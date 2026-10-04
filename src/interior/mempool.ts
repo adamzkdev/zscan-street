@@ -244,7 +244,8 @@ export function buildMempool(ctx: InteriorContext): Interior {
 
   // ---- people: the shopkeeper and a couple of customers browsing ----------------------------
   const people: Snark[] = [];
-  const addSnark = async (id: number, at: THREE.Vector3, role: string, wander?: THREE.Vector3[]) => {
+  /** Wanderers change aisle by the cross aisle at `cross` (z), never through the shelves. */
+  const addSnark = async (id: number, at: THREE.Vector3, role: string, wander?: THREE.Vector3[], cross = -3.8) => {
     try {
       const s = new Snark(id, await loadArt(id));
       s.noClip = true;
@@ -256,7 +257,10 @@ export function buildMempool(ctx: InteriorContext): Interior {
       if (wander)
         for (;;) {
           await new Promise((r) => setTimeout(r, 2500 + Math.random() * 5000));
-          await s.walk([wander[Math.floor(Math.random() * wander.length)]], 1);
+          const to = wander[Math.floor(Math.random() * wander.length)];
+          const from = s.root.position;
+          const path = Math.abs(to.x - from.x) > 0.3 ? [new THREE.Vector3(from.x, to.y, cross), new THREE.Vector3(to.x, to.y, cross), to] : [to];
+          await s.walk(path, 1);
         }
       else s.faceDir = new THREE.Vector3(0, 0, 1);
     } catch {}
@@ -265,7 +269,7 @@ export function buildMempool(ctx: InteriorContext): Interior {
   const aisleSpots = [-4.6, -0.6, 3.4].flatMap((x) => [-6, -9, -12].map((z) => new THREE.Vector3(x, SHOP_Y, z)));
   void addSnark(2967, aisleSpots[1], "Customer", aisleSpots);
   void addSnark(5430, aisleSpots[5], "Customer", aisleSpots);
-  void addSnark(1, new THREE.Vector3(0, ARCHIVE_Y, -10), "Archivist", [-5.5, 0, 5.5].flatMap((x) => [-6, -14, -24].map((z) => new THREE.Vector3(x, ARCHIVE_Y, z))));
+  void addSnark(1, new THREE.Vector3(0, ARCHIVE_Y, -10), "Archivist", [-5.5, 0, 5.5].flatMap((x) => [-6, -14, -24].map((z) => new THREE.Vector3(x, ARCHIVE_Y, z))), -1.9);
 
   // ---- blocks: the last hundred and fifty downstairs, a thousand upstairs --------------------
   void (async () => {

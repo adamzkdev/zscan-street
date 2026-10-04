@@ -41,8 +41,11 @@ async function boot(theme = "night") {
     document.addEventListener("mousedown", () => (c.firstChild.style.transform = "scale(0.85)"), true);
     document.addEventListener("mouseup", () => (c.firstChild.style.transform = ""), true);
   });
-  await p.evaluate(() => window.capture.ui(true));
+  // no HUD on the film: the city and the places only (the cursor shows when it picks a building)
+  await p.evaluate(() => window.capture.ui(false));
+  await cursor(false);
 }
+const cursor = (on) => p.evaluate((on) => { const c = document.getElementById("fakecursor"); if (c) c.style.display = on ? "" : "none"; }, on);
 
 /** One act = one take. `script(t, k)` runs before each frame (t seconds, k 0..1) and may return a camera. */
 async function act(name, bars, script, preroll = 0.5) {
@@ -115,6 +118,7 @@ async function enterFromCity(name, bars, key, target) {
   const [x, z, zoom, wx, wy, wz] = target;
   await city(x, z, zoom);
   await step(2.5);
+  await cursor(true);
   let clicked = false;
   await act(name, bars, async (t, k) => {
     const pt = await project([wx, wy, wz]);
@@ -125,7 +129,13 @@ async function enterFromCity(name, bars, key, target) {
     }
     return null;
   }, 0);
+  await cursor(false);
   void key;
+}
+/** Take the lift (a cut), then walk the new floor. */
+async function liftTo(name, n, bars, path) {
+  await p.evaluate((n) => window.capture.floor(n), n);
+  await act(name, bars, (t, k) => path(k), 0.2);
 }
 
 // ---- the acts -----------------------------------------------------------------------------------
@@ -161,136 +171,34 @@ const ACTS = {
   },
   async "a05-mempool"() {
     await enterFromCity("a05-enter-mempool", 2.5, "mempool", [-7.3, -6, 2.4, -7.3, 2.2, -11.5]);
-    let pt = null,
-      done = false;
-    await act("a06-mempool-walk", 3.5, async (t, k) => {
-      const cam = walkCam(0, [0, -1.6], [-0.6, -4.2], [0, 1.2, -15], [1.4, 1.0, -9], Math.min(1, k / 0.5));
-      if (k > 0.52 && !pt) pt = await findPick("^Block");
-      if (pt && !done) {
-        await glide(pt.x, pt.y, 0.2);
-        if (k > 0.8) {
-          done = true;
-          await click();
-        }
-      }
-      return cam;
-    }, 0.3);
-    // the lift to the archive
-    let lift = null,
-      went = false;
-    await act("a07-archive", 3, async (t, k) => {
-      if (!lift) lift = await domAt('.lift [data-floor="1"]');
-      if (!went) {
-        await glide(lift.x, lift.y, 0.2);
-        if (k > 0.25) {
-          went = true;
-          await p.evaluate(() => window.street.hud?.close?.());
-          await click();
-        }
-        return walkCam(0, [-0.6, -4.2], [-0.6, -4.2], [1.4, 1.0, -9], [1.4, 1.0, -9], 0);
-      }
-      const kk = (k - 0.25) / 0.75;
-      if (k > 0.4) await glide(W * 0.5, H * 0.9, 0.05);
-      return walkCam(6, [0, -2], [0, -10], [0, 7.6, -30], [0.5, 7.3, -30], kk);
-    }, 0);
+    await act("a06-mempool-walk", 3.5, (t, k) => walkCam(0, [0, -1.6], [-0.6, -4.6], [0, 1.2, -15], [1.4, 1.0, -9], k), 0.3);
+    await liftTo("a07-archive", 1, 3, (k) => walkCam(6, [0, -2], [0, -11], [0, 7.6, -30], [0.5, 7.3, -30], k));
   },
   async "a08-cards"() {
     await p.evaluate(() => window.street.interiors.exit());
     await enterFromCity("a08-enter-cards", 2, "cards", [6.8, -6, 2.4, 6.8, 2.6, -11.5]);
     await act("a09-cards-lobby", 2.5, (t, k) => walkCam(0, [0, -2.6], [0, -9], [0, 2.6, -24], [0, 2.9, -24], k), 0.3);
-    const lift = async (n, name, bars, path) => {
-      let at = null,
-        went = false;
-      await act(name, bars, async (t, k) => {
-        if (!at) at = await domAt(`.lift [data-floor="${n}"]`);
-        if (!went) {
-          await glide(at.x, at.y, 0.25);
-          if (k > 0.2) {
-            went = true;
-            await click();
-          }
-          return undefined;
-        }
-        if (k > 0.35) await glide(W * 0.5, H * 0.92, 0.06);
-        return path((k - 0.2) / 0.8);
-      }, 0);
-    };
-    await lift(2, "a10-cards-epic", 2.5, (k) => walkCam(19, [0, -2.2], [0, -8], [-4, 20.4, -12], [4, 20.4, -14], k));
-    await lift(7, "a11-cards-core", 3.5, (k) => walkCam(54, [0, -3], [0, -10], [-5, 55.6, -14], [-6, 55.5, -12], k));
-    // click a card on the wall
-    let pt = null,
-      done = false;
-    await act("a12-cards-click", 2, async (t, k) => {
-      if (!pt) pt = await findPick("Rank", [0.2, 0.5, 0.3, 0.6]);
-      if (pt && !done) {
-        await glide(pt.x, pt.y, 0.22);
-        if (k > 0.45) {
-          done = true;
-          await click();
-        }
-      }
-      return walkCam(54, [0, -10], [0, -10], [-6, 55.5, -12], [-6, 55.5, -12], 0);
-    }, 0);
+    await liftTo("a10-cards-epic", 2, 2.5, (k) => walkCam(19, [0, -2.2], [0, -8], [-4, 20.4, -12], [4, 20.4, -14], k));
+    await liftTo("a11-cards-core", 7, 3.5, (k) => walkCam(54, [0, -3], [0, -10], [-5, 55.6, -14], [-6, 55.5, -12], k));
+    // close to the wall: the cards one by one
+    await act("a12-cards-click", 2, (t, k) => walkCam(54, [-1.2, -10], [-1.2, -12.5], [-6, 55.4, -11], [-6, 55.4, -14.5], k), 0);
   },
   async "a13-bank"() {
-    await p.evaluate(() => { window.street.interiors.exit(); });
+    await p.evaluate(() => window.street.interiors.exit());
     await enterFromCity("a13-enter-bank", 2, "bank", [14.2, -5, 2.2, 14.2, 3.5, -11]);
-    let pt = null,
-      done = false;
-    await act("a14-bank-hall", 4, async (t, k) => {
-      const cam = walkCam(0, [0, -2.6], [0, -7.5], [0, 3, -22], [0, 2.2, -16], Math.min(1, k / 0.55));
-      if (k > 0.57 && !pt) pt = await findPick("bank", [0.15, 0.85, 0.35, 0.85]);
-      if (pt && !done) {
-        await glide(pt.x, pt.y, 0.2);
-        if (k > 0.82) {
-          done = true;
-          await click();
-        }
-      }
-      return cam;
-    }, 0.3);
-    // close the key panel, take the lift down to the vault
-    await p.evaluate(() => window.street.venues.close());
-    let at = null,
-      went = false;
-    await act("a15-bank-vault", 3, async (t, k) => {
-      if (!at) at = await domAt('.lift [data-floor="1"]');
-      if (!went) {
-        await glide(at.x, at.y, 0.25);
-        if (k > 0.2) {
-          went = true;
-          await click();
-        }
-        return undefined;
-      }
-      if (k > 0.35) await glide(W * 0.5, H * 0.92, 0.06);
-      return walkCam(-6, [0, -1.6], [0, -6], [0, -4.8, -16], [0, -5, -16], (k - 0.2) / 0.8);
-    }, 0);
+    await act("a14-bank-hall", 4, (t, k) => walkCam(0, [0, -2.6], [0, -8], [0, 3, -22], [0, 2.0, -16], k), 0.3);
+    await liftTo("a15-bank-vault", 1, 3, (k) => walkCam(-6, [0, -1.6], [0, -7], [0, -4.8, -16], [0, -5, -16], k));
   },
   async "a16-factory"() {
     await p.evaluate(() => window.street.interiors.exit());
     await enterFromCity("a16-enter-factory", 2, "factory", [40, -8, 1.6, 42.9, 3.5, -12]);
     await p.evaluate(() => window.__factoryTestBlock?.((window.street.director.blockHeight ?? 3506300) + 1, "Foundry"));
     await act("a17-factory-hall", 4, (t, k) => walkCam(0, [-3.5, -2.6], [-3.5, -10], [-3.5, 2.6, -24], [-1, 2.4, -18], k), 0.2);
-    let at = null,
-      went = false;
-    await act("a18-factory-control", 2.5, async (t, k) => {
-      if (!at) at = await domAt('.lift [data-floor="1"]');
-      if (!went) {
-        await glide(at.x, at.y, 0.25);
-        if (k > 0.22) {
-          went = true;
-          await click();
-        }
-        return undefined;
-      }
-      if (k > 0.35) await glide(W * 0.5, H * 0.92, 0.06);
-      return walkCam(4.5, [-3.5, -3.2], [-3.5, -6], [-3.5, 3, -24], [-3.5, 2.5, -24], (k - 0.22) / 0.78);
-    }, 0);
+    await liftTo("a18-factory-control", 1, 2.5, (k) => walkCam(4.5, [-3.5, -3.2], [-3.5, -6], [-3.5, 3, -24], [-3.5, 2.5, -24], k));
     await p.evaluate(() => window.street.interiors.exit());
   },
   async "a19-outro"() {
-    await p.evaluate(() => { window.capture.ui(false); window.capture.theme("night"); });
+    await p.evaluate(() => window.capture.theme("night"));
     await p.evaluate(() => document.getElementById("fakecursor")?.remove());
     await act("a19-tunnel", 2, (t, k) => ({ pos: lerp([66, 2.2, 9], [72, 2.8, 6.5], ease(k)), look: lerp([84, 2, -1.4], [84, 2.2, -1.4], ease(k)), tilt: 0.3 }), 0.5);
     await act("a20-outro", 2.5, (t, k) => ({ pos: lerp([0, 28, 40], [0, 70, 96], ease(k)), look: [0, 0, -4] }), 0.3);

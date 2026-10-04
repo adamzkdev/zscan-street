@@ -186,7 +186,8 @@ export function buildZsa(ctx: InteriorContext): Interior {
       let k = start;
       for (;;) {
         // fetch something from the crates, carry it to a job, work a little
-        const crate = jobs[Math.random() > 0.5 ? 4 : 5];
+        // the crates by the door (the ones at the back sit behind the counter)
+        const crate = jobs[4];
         await s.walk([crate], 1.1);
         s.showParcels(true);
         await new Promise((r) => setTimeout(r, 800));
@@ -202,7 +203,7 @@ export function buildZsa(ctx: InteriorContext): Interior {
   void builder(1337, 0, true);
   void builder(2468, 1);
   void builder(8642, 2);
-  void builder(1111, 5);
+  void builder(1111, 4);
 
   const camQuat = new THREE.Quaternion();
   const camRight = new THREE.Vector3();
