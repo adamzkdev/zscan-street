@@ -301,6 +301,16 @@ function enterPlace(key: string) {
 }
 
 window.addEventListener("keydown", (e) => {
+  // the elevator from the keyboard
+  if ((e.key === "PageUp" || e.key === "PageDown") && interiors.active && interiors.active.floors.length > 1) {
+    e.preventDefault();
+    const n = interiors.floor + (e.key === "PageUp" ? 1 : -1);
+    if (n < 0 || n >= interiors.active.floors.length) return;
+    interiors.goTo(n);
+    hud.cut();
+    hud.renderIndoor(interiors.floor);
+    return;
+  }
   if (e.key !== "Escape") return;
   if (venues.open) venues.close();
   else if (interiors.active) {

@@ -58,6 +58,11 @@ const ICON: Record<string, string> = {
   zec: '<circle cx="12" cy="12" r="9"/><path d="M8.6 8.2h6.8L8.6 15.8h6.8M12 5.6v2.6M12 15.8v2.6"/>',
   vault: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9.3 9.2h5.4l-5.4 5.6h5.4"/>',
   bolt: '<path d="M13.5 2.5 5 13.5h6.5L10.5 21.5 19 10.5h-6.5z"/>',
+  cards: '<rect x="3" y="6" width="12" height="15" rx="1.5"/><path d="M8 3.5h10.5A1.5 1.5 0 0 1 20 5v12.5"/><path d="M6.5 10.5h5M6.5 13.5h3"/>',
+  bank: '<path d="M3 9.5 12 4l9 5.5M4.5 20h15M6 10.5v7M10 10.5v7M14 10.5v7M18 10.5v7"/>',
+  crane: '<path d="M6 21V4h2v17M3 21h8M8 5h12l-3 3M8 5l4 4M17 8v5"/><rect x="15.5" y="13" width="3" height="2.5"/>',
+  door: '<path d="M5 21V4.5A1.5 1.5 0 0 1 6.5 3h8A1.5 1.5 0 0 1 16 4.5V21M3 21h18"/><circle cx="13" cy="12.5" r=".9"/><path d="M19 9v6"/>',
+  updown: '<path d="M8 10l4-4 4 4M8 14l4 4 4-4"/>',
   shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/>',
   sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path class="w1" d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path class="w2" d="M18.5 7a7 7 0 0 1 0 10"/><path class="x" d="M16 9l5 6M21 9l-5 6"/>',
 };
@@ -86,6 +91,15 @@ export interface HudCallbacks {
 }
 
 type Section = "block" | "mempool" | "market" | "supply" | "network";
+
+/** Walk-in places: icon and colour of their header and elevator. */
+const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
+  mempool: { icon: "parcel", color: "#ff9f2e" },
+  cards: { icon: "cards", color: "#b07bff" },
+  bank: { icon: "bank", color: "#3ee08f" },
+  factory: { icon: "bolt", color: "#f4b728" },
+  zsa: { icon: "crane", color: "#3ef0ff" },
+};
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
 const READINGS: Record<Section, { icon: string; label: string; color: string; title: string }> = {
@@ -551,18 +565,35 @@ export class Hud {
     const i = this.indoor;
     if (!i) return;
     const f = i.floors[floor];
+    const st = PLACE_STYLE[i.key];
+    // "The shop · pending transactions": a name, then what is on it
+    const split = (n: string) => {
+      const k = n.indexOf(" · ");
+      return k < 0 ? [n, ""] : [n.slice(0, k), n.slice(k + 3)];
+    };
+    const [fname, fsub] = split(f.name);
+    const many = i.floors.length > 1;
     this.$(".indoor").innerHTML = `
-      <div class="ihead hud"><span class="rec"></span><b>${esc(i.title)}</b><span>${esc(f.name)}</span></div>
+      <div class="ihead hud" style="--c:${st.color}"><span class="tile">${icon(st.icon)}</span><span class="it"><b>${esc(i.title)}</b><span>${many ? `<em>${esc(f.label)}</em>` : ""}${esc(fname)}${fsub ? ` · ${esc(fsub)}` : ""}</span></span></div>
       ${
-        i.floors.length > 1
-          ? `<nav class="lift hud"><div class="mh">Floors</div>${i.floors
-              .map((x, k) => `<button data-floor="${k}" class="${k === floor ? "on" : ""}" title="${esc(x.name)}"><b>${esc(x.label)}</b><span>${esc(x.name)}</span></button>`)
-              .reverse()
-              .join("")}</nav>`
+        many
+          ? `<nav class="lift hud" style="--c:${st.color}" aria-label="Elevator">
+              <div class="lh"><span class="mh">Elevator</span><span class="ud">
+                <button data-floor="${floor + 1}" ${floor >= i.floors.length - 1 ? "disabled" : ""} title="Up (Page Up)">${icon("up")}</button>
+                <button data-floor="${floor - 1}" ${floor <= 0 ? "disabled" : ""} title="Down (Page Down)" class="dn">${icon("up")}</button>
+              </span></div>
+              ${i.floors
+                .map((x, k) => {
+                  const [n, sub] = split(x.name);
+                  return `<button class="fl ${k === floor ? "on" : ""}" data-floor="${k}" aria-current="${k === floor}"><b>${esc(x.label)}</b><span><strong>${esc(n)}</strong>${sub ? `<small>${esc(sub)}</small>` : ""}</span></button>`;
+                })
+                .reverse()
+                .join("")}
+            </nav>`
           : ""
       }
-      <button class="leave hud" data-act="leave">${icon("close")}Leave <kbd>Esc</kbd></button>
-      <div class="ihint">${"<kbd>Z Q S D</kbd> / <kbd>W A S D</kbd> walk · <kbd>drag</kbd> look · <kbd>scroll</kbd> step · <kbd>Shift</kbd> hurry · <kbd>click</kbd> inspect"}</div>`;
+      <button class="leave hud" data-act="leave">${icon("door")}Leave <kbd>Esc</kbd></button>
+      <div class="ihint"><span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>click</kbd> inspect</span>${many ? "<span><kbd>PgUp</kbd><kbd>PgDn</kbd> floors</span>" : ""}<span>walk out the door to leave</span></div>`;
   }
 
   /** Info about something clicked inside. */
