@@ -118,7 +118,7 @@ async function enterFromCity(name, bars, key, target) {
   const [x, z, zoom, wx, wy, wz] = target;
   await city(x, z, zoom);
   await step(2.5);
-  await cursor(true);
+  // the cursor stays hidden on the film: the building lights up on hover, that is enough
   let clicked = false;
   await act(name, bars, async (t, k) => {
     const pt = await project([wx, wy, wz]);
@@ -200,6 +200,9 @@ const ACTS = {
   async "a19-outro"() {
     await p.evaluate(() => window.capture.theme("night"));
     await p.evaluate(() => document.getElementById("fakecursor")?.remove());
+    // the mouse leaves the city, so no building stays lit
+    await p.mouse.move(2, 2);
+    await p.evaluate(() => document.querySelector("#scene").dispatchEvent(new PointerEvent("pointerleave")));
     await act("a19-tunnel", 2, (t, k) => ({ pos: lerp([66, 2.2, 9], [72, 2.8, 6.5], ease(k)), look: lerp([84, 2, -1.4], [84, 2.2, -1.4], ease(k)), tilt: 0.3 }), 0.5);
     await act("a20-outro", 2.5, (t, k) => ({ pos: lerp([0, 28, 40], [0, 70, 96], ease(k)), look: [0, 0, -4] }), 0.3);
   },
