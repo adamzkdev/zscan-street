@@ -967,6 +967,18 @@ export class Director {
     return tx.txid;
   }
 
+  /** Test only: `n` copies of a pending transaction, already queueing at the stop. */
+  debugQueue(n: number) {
+    const base = [...this.mempool.values()][0];
+    if (!base) return 0;
+    for (let i = 0; i < n; i++) {
+      const tx: Tx = { ...base, txid: `${base.txid.slice(0, 56)}${Math.random().toString(16).slice(2, 10)}`, kind: "shielded", visible: 0, pool: "orchard" };
+      this.mempool.set(tx.txid, tx);
+      this.place(tx, "stop");
+    }
+    return n;
+  }
+
   debugCars() {
     return [...this.traffic.vehicles].map((x) => `${x.lane}:${x.x.toFixed(1)}`).join(" ");
   }

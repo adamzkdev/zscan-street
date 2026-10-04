@@ -5,7 +5,8 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { connectFeed, ZScan } from "./data/zscan";
-import type { BlockBus } from "./scene/bus";
+import { busLocal, type BlockBus } from "./scene/bus";
+import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
 import { AREAS, buildCity, CURB, CUT_VOX, type Occluder } from "./scene/city";
 import { VOX } from "./scene/voxel/model";
@@ -681,6 +682,23 @@ if (CAPTURE) {
         rig.flyTo(new THREE.Vector3(x, 1, z), zoom);
       },
       carrier: () => director.debugCarrier(),
+      queue: (n: number) => director.debugQueue(n),
+      /** The newest bus: its phase, and the CCTV view inside it (pos/look in world space). */
+      bus: () => {
+        const b = [...director.buses].at(-1);
+        if (!b) return null;
+        const g = b.group;
+        g.updateMatrixWorld(true);
+        const w = (v: THREE.Vector3) => g.localToWorld(v).toArray() as [number, number, number];
+        return {
+          phase: b.phase,
+          x: g.position.x,
+          z: g.position.z,
+          inside: { pos: w(busLocal(3.2, BUS.h - 4.2, 2.6)), look: w(busLocal(BUS.w - 16, BUS.floor + 3, 9.5)) },
+          // from the driver's corner, looking back down the aisle at the seats
+          front: { pos: w(busLocal(BUS.w - 5, BUS.h - 4.5, 3)), look: w(busLocal(8, BUS.floor + 2, 10)) },
+        };
+      },
       snarkPos: (txid: string) => {
         const s = director.snarkOf(txid);
         if (!s) return null;

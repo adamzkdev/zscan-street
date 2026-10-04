@@ -51,7 +51,7 @@ const cursor = (on) => p.evaluate((on) => { const c = document.getElementById("f
 async function act(name, bars, script, preroll = 0.5) {
   const frames = Math.round(bars * BAR * FPS);
   const dir = `${OUT}/frames/${name}`;
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true }); // frames are deleted once encoded (disk)
   mkdirSync(dir, { recursive: true });
   if (preroll) await p.evaluate((n) => { for (let i = 0; i < n; i++) window.capture.step(1 / 30); }, Math.round(preroll * FPS));
   for (let f = 0; f < frames; f++) {
@@ -165,9 +165,36 @@ const ACTS = {
     await act("a03-carrier", 4.5, (t, k) => ({ pos: lerp([-1.2, 2.6, -6.4], [-2.8, 2.2, -6.7], ease(k)), look: lerp([-9.8, 1.0, -8.4], [-9.6, 0.9, -8.0], ease(k)), fov: 46, tilt: 0.35 }), 0);
   },
   async "a04-bus"() {
+    // a block: the bus pulls in, the zkSNARKs board, we ride inside, then follow it into the tunnel
+    // a queue at the stop, then the block that carries them all
+    await p.evaluate(() => window.capture.queue(9));
+    await step(3);
     await p.evaluate(() => window.capture.testBlock());
-    await step(6.5);
-    await act("a04-bus", 3.5, (t, k) => ({ pos: lerp([9, 2.3, 8.5], [6, 2.0, 7], ease(k)), look: lerp([-3, 1.5, 1], [-5, 1.4, 0.8], ease(k)), fov: 42, tilt: 0.5 }), 0);
+    for (let i = 0; i < 80; i++) {
+      await step(0.25);
+      const bus = await p.evaluate(() => window.capture.bus());
+      if (bus && bus.x > -2) break;
+    }
+    await act("a04-bus", 2.5, (t, k) => ({ pos: lerp([9, 2.3, 8.5], [6.5, 2.0, 7.2], ease(k)), look: lerp([-3, 1.5, 1], [-5, 1.4, 0.8], ease(k)), fov: 42, tilt: 0.5 }), 0);
+    // inside: the CCTV corner at the back, riders taking their seats, the doors closing
+    await act("a04b-inside", 3.5, async () => {
+      const bus = await p.evaluate(() => window.capture.bus());
+      return bus ? { pos: bus.front.pos, look: bus.front.look, fov: 66 } : undefined;
+    }, 0);
+    // let it pull away a little, then chase it east until it vanishes into the tunnel
+    for (let i = 0; i < 60; i++) {
+      const bus = await p.evaluate(() => window.capture.bus());
+      if (!bus || bus.phase === "departing") break;
+      await step(0.25);
+    }
+    let c = null;
+    await act("a04c-depart", 5, async () => {
+      const bus = await p.evaluate(() => window.capture.bus());
+      if (bus) c = c ? lerp(c, [bus.x, bus.z], 0.25) : [bus.x, bus.z];
+      if (!c) return undefined;
+      const cx = Math.min(c[0] - 11, 70);
+      return { pos: [cx, 3.4, c[1] + 4.2], look: [Math.min(c[0] + 6, 92), 1.4, c[1]], fov: 44, tilt: 0.3 };
+    }, 0);
   },
   async "a05-mempool"() {
     await enterFromCity("a05-enter-mempool", 2.5, "mempool", [-7.3, -6, 2.4, -7.3, 2.2, -11.5]);
