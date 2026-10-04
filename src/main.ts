@@ -690,37 +690,32 @@ if (new URLSearchParams(location.search).has("debug")) {
 // frame, sinks to its ground floor (a clipping plane slides down, then the capped cut model takes
 // over). No ghostly transparency: what is left is solid and clean.
 renderer.localClippingEnabled = true;
-const corners = Array.from({ length: 8 }, () => new THREE.Vector3());
 const centre = new THREE.Vector3();
 const clips = new Map<Occluder, THREE.Plane>();
-function wallsDown(dt: number) {
-  // on foot, lights and shadows follow a point a few steps ahead
-  const focus = walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
-  const cam = rig.camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+const sight = new THREE.Ray();
+const eye = new THREE.Vector3();
+/** `allUp`: on foot nothing is in the way of a map camera, every building stands at full height. */
+function wallsDown(dt: number, allUp = false) {
+  const focus = rig.focus;
   const camPos = rig.shot ? rig.persp.position : rig.iso.position;
   const toCam = camPos.clone().sub(focus).normalize();
+  const close = rig.shot !== null || rig.iso.zoom > 1.6;
   for (const o of city.occluders) {
-    o.box.getCenter(centre);
-    const size = o.box.max.clone().sub(o.box.min);
-    const depth = centre.clone().sub(focus).dot(toCam) - Math.max(size.x, size.z) * 0.35;
     let cover = false;
-    // a walk-in shop also drops when the camera looks at something inside it
-    if (rig.mode === "overview") cover = false;
-    else if (o.open && o.box.containsPoint(focus) && rig.shot !== "shop") cover = true;
-    else if (depth > 0.5 && !o.box.containsPoint(focus)) {
-      let x0 = Infinity,
-        x1 = -Infinity,
-        y0 = Infinity,
-        y1 = -Infinity;
-      for (let i = 0; i < 8; i++) {
-        const c = corners[i].set(i & 1 ? o.box.max.x : o.box.min.x, i & 2 ? o.box.max.y : o.box.min.y, i & 4 ? o.box.max.z : o.box.min.z).project(cam);
-        x0 = Math.min(x0, c.x);
-        x1 = Math.max(x1, c.x);
-        y0 = Math.min(y0, c.y);
-        y1 = Math.max(y1, c.y);
+    if (allUp || rig.mode === "overview") cover = false;
+    // a walk-in place opens up only when you are close and looking right into it
+    else if (o.box.containsPoint(focus)) cover = o.open && close && rig.shot !== "shop";
+    else
+      // in the way only if it really cuts the line from what is looked at (at a person's height)
+      // to the camera, not merely because it is big on screen
+      for (const h of [0.4, 1.6]) {
+        sight.set(eye.copy(focus).setY(focus.y + h), toCam);
+        const hit = sight.intersectBox(o.box, centre);
+        if (hit && hit.distanceTo(eye) < camPos.distanceTo(eye)) {
+          cover = true;
+          break;
+        }
       }
-      cover = x1 > -0.6 && x0 < 0.6 && y1 > -0.6 && y0 < 0.45;
-    }
     const target = cover ? 0 : 1;
     if (o.level === target) continue;
     o.level = THREE.MathUtils.clamp(o.level + (target ? 1 : -1) * dt * 2.8, 0, 1);
@@ -874,7 +869,8 @@ function frame(stepDt?: number) {
   camRight.set(1, 0, 0).applyQuaternion(camQuat);
 
   // lights and shadows follow what the camera looks at
-  const focus = rig.focus;
+  // on foot, lights and shadows follow a point a few steps ahead
+  const focus = walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
   lampLights.update(t, focus);
   const wide = rig.mode === "overview";
   const ext = wide ? 90 : 30;
@@ -892,7 +888,7 @@ function frame(stepDt?: number) {
   else if (rig.shot) tilt.set(1, 0.48, 0.14);
   else tilt.set(wide ? 0 : theme === "day" ? 0.32 : 0.55, 0.5, theme === "day" ? 0.3 : 0.26);
 
-  if (!capturing && !walking) wallsDown(dt);
+  if (!capturing) wallsDown(dt, walking);
   director.update(dt, t, camQuat, camRight);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
