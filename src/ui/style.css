@@ -451,9 +451,7 @@ kbd {
     bottom 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 0.3s;
 }
-.strip.open {
-  width: min(680px, calc(100vw - 32px));
-}
+/* opening a section never changes the bar's width: the details take the bar's */
 .strip .bar {
   height: 50px;
   display: flex;
@@ -2431,4 +2429,66 @@ kbd {
 .rail > button.walk svg.px {
   width: 20px;
   height: 20px;
+}
+
+/* ---- inside: the elevator sits low on the right, the info panel opens above it ---- */
+.lift {
+  top: auto;
+  bottom: 84px;
+  transform: none;
+}
+.inspecting .lift {
+  right: 16px;
+}
+.indoors .panel {
+  max-height: calc(100% - 96px - 84px - var(--lift-h, 0px));
+}
+/* the way out: a little door left of the theme switch, inside only; it opens on hover */
+.hbtn.exit {
+  display: none;
+}
+.indoors .hbtn.exit {
+  display: grid;
+}
+.door {
+  width: 20px;
+  height: 20px;
+  overflow: visible;
+}
+.door .frame,
+.door .floor {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.door .gap {
+  fill: #ffd28a;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.door .leaf rect {
+  fill: color-mix(in srgb, currentColor 22%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+.door .leaf circle {
+  fill: currentColor;
+}
+.door .leaf {
+  transform-origin: 6.5px 12px;
+  transform-box: view-box;
+  transition: transform 0.35s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.hbtn.exit:hover {
+  color: var(--gold-ink);
+}
+.hbtn.exit:hover .leaf {
+  /* the leaf swings towards you: narrower, slightly skewed */
+  transform: perspective(40px) rotateY(-62deg);
+}
+.hbtn.exit:hover .gap {
+  opacity: 0.9;
+  filter: drop-shadow(0 0 4px #ffd28a);
 }

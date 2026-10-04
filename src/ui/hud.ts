@@ -73,9 +73,9 @@ const icon = (k: string) => `<svg class="i" viewBox="0 0 24 24">${ICON[k]}</svg>
 
 /** Pixel-art icons on a 12 × 12 grid, like the sprites and signs of the street. */
 const PIX: Record<string, string[]> = {
-  bus: ["..########..", ".#........#.", ".#.##..##.#.", ".#.##..##.#.", ".#........#.", ".##########.", ".#........#.", ".#.#....#.#.", ".##########.", "..##....##..", "..##....##..", "............"],
+  bus: ["................", "...##########...", "..#..........#..", "..#.########.#..", "..#.#......#.#..", "..#.#......#.#..", "..#.########.#..", "..#..........#..", "..############..", "..#..........#..", "..#.##....##.#..", "..#.##....##.#..", "..############..", "...##......##...", "...##......##...", "................"],
   parcel: ["....####....", "..##....##..", "##........##", "#.##....##.#", "#...####...#", "#.....#....#", "#.....#....#", "#.....#....#", "#.....#....#", ".##...#..##.", "...##.#.##..", ".....###...."],
-  zec: ["...######...", "..#......#..", ".#.######.#.", "#.......#..#", "#......#...#", "#.....#....#", "#....#.....#", "#...#......#", ".#.######.#.", "..#......#..", "...######...", "............"],
+  zec: [".....######.....", "...##......##...", "..#....##....#..", ".#.....##.....#.", ".#..########..#.", "#..........##..#", "#.........##...#", "#........##....#", "#.......##.....#", "#......##......#", "#.....##.......#", ".#..########..#.", ".#.....##.....#.", "..#....##....#..", "...##......##...", ".....######....."],
   vault: [".##########.", ".#........#.", ".#.######.#.", ".#......#.#.", ".#.....#..#.", ".#....#...#.", ".#...#....#.", ".#.######.#.", "..#......#..", "...#....#...", "....#..#....", ".....##....."],
   bolt: [".......###..", "......###...", ".....###....", "....###.....", "...#######..", "......###...", ".....###....", "....###.....", "...###......", "..###.......", ".##.........", "............"],
   book: ["............", ".#####.####.", ".#...#.#..#.", ".#.#.#.#.##.", ".#...#.#..#.", ".#.#.#.#.##.", ".#...#.#..#.", ".#.#.#.#.##.", ".#...#.#..#.", ".#####.####.", "............", "............"],
@@ -92,7 +92,7 @@ const pix = (k: string) => {
   if (!rows) return icon(k);
   let d = "";
   rows.forEach((r, y) => [...r].forEach((c, x) => c === "#" && (d += `M${x} ${y}h1v1h-1z`)));
-  return `<svg class="px" viewBox="0 0 12 12" shape-rendering="crispEdges"><path d="${d}"/></svg>`;
+  return `<svg class="px" viewBox="0 0 ${rows[0].length} ${rows.length}" shape-rendering="crispEdges"><path d="${d}"/></svg>`;
 };
 
 
@@ -134,9 +134,9 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
 const READINGS: Record<Section, { icon: string; label: string; jp: string; color: string; title: string }> = {
-  block: { icon: "bus", label: "Block", jp: "ブロック", color: "#ffd23f", title: "Last block: the bus that took it" },
+  block: { icon: "bus", label: "Block", jp: "ブロック", color: "#3ef0ff", title: "Last block: the bus that took it" },
   mempool: { icon: "parcel", label: "Mempool", jp: "待合室", color: "#ff9f2e", title: "Transactions waiting for a block" },
-  market: { icon: "zec", label: "ZEC", jp: "価格", color: "#3ef0ff", title: "ZEC price, 24 h" },
+  market: { icon: "zec", label: "ZEC", jp: "価格", color: "#f4b728", title: "ZEC price, 24 h" },
   supply: { icon: "vault", label: "Supply", jp: "供給", color: "#5cff9a", title: "Coins mined, share shielded" },
   network: { icon: "bolt", label: "Hash", jp: "採掘", color: "#ff3e8a", title: "Network hash power" },
 };
@@ -189,7 +189,6 @@ export class Hud {
   private selected: Snark | null = null;
   private tab: "txs" | "traits" | "journey" = "txs";
   private section: Section | null = null;
-  private flows = new Map<number, BlockFlow>();
   private stats: { mempool: number; shown: number; lastBlock: BlockSummary | null } = { mempool: 0, shown: 0, lastBlock: null };
   private status: "connecting" | "live" | "offline" = "connecting";
   private history: BlockSummary[] = [];
@@ -220,6 +219,7 @@ export class Hud {
       <div class="labels"></div>
       <a class="brand" href="${EXPLORER}" target="_blank" rel="noopener" title="ZScan explorer">${MARK}<span><b>Z</b>STREET</span></a>
       <div class="corner">
+        <button class="hbtn exit" data-act="leave" aria-label="Leave" title="Leave (Esc)"><svg viewBox="0 0 24 24" class="door"><path class="frame" d="M5 21V3h14v18"/><rect class="gap" x="6.5" y="4.5" width="11" height="16.5"/><g class="leaf"><rect x="6.5" y="4.5" width="11" height="16.5"/><circle cx="15" cy="13" r="1"/></g><path class="floor" d="M3 21h18"/></svg></button>
         <div class="seg" role="group" aria-label="Theme"><button data-theme="day" aria-label="Day" title="Day">${icon("sun")}</button><button data-theme="night" aria-label="Night" title="Night">${icon("moon")}</button></div>
         <button class="hbtn sound" data-act="sound" aria-label="Sound" title="Sound">${icon("sound")}</button>
       </div>
@@ -644,8 +644,14 @@ export class Hud {
             </nav>`
           : ""
       }
-      <button class="leave hud" data-act="leave">${pix("door")}Leave <kbd>Esc</kbd></button>
       <div class="ihint"><span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>click</kbd> inspect</span>${many ? "<span><kbd>PgUp</kbd><kbd>PgDn</kbd> floors</span>" : ""}<span>walk out the door to leave</span></div>`;
+    this.fitLift();
+  }
+
+  /** The elevator's height, so the info panel stops above it. */
+  private fitLift() {
+    const l = this.root.querySelector<HTMLElement>(".lift");
+    this.root.style.setProperty("--lift-h", `${l ? l.offsetHeight + 12 : 0}px`);
   }
 
   /** Info about something clicked inside. */
@@ -865,29 +871,16 @@ export class Hud {
       case "block": {
         const lb = this.stats.lastBlock;
         if (!lb) return head("LAST BLOCK") + `<div class="empty">Waiting for the feed…</div>`;
-        const f = this.flows.get(lb.height);
-        if (!f)
-          void Market.flow(lb.height).then((x) => {
-            if (!x) return;
-            this.flows.set(lb.height, x);
-            this.flowSig = String(lb.height);
-            this.renderStrip(true);
-          });
-        const shieldedIn = f ? (f.deltas.sapling ?? 0) + (f.deltas.orchard ?? 0) + (f.deltas.ironwood ?? 0) : null;
-        const max = Math.max(1, ...this.history.map((h) => h.tx_count));
         const sec = (Date.now() - Date.parse(lb.time)) / 1000;
-        return `${head(`BLOCK <a class="mono" href="${links.block(lb.height)}" target="_blank" rel="noopener">${num(lb.height)} ${icon("ext")}</a>`, `<span class="muted">${ago(Date.parse(lb.time))} ago · ${sec > TARGET_S ? "next one is late" : `next in ~${Math.round(TARGET_S - sec)} s`}</span>`)}
+        return `${head(`BLOCK <a class="mono" href="${links.block(lb.height)}" target="_blank" rel="noopener">${num(lb.height)} ${icon("ext")}</a>`, `<span class="muted">${ago(Date.parse(lb.time))} ago</span>`)}
           <dl class="cells">
+            ${cell("Hash", `<a class="mono" href="${links.block(lb.height)}" target="_blank" rel="noopener" title="${lb.hash}">${lb.hash.slice(0, 8)}…${lb.hash.slice(-6)}</a>`)}
+            ${cell("Mined by", esc(lb.miner_pool ?? "unknown pool"))}
             ${cell("Transactions", num(Math.max(0, lb.tx_count - 1)), "plus the coinbase")}
-            ${cell("Public ZEC moved", f ? zec(f.publicOut, 2) : "…", "transparent outputs")}
-            ${cell("Into shielded pools", shieldedIn == null ? "…" : `${shieldedIn >= 0 ? "+" : "−"}${zec(Math.abs(shieldedIn), 2)}`, "net, this block")}
             ${cell("Fees", zec(lb.fees ?? 0, 5))}
             ${cell("Size", `${(lb.size / 1000).toFixed(1)} kB`)}
-            ${cell("Mined by", esc(lb.miner_pool ?? "unknown pool"))}
-          </dl>
-          <div class="spark" title="Transactions per block">${this.history
-            .map((h) => `<a href="${links.block(h.height)}" target="_blank" rel="noopener" title="${num(h.height)} · ${Math.max(0, h.tx_count - 1)} tx" class="${h.height === lb.height ? "cur" : ""}" style="height:${Math.max(8, (h.tx_count / max) * 100)}%"></a>`)
-            .join("")}</div>`;
+            ${cell("Next block", sec > TARGET_S ? "late" : `~${Math.round(TARGET_S - sec)} s`, "75 s target")}
+          </dl>`;
       }
       case "mempool": {
         const txs = this.director.mempoolList();
