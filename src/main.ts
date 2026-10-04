@@ -384,7 +384,7 @@ const tmp = new THREE.Vector3();
 /** Walk into the card shop or the bank: the inside camera, and its counter on the left. */
 // the places you can walk into, tagged over their doors
 hud.setPlaces([
-  ...(city.shops[0] ? [{ key: "mempool", label: "MEMPOOL", sub: "pending tx · blocks", at: city.shops[0].door.clone().setY(4.6) }] : []),
+  ...(city.shops[0] ? [{ key: "mempool", label: "MEMPOOL", sub: "pending tx · pickup", at: city.shops[0].door.clone().setY(4.6) }] : []),
   ...city.venues.map((v) => ({
     key: v.kind,
     label: PLACES[v.kind],

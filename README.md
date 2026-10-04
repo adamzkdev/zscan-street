@@ -36,7 +36,7 @@ step, the lift for floors, Esc to leave. Click things for details and links to Z
 
 | Place | Inside |
 |---|---|
-| MEMPOOL | The shop: one aisle per kind of block, the live pickup wall of pending transactions. 1F: the archive of the last 2,000 blocks. |
+| MEMPOOL | One room: drivers set every pending transaction on the pickup table as a parcel, zkSNARKs come in and take theirs; the live mempool board on the back wall. |
 | zkCARDS | A museum of the whole collection: a lobby with the ten Legendaries, then one floor per rank band (10,000 cards). |
 | VIEW KEY BANK | The banking hall: paste a viewing key at a terminal; it is decrypted in this browser and never sent. -1: the vaults of the value pools. |
 | Proof Factory | The mining hall: rows per mining pool, a press that stamps every new block, the big wall screen. 1F: the control room. |
