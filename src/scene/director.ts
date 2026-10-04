@@ -228,6 +228,12 @@ export class Director {
     } catch {}
   }
 
+  private proofs = new Set<(tx: Tx) => void>();
+  /** Every transaction proved at the Proof Factory (shielded ones), as it is sent for a truck. */
+  onProof(fn: (tx: Tx) => void) {
+    this.proofs.add(fn);
+  }
+
   private visitors = new Set<(v: ShopVisit) => void>();
   /** Listen to the shop's door: every pickup and delivery, as it starts. */
   onShopVisit(fn: (v: ShopVisit) => void) {
@@ -501,6 +507,7 @@ export class Director {
    */
   private truckDelivery(tx: Tx) {
     const source = tx.pool || tx.kind === "shielded" || tx.kind === "migration" ? "proof" : "depot";
+    if (source === "proof") for (const fn of this.proofs) fn(tx);
     this.pending[source].push(tx);
     if (!this.enRoute[source]) void this.dispatch(source);
   }

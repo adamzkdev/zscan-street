@@ -252,7 +252,7 @@ try {
 setTimeout(() => hud.ready(), 15000);
 
 // ---- walk-in places ----------------------------------------------------------------------------
-const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "MINING HALL", zsa: "ZSA EXCHANGE", library: "LIBRARY" };
+const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "PROOF FACTORY", zsa: "ZSA EXCHANGE", library: "LIBRARY" };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 const ictx: InteriorContext = { renderer, director, theme, onBlock: (fn) => blockListeners.push(fn) };
 const interiors = new InteriorManager(
@@ -391,7 +391,7 @@ hud.setPlaces([
     sub: v.kind === "cards" ? "the whole collection" : v.kind === "bank" ? "read a shielded wallet" : v.kind === "library" ? "news · ZIPs · upgrades" : "shielded assets · coming soon",
     at: v.door.clone().setY(v.kind === "bank" ? 7.4 : v.kind === "library" ? 7.8 : 5.6),
   })),
-  ...(city.factory ? [{ key: "factory", label: "MINING HALL", sub: "blocks made here", at: city.factory.hall.clone().setY(7.2) }] : []),
+  ...(city.factory ? [{ key: "factory", label: "PROOF FACTORY", sub: "shielded tx proved here", at: city.factory.hall.clone().setY(7.2) }] : []),
 ]);
 
 function enterPlace(key: string) {

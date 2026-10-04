@@ -372,46 +372,36 @@ export function railingModel(len: number) {
   return m;
 }
 
-/** A crate stamped from a block: the canvas face (gold, a dark plate with the height). */
-export function crateTexture(height: number) {
+/** A parcel out of the proof press: cardboard, tape in its transaction's colour, its txid on a label. */
+export function parcelTexture(txid: string, color: string) {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
   const g = c.getContext("2d")!;
-  // voxel shading, 16 cells a side
-  const golds = ["#f4b728", "#e8a91c", "#ffc63e", "#d99a16"];
+  const browns = ["#c8a070", "#bf9766", "#d0a878", "#b88f5e"];
   for (let y = 0; y < 16; y++)
     for (let x = 0; x < 16; x++) {
-      g.fillStyle = golds[Math.floor(hash(x, y, height % 97, 5) * golds.length)];
+      g.fillStyle = browns[Math.floor(hash(x, y, txid.charCodeAt(0), 5) * browns.length)];
       g.fillRect(x * 8, y * 8, 8, 8);
     }
-  g.fillStyle = "#8a5a10";
-  g.fillRect(0, 0, 128, 8);
-  g.fillRect(0, 120, 128, 8);
-  g.fillRect(0, 0, 8, 128);
-  g.fillRect(120, 0, 8, 128);
-  g.fillStyle = "#0d0d0d";
-  g.fillRect(12, 40, 104, 48);
-  g.fillStyle = "#f4b728";
-  g.font = '800 15px "JetBrains Mono", Menlo, monospace';
+  // tape across both ways
+  g.fillStyle = color;
+  g.fillRect(0, 56, 128, 16);
+  g.fillRect(56, 0, 16, 128);
+  // the shipping label
+  g.fillStyle = "#f2efe6";
+  g.fillRect(14, 82, 100, 34);
+  g.fillStyle = "#14120f";
   g.textAlign = "center";
-  g.fillText("BLOCK", 64, 58);
-  g.font = '800 21px "JetBrains Mono", Menlo, monospace';
-  g.fillText(height.toLocaleString("en-US"), 64, 80);
-  // rivets
-  g.fillStyle = "#6a4a0a";
-  for (const [x, y] of [
-    [16, 16],
-    [104, 16],
-    [16, 104],
-    [104, 104],
-  ])
-    g.fillRect(x, y, 8, 8);
+  g.font = '800 13px "JetBrains Mono", Menlo, monospace';
+  g.fillText("PROOF ✓", 64, 97);
+  g.font = '600 12px "JetBrains Mono", Menlo, monospace';
+  g.fillText(`${txid.slice(0, 6)}…${txid.slice(-4)}`, 64, 111);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.magFilter = THREE.NearestFilter;
-  t.anisotropy = 4;
   return t;
 }
+
 
 /** Spare ASIC boxes on a pallet (12 vox/m): cardboard, tape, a label, a red "fragile" mark. */
 export function boxStackModel(seed: number) {

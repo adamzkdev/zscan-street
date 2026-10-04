@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { Market } from "../data/market";
-import type { BlockSummary } from "../data/types";
+import type { BlockSummary, Tx } from "../data/types";
+import { KIND_LABEL } from "../data/types";
 import { get, links, ZScan } from "../data/zscan";
-import { Snark, loadArt } from "../scene/snark";
+import { KIND_COLOR, Snark, loadArt } from "../scene/snark";
 import { hash } from "../scene/voxel/model";
 import { MATERIALS } from "../scene/voxel/mesher";
 import { barrel, crates as crateProp, vendingMachine } from "../scene/voxel/props";
@@ -15,7 +16,7 @@ import {
   columnModel,
   consoleModel,
   conveyorModel,
-  crateTexture,
+  parcelTexture,
   deskModel,
   elevatorModel,
   fanBladeModel,
@@ -40,9 +41,10 @@ import { makeScene } from "./kit";
 import type { Interior, InteriorContext, PickInfo, Rect } from "./types";
 
 /**
- * MINING HALL, inside the Proof Factory. Ground floor: rows of ASIC cabinets (one row per top
- * mining pool, sized by its share of the last week), a block press stamping a gold crate for every
- * real block, a conveyor, a porter who carries each crate to the dispatch bay ("to the bus"), and a
+ * Inside the Proof Factory. Ground floor: the proof press stamps a parcel for every real shielded
+ * transaction entering the mempool, the conveyor brings it to the porter, who sets it on the pallet
+ * at the dispatch bay where the truck takes it to the MEMPOOL shop. Around it, the mining hall:
+ * rows of ASIC cabinets (one row per top mining pool, sized by its share of the last week) and the
  * live wall. Upper floor: the control-room mezzanine overlooking the hall.
  */
 
@@ -93,15 +95,15 @@ interface Row {
   flashUntil: number;
 }
 
+/** A proved transaction on its way to the truck. */
 interface Crate {
   mesh: THREE.Mesh;
-  height: number;
-  pool: string | null;
+  tx: Tx;
   at: number;
   state: "press" | "belt" | "end" | "carried" | "pallet" | "leaving";
   t: number;
-  detail: { tx_count: number; size: number; fees: number | null } | null;
 }
+const shortId = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
 
 export function buildFactory(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#09080c");
@@ -298,7 +300,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
   cons.rotation.y = 0.5;
   scene.add(cons);
   ground.push([PRESS.x - 2.9, PRESS.z + 1.1, PRESS.x - 1.5, PRESS.z + 2.1]);
-  const pressSign = neonSign([{ text: "BLOCK PRESS", font: MONO(54, 800) }, { text: "ブロック製造機", font: JP(44) }], { color: GOLD, w: 2.4, h: 0.8, bg: "#0b0a0e" });
+  const pressSign = neonSign([{ text: "PROOF PRESS", font: MONO(54, 800) }, { text: "証明プレス", font: JP(44) }], { color: GOLD, w: 2.4, h: 0.8, bg: "#0b0a0e" });
   pressSign.position.set(PRESS.x, 5.2, PRESS.z);
   scene.add(pressSign);
 
@@ -320,7 +322,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
   shut.position.set(X1 + 0.1, 0, (BAY[0] + BAY[1]) / 2);
   scene.add(shut);
   const outside = (() => {
-    // the loading dock at night: wet asphalt, a lamp, the block bus waiting with its lights on
+    // the loading dock at night: wet asphalt, a lamp, the delivery truck waiting with its lights on
     const { c, g } = makeCanvas(384, 384);
     const gr = g.createLinearGradient(0, 0, 0, 384);
     gr.addColorStop(0, "#07070d");
@@ -341,7 +343,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
     g.fillRect(280, 255, 46, 40);
     g.fillStyle = "#e8e0c8";
     g.font = MONO(14, 800);
-    g.fillText("BLOCK BUS", 40, 165);
+    g.fillText("TO THE MEMPOOL", 40, 165);
     // reflections on the wet ground
     g.fillStyle = "rgba(244,183,40,0.25)";
     for (let x = 34; x < 340; x += 52) g.fillRect(x, 300, 40, 50);
@@ -633,7 +635,8 @@ export function buildFactory(ctx: InteriorContext): Interior {
   const crates: Crate[] = [];
   const crateGeo = new THREE.BoxGeometry(CRATE, CRATE, CRATE);
   let pressT = 99;
-  const seen = new Set<number>();
+  const seen = new Set<string>();
+  const blocksSeen = new Set<number>();
   let lastUpdate = 0;
 
   // sparks when the press stamps
@@ -647,15 +650,14 @@ export function buildFactory(ctx: InteriorContext): Interior {
   const hide = new THREE.Matrix4().makeScale(0, 0, 0);
   for (let i = 0; i < SPARKS; i++) sparks.setMatrixAt(i, hide);
 
-  function makeCrate(height: number, pool: string | null, at: number, state: Crate["state"]): Crate {
-    const tex = crateTexture(height);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, emissive: "#ffffff", emissiveMap: tex, emissiveIntensity: 0.12, roughness: 0.45, metalness: 0.25 });
+  function makeCrate(tx: Tx, at: number, state: Crate["state"]): Crate {
+    const tex = parcelTexture(tx.txid, KIND_COLOR[tx.kind]);
+    const mat = new THREE.MeshStandardMaterial({ map: tex, emissive: "#ffffff", emissiveMap: tex, emissiveIntensity: 0.08, roughness: 0.8 });
     const mesh = new THREE.Mesh(crateGeo, mat);
-    const c: Crate = { mesh, height, pool, at, state, t: 0, detail: null };
+    const c: Crate = { mesh, tx, at, state, t: 0 };
     mesh.userData.crate = c;
     scene.add(mesh);
     pickables.push(mesh);
-    void get<{ tx_count: number; size: number; fees: number | null }>(`/v1/blocks/${height}`).then((d) => (c.detail = d));
     return c;
   }
 
@@ -670,7 +672,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
   /** Put a crate on the pallet; the oldest beyond five leaves through the door. */
   function toPallet(c: Crate) {
     c.state = "pallet";
-    const onPallet = crates.filter((x) => x.state === "pallet").sort((a, b) => a.height - b.height);
+    const onPallet = crates.filter((x) => x.state === "pallet").sort((a, b) => a.at - b.at);
     while (onPallet.length > 5) {
       const old = onPallet.shift()!;
       old.state = "leaving";
@@ -686,11 +688,11 @@ export function buildFactory(ctx: InteriorContext): Interior {
     [0, 1, 0],
   ];
   function layoutPallet() {
-    const onPallet = crates.filter((x) => x.state === "pallet").sort((a, b) => a.height - b.height);
+    const onPallet = crates.filter((x) => x.state === "pallet").sort((a, b) => a.at - b.at);
     onPallet.forEach((c, i) => {
       const [dx, lvl, dz] = SLOTS[i];
       c.mesh.position.set(PALLET.x + dx, 1 / 6 + CRATE / 2 + lvl * CRATE, PALLET.z + dz);
-      c.mesh.rotation.set(0, (hash(c.height, 0, 0, 1) - 0.5) * 0.3, 0);
+      c.mesh.rotation.set(0, (hash(c.tx.txid.charCodeAt(0), c.tx.txid.charCodeAt(1), 0, 1) - 0.5) * 0.3, 0);
     });
   }
 
@@ -699,52 +701,54 @@ export function buildFactory(ctx: InteriorContext): Interior {
     st.recent = [{ height, pool, at }, ...st.recent.filter((r) => r.height !== height)].sort((a, b) => b.height - a.height).slice(0, 12);
   }
 
-  /** A real block: the press stamps it, or (while nobody is inside) it goes straight on the pallet. */
+  /** A real block: the miners' screens and the row that found it light up. */
   function onBlock(height: number, pool: string | null) {
-    if (seen.has(height)) return;
-    seen.add(height);
+    if (blocksSeen.has(height)) return;
+    blocksSeen.add(height);
     remember(height, pool, Date.now());
+    st.flashUntil = performance.now() + 5000;
     const row = rows.find((r) => pool && (r.miner.pool === pool || r.name === pool));
+    if (row) row.flashUntil = clock + 6;
+  }
+  ctx.onBlock(onBlock);
+
+  /** A real shielded transaction: the press proves it into a parcel (straight onto the pallet while nobody watches). */
+  function onProof(tx: Tx) {
+    if (seen.has(tx.txid)) return;
+    seen.add(tx.txid);
     if (performance.now() - lastUpdate > 1500) {
-      const c = makeCrate(height, pool, Date.now(), "pallet");
+      const c = makeCrate(tx, Date.now(), "pallet");
       crates.push(c);
       toPallet(c);
       return;
     }
-    st.flashUntil = performance.now() + 5000;
+    // one parcel in the press at a time: the others wait their turn
+    if (crates.some((c) => c.state === "press")) return void setTimeout(() => (seen.delete(tx.txid), onProof(tx)), 2500);
     st.stamped++;
-    if (row) row.flashUntil = clock + 6;
     pressT = 0;
-    const c = makeCrate(height, pool, Date.now(), "press");
+    const c = makeCrate(tx, Date.now(), "press");
     c.mesh.visible = false;
     c.mesh.position.set(PRESS.x, 5 / 6 + CRATE / 2, PRESS.z);
     crates.push(c);
   }
-  ctx.onBlock(onBlock);
-  if (debug) Object.assign(window, { __factoryTestBlock: (h: number, pool: string | null = "Foundry") => onBlock(h, pool), __factoryCrates: () => crates.map((c) => [c.height, c.state, +c.mesh.position.z.toFixed(2), pressT.toFixed(1)]) });
+  ctx.director.onProof(onProof);
+  if (debug) Object.assign(window, { __factoryCrates: () => crates.map((c) => [shortId(c.tx.txid), c.state, +c.mesh.position.z.toFixed(2), pressT.toFixed(1)]) });
 
-  // pre-populate: the last blocks on the pallet, the newest through the press on the first visit
+  // the miners' recent blocks for the screens; the shielded transactions waiting now on the pallet
   void (async () => {
     const list = await get<BlockSummary[]>("/v1/blocks?limit=5");
-    if (!list?.length) return;
-    const sorted = [...list].sort((a, b) => a.height - b.height);
-    for (const b of sorted.slice(0, -1)) {
-      if (seen.has(b.height)) continue;
-      seen.add(b.height);
+    for (const b of [...(list ?? [])].sort((a, b) => a.height - b.height)) {
+      blocksSeen.add(b.height);
       remember(b.height, b.miner_pool, Date.parse(b.time));
-      const c = makeCrate(b.height, b.miner_pool, Date.parse(b.time), "pallet");
+    }
+    const proved = ctx.director.mempoolList().filter((t) => t.pool || t.kind === "shielded" || t.kind === "migration");
+    for (const t of proved.slice(-5)) {
+      if (seen.has(t.txid)) continue;
+      seen.add(t.txid);
+      const c = makeCrate(t, t.seenAt, "pallet");
       crates.push(c);
       toPallet(c);
     }
-    const nb = sorted[sorted.length - 1];
-    if (seen.has(nb.height)) return;
-    seen.add(nb.height);
-    remember(nb.height, nb.miner_pool, Date.parse(nb.time));
-    const c = makeCrate(nb.height, nb.miner_pool, Date.parse(nb.time), "press");
-    c.mesh.visible = false;
-    c.mesh.position.set(PRESS.x, 5 / 6 + CRATE / 2, PRESS.z);
-    crates.push(c);
-    pressT = -1.5;
   })();
 
   // ---- the people ------------------------------------------------------------------------------
@@ -794,7 +798,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
       s.faceDir = V(-1, 0, 0);
       await sleep(500);
       c.state = "carried";
-      st.porter = `CARRYING #${c.height}`;
+      st.porter = `CARRYING ${shortId(c.tx.txid)}`;
       await sleep(300);
       s.faceDir = null;
       await s.walk([V(14.4, 0, -11.2), V(14.25, 0, PALLET.z)], 1.5);
@@ -953,7 +957,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
     title: "MINING HALL",
     scene,
     floors: [
-      { label: "G", name: "Mining hall", y: 0, spawn: V(-3.5, 0, -2.4), yaw: 0 },
+      { label: "G", name: "Proof line · mining hall", y: 0, spawn: V(-3.5, 0, -2.4), yaw: 0 },
       { label: "1", name: "Control room", y: MEZ_Y, spawn: V(-3.5, MEZ_Y, -3.2), yaw: 0 },
     ],
     colliders: (f) => (f === 0 ? ground : upper),
@@ -962,18 +966,20 @@ export function buildFactory(ctx: InteriorContext): Interior {
       const o = hit.object;
       const c = o.userData.crate as Crate | undefined;
       if (c) {
-        const fresh = Date.now() - c.at < 10 * 60_000;
-        const stats: [string, string][] = [["Mined by", c.pool ?? "unknown"]];
-        if (c.detail) stats.push(["Transactions", fmt(c.detail.tx_count)], ["Size", `${fmt(c.detail.size / 1000, 1)} kB`], ["Fees", `${((c.detail.fees ?? 0) / 1e8).toFixed(5)} ZEC`]);
-        else stats.push(["Found", new Date(c.at).toLocaleTimeString()]);
+        const t = c.tx;
         return {
-          eyebrow: fresh ? "Block · just mined" : "Block · shipped",
-          title: fmt(c.height),
+          eyebrow: "Parcel · proved transaction",
+          title: shortId(t.txid),
           mono: true,
-          tag: [c.state === "pallet" || c.state === "leaving" ? "Waiting for the bus" : "On the line", c.state === "pallet" ? "info" : "ok"],
-          stats,
-          body: `<p>Stamped by the press when the block was found, ${esc(new Date(c.at).toLocaleTimeString())}. The porter takes it to the dispatch bay, where the block bus picks it up.</p>`,
-          link: { href: links.block(c.height), label: "Block on ZScan" },
+          tag: [c.state === "pallet" || c.state === "leaving" ? "Waiting for the truck" : "On the line", c.state === "pallet" ? "info" : "ok"],
+          stats: [
+            ["Kind", KIND_LABEL[t.kind]],
+            ["Actions", String(t.actions)],
+            ["Size", `${fmt(t.size / 1000, 1)} kB`],
+            ["Fee", t.fee == null ? "—" : `${(t.fee / 1e8).toFixed(5)} ZEC`],
+          ],
+          body: `<p>A shielded transaction entered the mempool at ${esc(new Date(t.seenAt).toLocaleTimeString())}: its zero-knowledge proof makes it a parcel here. The porter sets it on the pallet, the truck takes it to the MEMPOOL shop, where a zkSNARK collects it for the bus.</p>`,
+          link: { href: links.tx(t.txid), label: "Transaction on ZScan" },
         };
       }
       if (o.userData.cabinets && hit.instanceId !== undefined) {
@@ -1032,7 +1038,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
           eyebrow: `Mining hall · ${s.role ?? "Miner"}`,
           title: s.name,
           image: ZScan.zkSnarkImage(s.id),
-          body: s === porter ? "<p>Takes every freshly stamped block from the end of the conveyor to the dispatch bay, where the bus picks it up.</p>" : s === operator ? "<p>Watches the pools and the network from the control room.</p>" : "<p>Keeps the ASIC cabinets hashing: checks the boards, swaps fans, watches the LEDs.</p>",
+          body: s === porter ? "<p>Takes every freshly proved parcel from the end of the conveyor to the pallet at the dispatch bay, where the truck to the MEMPOOL loads it.</p>" : s === operator ? "<p>Watches the pools and the network from the control room.</p>" : "<p>Keeps the ASIC cabinets hashing: checks the boards, swaps fans, watches the LEDs.</p>",
         };
       }
       return null;
@@ -1040,7 +1046,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
     hover(hit) {
       const o = hit.object;
       const c = o.userData.crate as Crate | undefined;
-      if (c) return `Block #${fmt(c.height)} · ${c.pool ?? "unknown miner"}`;
+      if (c) return `<b>${shortId(c.tx.txid)}</b><span>${KIND_LABEL[c.tx.kind]} · proved, waiting for the truck</span>`;
       if (o.userData.cabinets && hit.instanceId !== undefined) {
         const r = rows[cabRow[hit.instanceId]];
         return r ? `Row ${r.letter} · ${r.name} · ${(r.share * 100).toFixed(1)}% of blocks` : null;
