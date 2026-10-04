@@ -52,7 +52,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "cards" | "bank" | "factory" | "zsa";
+  readonly key: "mempool" | "cards" | "bank" | "factory" | "zsa" | "library";
   /** Shown top-left while inside ("zkCARDS"). */
   readonly title: string;
   readonly scene: THREE.Scene;

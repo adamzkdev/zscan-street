@@ -1,5 +1,5 @@
 import { apartment, house, izakaya, office, pavilion, shophouse, warehouse, type Built } from "../voxel/buildings";
-import { bank, cardShop, construction, depot, factory, machiya, mempoolShop, shrine, zsaShop } from "../voxel/buildings2";
+import { bank, cardShop, construction, depot, factory, library, machiya, mempoolShop, shrine, zsaShop } from "../voxel/buildings2";
 import * as Props from "../voxel/props";
 import type { BuildingJob } from "./plan";
 
@@ -41,6 +41,8 @@ export function buildJob(j: BuildingJob): Built {
       return bank(j.seed, o);
     case "zsa":
       return zsaShop(j.seed, o);
+    case "library":
+      return library(j.seed, o);
     case "pavilion":
       return pavilion(j.seed, o);
   }

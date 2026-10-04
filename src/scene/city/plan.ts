@@ -87,7 +87,8 @@ export type Archetype =
   | "pavilion"
   | "cardshop"
   | "bank"
-  | "zsa";
+  | "zsa"
+  | "library";
 
 export interface BuildingJob {
   id: number;
@@ -203,9 +204,8 @@ export function planCity() {
   row(
     [
       ["shophouse", 401, { shop: "cafe", sign: "喫茶", signColor: "#ffd28a", floors: 3, wall: "cream", garden: true }, 36],
-      ["shophouse", 402, { shop: "shop", sign: "市場", signColor: "#ffb347", floors: 2, wall: "warm", garden: true }, 36],
-      ["shophouse", 403, { shop: "florist", sign: "花", signColor: "#ff8ac0", floors: 3, wall: "tile", garden: true }, 36],
-      ["shophouse", 404, { shop: "ramen", sign: "公開", signColor: "#ffb347", floors: 2, wall: "cream", garden: true }, 36],
+      // the LIBRARY faces the fountain: ZIPs, the press room, network upgrades
+      ["library", 406, { venue: "library" }, 108],
       ["shophouse", 405, { shop: "cafe", sign: "OPEN", signColor: "#ffffff", floors: 3, wall: "warm", garden: true }, 36],
     ],
     -15,

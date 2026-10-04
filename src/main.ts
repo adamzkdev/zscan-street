@@ -29,6 +29,8 @@ import { buildBank } from "./interior/bank";
 import { buildFactory } from "./interior/factory";
 import { buildMempool } from "./interior/mempool";
 import { buildZsa } from "./interior/zsa";
+import { buildLibrary } from "./interior/library";
+import { newsTicker } from "./scene/press";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
@@ -75,6 +77,9 @@ const shelf = city.shops[0] ? new BlockShelf(scene, city.shops[0]) : null;
 void get<BlockSummary[]>("/v1/blocks?limit=100").then((b) => b && shelf?.set(b));
 // the mining hall in the Proof Factory: its live wall
 const hall = city.factory ? new MiningHall(scene, city.factory) : null;
+// the library's headline ticker, over its door (it faces the square, away from the avenue)
+const libraryDoor = city.venues.find((v) => v.kind === "library")?.door;
+const press = libraryDoor ? newsTicker(scene, libraryDoor.clone().add(new THREE.Vector3(0, 4.15, -0.35)), Math.PI) : null;
 const sound = new Soundscape();
 
 // ---- camera rig + post ------------------------------------------------------------------------
@@ -247,7 +252,7 @@ try {
 setTimeout(() => hud.ready(), 15000);
 
 // ---- walk-in places ----------------------------------------------------------------------------
-const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "MINING HALL", zsa: "ZSA EXCHANGE" };
+const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "MINING HALL", zsa: "ZSA EXCHANGE", library: "LIBRARY" };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 const ictx: InteriorContext = { renderer, director, theme, onBlock: (fn) => blockListeners.push(fn) };
 const interiors = new InteriorManager(
@@ -258,6 +263,7 @@ const interiors = new InteriorManager(
     bank: () => buildBank(ictx),
     factory: () => buildFactory(ictx),
     zsa: () => buildZsa(ictx),
+    library: () => buildLibrary(ictx),
   },
   {
     entered: (i, f) => {
@@ -382,8 +388,8 @@ hud.setPlaces([
   ...city.venues.map((v) => ({
     key: v.kind,
     label: PLACES[v.kind],
-    sub: v.kind === "cards" ? "the whole collection" : v.kind === "bank" ? "read a shielded wallet" : "shielded assets · coming soon",
-    at: v.door.clone().setY(v.kind === "bank" ? 7.4 : 5.6),
+    sub: v.kind === "cards" ? "the whole collection" : v.kind === "bank" ? "read a shielded wallet" : v.kind === "library" ? "news · ZIPs · upgrades" : "shielded assets · coming soon",
+    at: v.door.clone().setY(v.kind === "bank" ? 7.4 : v.kind === "library" ? 7.8 : 5.6),
   })),
   ...(city.factory ? [{ key: "factory", label: "MINING HALL", sub: "blocks made here", at: city.factory.hall.clone().setY(7.2) }] : []),
 ]);
@@ -895,6 +901,7 @@ function frame(stepDt?: number) {
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   city.update(t, dt);
   hall?.update(t, dt);
+  press?.update(t, dt);
   composer.render();
   hud.frame(project);
   again();

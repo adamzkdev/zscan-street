@@ -63,6 +63,7 @@ const ICON: Record<string, string> = {
   crane: '<path d="M6 21V4h2v17M3 21h8M8 5h12l-3 3M8 5l4 4M17 8v5"/><rect x="15.5" y="13" width="3" height="2.5"/>',
   door: '<path d="M5 21V4.5A1.5 1.5 0 0 1 6.5 3h8A1.5 1.5 0 0 1 16 4.5V21M3 21h18"/><circle cx="13" cy="12.5" r=".9"/><path d="M19 9v6"/>',
   updown: '<path d="M8 10l4-4 4 4M8 14l4 4 4-4"/>',
+  book: '<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/>',
   walker: '<circle cx="13" cy="4.5" r="2"/><path d="M10.5 21l2-6 2.5 2.5V21M12.5 15l-1-5 3 1.5 2.5 2.5M11.5 10l-3.5 2-1 3.5"/>',
   map2: '<path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/>',
   shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/>',
@@ -103,6 +104,7 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   bank: { icon: "bank", color: "#3ee08f" },
   factory: { icon: "bolt", color: "#f4b728" },
   zsa: { icon: "crane", color: "#3ef0ff" },
+  library: { icon: "book", color: "#ffd28a" },
 };
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */

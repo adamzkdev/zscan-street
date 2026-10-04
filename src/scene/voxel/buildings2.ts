@@ -643,3 +643,103 @@ export function zsaShop(seed: number, o: { width?: number } = {}): Built {
     },
   };
 }
+
+/**
+ * The LIBRARY (図書館) on Transparent Square: Zcash's public knowledge. A low civic hall in warm
+ * timber and stone under a copper-green roof: the ZIP stacks seen through a tall glass atrium in
+ * the middle, the press room in the left wing (the newspaper kiosk stands in front of it), the
+ * reading room in the right wing.
+ */
+export function library(seed: number, o: { width?: number } = {}): Built {
+  const W = o.width ?? 108,
+    D = 34,
+    H = 44;
+  const { m, x0, x1, fz } = body(W, D, H);
+  const stone = shades(["#bdb3a2", "#b5ab9a", "#c4baa9"], 2, seed);
+  const timber = shades(["#6a4630", "#634229", "#704b34"], 2, seed + 1);
+  const copper = shades(["#3f8a78", "#3a8070", "#46937f"], 2, seed + 2);
+  const dark = C("#2a2622");
+  const mid = x0 + Math.floor(W / 2);
+  const aw = 30; // atrium width
+  const a0 = mid - aw / 2,
+    a1 = mid + aw / 2;
+  const R = rand(seed);
+  const spines = ["#b0413e", "#3a6ea5", "#d9a441", "#2f7d5b", "#6b4c9a", "#c76b2d", "#e8e0cf", "#2a2a35"];
+  /** A run of book spines behind glass: what a library looks like from the street. */
+  const books = (bx0: number, bx1: number, y0: number, y1: number, z: number) => {
+    for (let y = y0; y < y1; y += 4) {
+      m.box(bx0, y, z, bx1, y + 1, z + 1, timber);
+      for (let x = bx0; x < bx1; x++) if (R() > 0.12) m.box(x, y + 1, z, x + 1, y + 1 + (R() > 0.3 ? 3 : 2), z + 1, C(spines[Math.floor(R() * spines.length)]));
+    }
+  };
+
+  // wings: stone plinth, timber upper storey with deep eaves
+  m.box(x0, 0, 0, x1, 3, D, stone);
+  m.box(x0, 3, 0, a0, 30, D - 2, stone);
+  m.box(a1, 3, 0, x1, 30, D - 2, stone);
+  for (const [w0, w1] of [
+    [x0, a0],
+    [a1, x1],
+  ]) {
+    // timber frame bands and a row of tall windows with books behind them
+    m.box(w0, 14, D - 2, w1, 16, D - 1, timber);
+    m.box(w0, 28, D - 2, w1, 30, D - 1, timber);
+    for (let x = w0 + 3; x + 6 <= w1 - 2; x += 9) {
+      m.box(x, 4, D - 3, x + 6, 13, D - 2, G("#ffe6b8"));
+      m.box(x, 17, D - 3, x + 6, 27, D - 2, G("#ffe6b8"));
+      books(x, x + 6, 17, 26, D - 4);
+      m.box(x - 1, 3, D - 2, x, 14, D - 1, timber);
+      m.box(x + 6, 3, D - 2, x + 7, 14, D - 1, timber);
+    }
+  }
+  // the atrium: full-height glass between two timber piers, three floors of shelves inside
+  m.box(a0 - 2, 3, D - 3, a0, 36, D, timber);
+  m.box(a1, 3, D - 3, a1 + 2, 36, D, timber);
+  m.box(a0, 3, 4, a1, 36, D - 6, C("#3a3028"));
+  for (const y of [3, 14, 25]) m.box(a0, y, D - 9, a1, y + 1, D - 6, timber);
+  books(a0 + 1, a1 - 1, 4, 13, D - 7);
+  books(a0 + 1, a1 - 1, 15, 24, D - 7);
+  books(a0 + 1, a1 - 1, 26, 35, D - 7);
+  m.box(a0, 3, D - 2, a1, 36, D - 1, G("#9fd0e0"));
+  for (let x = a0 + 5; x < a1; x += 5) m.box(x, 3, D - 2, x + 1, 36, D - 1, dark);
+  for (const y of [14, 25]) m.box(a0, y, D - 2, a1, y + 1, D - 1, dark);
+  // the doors at the foot of the atrium, a warm light over them, three steps up
+  m.box(mid - 4, 3, D - 2, mid + 4, 12, D - 1, C("#4a3424"));
+  m.box(mid - 3, 4, D - 2, mid + 3, 11, D - 1, G("#ffd9a0"));
+  m.box(mid, 4, D - 2, mid + 1, 11, D - 1, dark);
+  m.box(mid - 5, 12, D - 1, mid + 5, 13, D + 1, E("#ffd28a", 1.5));
+  for (let k = 0; k < 3; k++) m.box(mid - 8 - k, 0, D + k, mid + 8 + k, 3 - k, D + 1 + k, stone);
+  // copper roofs: low hips on the wings, a taller one over the atrium with a lantern ridge
+  for (let k = 0; k < 5; k++) {
+    m.box(x0 - 2 + k, 30 + k, -1 + k, a0 + 1 - k, 31 + k, D + 1 - k, copper);
+    m.box(a1 - 1 + k, 30 + k, -1 + k, x1 + 2 - k, 31 + k, D + 1 - k, copper);
+  }
+  for (let k = 0; k < 7; k++) m.box(a0 - 3 + k, 36 + k, -1 + k, a1 + 3 - k, 37 + k, D + 1 - k, copper);
+  m.box(a0 + 4, 43, D / 2 - 1, a1 - 4, 44, D / 2 + 1, E("#ffd28a", 1.2));
+  // the press wing's vertical sign and two paper lanterns by the door
+  verticalSignBox(m, x0 + 3, 8, D, 18, 5);
+  lantern(m, mid - 9, 8, D + 1, "#ffd28a");
+  lantern(m, mid + 6, 8, D + 1, "#ffd28a");
+
+  const signs: SignSpot[] = [
+    { text: "図書館 LIBRARY", color: "#ffd28a", x: mid, y: 32.5, z: D + 0.05, w: aw - 4, h: 3.4, vertical: false, facing: "front" },
+    { text: "PRESS · ZIPs", color: "#7fe3ff", x: (x0 + a0) / 2, y: 15, z: D - 0.9, w: 20, h: 2, vertical: false, facing: "front" },
+    { text: "新聞", color: "#ff8a5a", x: x0 + 4, y: 17, z: D + 2.5, w: 5, h: 14, vertical: true, facing: "side" },
+  ];
+  return {
+    model: m,
+    signs,
+    door: [mid, fz + 3],
+    body: [x0, 0, x1, D],
+    lights: [
+      [mid, 10, D + 3, "#ffd28a"],
+      [mid, 26, D - 8, "#ffe6b8"],
+    ],
+    points: {
+      keeper: [mid, 0, D - 8],
+      camPos: [mid, 22, D + 14],
+      camLook: [mid, 12, D],
+      kiosk: [x0 + 14, 0, D + 8],
+    },
+  };
+}
