@@ -53,6 +53,11 @@ const ICON: Record<string, string> = {
   chart: '<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>',
   coins: '<ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v5c0 1.7 2.7 3 6 3s6-1.3 6-3V7"/><path d="M9 15v2c0 1.7 2.7 3 6 3s6-1.3 6-3v-5c0-1.7-2.7-3-6-3"/>',
   pulse: '<path d="M2 12h4l3-8 4 16 3-8h6"/>',
+  // the strip: the block bus, a ZEC coin, the shielded supply, hash power
+  busfront: '<path d="M5 17V6.5A3.5 3.5 0 0 1 8.5 3h7A3.5 3.5 0 0 1 19 6.5V17z"/><path d="M5 11h14M8 17v3M16 17v3M9 6h6"/><circle cx="8.5" cy="14" r=".9"/><circle cx="15.5" cy="14" r=".9"/>',
+  zec: '<circle cx="12" cy="12" r="9"/><path d="M8.6 8.2h6.8L8.6 15.8h6.8M12 5.6v2.6M12 15.8v2.6"/>',
+  vault: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9.3 9.2h5.4l-5.4 5.6h5.4"/>',
+  bolt: '<path d="M13.5 2.5 5 13.5h6.5L10.5 21.5 19 10.5h-6.5z"/>',
   shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/>',
   sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path class="w1" d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path class="w2" d="M18.5 7a7 7 0 0 1 0 10"/><path class="x" d="M16 9l5 6M21 9l-5 6"/>',
 };
@@ -81,6 +86,15 @@ export interface HudCallbacks {
 }
 
 type Section = "block" | "mempool" | "market" | "supply" | "network";
+
+/** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
+const READINGS: Record<Section, { icon: string; label: string; color: string; title: string }> = {
+  block: { icon: "busfront", label: "Block", color: "#f4b728", title: "Last block: the bus that took it" },
+  mempool: { icon: "parcel", label: "Mempool", color: "#ff9f2e", title: "Transactions waiting for a block" },
+  market: { icon: "zec", label: "ZEC", color: "#2fbf9c", title: "ZEC price, 24 h" },
+  supply: { icon: "vault", label: "Supply", color: "#1baf7a", title: "Coins mined, share shielded" },
+  network: { icon: "bolt", label: "Hashrate", color: "#4ea8de", title: "Network hash power" },
+};
 const usd = (n: number) => (n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
 
 /** Price line for the market section. */
@@ -147,7 +161,6 @@ export class Hud {
   private rain = true;
   private theme: Theme;
   private sig = "";
-  private trackSig = "";
   private camOpen = false;
   private labels = new Map<string, HTMLElement>();
 
@@ -675,38 +688,85 @@ export class Hud {
    * The thin bar at the bottom: one reading per subject (last block, mempool, market, supply,
    * network). A click on a reading unfolds that subject above the bar.
    */
+  private stripBuilt = false;
+  private stripVals = new Map<string, string>();
+  private detailSig = "";
+
+  /** The bar is built once; after that only its values change, so hover and focus survive the clock. */
+  private buildStrip(el: HTMLElement) {
+    const rd = (k: Section) => {
+      const r = READINGS[k];
+      return `<button class="rd" data-sec="${k}" title="${r.title}" style="--c:${r.color}">
+        <span class="tile${k === "block" ? " prog" : ""}">${icon(r.icon)}</span>
+        <span class="rv"><small>${r.label}</small><span class="v"><b class="mono" data-k="${k}">—</b><em data-k="${k}-sub"></em></span></span>
+      </button>`;
+    };
+    el.innerHTML = `<div class="details"></div><div class="bar">
+      <span class="live" data-k="status"><i></i><b>…</b></span>
+      ${(Object.keys(READINGS) as Section[]).map(rd).join("")}
+      <span class="chev" data-sec="block" title="Open / close">${icon("up")}</span>
+    </div>`;
+    this.stripBuilt = true;
+    this.stripVals.clear();
+  }
+
+  private setVal(el: HTMLElement, k: string, html: string) {
+    if (this.stripVals.get(k) === html) return;
+    this.stripVals.set(k, html);
+    const n = el.querySelector<HTMLElement>(`[data-k="${k}"]`);
+    if (n) n.innerHTML = html;
+  }
+
   private renderStrip(force = false) {
     const el = this.$(".strip");
+    if (!this.stripBuilt) this.buildStrip(el);
     const lb = this.stats.lastBlock;
     const since = lb ? Date.parse(lb.time) : 0;
     const sec = lb ? (Date.now() - since) / 1000 : 0;
     const m = Market.state;
     const txs = this.director.mempoolList();
-    const sig = [this.status, lb?.height, Math.floor(sec), this.section, txs.length, txs[0]?.txid, this.buses.size, this.history.length, m.price?.usd, m.supply?.height, this.flowSig].join("|");
-    if (!force && sig === this.trackSig) return;
-    this.trackSig = sig;
-
-    const k = Math.min(1, sec / TARGET_S);
-    const ring = `<svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" class="bg"/><circle cx="10" cy="10" r="7.5" class="fg ${sec > TARGET_S ? "late" : ""}" style="stroke-dasharray:${(k * 47.1).toFixed(1)} 47.1"/></svg>`;
     const p = m.price;
     const up = (p?.usd_24h_change ?? 0) >= 0;
-    const item = (key: Section, inner: string, title: string) => `<button class="rd ${this.section === key ? "on" : ""}" data-sec="${key}" title="${title}">${inner}</button>`;
-    const bar = `<div class="bar">
-      <span class="live ${this.status}"><i></i>${this.status === "live" ? "LIVE" : this.status === "offline" ? "OFFLINE" : "…"}</span>
-      ${item("block", `${ring}<span class="mono">${lb ? num(lb.height) : "—"}</span><small>${lb ? ago(since) : ""}</small>`, "Last block")}
-      ${item("mempool", `${icon("parcel")}<span class="mono">${this.stats.mempool}</span><small>TX</small>`, "Mempool")}
-      ${item("market", `${icon("chart")}<span class="mono">${p ? usd(p.usd) : "—"}</span>${p ? `<small class="${up ? "up" : "down"}">${up ? "▲" : "▼"}${Math.abs(p.usd_24h_change).toFixed(1)}%</small>` : ""}`, "ZEC market")}
-      ${item("supply", `${icon("coins")}<span class="mono">${m.supply ? `${(m.supply.supply / 1e14).toFixed(2)}M` : "—"}</span>${m.pools ? `<small>${Math.round(m.pools.shielded_ratio * 100)}% ${icon("shield")}</small>` : ""}`, "Supply")}
-      ${item("network", `${icon("pulse")}<span class="mono">${m.network ? `${(m.network.solps / 1e9).toFixed(1)}` : "—"}</span><small>GSOL/S</small>`, "Network")}
-      <span class="chev" data-sec="${this.section ?? "block"}">${icon("up")}</span>
-    </div>`;
+
+    // the bar
+    const live = el.querySelector<HTMLElement>(".live")!;
+    live.className = `live ${this.status}`;
+    this.setVal(el, "status", `<i></i><b>${this.status === "live" ? "LIVE" : this.status === "offline" ? "OFFLINE" : "…"}</b>`);
+    this.setVal(el, "block", lb ? num(lb.height) : "—");
+    this.setVal(el, "block-sub", lb ? ago(since) : "");
+    const tile = el.querySelector<HTMLElement>(".tile.prog")!;
+    tile.style.setProperty("--k", Math.min(1, sec / TARGET_S).toFixed(3));
+    tile.classList.toggle("late", sec > TARGET_S);
+    this.setVal(el, "mempool", String(this.stats.mempool));
+    this.setVal(el, "mempool-sub", "tx");
+    this.setVal(el, "market", p ? usd(p.usd) : "—");
+    this.setVal(el, "market-sub", p ? `<span class="${up ? "up" : "down"}">${up ? "▲" : "▼"} ${Math.abs(p.usd_24h_change).toFixed(1)}%</span>` : "");
+    this.setVal(el, "supply", m.supply ? `${(m.supply.supply / 1e14).toFixed(2)}M` : "—");
+    this.setVal(el, "supply-sub", m.pools ? `${Math.round(m.pools.shielded_ratio * 100)}% shielded` : "");
+    this.setVal(el, "network", m.network ? (m.network.solps / 1e9).toFixed(1) : "—");
+    this.setVal(el, "network-sub", "GSol/s");
+    for (const b of el.querySelectorAll<HTMLElement>(".rd")) b.classList.toggle("on", b.dataset.sec === this.section);
+    el.querySelector<HTMLElement>(".chev")!.dataset.sec = this.section ?? "block";
     el.classList.toggle("open", !!this.section);
+
+    // the unfolded section: redrawn when its data changes (ages refresh every few seconds)
+    const sig = [this.section, this.status, lb?.height, Math.floor(sec / 5), txs.length, txs[0]?.txid, this.buses.size, this.history.length, p?.usd, m.supply?.height, this.flowSig].join("|");
+    if (!force && sig === this.detailSig) return;
+    this.detailSig = sig;
+    const det = el.querySelector<HTMLElement>(".details")!;
+    if (!this.section) {
+      det.innerHTML = "";
+      this.shown = null;
+      return;
+    }
     // the unfold animation plays when a section opens, not on every refresh
     const fresh = this.section !== this.shown;
     this.shown = this.section;
-    const scroll = el.querySelector(".rows")?.scrollTop ?? 0;
-    el.innerHTML = (this.section ? `<div class="details ${fresh ? "anim" : ""}">${this.sectionHtml(this.section)}</div>` : "") + bar;
-    const rows = el.querySelector(".rows");
+    const scroll = det.querySelector(".rows")?.scrollTop ?? 0;
+    det.className = `details${fresh ? " anim" : ""}`;
+    det.style.setProperty("--c", READINGS[this.section].color);
+    det.innerHTML = this.sectionHtml(this.section);
+    const rows = det.querySelector(".rows");
     if (rows) rows.scrollTop = scroll;
   }
   private shown: Section | null = null;
@@ -717,7 +777,7 @@ export class Hud {
   private sectionHtml(sec: Section): string {
     const m = Market.state;
     const cell = (k: string, v: string, sub = "") => `<div class="cell"><dt>${k}</dt><dd>${v}</dd>${sub ? `<small>${sub}</small>` : ""}</div>`;
-    const head = (t: string, right = "") => `<div class="dh"><b>${t}</b>${right}</div>`;
+    const head = (t: string, right = "") => `<div class="dh"><span class="tile">${icon(READINGS[sec].icon)}</span><b>${t}</b><span class="dr">${right}</span></div>`;
     switch (sec) {
       case "block": {
         const lb = this.stats.lastBlock;

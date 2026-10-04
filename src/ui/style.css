@@ -455,23 +455,22 @@ kbd {
   width: min(680px, calc(100vw - 32px));
 }
 .strip .bar {
-  height: 40px;
+  height: 50px;
   display: flex;
   align-items: stretch;
-  padding: 0 4px 0 12px;
+  padding: 0 4px 0 14px;
   white-space: nowrap;
 }
 .strip .live {
-  margin-right: 6px;
+  margin-right: 8px;
 }
 .rd {
   all: unset;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 11px;
-  font-size: 12px;
+  gap: 9px;
+  padding: 0 14px 0 12px;
   position: relative;
   color: var(--text);
   transition: background 0.15s;
@@ -480,45 +479,85 @@ kbd {
   content: "";
   position: absolute;
   left: 0;
-  top: 12px;
-  bottom: 12px;
+  top: 13px;
+  bottom: 13px;
   width: 1px;
   background: var(--line);
 }
 .rd:hover {
   background: var(--line);
 }
+.rd:focus-visible {
+  outline: 1px solid var(--c, var(--gold));
+  outline-offset: -1px;
+}
 .rd.on {
-  background: var(--gold-soft);
+  background: color-mix(in srgb, var(--c, var(--gold)) 12%, transparent);
 }
 .rd.on::after {
   content: "";
   position: absolute;
-  left: 8px;
-  right: 8px;
+  left: 10px;
+  right: 10px;
   top: -1px;
   height: 2px;
-  background: var(--gold);
+  background: var(--c, var(--gold));
 }
-.rd > svg.i {
-  width: 15px;
-  height: 15px;
-  color: var(--gold-ink);
+/* icon tile: the reading's colour on a soft ground; the block one rings with the time to the next */
+.tile {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--c, var(--gold));
+  background: color-mix(in srgb, var(--c, var(--gold)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--gold)) 30%, transparent);
 }
-.rd .mono {
-  font-weight: 500;
+.tile svg.i {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.75;
 }
-.rd small {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font: 10.5px var(--mono);
+.tile.prog {
+  --k: 0;
+  border-radius: 50%;
+  box-shadow: none;
+  background:
+    radial-gradient(closest-side, var(--hud-solid) 82%, transparent 84%),
+    conic-gradient(var(--c) calc(var(--k) * 1turn), color-mix(in srgb, var(--c) 18%, transparent) 0);
+}
+.tile.prog.late {
+  --c: var(--bad);
+}
+.rv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1;
+}
+.rv small {
+  font: 500 10px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--faint);
-  letter-spacing: 0.04em;
 }
-.rd small svg.i {
-  width: 11px;
-  height: 11px;
+.rv .v {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.rv .v b {
+  font: 500 14px var(--mono);
+  color: var(--text);
+}
+.rv .v em {
+  font: 400 11px var(--mono);
+  font-style: normal;
+  color: var(--muted);
+}
+.rv .v em:empty {
+  display: none;
 }
 .up {
   color: var(--good) !important;
@@ -529,8 +568,8 @@ kbd {
 .live {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font: 500 10.5px var(--mono);
+  gap: 7px;
+  font: 500 11px var(--mono);
   letter-spacing: 0.12em;
   color: var(--faint);
 }
@@ -593,8 +632,11 @@ kbd {
 
 /* unfolded section */
 .details {
-  padding: 12px 14px 10px;
-  border-bottom: 1px dashed var(--line-strong);
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.details:empty {
+  display: none;
 }
 .details.anim {
   animation: unfold 0.22s ease-out;
@@ -607,16 +649,27 @@ kbd {
 }
 .dh {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
   font-size: 12px;
 }
+.dh .tile {
+  width: 26px;
+  height: 26px;
+}
+.dh .tile svg.i {
+  width: 15px;
+  height: 15px;
+}
 .dh b {
-  font: 500 11px var(--mono);
+  font: 500 12px var(--mono);
   letter-spacing: 0.14em;
-  color: var(--gold-ink);
+  color: var(--c, var(--gold-ink));
+}
+.dh .dr {
+  margin-left: auto;
+  text-align: right;
 }
 .dh b a {
   color: var(--text);
@@ -631,7 +684,7 @@ kbd {
 .dh b a:hover {
   color: var(--gold-ink);
 }
-.dh svg.i {
+.dh b svg.i {
   width: 12px;
   height: 12px;
 }
@@ -646,11 +699,11 @@ kbd {
   border-top: none;
 }
 .cell {
-  padding: 8px 10px 8px 0;
+  padding: 9px 12px 9px 0;
   border-bottom: 1px solid var(--line);
 }
 .cell dt {
-  font: 500 9.5px var(--mono);
+  font: 500 10.5px var(--mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
@@ -1297,10 +1350,19 @@ kbd {
 
 @media (max-width: 760px) {
   .tip,
-  .rd small,
-  .rd[data-sec="network"],
-  .rd[data-sec="supply"] {
+  .rv small {
     display: none;
+  }
+  .strip .bar {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .strip {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  .rd {
+    padding: 0 10px;
+    gap: 7px;
   }
   .cells {
     grid-template-columns: 1fr 1fr;
