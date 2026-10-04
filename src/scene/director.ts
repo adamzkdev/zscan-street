@@ -51,6 +51,18 @@ export interface DirectorEvents {
   door?(): void;
 }
 
+/**
+ * Someone walks into the MEMPOOL shop: a zkSNARK collecting its parcel, or a truck driver bringing
+ * one in. The walk-in shop replays these visits inside (interior/mempool.ts).
+ */
+export interface ShopVisit {
+  kind: "pickup" | "delivery";
+  /** The zkSNARK (portrait) doing it. */
+  id: number;
+  tx: Tx;
+  role: string;
+}
+
 /** A line of people: spots along a path, filled in order of arrival. */
 class Line {
   readonly people: Snark[] = [];
@@ -216,6 +228,20 @@ export class Director {
     } catch {}
   }
 
+  private visitors = new Set<(v: ShopVisit) => void>();
+  /** Listen to the shop's door: every pickup and delivery, as it starts. */
+  onShopVisit(fn: (v: ShopVisit) => void) {
+    this.visitors.add(fn);
+  }
+  private visit(v: ShopVisit) {
+    for (const fn of this.visitors) fn(v);
+  }
+
+  /** The transactions waiting on the shop rack (delivered, not yet collected), oldest first. */
+  rackTxs(): Tx[] {
+    return [...this.shops.values()].flatMap((s) => s.rack.map((c) => c.tx));
+  }
+
   /** The parcels on the shop racks, for picking. */
   rackMeshes() {
     return [...this.shops.values()].flatMap((s) => s.rack.map((c) => c.mesh));
@@ -352,6 +378,7 @@ export class Director {
     if (!this.snarks.has(s)) return;
     // inside: to the counter, take the parcel, back out
     s.state = "shopping";
+    this.visit({ kind: "pickup", id: s.id, tx, role: "Customer" });
     await s.walk([shop.site.door], 1.5);
     this.ev.door?.();
     await s.walk([shop.site.inside, shop.site.counter], 1.5);
@@ -536,6 +563,7 @@ export class Director {
         await driver.walk([truck.behind().setY(CITY.curb)], 1.9);
         driver.setTxs([tx]);
         driver.showParcels(true);
+        this.visit({ kind: "delivery", id: driver.id, tx, role: driver.role ?? "Driver" });
         await driver.walk([shop.site.door], 1.7);
         this.ev.door?.();
         await driver.walk([shop.site.inside, shop.site.counter], 1.7);

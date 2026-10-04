@@ -243,7 +243,7 @@ export function buildMempool(ctx: InteriorContext): Interior {
     scene.add(l);
   }
 
-  // ---- people: the shopkeeper and a couple of customers browsing ----------------------------
+  // ---- people: the shopkeeper, a customer browsing, the archivist upstairs --------------------
   const people: Snark[] = [];
   /** Wanderers change aisle by the cross aisle at `cross` (z), never through the shelves. */
   const addSnark = async (id: number, at: THREE.Vector3, role: string, wander?: THREE.Vector3[], cross = -3.8) => {
@@ -269,8 +269,57 @@ export function buildMempool(ctx: InteriorContext): Interior {
   void addSnark(6221, new THREE.Vector3(6.8, SHOP_Y, -6.2), "Shopkeeper");
   const aisleSpots = [-4.6, -0.6, 3.4].flatMap((x) => [-6, -9, -12].map((z) => new THREE.Vector3(x, SHOP_Y, z)));
   void addSnark(2967, aisleSpots[1], "Customer", aisleSpots);
-  void addSnark(5430, aisleSpots[5], "Customer", aisleSpots);
   void addSnark(1, new THREE.Vector3(0, ARCHIVE_Y, -10), "Archivist", [-5.5, 0, 5.5].flatMap((x) => [-6, -14, -24].map((z) => new THREE.Vector3(x, ARCHIVE_Y, z))), -1.9);
+
+  // ---- the live street, replayed in here: drivers bring parcels in, zkSNARKs collect them -------
+  /** Last frame drawn in here: visits are replayed only while someone is watching. */
+  let seen = 0;
+  let visiting = 0;
+  const DOOR_IN = new THREE.Vector3(0, SHOP_Y, 0.9),
+    DOOR = new THREE.Vector3(0, SHOP_Y, -0.8);
+  /** Round the west end of the counter to the pickup wall, standing just in front of it. */
+  const toWall = (z: number) => [DOOR, new THREE.Vector3(4.1, SHOP_Y, -3.2), new THREE.Vector3(4.1, SHOP_Y, -5.7), new THREE.Vector3(8.7, SHOP_Y, THREE.MathUtils.clamp(z, -12, -5.2))];
+  ctx.director.onShopVisit(async (v) => {
+    if (performance.now() - seen > 600 || visiting >= 10) return;
+    visiting++;
+    const pickup = v.kind === "pickup";
+    if (pickup) parcels.held.set(v.tx.txid, v.tx);
+    else parcels.incoming.add(v.tx.txid);
+    let s: Snark | null = null;
+    try {
+      s = new Snark(v.id, await loadArt(v.id));
+      s.noClip = true;
+      s.state = "resident";
+      s.role = v.role;
+      s.setTxs([v.tx]);
+      s.showParcels(!pickup);
+      s.root.position.copy(DOOR_IN);
+      scene.add(s.root);
+      people.push(s);
+      const at = pickup ? parcels.where(v.tx.txid) : null;
+      const path = toWall(at ? at.z : -5.2 - Math.random() * 6);
+      await s.walk(path, pickup ? 1.6 : 1.8);
+      s.faceDir = new THREE.Vector3(1, 0, 0);
+      await new Promise((r) => setTimeout(r, 450));
+      // take the parcel off the wall, or put it on
+      if (pickup) parcels.held.delete(v.tx.txid);
+      else parcels.incoming.delete(v.tx.txid);
+      parcels.sync();
+      s.showParcels(pickup);
+      await new Promise((r) => setTimeout(r, 350));
+      s.faceDir = null;
+      await s.walk([...path.slice(0, -1).reverse(), DOOR_IN], pickup ? 1.7 : 1.9);
+    } catch {
+      parcels.held.delete(v.tx.txid);
+      parcels.incoming.delete(v.tx.txid);
+    } finally {
+      visiting--;
+      if (s) {
+        scene.remove(s.root);
+        people.splice(people.indexOf(s), 1);
+      }
+    }
+  });
 
   // ---- blocks: the last hundred and fifty downstairs, a thousand upstairs --------------------
   void (async () => {
@@ -332,6 +381,7 @@ export function buildMempool(ctx: InteriorContext): Interior {
     pick: (hit) => recent.pick(hit) ?? archive.pick(hit) ?? parcels.pick(hit) ?? (hit.object === board.mesh ? board.info() : null),
     hover: (hit) => recent.hover(hit) ?? archive.hover(hit) ?? parcels.hover(hit) ?? (hit.object === board.mesh ? "<b>Mempool board</b><span>live</span>" : null),
     update(dt, t, camera) {
+      seen = performance.now();
       camera.getWorldQuaternion(camQuat);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
       for (const s of people) s.update(dt, t, camQuat, camRight);
@@ -424,6 +474,10 @@ class BlockBoxes {
 class Parcels {
   readonly group = new THREE.Group();
   private byTx = new Map<string, THREE.Mesh>();
+  /** Collected outside already, but its zkSNARK is still walking to the wall in here. */
+  readonly held = new Map<string, Tx>();
+  /** On the rack outside, but its driver is still carrying it in here. */
+  readonly incoming = new Set<string>();
   private geo = new THREE.BoxGeometry(0.34, 0.3, 0.34);
 
   constructor(
@@ -436,7 +490,8 @@ class Parcels {
   }
 
   sync() {
-    const txs = this.ctx.director.mempoolList().slice(-70);
+    const rack = this.ctx.director.rackTxs().filter((t) => !this.incoming.has(t.txid));
+    const txs = [...rack, ...[...this.held.values()].filter((t) => !rack.includes(t))].slice(-70);
     const keep = new Set(txs.map((t) => t.txid));
     for (const [id, m] of this.byTx)
       if (!keep.has(id)) {
@@ -453,6 +508,11 @@ class Parcels {
       }
       m.position.copy(this.slot(i % 14, Math.floor(i / 14)));
     });
+  }
+
+  /** Where a parcel sits on the wall (null if it isn't there). */
+  where(txid: string) {
+    return this.byTx.get(txid)?.position ?? null;
   }
 
   private at(hit: THREE.Intersection): Tx | undefined {
@@ -573,7 +633,7 @@ function liveBoard(ctx: InteriorContext) {
           ["Oldest", txs[0] ? ago(txs[0].seenAt) : "—"],
           ["Shielded", txs.length ? `${Math.round((txs.filter((t) => t.kind === "shielded" || t.kind === "migration").length / txs.length) * 100)}%` : "—"],
         ],
-        body: `<div class="note">Each transaction is a parcel on the pickup wall by the counter. A zkSNARK collects it and waits at the bus stop for the next block.</div>`,
+        body: `<div class="note">Each transaction is a parcel on the pickup wall by the counter. A truck driver brings it in, a zkSNARK collects it and waits at the bus stop for the next block.</div>`,
         link: { href: "https://zscan.cash/mempool", label: "Mempool on ZScan" },
       };
     },

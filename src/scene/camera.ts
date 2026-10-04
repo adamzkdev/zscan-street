@@ -253,10 +253,8 @@ export class CameraRig {
       this.bus = s.bus;
       return s.bus.phase === "departing" ? "bus-side" : "inside";
     }
-    if (s.state === "shopping" && s.shop && s.root.position.distanceTo(s.shop.inside) < 4.5) {
-      this.shopSite = s.shop;
-      return "shop";
-    }
+    // inside the shop it is replayed in the walk-in MEMPOOL (interior/mempool.ts): the camera waits
+    // at the door rather than cutting into the street model's old, smaller shop
     return null;
   }
 
