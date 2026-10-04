@@ -25,6 +25,9 @@ a transaction is picked from its txid (zkSNARKs live off-chain, so it's casting,
 - LED screens on the towers show the live ZEC price, market cap and supply.
 - Day and night themes (night: rain and neon), sound, a camera rail on the right, and one thin data
   strip at the bottom (last block, mempool, market, supply, network) that unfolds on click.
+- On foot: the walker button under the camera rail puts you in the street in first person (WASD /
+  ZQSD, drag to look, Shift to run). Walk into a shop door to go in; walk back out of the entrance
+  to come out on the pavement. Esc returns to the map.
 
 ## Walk-in places
 

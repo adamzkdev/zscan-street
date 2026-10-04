@@ -63,6 +63,8 @@ const ICON: Record<string, string> = {
   crane: '<path d="M6 21V4h2v17M3 21h8M8 5h12l-3 3M8 5l4 4M17 8v5"/><rect x="15.5" y="13" width="3" height="2.5"/>',
   door: '<path d="M5 21V4.5A1.5 1.5 0 0 1 6.5 3h8A1.5 1.5 0 0 1 16 4.5V21M3 21h18"/><circle cx="13" cy="12.5" r=".9"/><path d="M19 9v6"/>',
   updown: '<path d="M8 10l4-4 4 4M8 14l4 4 4-4"/>',
+  walker: '<circle cx="13" cy="4.5" r="2"/><path d="M10.5 21l2-6 2.5 2.5V21M12.5 15l-1-5 3 1.5 2.5 2.5M11.5 10l-3.5 2-1 3.5"/>',
+  map2: '<path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/>',
   shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/>',
   sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path class="w1" d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path class="w2" d="M18.5 7a7 7 0 0 1 0 10"/><path class="x" d="M16 9l5 6M21 9l-5 6"/>',
 };
@@ -87,6 +89,8 @@ export interface HudCallbacks {
   /** Walk into a place: the MEMPOOL shop, the mining hall, the card shop, the bank. */
   enterPlace(key: string): void;
   floor(n: number): void;
+  /** On foot in the street (first person), or back to the map. */
+  walk(on: boolean): void;
   leave(): void;
 }
 
@@ -202,6 +206,8 @@ export class Hud {
         <i></i>
         <button data-act="cam" title="Camera and places">${icon("camera")}</button>
         <div class="campop hud hidden"></div>
+        <i></i>
+        <button data-act="walk" class="walk" title="Walk the street (first person)">${icon("walker")}</button>
       </nav>
       <aside class="panel hud"></aside>
       <section class="strip hud"></section>
@@ -239,6 +245,22 @@ export class Hud {
       this.renderStrip(true);
     } else if (this.mode === "follow" || this.mode === "inspect") this.cb.exitFollow();
     else this.cb.select(null);
+  }
+
+  /** On foot: the map's tools step aside, the walk button lights up, a hint says how to move. */
+  setWalking(on: boolean) {
+    this.root.classList.toggle("walking", on);
+    const b = this.$(".rail .walk");
+    b.classList.toggle("on", on);
+    b.innerHTML = icon(on ? "map2" : "walker");
+    b.title = on ? "Back to the map" : "Walk the street (first person)";
+    let h = this.root.querySelector<HTMLElement>(".whint");
+    if (!h) {
+      h = document.createElement("div");
+      h.className = "whint";
+      h.innerHTML = `<span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>Shift</kbd> run</span><span>walk into a door to go in</span><span><kbd>Esc</kbd> back to the map</span>`;
+      this.root.appendChild(h);
+    }
   }
 
   /** The sound button's state (the preference is restored on load). */
@@ -467,6 +489,9 @@ export class Hud {
         return this.cb.home();
       case "cam":
         return this.setCam(!this.camOpen);
+      case "walk":
+        this.setCam(false);
+        return this.cb.walk(!this.root.classList.contains("walking"));
       case "close":
         return this.cb.select(null);
       case "leave":

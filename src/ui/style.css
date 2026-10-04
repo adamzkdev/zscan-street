@@ -2131,3 +2131,51 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ---- on foot in the street ---- */
+.walking .rail > button:not(.walk),
+.walking .rail > i,
+.walking .labels,
+.walking .placetag {
+  display: none;
+}
+.whint {
+  position: absolute;
+  left: 50%;
+  bottom: 80px;
+  transform: translateX(-50%);
+  display: none;
+  gap: 14px;
+  align-items: center;
+  font-size: 11.5px;
+  color: #d8d8d8;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.whint span {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.walking:not(.indoors) .whint {
+  display: flex;
+}
+/* a small crosshair: where a click lands */
+.walking:not(.indoors)::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+:root[data-theme="day"] .whint {
+  color: #212529;
+  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.9);
+}

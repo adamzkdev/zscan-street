@@ -22,6 +22,7 @@ import { BlockShelf } from "./scene/shelf";
 import { MiningHall } from "./scene/mining";
 import { CardWall } from "./scene/cardwall";
 import { InteriorManager } from "./interior/manager";
+import { WalkControls } from "./interior/walk";
 import type { Interior, InteriorContext } from "./interior/types";
 import { buildGallery } from "./interior/gallery";
 import { buildBank } from "./interior/bank";
@@ -229,6 +230,7 @@ hud = new Hud(
       hud.renderIndoor(interiors.floor);
     },
     leave: () => interiors.exit(),
+    walk: (on) => setWalking(on),
   },
   director,
   theme,
@@ -264,16 +266,94 @@ const interiors = new InteriorManager(
       hud.enterInterior(i, f);
     },
     left: () => {
-      rig.controls.enabled = true;
       venues.close();
       hud.leaveInterior();
+      if (walking && cameIn) stepOut(cameIn);
+      else rig.controls.enabled = !walking;
+      cameIn = null;
       syncCamera();
     },
     fade: () => hud.cut(),
   },
 );
 interiors.walk.resize(window.innerWidth, window.innerHeight);
-window.addEventListener("resize", () => interiors.walk.resize(window.innerWidth, window.innerHeight));
+window.addEventListener("resize", () => {
+  interiors.walk.resize(window.innerWidth, window.innerHeight);
+  onFoot.resize(window.innerWidth, window.innerHeight);
+});
+
+// ---- on foot: first person in the street, the same walk as inside, through the doors -----------
+const onFoot = new WalkControls(canvas);
+onFoot.camera.far = 400;
+onFoot.resize(window.innerWidth, window.innerHeight);
+const BOARD = { x0: -49.4, x1: 49.4, z0: -38.6, z1: 31.6 };
+onFoot.collide = (x, z) => x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1 || !city.nav.free(x, z, 0.28);
+let walking = false;
+/** The place walked into, to step back out of its door. */
+let cameIn: Interior["key"] | null = null;
+/** Walk-in doors on the street (the Proof Factory's is on the avenue, in line with the others). */
+const doors: { key: Interior["key"]; at: THREE.Vector3 }[] = [
+  ...(city.shops[0] ? [{ key: "mempool" as const, at: city.shops[0].door }] : []),
+  ...city.venues.map((v) => ({ key: v.kind, at: v.door })),
+  ...(city.factory && city.shops[0] ? [{ key: "factory" as const, at: new THREE.Vector3(city.factory.hall.x, CURB, city.shops[0].door.z) }] : []),
+];
+/** The camera the viewer is looking through on the street. */
+function viewCam() {
+  return walking ? onFoot.camera : rig.camera;
+}
+/** The pavement side of a door: the free spot just outside it. */
+function outside(at: THREE.Vector3) {
+  for (const d of [1.6, -1.6, 2.4, -2.4]) if (!onFoot.collide!(at.x, at.z + d)) return { x: at.x, z: at.z + d, yaw: d > 0 ? Math.PI : 0 };
+  return { x: at.x, z: at.z + 1.6, yaw: Math.PI };
+}
+function stepOut(key: Interior["key"]) {
+  const d = doors.find((x) => x.key === key);
+  if (!d) return;
+  const o = outside(d.at);
+  onFoot.place(new THREE.Vector3(o.x, CURB, o.z), o.yaw);
+  onFoot.enabled = true;
+  doorCool = 1.2;
+}
+let doorCool = 0;
+function setWalking(on: boolean) {
+  if (on === walking || interiors.active) return;
+  walking = on;
+  select(null);
+  if (on) {
+    if (rig.mode === "follow" || rig.mode === "inspect") exitFollow();
+    // start where the map was looking, on the first free spot, facing the way the map faced
+    const f = rig.focus;
+    let at = new THREE.Vector3(f.x, CURB, f.z);
+    search: for (let r = 0; r < 10; r += 0.7)
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+        const x = f.x + Math.cos(a) * r,
+          z = f.z + Math.sin(a) * r;
+        if (!onFoot.collide!(x, z)) {
+          at = new THREE.Vector3(x, CURB, z);
+          break search;
+        }
+      }
+    const dir = rig.camera.getWorldDirection(new THREE.Vector3());
+    onFoot.place(at, Math.atan2(-dir.x, -dir.z));
+    doorCool = 0.8;
+  }
+  onFoot.enabled = on;
+  rig.controls.enabled = !on;
+  hud.setWalking(on);
+  hud.cut();
+}
+/** Walking into a walk-in door takes you inside. */
+function throughDoors(dt: number) {
+  doorCool -= dt;
+  if (doorCool > 0) return;
+  const p = onFoot.camera.position;
+  for (const d of doors)
+    if (Math.hypot(p.x - d.at.x, p.z - d.at.z) < 1.15) {
+      enterPlace(d.key);
+      return;
+    }
+}
+const footFocus = new THREE.Vector3();
 
 if (city.factory) director.spawnMiners(city.factory.patrol);
 // the card shop's walls, and a clerk in each shop
@@ -310,7 +390,13 @@ hud.setPlaces([
 
 function enterPlace(key: string) {
   select(null);
-  if (key in PLACES) interiors.enter(key as Interior["key"]);
+  if (!(key in PLACES)) return;
+  // on foot, you come back out of the same door
+  if (walking) {
+    cameIn = key as Interior["key"];
+    onFoot.enabled = false;
+  }
+  interiors.enter(key as Interior["key"]);
 }
 
 window.addEventListener("keydown", (e) => {
@@ -330,7 +416,8 @@ window.addEventListener("keydown", (e) => {
   else if (interiors.active) {
     if (document.querySelector("#ui .panel.open")) select(null);
     else interiors.exit();
-  } else hud.escape();
+  } else if (walking && !document.querySelector("#ui .panel.open")) setWalking(false);
+  else hud.escape();
 });
 
 function exitFollow() {
@@ -365,7 +452,7 @@ let down: { x: number; y: number } | null = null;
 const pickable = () => [...director.snarks].filter((s) => s.root.visible && s.state !== "riding").map((s) => s.body);
 function hitAt(x: number, y: number) {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-  ray.setFromCamera(ndc, rig.camera);
+  ray.setFromCamera(ndc, viewCam());
   return ray.intersectObjects(pickable(), false).find((h) => opaqueAt(h));
 }
 canvas.addEventListener("pointerdown", (e) => {
@@ -430,7 +517,7 @@ canvas.addEventListener("pointerleave", () => {
 
 function shopAt(x: number, y: number) {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-  ray.setFromCamera(ndc, rig.camera);
+  ray.setFromCamera(ndc, viewCam());
   for (const site of city.shops) {
     const o = site.occluder;
     const target = o.full.visible ? o.full : o.cut;
@@ -448,7 +535,7 @@ function itemAt(x: number, y: number): { block?: BlockSummary; tx?: Tx } | null 
   const site = city.shops[0];
   if (!site || (rig.mode !== "inspect" && site.occluder.level > 0.5)) return null;
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-  ray.setFromCamera(ndc, rig.camera);
+  ray.setFromCamera(ndc, viewCam());
   const h = ray.intersectObjects([...(shelf?.meshes ?? []), ...director.rackMeshes()], false)[0];
   return h ? { block: h.object.userData.block, tx: h.object.userData.tx } : null;
 }
@@ -507,13 +594,13 @@ function factoryAt(x: number, y: number) {
   const f = city.factory;
   if (!f || f.occluder.level < 0.5) return false;
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-  ray.setFromCamera(ndc, rig.camera);
+  ray.setFromCamera(ndc, viewCam());
   return ray.intersectObject(f.occluder.full, true).length > 0;
 }
 
 function venueAt(x: number, y: number) {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-  ray.setFromCamera(ndc, rig.camera);
+  ray.setFromCamera(ndc, viewCam());
   let best: { v: (typeof city.venues)[number]; d: number } | null = null;
   for (const v of city.venues) {
     const o = v.occluder;
@@ -607,7 +694,8 @@ const corners = Array.from({ length: 8 }, () => new THREE.Vector3());
 const centre = new THREE.Vector3();
 const clips = new Map<Occluder, THREE.Plane>();
 function wallsDown(dt: number) {
-  const focus = rig.focus;
+  // on foot, lights and shadows follow a point a few steps ahead
+  const focus = walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
   const cam = rig.camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
   const camPos = rig.shot ? rig.persp.position : rig.iso.position;
   const toCam = camPos.clone().sub(focus).normalize();
@@ -662,7 +750,7 @@ function wallsDown(dt: number) {
 // ---- in-world labels --------------------------------------------------------------------------
 const projected = new THREE.Vector3();
 function project(v: THREE.Vector3) {
-  projected.copy(v).project(rig.camera);
+  projected.copy(v).project(viewCam());
   if (projected.z > 1 || Math.abs(projected.x) > 1.1 || Math.abs(projected.y) > 1.1) return null;
   return { x: ((projected.x + 1) / 2) * window.innerWidth, y: ((1 - projected.y) / 2) * window.innerHeight };
 }
@@ -769,14 +857,18 @@ function frame(stepDt?: number) {
     return;
   }
   renderPass.scene = scene;
-  rig.update(dt);
+  if (walking) {
+    onFoot.update(dt);
+    throughDoors(dt);
+    if (interiors.active) return again();
+  } else rig.update(dt);
   const capturing = CAPTURE && capShot;
   if (capturing) {
     aimCapture(capCam, capShot!);
     // lights and shadows follow the point the shot looks at
     rig.controls.target.set(capShot!.look[0], 1, capShot!.look[2]);
   }
-  const cam = capturing ? capCam : rig.camera;
+  const cam = capturing ? capCam : walking ? onFoot.camera : rig.camera;
   renderPass.camera = cam;
   cam.getWorldQuaternion(camQuat);
   camRight.set(1, 0, 0).applyQuaternion(camQuat);
@@ -795,15 +887,16 @@ function frame(stepDt?: number) {
 
   // miniature look: strong tilt-shift on cinematic shots, a hint of it in iso
   if (capturing) tilt.set(capShot!.tilt ?? 0, 0.5, 0.22);
+  else if (walking) tilt.set(0);
   else if (rig.shot === "inside" || rig.shot === "shop") tilt.set(0.3, 0.5, 0.3);
   else if (rig.shot) tilt.set(1, 0.48, 0.14);
   else tilt.set(wide ? 0 : theme === "day" ? 0.32 : 0.55, 0.5, theme === "day" ? 0.3 : 0.26);
 
-  if (!capturing) wallsDown(dt);
+  if (!capturing && !walking) wallsDown(dt);
   director.update(dt, t, camQuat, camRight);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
-  decor.update(t, dt, focus, capturing ? capCam.position : rig.shot ? rig.persp.position : rig.iso.position);
+  decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   city.update(t, dt);
   hall?.update(t, dt);
   composer.render();

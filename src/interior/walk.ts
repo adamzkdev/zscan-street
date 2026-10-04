@@ -22,6 +22,8 @@ export class WalkControls {
   private push = 0;
   /** Where you came in (ground floor only): walking back into that wall takes you out. */
   door: { x: number; z: number } | null = null;
+  /** Obstacles other than `colliders` (the street uses its own grid). */
+  collide?: (x: number, z: number) => boolean;
   onExit?: () => void;
   private leaving = 0;
 
@@ -121,7 +123,13 @@ export class WalkControls {
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }
 
+  /** The way the walker looks (0 = toward −z). */
+  get heading() {
+    return this.yaw;
+  }
+
   private blocked(x: number, z: number) {
+    if (this.collide?.(x, z)) return true;
     for (const [x0, z0, x1, z1] of this.colliders) if (x > x0 - RADIUS && x < x1 + RADIUS && z > z0 - RADIUS && z < z1 + RADIUS) return true;
     return false;
   }
