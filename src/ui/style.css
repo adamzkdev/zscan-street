@@ -1933,3 +1933,190 @@ kbd {
 .indoors .panel {
   top: 96px;
 }
+
+/* ---- zkSNARK inspector: portrait on its transaction's colour, state, the five stops ---- */
+.panel .hero {
+  align-items: center;
+  gap: 14px;
+}
+.portrait {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: end center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 80%, color-mix(in srgb, var(--c) 55%, transparent), transparent 70%),
+    color-mix(in srgb, var(--c) 16%, #08080b);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent), 0 0 24px color-mix(in srgb, var(--c) 22%, transparent);
+}
+.portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.hero h2 {
+  font-size: 19px;
+  margin-top: 3px;
+}
+.badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+.badges .muted {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rank {
+  flex: none;
+  font: 600 11px var(--mono);
+  padding: 2px 6px;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.rank.gold {
+  color: #0d0d0d;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 8px;
+  font: 500 11px var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+}
+.pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+  animation: pulse 1.6s infinite;
+}
+.pill.ok {
+  color: var(--good);
+}
+.pill.warn {
+  color: var(--warn);
+}
+.pill.info {
+  color: var(--gold-ink);
+}
+.pill.muted i {
+  animation: none;
+  box-shadow: none;
+}
+.steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin: 0 0 14px;
+  padding: 0;
+}
+.steps li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--faint);
+}
+/* the rail between two stops */
+.steps li + li::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--line-strong);
+}
+.steps li.done::before,
+.steps li.now::before {
+  background: var(--gold);
+}
+.steps i {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--hud-solid);
+  border: 2px solid var(--line-strong);
+  box-sizing: border-box;
+}
+.steps li.done i {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.steps li.now i {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-soft);
+}
+.steps li.done,
+.steps li.now {
+  color: var(--text);
+}
+.steps small {
+  display: block;
+  font: 500 10px var(--mono);
+  color: var(--gold-ink);
+}
+.stats.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+.stats dt {
+  font-size: 10.5px;
+}
+.stats dd {
+  font-size: 14px;
+}
+.tabs button small {
+  font-size: 10px;
+  color: var(--faint);
+  margin-left: 3px;
+}
+.chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 10px;
+}
+.chips div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+.chips small {
+  font: 500 10px var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.chips b {
+  font-weight: 500;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -994,39 +994,43 @@ export class Hud {
     const following = this.mode === "follow" && this.followed === s;
     const stage = stageOf(s);
     const role = s.state === "guard" ? "bodyguard" : s.state === "resident" ? "resident" : s.role ? "worker" : "carrier";
-    const journey =
+    const c = s.txs[0] ? KIND_COLOR[s.txs[0].kind] : "#b07bff";
+    const tab = this.tab === "journey" ? "txs" : this.tab;
+    // where its transaction is: the five stops from the mempool to a confirmed block
+    const steps =
       stage < 0
-        ? `<div class="note">Residents live in the city and carry nothing. Carriers appear when real transactions enter the mempool.</div>`
-        : `<ol class="flow v">${STAGES.map((t, i) => `<li class="${i < stage ? "done" : i === stage ? "now" : ""}"><b>${t}${i === 3 && mined ? ` · ${num(mined)}` : ""}</b></li>`).join("")}</ol>`;
+        ? ""
+        : `<ol class="steps">${STAGES.map((t, i) => `<li class="${i < stage ? "done" : i === stage ? "now" : ""}"><i></i><span>${t}${i === 3 && mined ? `<small>${num(mined)}</small>` : ""}</span></li>`).join("")}</ol>`;
     this.$(".panel").innerHTML = `
-      <header>
-        <img class="thumb" src="${ZScan.zkSnarkImage(s.id)}" alt="" />
-        <div class="grow"><div class="eyebrow">zkSNARK · ${role}</div><h2>${esc(s.name)}</h2><div class="muted">${esc(trait("Lineage"))}</div></div>
+      <header class="hero" style="--c:${c}">
+        <div class="portrait"><img src="${ZScan.zkSnarkImage(s.id)}" alt="" /></div>
+        <div class="grow">
+          <div class="eyebrow">zkSNARK · ${role}</div>
+          <h2>${esc(s.name)}</h2>
+          <div class="badges">${rank ? `<span class="rank ${rank <= 500 ? "gold" : ""}">#${num(rank)}</span>` : ""}<span class="muted">${esc(trait("Lineage"))}</span></div>
+        </div>
         <button class="x" data-act="close" aria-label="Close">${icon("close")}</button>
       </header>
-      <div class="state"><span class="tag ${tone}">${st}</span><span class="muted">${stv}</span></div>
-      <dl class="stats">
-        <div><dt>Rank</dt><dd class="${rank && rank <= 500 ? "gold" : ""}">${rank ? `#${num(rank)}` : "—"}</dd></div>
+      <div class="state"><span class="pill ${tone}"><i></i>${st}</span><span class="muted">${stv}</span></div>
+      ${steps}
+      <dl class="stats three">
         <div><dt>Carrying</dt><dd>${s.txs.length} tx</dd></div>
         <div><dt>Fees</dt><dd>${s.txs.length ? zec(fees, 6).replace(" ZEC", "") : "—"}</dd></div>
         <div><dt>Block</dt><dd>${mined ? num(mined) : s.txs.length ? "next" : "—"}</dd></div>
       </dl>
       <div class="tabs">
-        <button data-tab="txs" class="${this.tab === "txs" ? "on" : ""}">Transactions</button>
-        <button data-tab="traits" class="${this.tab === "traits" ? "on" : ""}">Traits</button>
-        <button data-tab="journey" class="${this.tab === "journey" ? "on" : ""}">Journey</button>
+        <button data-tab="txs" class="${tab === "txs" ? "on" : ""}">Transactions <small>${s.txs.length}</small></button>
+        <button data-tab="traits" class="${tab === "traits" ? "on" : ""}">Traits</button>
       </div>
       <div class="pbody">${
-        this.tab === "txs"
+        tab === "txs"
           ? s.txs.length
             ? s.txs.map((t) => this.txRow(t)).join("")
-            : `<div class="note">Not carrying anything right now.</div>`
-          : this.tab === "traits"
-            ? `<dl class="kvlist">${(it?.traits ?? [])
-                .filter((t) => t.trait_type !== "Background")
-                .map((t) => `<div><dt>${esc(t.trait_type)}</dt><dd>${esc(t.value)}</dd></div>`)
-                .join("")}${it ? "" : `<div><dt>Loading…</dt><dd></dd></div>`}</dl>${it?.last ? `<div class="note">Last sale ${zec(it.last, 3)} on Zilkroad.</div>` : ""}`
-            : journey
+            : `<div class="note">${stage < 0 ? "Residents live in the city and carry nothing. Carriers appear when real transactions enter the mempool." : "Not carrying anything right now."}</div>`
+          : `<div class="chips">${(it?.traits ?? [])
+              .filter((t) => t.trait_type !== "Background")
+              .map((t) => `<div><small>${esc(t.trait_type)}</small><b>${esc(t.value)}</b></div>`)
+              .join("")}${it ? "" : `<div><small>Traits</small><b>Loading…</b></div>`}</div>${it?.last ? `<div class="note">Last sale ${zec(it.last, 3)} on Zilkroad.</div>` : ""}`
       }</div>
       <div class="actions">
         <button class="btn ${following ? "" : "primary"}" data-act="${following ? "unfollow" : "follow"}">${icon("follow")}${following ? "Stop following" : "Follow"}</button>
