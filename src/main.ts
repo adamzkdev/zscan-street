@@ -62,6 +62,9 @@ const MOON_OFFSET = new THREE.Vector3(-18, 34, 22);
 const bootBar = document.querySelector<HTMLElement>("#boot i");
 const t0 = performance.now();
 const city = await buildCity((k) => bootBar && (bootBar.style.width = `${Math.round(k * 100)}%`));
+// one boot screen: the city is built, now the first snapshot of the chain
+const bootText = document.querySelector<HTMLElement>("#boot p");
+if (bootText) bootText.textContent = "CONNECTING TO ZCASH";
 console.info(`city built in ${Math.round(performance.now() - t0)} ms`);
 scene.add(city.group);
 const lampLights = new LampLights(scene, city.lamps, 12);
@@ -231,6 +234,16 @@ hud = new Hud(
   theme,
 );
 
+// sound stays as it was left; browsers only let it start on the first touch or click
+try {
+  if (localStorage.getItem("street.sound") === "1") {
+    hud.setSoundButton(true);
+    window.addEventListener("pointerdown", () => void sound.start(), { once: true });
+  }
+} catch {}
+// the street opens even if the chain is slow to answer (the strip then says OFFLINE)
+setTimeout(() => hud.ready(), 15000);
+
 // ---- walk-in places ----------------------------------------------------------------------------
 const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "MINING HALL", zsa: "ZSA EXCHANGE" };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
@@ -312,11 +325,12 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key !== "Escape") return;
+  // one handler for Escape, innermost first
   if (venues.open) venues.close();
   else if (interiors.active) {
     if (document.querySelector("#ui .panel.open")) select(null);
     else interiors.exit();
-  }
+  } else hud.escape();
 });
 
 function exitFollow() {

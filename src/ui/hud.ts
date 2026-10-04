@@ -210,20 +210,9 @@ export class Hud {
       <div class="followhead hud hidden"></div>
       <div class="shots hud hidden"></div>
       <div class="tip"></div>
-      <div class="cut"></div>
-      <div class="loading"><div>${MARK}<span>LOADING THE STREET</span></div></div>`;
+      <div class="cut"></div>`;
 
     this.root.addEventListener("click", (e) => this.onClick(e));
-    window.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      if (this.camOpen) this.setCam(false);
-      else if (this.section) {
-        this.section = null;
-        this.renderStrip(true);
-      }
-      else if (this.mode === "follow" || this.mode === "inspect") cb.exitFollow();
-      else cb.select(null);
-    });
     document.addEventListener("pointerdown", (e) => {
       if (this.camOpen && !(e.target as HTMLElement).closest(".campop,[data-act=cam]")) this.setCam(false);
     });
@@ -242,16 +231,27 @@ export class Hud {
 
   // ---- inputs ---------------------------------------------------------------------------------
 
+  /** Escape on the street: the camera menu, then the open section, then follow, then the selection. */
+  escape() {
+    if (this.camOpen) this.setCam(false);
+    else if (this.section) {
+      this.section = null;
+      this.renderStrip(true);
+    } else if (this.mode === "follow" || this.mode === "inspect") this.cb.exitFollow();
+    else this.cb.select(null);
+  }
+
+  /** The sound button's state (the preference is restored on load). */
+  setSoundButton(on: boolean) {
+    this.$(".hbtn.sound").classList.toggle("on", on);
+  }
+
   ready() {
     const boot = document.getElementById("boot");
-    if (boot) {
-      boot.style.opacity = "0";
-      setTimeout(() => boot.remove(), 900);
-    }
-    const l = this.root.querySelector<HTMLElement>(".loading");
-    if (!l) return;
-    l.style.opacity = "0";
-    setTimeout(() => l.remove(), 900);
+    if (!boot || boot.dataset.gone) return;
+    boot.dataset.gone = "1";
+    boot.style.opacity = "0";
+    setTimeout(() => boot.remove(), 900);
   }
 
   setStatus(s: "connecting" | "live" | "offline") {
