@@ -2485,8 +2485,8 @@ kbd {
   color: var(--gold-ink);
 }
 .hbtn.exit:hover .leaf {
-  /* the leaf swings towards you: narrower, slightly skewed */
-  transform: perspective(40px) rotateY(-62deg);
+  /* the leaf swings open on its hinge (SVG has no 3D: narrower and skewed reads the same) */
+  transform: scaleX(0.38) skewY(-10deg);
 }
 .hbtn.exit:hover .gap {
   opacity: 0.9;

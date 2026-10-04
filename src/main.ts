@@ -461,6 +461,17 @@ function hitAt(x: number, y: number) {
   ray.setFromCamera(ndc, viewCam());
   return ray.intersectObjects(pickable(), false).find((h) => opaqueAt(h));
 }
+/** The block bus under the cursor, if any. */
+function busAt(x: number, y: number) {
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, viewCam());
+  let best: { b: BlockBus; d: number } | null = null;
+  for (const b of director.buses) {
+    const h = ray.intersectObject(b.group, true)[0];
+    if (h && (!best || h.distance < best.d)) best = { b, d: h.distance };
+  }
+  return best?.b ?? null;
+}
 canvas.addEventListener("pointerdown", (e) => {
   down = { x: e.clientX, y: e.clientY };
   rig.interrupt();
@@ -482,6 +493,14 @@ canvas.addEventListener("pointerup", (e) => {
     if (item) select(null);
     if (item?.block) return void hud.showBlock(item.block);
     if (item?.tx) return void hud.showTx(item.tx);
+    // a bus: ride it, from inside
+    const bus = busAt(e.clientX, e.clientY);
+    if (bus) {
+      if (walking) setWalking(false);
+      rig.rideIn(bus);
+      hud.follow(null);
+      return syncCamera();
+    }
     // a walk-in place: in you go
     const place = placeAt(e.clientX, e.clientY);
     if (place) return enterPlace(place);
@@ -506,14 +525,16 @@ canvas.addEventListener("pointermove", (e) => {
   if (e.buttons) return void hud.hover(null);
   const hit = hitAt(e.clientX, e.clientY);
   const item = hit ? null : itemAt(e.clientX, e.clientY);
-  const place = hit || item ? null : placeAt(e.clientX, e.clientY);
-  canvas.style.cursor = hit || item || place ? "pointer" : "";
+  const bus = hit || item ? null : busAt(e.clientX, e.clientY);
+  const place = hit || item || bus ? null : placeAt(e.clientX, e.clientY);
+  canvas.style.cursor = hit || item || place || bus ? "pointer" : "";
   // hovering a place lights it up, with its name and the way in over its door
   if (place) hud.hoverPlace(place);
   highlight(place);
   if (hit) hud.hover(hit.object.userData.snark as Snark, e.clientX, e.clientY);
   else if (item?.block) hud.hoverText(`<b>Block ${item.block.height.toLocaleString("en-US")}</b><span>${Math.max(0, item.block.tx_count - 1)} tx · click to open</span>`, e.clientX, e.clientY);
   else if (item?.tx) hud.hoverText(`<b>Parcel</b><span>${item.tx.kind} tx waiting for a block</span>`, e.clientX, e.clientY);
+  else if (bus) hud.hoverText(`<b>Block bus${bus.blockHeight ? ` ${bus.blockHeight.toLocaleString("en-US")}` : ""}</b><span>click to ride inside</span>`, e.clientX, e.clientY);
   else hud.hover(null);
 });
 canvas.addEventListener("pointerleave", () => {

@@ -188,6 +188,13 @@ export class CameraRig {
     this.ev.shot(this.shot, this.mode);
   }
 
+  /** Ride a bus: follow it from inside, among its riders. */
+  rideIn(bus: BlockBus) {
+    this.followTheBus(bus);
+    this.setShot("inside");
+    this.ev.shot(this.shot, this.mode);
+  }
+
   /** Look inside a walk-in building (the MEMPOOL shop, the mining hall, the card shop, the bank). */
   lookIn(site: Interior) {
     this.following = null;
