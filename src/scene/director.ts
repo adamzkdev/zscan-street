@@ -109,6 +109,8 @@ export class Director {
   private rarest: { id: number; rank: number }[] = [];
   private crateGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
   private lastTidy = 0;
+  /** Who is waiting outside the shop for a delivery, by spot. */
+  private outside: (Snark | null)[] = [];
 
   constructor(
     private scene: THREE.Object3D,
@@ -337,9 +339,16 @@ export class Director {
     s.state = "arriving";
     s.showParcels(false);
     const lane = nz(-4.0) + (Math.random() - 0.5) * 0.6;
-    await s.walk([v(entry.x, lane), v(shop.site.door.x + (Math.random() - 0.5) * 1.5, lane + 0.9)], 1.8);
-    // wait outside until the delivery is on the rack
+    // wait outside, in a loose row along the shop front, until the delivery is on the rack
+    const slot = this.outside.indexOf(null) >= 0 ? this.outside.indexOf(null) : this.outside.push(null) - 1;
+    this.outside[slot] = s;
+    const ox = shop.site.door.x + ((slot % 7) - 3) * 0.95 + (Math.random() - 0.5) * 0.2;
+    const oz = lane + 0.7 + Math.floor(slot / 7) * 0.8;
+    await s.walk([v(entry.x, lane), v(ox, oz)], 1.8);
+    s.faceDir = new THREE.Vector3(0, 0, -1);
     while (this.snarks.has(s) && !shop.rack.some((c) => c.tx === tx) && !tx.height) await sleep(300);
+    this.outside[slot] = null;
+    s.faceDir = null;
     if (!this.snarks.has(s)) return;
     // inside: to the counter, take the parcel, back out
     s.state = "shopping";
@@ -943,6 +952,16 @@ export class Director {
     const base = [...this.mempool.values()][0];
     if (!base) return false;
     const tx: Tx = { ...base, txid: `${base.txid.slice(0, 56)}${Math.random().toString(16).slice(2, 10)}`, visible: tier === "limo" ? 600e8 : 80e8, kind: "transparent", pool: null };
+    this.mempool.set(tx.txid, tx);
+    this.place(tx, "walk");
+    return tx.txid;
+  }
+
+  /** Test only: a copy of a pending transaction, delivered and picked up like a new one. */
+  debugCarrier(kind: Tx["kind"] = "shielded") {
+    const base = [...this.mempool.values()][0];
+    if (!base) return false;
+    const tx: Tx = { ...base, txid: `${base.txid.slice(0, 56)}${Math.random().toString(16).slice(2, 10)}`, kind, seenAt: Date.now() };
     this.mempool.set(tx.txid, tx);
     this.place(tx, "walk");
     return tx.txid;

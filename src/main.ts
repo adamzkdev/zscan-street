@@ -666,6 +666,27 @@ if (CAPTURE) {
       },
       leave: () => interiors.exit(),
       theme: (t: "day" | "night") => setTheme(t),
+      /** Show or hide the HUD (gameplay shots keep it). */
+      ui: (on: boolean) => (document.getElementById("ui")!.style.display = on ? "" : "none"),
+      /** Take the lift, as the HUD's floor buttons do. */
+      floor: (n: number) => {
+        interiors.goTo(n);
+        hud.cut();
+        hud.renderIndoor(interiors.floor);
+      },
+      /** Back to the city's own camera (hover and click buildings with the mouse). */
+      rig: (x: number, z: number, zoom: number) => {
+        capShot = null;
+        rig.setMode("free");
+        rig.flyTo(new THREE.Vector3(x, 1, z), zoom);
+      },
+      carrier: () => director.debugCarrier(),
+      snarkPos: (txid: string) => {
+        const s = director.snarkOf(txid);
+        if (!s) return null;
+        s.root.getWorldPosition(tmp);
+        return { x: tmp.x, y: tmp.y, z: tmp.z, state: s.state };
+      },
       testBlock: () => (window as unknown as { street: { testBoard(): Promise<void> } }).street.testBoard(),
     },
   });
@@ -689,8 +710,11 @@ function frame(stepDt?: number) {
 
   // inside a place: its own scene and the walking camera; the city keeps living (but unseen)
   if (interiors.active) {
-    if (CAPTURE && capShot) aimCapture(interiors.walk.camera, capShot);
     interiors.update(dt, t);
+    if (CAPTURE && capShot) {
+      interiors.walk.enabled = false;
+      aimCapture(interiors.walk.camera, capShot);
+    }
     director.update(dt, t, interiors.walk.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(interiors.walk.camera.quaternion));
     renderPass.scene = interiors.active.scene;
     renderPass.camera = interiors.walk.camera;
