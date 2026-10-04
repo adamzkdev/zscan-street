@@ -160,7 +160,7 @@ export class Hud {
     this.root.innerHTML = `
       <div class="lb"><i></i><i></i></div>
       <div class="labels"></div>
-      <a class="brand" href="${EXPLORER}" target="_blank" rel="noopener" title="ZScan explorer">${MARK}<span>ZSCAN<b>/</b>STREET</span></a>
+      <a class="brand" href="${EXPLORER}" target="_blank" rel="noopener" title="ZScan explorer">${MARK}<span><b>Z</b>STREET</span></a>
       <div class="corner">
         <div class="seg" role="group" aria-label="Theme"><button data-theme="day" aria-label="Day" title="Day">${icon("sun")}</button><button data-theme="night" aria-label="Night" title="Night">${icon("moon")}</button></div>
         <button class="hbtn sound" data-act="sound" aria-label="Sound" title="Sound">${icon("sound")}</button>

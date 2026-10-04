@@ -1,4 +1,4 @@
-// Films the gameplay cut of ZScan Street: the HUD on, a mouse cursor that hovers and clicks, the
+// Films the gameplay cut of ZStreet: the HUD on, a mouse cursor that hovers and clicks, the
 // lift, the panels. Each act is one continuous take (time stepped frame by frame), encoded to mp4
 // in video/public/street/gameplay/ for the Remotion edit (src/street/StreetGameplay.tsx).
 //   node shots/gameplay-capture.mjs [act ...]      (no argument: every act)

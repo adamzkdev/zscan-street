@@ -234,8 +234,8 @@ kbd {
 }
 .brand b {
   color: var(--gold);
-  font-weight: 500;
-  margin: 0 3px;
+  font-weight: 700;
+  margin-right: 1px;
 }
 :root[data-theme="day"] .brand {
   text-shadow: 0 1px 6px rgba(255, 255, 255, 0.8);

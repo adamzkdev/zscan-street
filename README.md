@@ -1,4 +1,4 @@
-# ZScan Street
+# ZStreet
 
 The Zcash blockchain as a living voxel city (Three.js), at street.zscan.cash. Real zkSNARK NFTs pick
 up real mempool transactions at the MEMPOOL shop, wait at the stop and board the block bus when the
