@@ -20,6 +20,10 @@ export class WalkControls {
   private drag: { x: number; y: number } | null = null;
   private moved = 0;
   private push = 0;
+  /** Where you came in (ground floor only): walking back into that wall takes you out. */
+  door: { x: number; z: number } | null = null;
+  onExit?: () => void;
+  private leaving = 0;
 
   constructor(dom: HTMLElement) {
     this.camera.rotation.order = "YXZ";
@@ -101,7 +105,18 @@ export class WalkControls {
     p.x += move.x;
     if (this.blocked(p.x, p.z)) p.x -= move.x;
     p.z += move.z;
-    if (this.blocked(p.x, p.z)) p.z -= move.z;
+    if (this.blocked(p.x, p.z)) {
+      p.z -= move.z;
+      // pressing on the entrance (behind where you came in) for a moment: out to the street
+      const d = this.door;
+      if (d && move.z > 0 && Math.abs(p.x - d.x) < 1.7 && p.z > d.z - 0.2) {
+        this.leaving += dt;
+        if (this.leaving > 0.18) {
+          this.leaving = 0;
+          this.onExit?.();
+        }
+      } else this.leaving = 0;
+    } else this.leaving = 0;
     p.y += (this.floorY + EYE - p.y) * Math.min(1, dt * 10);
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }

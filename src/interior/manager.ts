@@ -29,6 +29,7 @@ export class InteriorManager {
     private ev: InteriorEvents,
   ) {
     this.walk = new WalkControls(dom);
+    this.walk.onExit = () => this.exit();
     this.ray.far = 30;
   }
 
@@ -54,6 +55,8 @@ export class InteriorManager {
     const f = i.floors[this.floor];
     this.walk.place(f.spawn, f.yaw, f.y);
     this.walk.colliders = i.colliders(this.floor);
+    // every place is entered from the street side (+z) on its ground floor
+    this.walk.door = this.floor === 0 ? { x: f.spawn.x, z: f.spawn.z } : null;
   }
 
   exit() {
