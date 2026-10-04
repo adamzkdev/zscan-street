@@ -31,6 +31,7 @@ import { buildMempool } from "./interior/mempool";
 import { buildZsa } from "./interior/zsa";
 import { buildLibrary } from "./interior/library";
 import { newsTicker } from "./scene/press";
+import { Reader } from "./ui/reader";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
@@ -380,6 +381,10 @@ const venues = new Venues(document.getElementById("ui")!, {
   closed: () => {},
 });
 const tmp = new THREE.Vector3();
+const reader = new Reader(document.getElementById("ui")!);
+reader.onClose = () => {
+  if (interiors.active) interiors.walk.enabled = true;
+};
 
 /** Walk into the card shop or the bank: the inside camera, and its counter on the left. */
 // the places you can walk into, tagged over their doors
@@ -418,7 +423,8 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key !== "Escape") return;
   // one handler for Escape, innermost first
-  if (venues.open) venues.close();
+  if (reader.open) reader.close();
+  else if (venues.open) venues.close();
   else if (interiors.active) {
     if (document.querySelector("#ui .panel.open")) select(null);
     else interiors.exit();
@@ -482,6 +488,11 @@ canvas.addEventListener("pointerup", (e) => {
     if (e.button !== 0 || interiors.walk.dragged) return;
     const info = interiors.pickAt(e.clientX, e.clientY);
     if (info?.panel) return venues.show(info.panel);
+    // a book in the library: open it and read
+    if (info?.book) {
+      interiors.walk.enabled = false;
+      return void reader.show(info.book);
+    }
     if (info) hud.showPick(info);
     return;
   }

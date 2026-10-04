@@ -40,6 +40,8 @@ export interface PickInfo {
   link?: { href: string; label: string };
   /** Opens one of the shop panels (the bank's terminals). */
   panel?: "bank" | "cards";
+  /** Opens a book in the reader (the library's ZIPs). */
+  book?: import("../ui/reader").Book;
 }
 
 export interface InteriorContext {

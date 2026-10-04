@@ -2492,3 +2492,292 @@ kbd {
   opacity: 0.9;
   filter: drop-shadow(0 0 4px #ffd28a);
 }
+
+/* ---- the ZIP reader: an open book over the library ---- */
+.reader {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  background: radial-gradient(ellipse at center, rgba(10, 8, 16, 0.55), rgba(5, 4, 9, 0.85));
+  transition: opacity 0.25s;
+  z-index: 20;
+}
+.reader.hidden {
+  transform: none;
+}
+.tome {
+  --pw: min(430px, calc((100vw - 120px) / 2));
+  --ph: min(600px, calc(100vh - 170px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  animation: tome-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes tome-in {
+  from {
+    transform: translateY(24px) scale(0.96);
+    opacity: 0;
+  }
+}
+.spine-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  font: 400 14px var(--pixel);
+  color: #f1ead8;
+}
+.spine-top span {
+  color: var(--c);
+  text-shadow: 0 0 8px var(--c);
+}
+.spine-top b {
+  font-weight: 400;
+  color: #cfc6b2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.spine-top button,
+.reader .nav button {
+  all: unset;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font: 400 20px var(--pixel);
+  color: #f1ead8;
+  background: rgba(255, 255, 255, 0.08);
+}
+.spine-top button:hover,
+.reader .nav button:hover:not(:disabled) {
+  background: var(--c);
+  color: #0d0d0d;
+}
+.reader .nav button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.reader .nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font: 400 13px var(--pixel);
+  color: #cfc6b2;
+}
+/* the open book: two pages in a binding of the status colour */
+.spread {
+  position: relative;
+  display: flex;
+  padding: 10px;
+  background: color-mix(in srgb, var(--c) 55%, #2a1d14);
+  box-shadow:
+    0 30px 60px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.35);
+  perspective: 2400px;
+}
+.pg {
+  position: relative;
+  width: var(--pw);
+  height: var(--ph);
+  padding: 34px 34px 40px;
+  background: #f1ead8;
+  color: #2a241c;
+  font: 15px/1.6 Georgia, "Times New Roman", serif;
+  overflow: hidden;
+  cursor: pointer;
+}
+.pg.left {
+  background: linear-gradient(90deg, #efe7d3 0%, #f1ead8 88%, #ddd2b8 100%);
+}
+.pg.right {
+  background: linear-gradient(90deg, #d8cdb2 0%, #efe7d3 10%, #f1ead8 100%);
+}
+.pg.blank {
+  cursor: default;
+}
+.pg .pbody {
+  height: 100%;
+  overflow: hidden;
+}
+.pg.probe {
+  position: absolute;
+  visibility: hidden;
+  left: -9999px;
+  top: 0;
+  width: min(430px, calc((100vw - 120px) / 2));
+  height: min(600px, calc(100vh - 170px));
+}
+@media (max-width: 760px) {
+  .tome {
+    --pw: calc(100vw - 52px);
+  }
+  .pg.probe {
+    width: calc(100vw - 52px);
+  }
+}
+.pg h1,
+.pg h2,
+.pg h3 {
+  font-family: var(--pixel);
+  font-weight: 400;
+  color: #1c1812;
+  margin: 0.4em 0 0.5em;
+  line-height: 1.25;
+}
+.pg h1 {
+  font-size: 20px;
+  border-bottom: 2px solid color-mix(in srgb, var(--c) 70%, #2a241c);
+  padding-bottom: 4px;
+}
+.pg h2 {
+  font-size: 17px;
+}
+.pg h3 {
+  font-size: 15px;
+}
+.pg p {
+  margin: 0 0 0.75em;
+  text-align: justify;
+  hyphens: auto;
+}
+.pg p.li {
+  padding-left: 18px;
+  position: relative;
+}
+.pg p.li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0.65em;
+  width: 6px;
+  height: 6px;
+  background: color-mix(in srgb, var(--c) 70%, #2a241c);
+}
+.pg pre {
+  margin: 0 0 0.8em;
+  padding: 8px 10px;
+  font: 11.5px/1.45 var(--mono);
+  background: #e4dcc6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pg code {
+  font: 0.86em var(--mono);
+  background: #e4dcc6;
+  padding: 0 3px;
+}
+.pg blockquote {
+  margin: 0 0 0.8em;
+  padding-left: 12px;
+  border-left: 3px solid color-mix(in srgb, var(--c) 60%, #2a241c);
+  font-style: italic;
+}
+.pg a {
+  color: #6a3a10;
+}
+.pno {
+  position: absolute;
+  bottom: 14px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: 400 12px var(--pixel);
+  color: #8a7e66;
+}
+.cover {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+.cover .crest {
+  font: 400 16px var(--pixel);
+  letter-spacing: 0.2em;
+  color: #6a5e48;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.cover .crest b {
+  font: 400 64px var(--pixel);
+  letter-spacing: 0;
+  color: color-mix(in srgb, var(--c) 65%, #1c1812);
+}
+.cover h1 {
+  font-size: 22px;
+  border: none;
+  max-width: 90%;
+}
+.cover .cstatus {
+  font: 400 13px var(--pixel);
+  padding: 3px 10px;
+  background: var(--c);
+  color: #0d0d0d;
+}
+.cover .by,
+.cover .src {
+  margin: 0;
+  font-size: 13px;
+  color: #6a5e48;
+  text-align: center;
+}
+.cover.end {
+  font-size: 14px;
+}
+.loadingp {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font: 400 15px var(--pixel);
+  color: #8a7e66;
+}
+/* the turning leaf */
+.leaf {
+  position: absolute;
+  top: 10px;
+  width: var(--pw);
+  height: var(--ph);
+  transform-style: preserve-3d;
+  pointer-events: none;
+  animation: 0.6s cubic-bezier(0.45, 0.05, 0.3, 1) forwards;
+}
+.leaf.fwd {
+  left: calc(10px + var(--pw));
+  transform-origin: left center;
+  animation-name: leaf-fwd;
+}
+.leaf.bwd {
+  left: 10px;
+  transform-origin: right center;
+  animation-name: leaf-bwd;
+}
+.leaf .face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+.leaf .face.back {
+  transform: rotateY(180deg);
+}
+.leaf .face .pg {
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.25);
+}
+@keyframes leaf-fwd {
+  to {
+    transform: rotateY(-180deg);
+  }
+}
+@keyframes leaf-bwd {
+  to {
+    transform: rotateY(180deg);
+  }
+}

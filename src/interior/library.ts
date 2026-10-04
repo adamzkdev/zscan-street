@@ -395,10 +395,12 @@ export function buildLibrary(ctx: InteriorContext): Interior {
         // a few books lean
         if (Math.random() < 0.08) book.rotation.x = (Math.random() - 0.5) * 0.25;
         book.userData.zip = z;
+        book.userData.dir = dir;
         scene.add(book);
         pickables.push(book);
         hovers.set(book, `<b>${z.number != null ? `ZIP ${z.number}` : "Draft"}</b><span>${esc(z.title)}</span>`);
         picks.set(book, () => ({
+          book: { slug: z.slug, number: z.number, title: z.title, status: z.status, owners: z.owners, created: z.created, url: z.url, color: shelf.color },
           eyebrow: `${z.number != null ? `ZIP ${z.number}` : "Draft ZIP"} · ${z.categories.join(" / ") || "—"}`,
           title: z.title,
           tag: [z.status, z.status === "Final" || z.status === "Active" ? "ok" : z.status === "Proposed" ? "info" : z.status === "Draft" ? "warn" : "muted"],
@@ -498,6 +500,31 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     });
   });
 
+  // the book under the cursor slides out of the shelf and lights up
+  let lit: THREE.Mesh | null = null;
+  let litAt = 0;
+  const glow = new THREE.Color("#ffd28a");
+  const light = (book: THREE.Mesh | null) => {
+    if (lit === book) return;
+    if (lit) {
+      lit.position.x = lit.userData.homeX;
+      for (const m of lit.material as THREE.Material[]) m.dispose();
+      lit.material = lit.userData.mats;
+    }
+    lit = book;
+    if (book) {
+      book.userData.homeX ??= book.position.x;
+      book.userData.mats ??= book.material;
+      // its own copies of the materials, so only this book glows
+      book.material = (book.userData.mats as THREE.MeshStandardMaterial[]).map((m) => {
+        const c = m.clone();
+        c.emissive = glow.clone();
+        c.emissiveIntensity = 0.35;
+        return c;
+      });
+    }
+  };
+
   const camQuat = new THREE.Quaternion();
   const camRight = new THREE.Vector3();
   const find = (o: THREE.Object3D | null) => {
@@ -521,6 +548,10 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     },
     hover: (hit) => {
       const o = find(hit.object);
+      if (o && (o as THREE.Mesh).userData.zip) {
+        light(o as THREE.Mesh);
+        litAt = performance.now();
+      } else light(null);
       return o ? (hovers.get(o) ?? null) : null;
     },
     update(dt, t, camera) {
@@ -528,6 +559,14 @@ export function buildLibrary(ctx: InteriorContext): Interior {
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
       for (const s of people) s.update(dt, t, camQuat, camRight);
       for (const k of ticks) k(dt, t);
+      if (lit) {
+        // the cursor left it: back on the shelf
+        if (performance.now() - litAt > 180) light(null);
+        else {
+          const out = lit.userData.homeX + lit.userData.dir * 0.12;
+          lit.position.x += (out - lit.position.x) * Math.min(1, dt * 14);
+        }
+      }
     },
   };
 }
