@@ -3,6 +3,7 @@ import type { City, Facade } from "./city";
 import { CURB } from "./city";
 import { Market, type MarketState } from "../data/market";
 import { blobTexture, zcashBadge } from "./textures";
+import { fitText, shrink } from "./fit";
 
 /**
  * Cyberpunk dressing on top of the city: animated ad screens (some showing live chain data),
@@ -122,16 +123,16 @@ const MARKET_ADS: Ad[] = [
     zLogo(ctx, h * 0.2, h * 0.22, h * 0.26, "#f4b728");
     ctx.fillStyle = "#f4b728";
     ctx.font = `700 ${h * 0.12}px ${MONO}`;
-    ctx.fillText("ZEC / USD", h * 0.4, h * 0.26);
-    if (!p) return void ((ctx.fillStyle = "#666"), ctx.fillText("LOADING…", w * 0.06, h * 0.6));
+    fitText(ctx, "ZEC / USD", h * 0.4, h * 0.26);
+    if (!p) return void ((ctx.fillStyle = "#666"), fitText(ctx, "LOADING…", w * 0.06, h * 0.6));
     const up = p.usd_24h_change >= 0;
     const col = up ? "#2fbf9c" : "#f06b76";
     ctx.fillStyle = "#ffffff";
     ctx.font = `800 ${h * 0.3}px ${MONO}`;
-    ctx.fillText(usd(p.usd), w * 0.05, h * 0.62);
+    fitText(ctx, usd(p.usd), w * 0.05, h * 0.62, w * 0.48);
     ctx.fillStyle = col;
     ctx.font = `700 ${h * 0.14}px ${MONO}`;
-    ctx.fillText(`${up ? "▲" : "▼"} ${Math.abs(p.usd_24h_change).toFixed(2)}% 24H`, w * 0.05, h * 0.86);
+    fitText(ctx, `${up ? "▲" : "▼"} ${Math.abs(p.usd_24h_change).toFixed(2)}% 24H`, w * 0.05, h * 0.86, w * 0.48);
     sparkline(ctx, [...p.history, [Date.now(), p.usd]], w * 0.56, h * 0.38, w * 0.38, h * 0.48, col);
     if (Math.sin(t * 5) > 0) {
       ctx.fillStyle = col;
@@ -148,15 +149,15 @@ const MARKET_ADS: Ad[] = [
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#a3a3a3";
     ctx.font = `600 ${h * 0.11}px ${MONO}`;
-    ctx.fillText("ZCASH MARKET CAP", w * 0.06, h * 0.22);
+    fitText(ctx, "ZCASH MARKET CAP", w * 0.06, h * 0.22);
     if (!p) return;
     const up = p.usd_24h_change >= 0;
     ctx.fillStyle = "#f4b728";
     ctx.font = `800 ${h * 0.3}px ${MONO}`;
-    ctx.fillText(usd(p.market_cap_usd), w * 0.06, h * 0.56);
+    fitText(ctx, usd(p.market_cap_usd), w * 0.06, h * 0.56);
     ctx.fillStyle = up ? "#2fbf9c" : "#f06b76";
     ctx.font = `700 ${h * 0.12}px ${MONO}`;
-    ctx.fillText(`${up ? "+" : "−"}${usd(Math.abs((p.market_cap_usd * p.usd_24h_change) / (100 + p.usd_24h_change)))} TODAY`, w * 0.06, h * 0.74);
+    fitText(ctx, `${up ? "+" : "−"}${usd(Math.abs((p.market_cap_usd * p.usd_24h_change) / (100 + p.usd_24h_change)))} TODAY`, w * 0.06, h * 0.74);
     // volume ticker
     ctx.fillStyle = "#f4b728";
     ctx.fillRect(0, h * 0.8, w, h * 0.2);
@@ -174,14 +175,14 @@ const MARKET_ADS: Ad[] = [
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#a3a3a3";
     ctx.font = `600 ${h * 0.11}px ${MONO}`;
-    ctx.fillText("ZEC SUPPLY", w * 0.06, h * 0.22);
+    fitText(ctx, "ZEC SUPPLY", w * 0.06, h * 0.22);
     if (!s) return;
     ctx.fillStyle = "#ffffff";
     ctx.font = `800 ${h * 0.26}px ${MONO}`;
-    ctx.fillText(`${(s.supply / 1e14).toFixed(2)}M`, w * 0.06, h * 0.52);
+    const fig = fitText(ctx, `${(s.supply / 1e14).toFixed(2)}M`, w * 0.06, h * 0.52, w * 0.62);
     ctx.fillStyle = "#737373";
     ctx.font = `600 ${h * 0.12}px ${MONO}`;
-    ctx.fillText("/ 21M", w * 0.06 + ctx.measureText(`${(s.supply / 1e14).toFixed(2)}M`).width * 2.15, h * 0.52);
+    fitText(ctx, "/ 21M", w * 0.06 + fig + h * 0.04, h * 0.52);
     // bar: mined share, with the shielded part in green
     const x = w * 0.06,
       bw = w * 0.88,
@@ -196,7 +197,7 @@ const MARKET_ADS: Ad[] = [
       ctx.fillRect(x, y, bw * (pools.shielded / s.max_supply), bh);
       ctx.fillStyle = "#3ddc97";
       ctx.font = `700 ${h * 0.11}px ${MONO}`;
-      ctx.fillText(`${Math.round(pools.shielded_ratio * 100)}% SHIELDED`, x, h * 0.92);
+      fitText(ctx, `${Math.round(pools.shielded_ratio * 100)}% SHIELDED`, x, h * 0.92);
     }
   },
 ];
@@ -214,6 +215,7 @@ const ADS: Ad[] = [
     zLogo(ctx, w * 0.22, h / 2, h * (0.62 + Math.sin(t * 3) * 0.04), "#f4b728");
     ctx.fillStyle = "#ffe08a";
     ctx.font = `800 ${h * 0.24}px ${FONT}`;
+    shrink(ctx, "EVERYTHING", w * 0.54);
     ctx.fillText("SHIELD", w * 0.42, h * 0.45);
     ctx.fillText("EVERYTHING", w * 0.42, h * 0.75);
   },
@@ -223,13 +225,13 @@ const ADS: Ad[] = [
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#3ef0ff";
     ctx.font = `600 ${h * 0.14}px ${MONO}`;
-    ctx.fillText("ZCASH MAINNET · LIVE", w * 0.06, h * 0.22);
+    fitText(ctx, "ZCASH MAINNET · LIVE", w * 0.06, h * 0.22);
     ctx.font = `800 ${h * 0.32}px ${MONO}`;
     ctx.fillStyle = "#e8fbff";
-    ctx.fillText(live.height ? `#${live.height.toLocaleString("en-US")}` : "SYNCING", w * 0.06, h * 0.6);
+    fitText(ctx, live.height ? `#${live.height.toLocaleString("en-US")}` : "SYNCING", w * 0.06, h * 0.6);
     ctx.font = `600 ${h * 0.14}px ${MONO}`;
     ctx.fillStyle = "#ff3e8a";
-    ctx.fillText(`MEMPOOL ${live.mempool} TX · ${Math.floor(live.since)}s AGO`, w * 0.06, h * 0.85);
+    fitText(ctx, `MEMPOOL ${live.mempool} TX · ${Math.floor(live.since)}s AGO`, w * 0.06, h * 0.85);
   },
   // 零知識 — zero knowledge, magenta kanji with a scan line
   (ctx, w, h, t) => {
@@ -240,10 +242,10 @@ const ADS: Ad[] = [
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#ff3e8a";
     ctx.font = `800 ${h * 0.5}px ${FONT}`;
-    ctx.fillText("零知識", w * 0.06, h * 0.62);
+    fitText(ctx, "零知識", w * 0.06, h * 0.62);
     ctx.fillStyle = "#ffb0d0";
     ctx.font = `600 ${h * 0.13}px ${FONT}`;
-    ctx.fillText("PROVE IT. REVEAL NOTHING.", w * 0.07, h * 0.88);
+    fitText(ctx, "PROVE IT. REVEAL NOTHING.", w * 0.07, h * 0.88);
     ctx.fillStyle = "rgba(255,255,255,0.12)";
     ctx.fillRect(0, ((t * 60) % (h + 20)) - 10, w, 6);
   },
@@ -253,12 +255,13 @@ const ADS: Ad[] = [
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#ffffff";
     ctx.font = `800 ${h * 0.3}px ${FONT}`;
+    shrink(ctx, "ZSCAN.CASH", w * 0.88);
     ctx.fillText("ZSCAN", w * 0.06, h * 0.45);
     ctx.fillStyle = "#f4b728";
     ctx.fillText(".CASH", w * 0.06 + ctx.measureText("ZSCAN").width, h * 0.45);
     ctx.fillStyle = "#9895a8";
     ctx.font = `500 ${h * 0.12}px ${FONT}`;
-    ctx.fillText("the Zcash explorer", w * 0.06, h * 0.62);
+    fitText(ctx, "the Zcash explorer", w * 0.06, h * 0.62);
     ctx.fillStyle = "#59e3ff";
     ctx.fillRect(0, h * 0.74, w, h * 0.26);
     ctx.fillStyle = "#04121a";
@@ -279,10 +282,10 @@ const ADS: Ad[] = [
     }
     ctx.fillStyle = "#e8fbff";
     ctx.font = `800 ${h * 0.34}px ${FONT}`;
-    ctx.fillText("NU7", w * 0.06, h * 0.48);
+    const nw = fitText(ctx, "NU7", w * 0.06, h * 0.48, w * 0.4);
     ctx.fillStyle = "#3ef0ff";
     ctx.font = `600 ${h * 0.13}px ${FONT}`;
-    ctx.fillText("25s BLOCKS · COMING", w * 0.36, h * 0.46);
+    fitText(ctx, "25s BLOCKS · COMING", w * 0.06 + nw + h * 0.08, h * 0.46);
   },
   // ramen ad, warm
   (ctx, w, h, t) => {
@@ -296,10 +299,10 @@ const ADS: Ad[] = [
     for (let i = 0; i < 3; i++) ctx.fillRect(w * (0.12 + i * 0.07), h * (0.2 + Math.sin(t * 2 + i) * 0.03), w * 0.012, h * 0.3);
     ctx.fillStyle = "#fff0d8";
     ctx.font = `800 ${h * 0.36}px ${FONT}`;
-    ctx.fillText("ラーメン", w * 0.44, h * 0.55);
+    fitText(ctx, "ラーメン", w * 0.44, h * 0.55);
     ctx.fillStyle = "#ffb070";
     ctx.font = `600 ${h * 0.12}px ${FONT}`;
-    ctx.fillText("24H · PAY IN ZEC", w * 0.45, h * 0.8);
+    fitText(ctx, "24H · PAY IN ZEC", w * 0.45, h * 0.8);
   },
   // 10,000 encrypted identities (zkSNARK pixel face)
   (ctx, w, h, t) => {
@@ -317,10 +320,10 @@ const ADS: Ad[] = [
     );
     ctx.fillStyle = "#e8e0ff";
     ctx.font = `800 ${h * 0.22}px ${FONT}`;
-    ctx.fillText("zkSNARKs", w * 0.42, h * 0.48);
+    fitText(ctx, "zkSNARKs", w * 0.42, h * 0.48);
     ctx.fillStyle = "#b07bff";
     ctx.font = `600 ${h * 0.11}px ${FONT}`;
-    ctx.fillText("10,000 encrypted identities", w * 0.42, h * 0.7);
+    fitText(ctx, "10,000 encrypted identities", w * 0.42, h * 0.7);
   },
 ];
 

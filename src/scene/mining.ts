@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { Market } from "../data/market";
+import { fitText } from "./fit";
 import { get } from "../data/zscan";
 import type { FactorySite } from "./city";
 
@@ -105,12 +106,12 @@ export class MiningHall {
       ctx.fillStyle = k ? "#f4b728" : "#ffe08a";
       ctx.font = mono(54, 800);
       ctx.textAlign = "center";
-      ctx.fillText("BLOCK FOUND", W / 2, 110);
+      fitText(ctx, "BLOCK FOUND", W / 2, 110);
       ctx.font = mono(30, 700);
-      ctx.fillText(this.last ? `#${this.last.height.toLocaleString("en-US")}` : "", W / 2, 158);
+      fitText(ctx, this.last ? `#${this.last.height.toLocaleString("en-US")}` : "", W / 2, 158);
       ctx.fillStyle = "#e8e0c8";
       ctx.font = mono(20, 500);
-      ctx.fillText(this.last?.pool ?? "solo / unknown miner", W / 2, 196);
+      fitText(ctx, this.last?.pool ?? "solo / unknown miner", W / 2, 196);
       ctx.textAlign = "left";
       this.glow.color.set("#f4b728");
       this.glow.intensity = 6;
@@ -120,22 +121,22 @@ export class MiningHall {
       const n = Market.state.network;
       ctx.fillStyle = "#3ddc97";
       ctx.font = mono(16);
-      ctx.fillText("MINING HALL · EQUIHASH 200,9", 18, 30);
+      fitText(ctx, "MINING HALL · EQUIHASH 200,9", 18, 30);
       ctx.fillStyle = Math.sin(t * 4) > 0 ? "#3ddc97" : "#0f3a2a";
       ctx.fillRect(W - 30, 18, 12, 12);
       ctx.fillStyle = "#ffffff";
       ctx.font = mono(52, 800);
-      ctx.fillText(n ? `${(n.solps / 1e9).toFixed(2)}` : "—", 18, 92);
+      const hw = fitText(ctx, n ? `${(n.solps / 1e9).toFixed(2)}` : "—", 18, 92, W * 0.62);
       ctx.fillStyle = "#7a8a84";
       ctx.font = mono(18);
-      ctx.fillText("GSol/s", 18 + ctx.measureText(n ? `${(n.solps / 1e9).toFixed(2)}` : "—").width * 2.9 + 10, 92);
+      fitText(ctx, "GSol/s", 18 + hw + 10, 92);
       ctx.fillStyle = "#a3a3a3";
       ctx.font = mono(15, 500);
-      ctx.fillText(n ? `difficulty ${(n.difficulty / 1e6).toFixed(1)}M · block ${n.avg_block_time.toFixed(0)}s avg` : "", 18, 120);
+      fitText(ctx, n ? `difficulty ${(n.difficulty / 1e6).toFixed(1)}M · block ${n.avg_block_time.toFixed(0)}s avg` : "", 18, 120);
       if (this.last) {
         const ago = Math.max(0, Math.round((Date.now() - this.last.at) / 1000));
         ctx.fillStyle = "#f4b728";
-        ctx.fillText(`last #${this.last.height.toLocaleString("en-US")} · ${ago}s ago · ${this.last.pool ?? "unknown"}`, 18, 146);
+        fitText(ctx, `last #${this.last.height.toLocaleString("en-US")} · ${ago}s ago · ${this.last.pool ?? "unknown"}`, 18, 146);
       }
       // the pools' share of the last week
       const list = this.miners?.miners.slice(0, 5) ?? [];
@@ -149,8 +150,8 @@ export class MiningHall {
         ctx.fillRect(150, y - 10, 300 * share, 10);
         ctx.fillStyle = "#c8d0cc";
         ctx.font = mono(12, 500);
-        ctx.fillText((m.pool ?? m.tag ?? `${m.address.slice(0, 8)}…`).slice(0, 16), 18, y);
-        ctx.fillText(`${Math.round(share * 100)}%`, 458, y);
+        fitText(ctx, (m.pool ?? m.tag ?? `${m.address.slice(0, 8)}…`).slice(0, 16), 18, y);
+        fitText(ctx, `${Math.round(share * 100)}%`, 458, y);
       });
     }
     // scan lines
@@ -172,7 +173,7 @@ function boxLabel(height: number) {
   ctx.fillStyle = "#f4b728";
   ctx.font = '700 22px "JetBrains Mono", monospace';
   ctx.textAlign = "center";
-  ctx.fillText(height.toLocaleString("en-US"), 64, 72);
+  fitText(ctx, height.toLocaleString("en-US"), 64, 72);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;

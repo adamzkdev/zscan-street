@@ -944,7 +944,8 @@ export function buildFactory(ctx: InteriorContext): Interior {
         if (m.position.x > X1 + 1.2) dropCrate(c);
       }
     }
-    beltTex.offset.y -= dt / 0.9;
+    // crates ride at 1 m/s towards +z; one tile is 0.9 m and the canvas top faces −z
+    beltTex.offset.y += dt / 0.9;
   }
 
   return {

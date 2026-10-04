@@ -15,7 +15,7 @@ a transaction is picked from its txid (zkSNARKs live off-chain, so it's casting,
 
 ## The street
 
-- One avenue, Downtown in the middle, the Orchard park west, Ironwood's depot and Proof Factory east,
+- One avenue, Downtown in the middle, the Orchard park west, Ironwood's Proof Factory and depot east,
   the Transparent square south. The avenue runs off the board into a tunnel at each end: buses come
   "from the miners" in the west and carry blocks "into the chain" in the east.
 - A new mempool transaction sends a truck from the Proof Factory (shielded) or the depot

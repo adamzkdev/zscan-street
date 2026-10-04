@@ -365,12 +365,14 @@ export function beltTexture() {
   for (let y = 0; y < 64; y += 8) g.fillRect(0, y, 64, 3);
   g.fillStyle = "rgba(244,183,40,0.5)";
   g.beginPath();
-  g.moveTo(16, 44);
-  g.lineTo(32, 24);
-  g.lineTo(48, 44);
-  g.lineTo(40, 44);
+  // the chevron points down the canvas: on the belt (laid flat, canvas top towards −z) that is +z,
+  // the way the crates travel
+  g.moveTo(16, 24);
+  g.lineTo(32, 44);
+  g.lineTo(48, 24);
+  g.lineTo(40, 24);
   g.lineTo(32, 34);
-  g.lineTo(24, 44);
+  g.lineTo(24, 24);
   g.fill();
   const t = canvasTex(c, true);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;

@@ -67,7 +67,7 @@ export const DISTRICTS: DistrictPlan[] = [{ key: "downtown", name: "Downtown", x
 export const AREAS = [
   { key: "downtown", name: "Downtown", blurb: "The MEMPOOL shop, the bus stop, neon", color: "#ff9f2e", x: 1.5, z: -0.5, zoom: 1 },
   { key: "orchard", name: "Orchard", blurb: "Wooden houses, the greenhouse, the orchard park", color: "#5cff9a", x: -37, z: 2, zoom: 1.1 },
-  { key: "ironwood", name: "Ironwood", blurb: "The depot, the Proof Factory, the container yard", color: "#b07bff", x: 37, z: 0, zoom: 1.1 },
+  { key: "ironwood", name: "Ironwood", blurb: "The Proof Factory, the depot, the container yard", color: "#b07bff", x: 37, z: 0, zoom: 1.1 },
   { key: "transparent", name: "Transparent Square", blurb: "Open market, nothing hidden", color: "#ffd28a", x: 0, z: 18, zoom: 1.2 },
 ];
 
@@ -190,8 +190,9 @@ export function planCity() {
   );
   row(
     [
-      ["depot", 301, {}, 56],
+      // the Proof Factory on the left, the depot on the right
       ["factory", 302, {}, 62],
+      ["depot", 301, {}, 56],
     ],
     28.4,
     fz,

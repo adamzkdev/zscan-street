@@ -3,6 +3,7 @@ import type { BlockSummary, Tx } from "../data/types";
 import { KIND_HELP, KIND_LABEL } from "../data/types";
 import { get, links } from "../data/zscan";
 import { KIND_COLOR, Snark, loadArt } from "../scene/snark";
+import { fitText } from "../scene/fit";
 import { toObject } from "../scene/voxel/mesher";
 import { C, E, G, shades, VoxelModel } from "../scene/voxel/model";
 import { box, glowMat, makeScene, room, std, textPlane } from "./kit";
@@ -529,13 +530,13 @@ function liveBoard(ctx: InteriorContext) {
       g.fillRect(0, 0, 512, 256);
       g.fillStyle = "#ff9f2e";
       g.font = mono(18);
-      g.fillText("MEMPOOL · WAITING FOR A BLOCK", 20, 34);
+      fitText(g, "MEMPOOL · WAITING FOR A BLOCK", 20, 34);
       g.fillStyle = "#ffffff";
       g.font = mono(76, 800);
-      g.fillText(String(txs.length), 20, 118);
+      const cw = fitText(g, String(txs.length), 20, 118, 200);
       g.fillStyle = "#9a9a9a";
       g.font = mono(18);
-      g.fillText(`tx · ${(fees / 1e8).toFixed(5)} ZEC in fees`, 24 + g.measureText(String(txs.length)).width * 4.3, 116);
+      fitText(g, `tx · ${(fees / 1e8).toFixed(5)} ZEC in fees`, 34 + cw, 116);
       // kinds as a stacked bar
       const kinds = ["shielded", "migration", "shielding", "deshielding", "transparent", "mixed"] as const;
       let x = 20;
@@ -553,7 +554,7 @@ function liveBoard(ctx: InteriorContext) {
         g.fillStyle = KIND_COLOR[t.kind];
         g.fillRect(20, ly - 10, 10, 10);
         g.fillStyle = "#d0d0d0";
-        g.fillText(`${short(t.txid)}  ${KIND_LABEL[t.kind].padEnd(12)} ${ago(t.seenAt)}`, 38, ly);
+        fitText(g, `${short(t.txid)}  ${KIND_LABEL[t.kind].padEnd(12)} ${ago(t.seenAt)}`, 38, ly);
         ly += 22;
       }
       g.fillStyle = "rgba(0,0,0,0.18)";
