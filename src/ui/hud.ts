@@ -71,6 +71,31 @@ const ICON: Record<string, string> = {
 };
 const icon = (k: string) => `<svg class="i" viewBox="0 0 24 24">${ICON[k]}</svg>`;
 
+/** Pixel-art icons on a 12 × 12 grid, like the sprites and signs of the street. */
+const PIX: Record<string, string[]> = {
+  bus: ["..########..", ".#........#.", ".#.##..##.#.", ".#.##..##.#.", ".#........#.", ".##########.", ".#........#.", ".#.#....#.#.", ".##########.", "..##....##..", "..##....##..", "............"],
+  parcel: ["....####....", "..##....##..", "##........##", "#.##....##.#", "#...####...#", "#.....#....#", "#.....#....#", "#.....#....#", "#.....#....#", ".##...#..##.", "...##.#.##..", ".....###...."],
+  zec: ["...######...", "..#......#..", ".#.######.#.", "#.......#..#", "#......#...#", "#.....#....#", "#....#.....#", "#...#......#", ".#.######.#.", "..#......#..", "...######...", "............"],
+  vault: [".##########.", ".#........#.", ".#.######.#.", ".#......#.#.", ".#.....#..#.", ".#....#...#.", ".#...#....#.", ".#.######.#.", "..#......#..", "...#....#...", "....#..#....", ".....##....."],
+  bolt: [".......###..", "......###...", ".....###....", "....###.....", "...#######..", "......###...", ".....###....", "....###.....", "...###......", "..###.......", ".##.........", "............"],
+  book: ["............", ".#####.####.", ".#...#.#..#.", ".#.#.#.#.##.", ".#...#.#..#.", ".#.#.#.#.##.", ".#...#.#..#.", ".#.#.#.#.##.", ".#...#.#..#.", ".#####.####.", "............", "............"],
+  walker: [".....##.....", ".....##.....", "............", "....###.....", "...#.##.#...", "..#..##..#..", ".....##.....", "....#..#....", "....#..#....", "...#....#...", "...#....#...", "............"],
+  grid: ["............", ".###.###.###", ".###.###.###", "............", ".###.###.###", ".###.###.###", "............", ".###.###.###", ".###.###.###", "............", "............", "............"],
+  cards: ["...#######..", "...#.....#..", ".#######.#..", ".#.....#.#..", ".#.###.#.#..", ".#.#.#.#.#..", ".#.###.#.#..", ".#.....#.#..", ".#.....###..", ".#######....", "............", "............"],
+  bank: [".....##.....", "...##..##...", ".##......##.", "############", "............", ".##.##.##.##", ".##.##.##.##", ".##.##.##.##", ".##.##.##.##", "............", "############", "............"],
+  crane: [".##########.", ".#...#....#.", ".#...#....#.", ".#........#.", ".#........#.", ".#......###.", ".#......###.", ".#..........", ".#..........", ".#..........", "###.........", "............"],
+  door: [".########...", ".#......#...", ".#......#...", ".#......#...", ".#......#...", ".#....#.#...", ".#......#...", ".#......#...", ".#......#...", ".#......#...", "##########..", "............"],
+};
+/** A pixel icon: one rect per lit cell, crisp at any size. */
+const pix = (k: string) => {
+  const rows = PIX[k];
+  if (!rows) return icon(k);
+  let d = "";
+  rows.forEach((r, y) => [...r].forEach((c, x) => c === "#" && (d += `M${x} ${y}h1v1h-1z`)));
+  return `<svg class="px" viewBox="0 0 12 12" shape-rendering="crispEdges"><path d="${d}"/></svg>`;
+};
+
+
 export interface HudCallbacks {
   mode(m: "live" | "overview" | "free"): void;
   district(key: string): void;
@@ -101,19 +126,19 @@ type Section = "block" | "mempool" | "market" | "supply" | "network";
 const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   mempool: { icon: "parcel", color: "#ff9f2e" },
   cards: { icon: "cards", color: "#b07bff" },
-  bank: { icon: "bank", color: "#3ee08f" },
-  factory: { icon: "bolt", color: "#f4b728" },
+  bank: { icon: "bank", color: "#5cff9a" },
+  factory: { icon: "bolt", color: "#ffd23f" },
   zsa: { icon: "crane", color: "#3ef0ff" },
   library: { icon: "book", color: "#ffd28a" },
 };
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
-const READINGS: Record<Section, { icon: string; label: string; color: string; title: string }> = {
-  block: { icon: "busfront", label: "Block", color: "#f4b728", title: "Last block: the bus that took it" },
-  mempool: { icon: "parcel", label: "Mempool", color: "#ff9f2e", title: "Transactions waiting for a block" },
-  market: { icon: "zec", label: "ZEC", color: "#2fbf9c", title: "ZEC price, 24 h" },
-  supply: { icon: "vault", label: "Supply", color: "#1baf7a", title: "Coins mined, share shielded" },
-  network: { icon: "bolt", label: "Hashrate", color: "#4ea8de", title: "Network hash power" },
+const READINGS: Record<Section, { icon: string; label: string; jp: string; color: string; title: string }> = {
+  block: { icon: "bus", label: "Block", jp: "ブロック", color: "#ffd23f", title: "Last block: the bus that took it" },
+  mempool: { icon: "parcel", label: "Mempool", jp: "待合室", color: "#ff9f2e", title: "Transactions waiting for a block" },
+  market: { icon: "zec", label: "ZEC", jp: "価格", color: "#3ef0ff", title: "ZEC price, 24 h" },
+  supply: { icon: "vault", label: "Supply", jp: "供給", color: "#5cff9a", title: "Coins mined, share shielded" },
+  network: { icon: "bolt", label: "Hash", jp: "採掘", color: "#ff3e8a", title: "Network hash power" },
 };
 const usd = (n: number) => (n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
 
@@ -209,7 +234,7 @@ export class Hud {
         <button data-act="cam" title="Camera and places">${icon("camera")}</button>
         <div class="campop hud hidden"></div>
         <i></i>
-        <button data-act="walk" class="walk" title="Walk the street (first person)">${icon("walker")}</button>
+        <button data-act="walk" class="walk" title="Walk the street (first person)">${pix("walker")}</button>
       </nav>
       <aside class="panel hud"></aside>
       <section class="strip hud"></section>
@@ -254,7 +279,7 @@ export class Hud {
     this.root.classList.toggle("walking", on);
     const b = this.$(".rail .walk");
     b.classList.toggle("on", on);
-    b.innerHTML = icon(on ? "map2" : "walker");
+    b.innerHTML = pix(on ? "grid" : "walker");
     b.title = on ? "Back to the map" : "Walk the street (first person)";
     let h = this.root.querySelector<HTMLElement>(".whint");
     if (!h) {
@@ -601,7 +626,7 @@ export class Hud {
     const [fname, fsub] = split(f.name);
     const many = i.floors.length > 1;
     this.$(".indoor").innerHTML = `
-      <div class="ihead hud" style="--c:${st.color}"><span class="tile">${icon(st.icon)}</span><span class="it"><b>${esc(i.title)}</b><span>${many ? `<em>${esc(f.label)}</em>` : ""}${esc(fname)}${fsub ? ` · ${esc(fsub)}` : ""}</span></span></div>
+      <div class="ihead hud" style="--c:${st.color}"><span class="tile">${pix(st.icon)}</span><span class="it"><b>${esc(i.title)}</b><span>${many ? `<em>${esc(f.label)}</em>` : ""}${esc(fname)}${fsub ? ` · ${esc(fsub)}` : ""}</span></span></div>
       ${
         many
           ? `<nav class="lift hud" style="--c:${st.color}" aria-label="Elevator">
@@ -619,7 +644,7 @@ export class Hud {
             </nav>`
           : ""
       }
-      <button class="leave hud" data-act="leave">${icon("door")}Leave <kbd>Esc</kbd></button>
+      <button class="leave hud" data-act="leave">${pix("door")}Leave <kbd>Esc</kbd></button>
       <div class="ihint"><span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>click</kbd> inspect</span>${many ? "<span><kbd>PgUp</kbd><kbd>PgDn</kbd> floors</span>" : ""}<span>walk out the door to leave</span></div>`;
   }
 
@@ -755,8 +780,8 @@ export class Hud {
     const rd = (k: Section) => {
       const r = READINGS[k];
       return `<button class="rd" data-sec="${k}" title="${r.title}" style="--c:${r.color}">
-        <span class="tile${k === "block" ? " prog" : ""}">${icon(r.icon)}</span>
-        <span class="rv"><small>${r.label}</small><span class="v"><b class="mono" data-k="${k}">—</b><em data-k="${k}-sub"></em></span></span>
+        <span class="tile${k === "block" ? " prog" : ""}">${pix(r.icon)}</span>
+        <span class="rv"><small><i>${r.jp}</i>${r.label}</small><span class="v"><b class="mono" data-k="${k}">—</b><em data-k="${k}-sub"></em></span></span>
       </button>`;
     };
     el.innerHTML = `<div class="details"></div><div class="bar">
@@ -835,7 +860,7 @@ export class Hud {
   private sectionHtml(sec: Section): string {
     const m = Market.state;
     const cell = (k: string, v: string, sub = "") => `<div class="cell"><dt>${k}</dt><dd>${v}</dd>${sub ? `<small>${sub}</small>` : ""}</div>`;
-    const head = (t: string, right = "") => `<div class="dh"><span class="tile">${icon(READINGS[sec].icon)}</span><b>${t}</b><span class="dr">${right}</span></div>`;
+    const head = (t: string, right = "") => `<div class="dh"><span class="tile">${pix(READINGS[sec].icon)}</span><b><i>${READINGS[sec].jp}</i>${t}</b><span class="dr">${right}</span></div>`;
     switch (sec) {
       case "block": {
         const lb = this.stats.lastBlock;

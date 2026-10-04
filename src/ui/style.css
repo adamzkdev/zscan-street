@@ -2179,3 +2179,256 @@ kbd {
   color: #212529;
   text-shadow: 0 1px 6px rgba(255, 255, 255, 0.9);
 }
+
+/* =================================================================================================
+ * ZStreet signage: the HUD speaks the city's language. Night-ink panels with LED scan lines and
+ * stepped (voxel) corners, a Japanese pixel font, pixel-art icons, neon kanji labels and figures
+ * that glow like the street's LED boards.
+ * ============================================================================================== */
+:root {
+  --pixel: "DotGothic16", "JetBrains Mono", monospace;
+  --ink: rgba(11, 9, 19, 0.9);
+  --ink-line: rgba(140, 120, 255, 0.28);
+  --scan: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 3px);
+  --step: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
+}
+:root[data-theme="day"] {
+  --ink: rgba(250, 246, 238, 0.94);
+  --ink-line: rgba(90, 60, 30, 0.28);
+  --scan: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.025) 0 1px, transparent 1px 3px);
+}
+.hud {
+  background: var(--scan), var(--ink);
+  border: none;
+  border-radius: 0;
+  clip-path: var(--step);
+  box-shadow: inset 0 0 0 2px var(--ink-line);
+}
+/* pixel blocks in the four corners instead of the old gold ticks */
+.hud::before {
+  inset: 4px;
+  background:
+    linear-gradient(var(--c, var(--gold)), var(--c, var(--gold))) top left / 4px 4px,
+    linear-gradient(var(--c, var(--gold)), var(--c, var(--gold))) top right / 4px 4px,
+    linear-gradient(var(--c, var(--gold)), var(--c, var(--gold))) bottom left / 4px 4px,
+    linear-gradient(var(--c, var(--gold)), var(--c, var(--gold))) bottom right / 4px 4px;
+  background-repeat: no-repeat;
+  opacity: 0.9;
+}
+svg.px {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  flex: none;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+:root[data-theme="day"] svg.px {
+  filter: none;
+}
+
+/* ---- the strip: a row of little neon signs ---- */
+.strip .bar {
+  height: 56px;
+}
+.strip .live {
+  font-family: var(--pixel);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+.tile {
+  width: 32px;
+  height: 32px;
+  background: color-mix(in srgb, var(--c) 10%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 45%, transparent);
+  clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px));
+}
+.tile.prog {
+  border-radius: 0;
+  clip-path: none;
+  box-shadow: none;
+  background:
+    linear-gradient(var(--ink-solid, #0b0913), var(--ink-solid, #0b0913)) center / calc(100% - 6px) calc(100% - 6px) no-repeat,
+    conic-gradient(var(--c) calc(var(--k) * 1turn), color-mix(in srgb, var(--c) 16%, transparent) 0);
+}
+:root[data-theme="day"] .tile.prog {
+  --ink-solid: #faf6ee;
+}
+.rv small {
+  font: 400 11px var(--pixel);
+  letter-spacing: 0.06em;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.rv small i,
+.dh b i {
+  font-style: normal;
+  color: var(--c);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--c) 70%, transparent);
+  letter-spacing: 0.04em;
+}
+.rv .v b {
+  font: 400 17px var(--pixel);
+  color: color-mix(in srgb, var(--c) 35%, #ffffff);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--c) 55%, transparent);
+}
+.rv .v em {
+  font-family: var(--pixel);
+  font-size: 12px;
+}
+:root[data-theme="day"] .rv .v b {
+  color: #1c1a24;
+  text-shadow: none;
+}
+.rd.on {
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+}
+.rd.on::after {
+  height: 3px;
+  left: 12px;
+  right: 12px;
+  top: 2px;
+  box-shadow: 0 0 8px var(--c);
+}
+.rd + .rd::before {
+  width: 2px;
+  background: repeating-linear-gradient(180deg, var(--ink-line) 0 2px, transparent 2px 4px);
+}
+.dh b {
+  font: 400 14px var(--pixel);
+  letter-spacing: 0.08em;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.cell dt,
+.stats dt,
+.mh,
+.eyebrow,
+.tabs button,
+.btn,
+.tag,
+.pill,
+.rank,
+.chips small,
+.leave,
+.ihead b,
+.lift .fl > b {
+  font-family: var(--pixel) !important;
+  font-weight: 400 !important;
+}
+.cell dd,
+.stats dd {
+  font-family: var(--pixel);
+  font-size: 15px;
+}
+.details {
+  border-bottom: 2px dashed var(--ink-line);
+}
+
+/* ---- buttons, tags: squared, pixel stepped ---- */
+.btn {
+  border-radius: 0;
+  border-width: 2px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+.btn.primary {
+  box-shadow: 0 0 14px rgba(244, 183, 40, 0.35);
+}
+.tag,
+.pill,
+.rank,
+kbd {
+  border-radius: 0;
+}
+
+/* ---- the zkSNARK panel ---- */
+.panel {
+  --c: #b07bff;
+  padding: 18px;
+}
+.panel .hero h2 {
+  font: 400 22px var(--pixel);
+  letter-spacing: 0.02em;
+}
+.portrait {
+  clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.pill i {
+  border-radius: 0;
+}
+.steps i {
+  border-radius: 0;
+  width: 12px;
+  height: 12px;
+}
+.steps li + li::before {
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--line-strong) 0 3px, transparent 3px 5px);
+}
+.steps li.done::before,
+.steps li.now::before {
+  background: var(--gold);
+}
+.steps li {
+  font: 400 11px var(--pixel);
+}
+.chips div {
+  border: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--c) 60%, transparent);
+}
+.chips b {
+  font: 400 13.5px var(--pixel);
+}
+.tabs {
+  border-bottom: 2px solid var(--ink-line);
+}
+.tabs button {
+  font-size: 12.5px;
+  padding: 8px 12px;
+}
+.tabs button.on {
+  border-bottom-width: 3px;
+  text-shadow: 0 0 6px rgba(244, 183, 40, 0.5);
+}
+
+/* ---- inside: elevator and header ---- */
+.lift .fl > b {
+  border-radius: 0;
+  font-size: 15px;
+  clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px));
+}
+.lift .fl strong {
+  font: 400 13.5px var(--pixel);
+}
+.ihead b {
+  font-size: 15px !important;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.leave {
+  border-radius: 0;
+  clip-path: var(--step);
+  font-size: 13px;
+}
+.brand span {
+  font-family: var(--pixel);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+}
+/* no clip-path on the rail: its camera menu opens outside it */
+.rail {
+  border-radius: 0;
+  background: var(--scan), var(--ink);
+  border: none;
+  box-shadow: inset 0 0 0 2px var(--ink-line);
+}
+.rail > button {
+  border-radius: 0;
+}
+.rail > button.walk svg.px {
+  width: 20px;
+  height: 20px;
+}
