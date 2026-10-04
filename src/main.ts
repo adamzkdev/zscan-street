@@ -684,14 +684,16 @@ if (CAPTURE) {
       carrier: () => director.debugCarrier(),
       queue: (n: number) => director.debugQueue(n),
       /** The newest bus: its phase, and the CCTV view inside it (pos/look in world space). */
-      bus: () => {
-        const b = [...director.buses].at(-1);
+      bus: (h?: number) => {
+        const b = h ? [...director.buses].find((x) => x.blockHeight === h) : [...director.buses].at(-1);
         if (!b) return null;
         const g = b.group;
         g.updateMatrixWorld(true);
         const w = (v: THREE.Vector3) => g.localToWorld(v).toArray() as [number, number, number];
         return {
           phase: b.phase,
+          height: b.blockHeight,
+          riding: [...director.snarks].filter((s) => s.bus === b && s.state === "riding").length,
           x: g.position.x,
           z: g.position.z,
           inside: { pos: w(busLocal(3.2, BUS.h - 4.2, 2.6)), look: w(busLocal(BUS.w - 16, BUS.floor + 3, 9.5)) },

@@ -176,24 +176,35 @@ const ACTS = {
       if (bus && bus.x > -2) break;
     }
     await act("a04-bus", 2.5, (t, k) => ({ pos: lerp([9, 2.3, 8.5], [6.5, 2.0, 7.2], ease(k)), look: lerp([-3, 1.5, 1], [-5, 1.4, 0.8], ease(k)), fov: 42, tilt: 0.5 }), 0);
-    // inside: the CCTV corner at the back, riders taking their seats, the doors closing
-    await act("a04b-inside", 3.5, async () => {
+    // the bus at this stop, followed by its block height
+    let h = null;
+    for (let i = 0; i < 80 && !h; i++) {
       const bus = await p.evaluate(() => window.capture.bus());
-      return bus ? { pos: bus.front.pos, look: bus.front.look, fov: 66 } : undefined;
-    }, 0);
-    // let it pull away a little, then chase it east until it vanishes into the tunnel
-    for (let i = 0; i < 60; i++) {
-      const bus = await p.evaluate(() => window.capture.bus());
+      if (bus && bus.phase === "stopped") h = bus.height;
+      else await step(0.25);
+    }
+    // wait until the riders have taken their seats
+    for (let i = 0, last = -1, still = 0; i < 60; i++) {
+      const bus = await p.evaluate((h) => window.capture.bus(h), h);
       if (!bus || bus.phase === "departing") break;
+      still = bus.riding === last ? still + 1 : 0;
+      last = bus.riding;
+      if (bus.riding >= 6 && still >= 4) break;
       await step(0.25);
     }
-    let c = null;
-    await act("a04c-depart", 5, async () => {
-      const bus = await p.evaluate(() => window.capture.bus());
-      if (bus) c = c ? lerp(c, [bus.x, bus.z], 0.25) : [bus.x, bus.z];
-      if (!c) return undefined;
-      const cx = Math.min(c[0] - 11, 70);
-      return { pos: [cx, 3.4, c[1] + 4.2], look: [Math.min(c[0] + 6, 92), 1.4, c[1]], fov: 44, tilt: 0.3 };
+    // inside, seated: a short look down the aisle
+    await act("a04b-inside", 1.5, async () => {
+      const bus = await p.evaluate((h) => window.capture.bus(h), h);
+      return bus ? { pos: bus.front.pos, look: bus.front.look, fov: 66 } : undefined;
+    }, 0);
+    // outside, from the pavement: the doors close and the bus pulls away, the block is on its way
+    // a camera that pans after it, lagging, so the bus slides out of frame to the east
+    let cx = null;
+    await act("a04c-depart", 2.25, async () => {
+      const bus = await p.evaluate((h) => window.capture.bus(h), h);
+      if (bus) cx = cx === null ? bus.x : cx + (bus.x - cx) * 0.05;
+      const x = cx ?? 7;
+      return { pos: [x - 2, 2.3, -5.2], look: [x + 2.5, 1.5, 1.4], fov: 50, tilt: 0.3 };
     }, 0);
   },
   async "a05-mempool"() {
