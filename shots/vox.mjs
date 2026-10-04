@@ -1,0 +1,12 @@
+import puppeteer from "puppeteer-core";
+const [, , part = "", out = "shots/vox.png", cam = ""] = process.argv;
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1200, height: 900 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push(e.message));
+p.on("console", (m) => m.type() === "error" && errs.push(m.text()));
+await p.goto(`http://localhost:3007/voxtest.html${part ? `?part=${part}` : ""}${cam ? `&cam=${cam}` : ""}`);
+await new Promise((r) => setTimeout(r, 2500));
+await p.screenshot({ path: out });
+console.log(errs.join("\n") || "ok");
+await b.close();

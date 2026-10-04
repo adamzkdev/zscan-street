@@ -1,0 +1,18 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal", "--autoplay-policy=no-user-gesture-required"], defaultViewport: { width: 1600, height: 1000 } });
+const p = await b.newPage();
+const logs = [];
+p.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
+p.on("console", (m) => m.type() === "error" && logs.push(m.text()));
+await p.goto("http://localhost:3007/?debug");
+await new Promise((r) => setTimeout(r, 7000));
+await p.click(".sound");
+await new Promise((r) => setTimeout(r, 4000));
+console.log("sound on:", await p.evaluate(() => document.querySelector(".sound").classList.contains("on")));
+const fps = await p.evaluate(() => new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res(Math.round(n / 3)); }; requestAnimationFrame(f); }));
+console.log("fps with audio", fps);
+await p.evaluate(() => { const r = street.rig; r.flyTo(new (r.controls.target.constructor)(-12, 1, -6), 2.2); });
+await new Promise((r) => setTimeout(r, 2500));
+await p.screenshot({ path: "shots/audio.png" });
+console.log(logs.join("\n") || "no errors");
+await b.close();

@@ -1,0 +1,304 @@
+/**
+ * The street's soundscape, synthesised with Web Audio (no files to download):
+ * rain on the pavement, a distant city hum, a slow lo-fi synth pad with a soft arpeggio, and
+ * the little sounds of the street (the konbini door chime, the bus pulling in).
+ * Browsers only allow sound after a click, so it starts from the HUD's sound button.
+ */
+export class Soundscape {
+  private ctx: AudioContext | null = null;
+  private master!: GainNode;
+  private rainGain!: GainNode;
+  private musicGain!: GainNode;
+  private sfxGain!: GainNode;
+  private rainOn = true;
+  private timer: ReturnType<typeof setInterval> | undefined;
+  on = false;
+
+  async start() {
+    if (!this.ctx) this.build();
+    await this.ctx!.resume();
+    this.on = true;
+    this.fade(this.master, 0.9, 1.5);
+  }
+
+  stop() {
+    if (!this.ctx) return;
+    this.on = false;
+    this.fade(this.master, 0, 0.6);
+  }
+
+  setRain(on: boolean) {
+    this.rainOn = on;
+    if (this.ctx) this.fade(this.rainGain, on ? 0.55 : 0, 1.2);
+  }
+
+  /** The two-note konbini door chime. */
+  chime() {
+    if (!this.on || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    [1318.5, 1046.5].forEach((f, i) => this.bell(f, t + i * 0.22, 0.6, 0.07));
+  }
+
+  /** Air brakes and a low rumble as the bus stops. */
+  busArrives() {
+    if (!this.on || !this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise(1.2);
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 2400;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.12, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 1.1);
+    n.connect(hp).connect(g).connect(this.sfxGain);
+    n.start(t);
+    // a gentle three-note arrival tone, like a station jingle
+    [659.3, 830.6, 987.8].forEach((f, i) => this.bell(f, t + 0.5 + i * 0.16, 0.5, 0.05));
+  }
+
+  private build() {
+    const ctx = new AudioContext();
+    this.ctx = ctx;
+    this.master = ctx.createGain();
+    this.master.gain.value = 0;
+    // a touch of space on everything
+    const verb = ctx.createConvolver();
+    verb.buffer = this.impulse(2.8);
+    const wet = ctx.createGain();
+    wet.gain.value = 0.35;
+    this.master.connect(ctx.destination);
+    verb.connect(wet).connect(this.master);
+    this.rainGain = ctx.createGain();
+    this.rainGain.gain.value = this.rainOn ? 0.55 : 0;
+    this.musicGain = ctx.createGain();
+    this.musicGain.gain.value = 0.32;
+    this.sfxGain = ctx.createGain();
+    this.sfxGain.gain.value = 0.8;
+    for (const g of [this.rainGain, this.musicGain, this.sfxGain]) g.connect(this.master);
+    this.musicGain.connect(verb);
+    this.sfxGain.connect(verb);
+    this.rain();
+    this.hum();
+    this.music();
+  }
+
+  /** Rain: two layers of filtered noise (the hiss of the shower, the patter on the ground) plus drips. */
+  private rain() {
+    const ctx = this.ctx!;
+    const layer = (type: BiquadFilterType, freq: number, q: number, gain: number) => {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise(4, true);
+      src.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      f.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.value = gain;
+      src.connect(f).connect(g).connect(this.rainGain);
+      src.start();
+      // slow gusts
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.07 + Math.random() * 0.05;
+      const depth = ctx.createGain();
+      depth.gain.value = gain * 0.35;
+      lfo.connect(depth).connect(g.gain);
+      lfo.start();
+    };
+    layer("highpass", 3200, 0.5, 0.35);
+    layer("bandpass", 900, 0.6, 0.55);
+    layer("lowpass", 300, 0.7, 0.4);
+    // drips from awnings and gutters
+    setInterval(() => {
+      if (!this.on || !this.rainOn) return;
+      const t = ctx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        if (Math.random() > 0.5) continue;
+        const o = ctx.createOscillator();
+        o.type = "sine";
+        const f0 = 1800 + Math.random() * 2400;
+        o.frequency.setValueAtTime(f0, t + i * 0.09);
+        o.frequency.exponentialRampToValueAtTime(f0 * 0.5, t + i * 0.09 + 0.05);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.025, t + i * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.09 + 0.06);
+        o.connect(g).connect(this.rainGain);
+        o.start(t + i * 0.09);
+        o.stop(t + i * 0.09 + 0.08);
+      }
+    }, 280);
+  }
+
+  /** The city far away: a low, breathing drone. */
+  private hum() {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise(4, true);
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 140;
+    const g = ctx.createGain();
+    g.gain.value = 0.25;
+    src.connect(f).connect(g).connect(this.master);
+    src.start();
+  }
+
+  /**
+   * Music: a minor-key progression on a warm detuned pad, a soft sub bass, and a sparse plucked
+   * arpeggio, at 72 bpm. Chords change every two bars; notes are chosen so it never sounds busy.
+   */
+  private music() {
+    const ctx = this.ctx!;
+    const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
+    // Am9 · Fmaj7 · Cmaj7 · Em7 (in midi notes)
+    const chords = [
+      [57, 60, 64, 67, 71],
+      [53, 57, 60, 64, 67],
+      [48, 55, 59, 62, 64],
+      [52, 55, 59, 62, 66],
+    ];
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1400;
+    lp.Q.value = 0.4;
+    lp.connect(this.musicGain);
+    // a slow filter sweep breathes life into the pad
+    const sweep = ctx.createOscillator();
+    sweep.frequency.value = 0.03;
+    const sweepDepth = ctx.createGain();
+    sweepDepth.gain.value = 600;
+    sweep.connect(sweepDepth).connect(lp.frequency);
+    sweep.start();
+    const beat = 60 / 72;
+    const bar = beat * 4;
+    let next = ctx.currentTime + 0.2;
+    let k = 0;
+    const schedule = () => {
+      while (next < ctx.currentTime + 4) {
+        const chord = chords[k % chords.length];
+        const dur = bar * 2;
+        // pad: two detuned saws per note, slow attack and release
+        for (const n of chord.slice(1)) {
+          for (const det of [-7, 7]) {
+            const o = ctx.createOscillator();
+            o.type = "sawtooth";
+            o.frequency.value = midi(n);
+            o.detune.value = det;
+            const g = ctx.createGain();
+            g.gain.setValueAtTime(0, next);
+            g.gain.linearRampToValueAtTime(0.018, next + 1.6);
+            g.gain.setValueAtTime(0.018, next + dur - 1.2);
+            g.gain.linearRampToValueAtTime(0, next + dur + 0.6);
+            o.connect(g).connect(lp);
+            o.start(next);
+            o.stop(next + dur + 0.7);
+          }
+        }
+        // sub bass on the root
+        const b = ctx.createOscillator();
+        b.type = "sine";
+        b.frequency.value = midi(chord[0] - 12);
+        const bg = ctx.createGain();
+        bg.gain.setValueAtTime(0, next);
+        bg.gain.linearRampToValueAtTime(0.09, next + 0.4);
+        bg.gain.linearRampToValueAtTime(0, next + dur);
+        b.connect(bg).connect(this.musicGain);
+        b.start(next);
+        b.stop(next + dur + 0.1);
+        // arpeggio: eighth notes, about half of them played, up an octave
+        for (let i = 0; i < 16; i++) {
+          if (Math.random() < 0.45) continue;
+          const n = chord[(i * 3 + k) % chord.length] + 12;
+          this.pluck(midi(n), next + i * beat * 0.5, 0.035);
+        }
+        next += dur;
+        k++;
+      }
+    };
+    schedule();
+    this.timer = setInterval(schedule, 1000);
+  }
+
+  private pluck(freq: number, t: number, vol: number) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "triangle";
+    o.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    o.connect(g).connect(this.musicGain);
+    o.start(t);
+    o.stop(t + 1);
+  }
+
+  private bell(freq: number, t: number, len: number, vol: number) {
+    const ctx = this.ctx!;
+    for (const [mult, v] of [
+      [1, 1],
+      [2.76, 0.3],
+      [5.4, 0.12],
+    ]) {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.value = freq * mult;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol * v, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      o.connect(g).connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + len + 0.05);
+    }
+  }
+
+  private fade(g: GainNode, to: number, s: number) {
+    const t = this.ctx!.currentTime;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(g.gain.value, t);
+    g.gain.linearRampToValueAtTime(to, t + s);
+  }
+
+  /** White noise, or pink-ish (softer, more like rain) when `pink`. */
+  private noise(seconds: number, pink = false) {
+    const ctx = this.ctx!;
+    const buf = ctx.createBuffer(2, ctx.sampleRate * seconds, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      let b0 = 0,
+        b1 = 0,
+        b2 = 0;
+      for (let i = 0; i < d.length; i++) {
+        const w = Math.random() * 2 - 1;
+        if (!pink) d[i] = w;
+        else {
+          b0 = 0.99765 * b0 + w * 0.099046;
+          b1 = 0.963 * b1 + w * 0.2965164;
+          b2 = 0.57 * b2 + w * 1.0526913;
+          d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.2;
+        }
+      }
+    }
+    return buf;
+  }
+
+  private impulse(seconds: number) {
+    const ctx = this.ctx!;
+    const buf = ctx.createBuffer(2, ctx.sampleRate * seconds, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    }
+    return buf;
+  }
+
+  dispose() {
+    clearInterval(this.timer);
+    void this.ctx?.close();
+  }
+}

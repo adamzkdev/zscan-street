@@ -1,0 +1,20 @@
+{
+  "name": "zscan-street-v2",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3007",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 3007"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "puppeteer-core": "^25.12.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2"
+  }
+}

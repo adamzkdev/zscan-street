@@ -1,0 +1,10 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1440, height: 860 } });
+const p = await b.newPage();
+await p.goto(`http://localhost:3007/?debug&theme=${process.argv[2] ?? "day"}`);
+await new Promise((r) => setTimeout(r, 10000));
+const info = await p.evaluate(() => { const v = street.city.venues.map((v) => [v.kind, v.door.x.toFixed(1), v.door.z.toFixed(1)]); const bank = street.city.venues.find((x) => x.kind === "bank"); const T = street.rig.controls.target.constructor; street.rig.flyTo(new T(bank.door.x - 4, 1, bank.door.z), 2.2); return JSON.stringify(v); });
+console.log(info);
+await new Promise((r) => setTimeout(r, 4000));
+await p.screenshot({ path: "shots/bankext.png" });
+await b.close();

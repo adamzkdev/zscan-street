@@ -1,0 +1,10 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1000, height: 640 } });
+const p = await b.newPage();
+await p.goto(`http://localhost:3007/?debug&theme=night&interior=mempool`);
+await new Promise((r) => setTimeout(r, 15000));
+console.log(await p.evaluate(() => { const out = []; street.interiors.active.scene.traverse((o) => { if (o.isInstancedMesh) { const m = new o.matrix.constructor(); o.getMatrixAt(0, m); out.push([o.count, Array.from(m.elements).map((x) => +x.toFixed(2)), o.visible, o.parent?.type, !!o.instanceColor]); } }); return JSON.stringify(out); }));
+await p.evaluate(() => { const I = street.interiors; const V = I.walk.camera.position.constructor; I.walk.place(new V(-0.6, 0, -3.5), 0, 1.6); I.walk.pitch = -0.6; });
+await new Promise((r) => setTimeout(r, 1000));
+await p.screenshot({ path: "shots/mp-dbg.png" });
+await b.close();

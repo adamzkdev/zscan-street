@@ -1,0 +1,12 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1600, height: 1000 } });
+const p = await b.newPage();
+await p.goto("http://localhost:3007/?debug");
+await new Promise((r) => setTimeout(r, 9000));
+await p.evaluate(() => { const r = street.rig; r.auto = false; r.setMode("live"); });
+await new Promise((r) => setTimeout(r, 1500));
+await p.evaluate(() => { const r = street.rig, c = r.iso, t = r.controls.target; const o = c.position.clone().sub(t); o.applyAxisAngle(new (o.constructor)(0,1,0), Math.PI); c.position.copy(t).add(o); r.controls.update(); });
+await new Promise((r) => setTimeout(r, 2000));
+console.log(await p.evaluate(() => { const r = street.rig; return JSON.stringify({ focus: r.focus.toArray().map(v=>+v.toFixed(1)), cam: r.iso.position.toArray().map(v=>+v.toFixed(1)), faded: street.city.occluders.filter(o=>o.fade<0.9).length, n: street.city.occluders.length, box0: [street.city.occluders[0].box.min.toArray().map(v=>+v.toFixed(1)), street.city.occluders[0].box.max.toArray().map(v=>+v.toFixed(1))] }); }));
+await p.screenshot({ path: "shots/fade.png" });
+await b.close();

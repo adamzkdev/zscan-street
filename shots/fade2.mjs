@@ -1,0 +1,12 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1600, height: 1000 } });
+const p = await b.newPage();
+await p.goto("http://localhost:3007/?debug");
+await new Promise((r) => setTimeout(r, 9000));
+await p.evaluate(() => { const r = street.rig; r.auto = false; r.setMode("live"); });
+await new Promise((r) => setTimeout(r, 1500));
+await p.evaluate(() => { const r = street.rig, c = r.iso, t = r.controls.target; const o = c.position.clone().sub(t); o.applyAxisAngle(new (o.constructor)(0,1,0), Math.PI); c.position.copy(t).add(o); r.controls.update(); });
+await new Promise((r) => setTimeout(r, 2000));
+console.log(await p.evaluate(() => { const r = street.rig; const cam = r.camera; const f = r.focus; const toCam = r.iso.position.clone().sub(f).normalize(); return street.city.occluders.filter((o,i)=>[12,13,14].includes(i)).map(o => { const c = o.box.getCenter(o.box.min.clone()); const size = o.box.max.clone().sub(o.box.min); const depth = c.clone().sub(f).dot(toCam) - Math.max(size.x,size.z)*0.35; let x0=9,x1=-9,y0=9,y1=-9; for (let i=0;i<8;i++){ const v = new (c.constructor)(i&1?o.box.max.x:o.box.min.x, i&2?o.box.max.y:o.box.min.y, i&4?o.box.max.z:o.box.min.z).project(cam); x0=Math.min(x0,v.x);x1=Math.max(x1,v.x);y0=Math.min(y0,v.y);y1=Math.max(y1,v.y);} return JSON.stringify({depth:+depth.toFixed(1), x0:+x0.toFixed(2),x1:+x1.toFixed(2),y0:+y0.toFixed(2),y1:+y1.toFixed(2)}); }).join("\n"); }));
+console.log(await p.evaluate(() => street.city.occluders.map((o) => { const c = o.box.getCenter(o.box.min.clone()); let mats = []; o.group.traverse(m => m.material && mats.push(`${m.material.opacity.toFixed(2)}${m.material.transparent?'T':''}`)); return `${c.x.toFixed(0)},${c.z.toFixed(0)} h${o.box.max.y.toFixed(0)} fade=${o.fade.toFixed(2)} ${mats.join(' ')}`; }).join("\n")));
+await b.close();

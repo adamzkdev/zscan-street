@@ -1,0 +1,11 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1600, height: 1000 } });
+const p = await b.newPage();
+await p.goto("http://localhost:3007/?debug");
+await new Promise((r) => setTimeout(r, 12000));
+const fps = () => p.evaluate(() => new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res(Math.round(n / 3)); }; requestAnimationFrame(f); }));
+console.log("live", await fps());
+await p.evaluate(() => street.rig.setMode("overview")); await new Promise((r) => setTimeout(r, 2500));
+console.log("overview", await fps());
+console.log(await p.evaluate(() => { const r = window.__renderInfo; return r ? JSON.stringify(r) : "n/a"; }));
+await b.close();

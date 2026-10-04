@@ -1,0 +1,11 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1600, height: 900 } });
+const p = await b.newPage();
+const logs = [];
+p.on("console", (m) => m.type() === "error" && logs.push(m.text()));
+p.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
+await p.goto("http://localhost:3007/" + (process.argv[3] ?? ""));
+await new Promise((r) => setTimeout(r, 9000));
+await p.screenshot({ path: `shots/${process.argv[2] ?? "now"}.png` });
+console.log(logs.join("\n"));
+await b.close();

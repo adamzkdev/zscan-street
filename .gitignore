@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+.env
+.env.local
+# screenshots from the check scripts, and design references
+shots/*.png
+shots/*.jpg
+captures/
+design*.png
+Diorama*.png

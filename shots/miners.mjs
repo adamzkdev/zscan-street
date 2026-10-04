@@ -1,0 +1,10 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1440, height: 860 } });
+const p = await b.newPage();
+await p.goto(`http://localhost:3007/?debug&theme=day`);
+await new Promise((r) => setTimeout(r, 12000));
+console.log(await p.evaluate(() => JSON.stringify({ miners: [...street.director.snarks].filter((s) => s.role === "Miner").map((s) => [s.root.position.x.toFixed(1), s.root.position.z.toFixed(1), s.root.visible]), patrol: street.city.factory.patrol.map((v) => [v.x.toFixed(1), v.y.toFixed(2), v.z.toFixed(1)]), box: street.city.factory.occluder.box })));
+await p.evaluate(() => { const f = street.city.factory; street.rig.flyTo(f.hall.clone().setY(1), 3); });
+await new Promise((r) => setTimeout(r, 5000));
+await p.screenshot({ path: `shots/factory-day-c.png` });
+await b.close();

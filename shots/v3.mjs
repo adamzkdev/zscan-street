@@ -1,0 +1,22 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1600, height: 1000 } });
+const p = await b.newPage();
+const logs = [];
+p.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
+p.on("console", (m) => ["error", "warning"].includes(m.type()) && logs.push(`[${m.type()}] ${m.text()}`));
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+await p.goto("http://localhost:3007/?debug");
+await wait(10000);
+const fps = await p.evaluate(() => new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res(Math.round(n / 3)); }; requestAnimationFrame(f); }));
+console.log("fps live", fps);
+await p.click('[data-drawer="mempool"]'); await wait(800); await p.screenshot({ path: "shots/v3-mempool.png" });
+await p.click('[data-drawer="camera"]'); await wait(800); await p.screenshot({ path: "shots/v3-camera.png" });
+await p.click('[data-act="follow-random"]'); await wait(3000); await p.screenshot({ path: "shots/v3-follow.png" });
+const fps2 = await p.evaluate(() => new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res(Math.round(n / 3)); }; requestAnimationFrame(f); }));
+console.log("fps follow", fps2);
+await p.keyboard.press("Escape"); await wait(800);
+await p.evaluate(() => street.testBoard());
+for (let i = 0; i < 40; i++) { await wait(500); const ok = await p.evaluate(() => { const s=[...street.director.snarks].find(s=>s.state==="riding"); if (s && street.director.bus.phase==="stopped") { street.follow(s); return true; } return false; }); if (ok) break; }
+await wait(1500); await p.screenshot({ path: "shots/v3-inside.png" });
+console.log(logs.slice(0, 10).join("\n"));
+await b.close();

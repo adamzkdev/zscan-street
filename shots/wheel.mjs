@@ -1,0 +1,15 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1200, height: 800 } });
+const p = await b.newPage();
+await p.goto("http://localhost:3007/?debug");
+await new Promise((r) => setTimeout(r, 12000));
+const st = () => p.evaluate(() => `zoom=${street.rig.iso.zoom.toFixed(2)} target=${street.rig.controls.target.toArray().map((v) => v.toFixed(1))} enabled=${street.rig.controls.enabled} top=${document.elementFromPoint(600, 400)?.id || document.elementFromPoint(600, 400)?.className}`);
+console.log("start", await st());
+await p.mouse.move(600, 400);
+for (let i = 0; i < 5; i++) await p.mouse.wheel({ deltaY: -200 });
+await new Promise((r) => setTimeout(r, 800));
+console.log("after wheel", await st());
+await p.mouse.down({ button: "right" }); await p.mouse.move(800, 500, { steps: 10 }); await p.mouse.up({ button: "right" });
+await new Promise((r) => setTimeout(r, 800));
+console.log("after right drag", await st());
+await b.close();

@@ -1,0 +1,10 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push(e.message));
+await p.goto("http://localhost:3007/");
+await new Promise((r) => setTimeout(r, 9000));
+await p.screenshot({ path: "shots/mobile.png" });
+console.log(errs.join("\n") || "no errors");
+await b.close();

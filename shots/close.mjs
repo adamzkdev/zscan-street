@@ -1,0 +1,13 @@
+import puppeteer from "puppeteer-core";
+const [, , x = "6", z = "4", zoom = "4", out = "shots/close.png", wait = "11000"] = process.argv;
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1600, height: 1000 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push(e.message));
+await p.goto("http://localhost:3007/?debug");
+await new Promise((r) => setTimeout(r, Number(wait)));
+await p.evaluate((x, z, zoom) => { const r = street.rig; r.auto = false; r.flyTo(new (r.controls.target.constructor)(+x, 1, +z), +zoom); }, x, z, zoom);
+await new Promise((r) => setTimeout(r, 3500));
+await p.screenshot({ path: out });
+console.log(errs.join("\n") || "ok");
+await b.close();
