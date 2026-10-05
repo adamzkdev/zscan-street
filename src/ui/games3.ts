@@ -496,7 +496,9 @@ export function billiards(host: HTMLElement, score: Score, over: Over) {
     }
     g.fillStyle = "#e9eef7";
     g.font = '700 14px "JetBrains Mono", monospace';
-    g.fillText(`aim with the mouse · hold to power · ${potted}/10 potted · ${shots} shots`, 12, 30);
+    g.fillText(`${potted}/10 potted · ${shots} shots`, 12, 30);
+    g.font = '500 12px "JetBrains Mono", monospace';
+    g.fillText("aim with the mouse · hold, then release to shoot", 12, 52);
     g.fillStyle = "#24202e";
     g.fillRect(12, 400, 416, 10);
     g.fillStyle = "#f4b728";
