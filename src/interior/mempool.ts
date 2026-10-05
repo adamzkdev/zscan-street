@@ -7,6 +7,7 @@ import { fitText } from "../scene/fit";
 import { toObject } from "../scene/voxel/mesher";
 import { C, E, G, shades, VoxelModel } from "../scene/voxel/model";
 import { box, glowMat, makeScene, room, std, textPlane } from "./kit";
+import { buildArchive } from "./archive";
 import type { Interior, InteriorContext, PickInfo, Rect } from "./types";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -20,6 +21,8 @@ const ago = (ms: number) => {
 
 /** The shop floor: 12 × 9 m behind a glass front, the pickup table across the middle. */
 const SHOP_Y = 0;
+/** The Block Archive upstairs (far above the shop: neither floor ever sees the other). */
+const ARCHIVE_Y = 40;
 const TABLE_Z = -5.4,
   TABLE_TOP = 1.0;
 /** Parcels on the table: two rows of 18, a second layer on top when it fills up. */
@@ -31,9 +34,10 @@ const tableSlot = (i: number) => {
 };
 
 /**
- * Inside the MEMPOOL shop: one room. Truck drivers bring every pending transaction in as a parcel
- * and set it on the pickup table; zkSNARKs come in, take theirs and leave for the bus stop. The
- * board on the back wall shows the mempool live.
+ * Inside the MEMPOOL shop. Ground floor: truck drivers bring every pending transaction in as a
+ * parcel and set it on the pickup table; zkSNARKs come in, take theirs and leave for the bus
+ * stop; the board on the back wall shows the mempool live. Upstairs (1F): the Block Archive,
+ * where any block from genesis to the tip is rebuilt in the room (see archive/).
  */
 export function buildMempool(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#0d0c12");
@@ -184,6 +188,10 @@ export function buildMempool(ctx: InteriorContext): Interior {
     }
   });
 
+  const archive = buildArchive(ctx, scene, ARCHIVE_Y);
+  let floor = 0;
+  archive.setActive(false);
+
   const camQuat = new THREE.Quaternion();
   const camRight = new THREE.Vector3();
   let acc = 0;
@@ -191,12 +199,17 @@ export function buildMempool(ctx: InteriorContext): Interior {
     key: "mempool",
     title: "MEMPOOL",
     scene,
-    floors: [{ label: "G", name: "The shop · pending transactions", y: SHOP_Y, spawn: new THREE.Vector3(0, SHOP_Y, -0.9), yaw: 0 }],
-    colliders: () => rects,
-    pickables: () => pickables,
-    pick: (hit) => parcels.pick(hit) ?? (hit.object === board.mesh ? board.info() : null),
-    hover: (hit) => parcels.hover(hit) ?? (hit.object === board.mesh ? "<b>Mempool board</b><span>live</span>" : null),
+    floors: [{ label: "G", name: "The shop · pending transactions", y: SHOP_Y, spawn: new THREE.Vector3(0, SHOP_Y, -0.9), yaw: 0 }, archive.floor],
+    colliders: (f) => (f === 1 ? archive.rects : rects),
+    pickables: () => (floor === 1 ? archive.pickables : pickables),
+    pick: (hit) => (floor === 1 ? archive.pick(hit) : (parcels.pick(hit) ?? (hit.object === board.mesh ? board.info() : null))),
+    hover: (hit) => (floor === 1 ? archive.hover(hit) : (parcels.hover(hit) ?? (hit.object === board.mesh ? "<b>Mempool board</b><span>live</span>" : null))),
+    setFloor(f) {
+      floor = f;
+      archive.setActive(f === 1);
+    },
     update(dt, t, camera) {
+      if (floor === 1) return archive.update(dt);
       seen = performance.now();
       camera.getWorldQuaternion(camQuat);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);

@@ -1,4 +1,4 @@
-import type { Block, BlockDetail, BlockSummary, BlockTxRow, MempoolTx, NftItem, Tx, TxDetail } from "./types";
+import type { ArchiveBlock, Block, BlockDetail, BlockSummary, BlockTxRow, MempoolTx, NftItem, Tx, TxDetail, Upgrades } from "./types";
 
 export const API = (import.meta.env.VITE_API_URL as string | undefined) ?? "https://api.zscan.cash";
 export const EXPLORER = (import.meta.env.VITE_EXPLORER_URL as string | undefined) ?? "https://zscan.cash";
@@ -98,7 +98,27 @@ export const ZScan = {
     return tx;
   },
   zkSnarkImage: (id: number) => `${API}/v1/collections/zksnarks/items/${id}/image`,
+  /** Any block in full, genesis to tip (kept in a small cache: stepping back and forth is instant). */
+  blockDetail: (height: number): Promise<ArchiveBlock | null> => cached(height, () => get<ArchiveBlock>(`/v1/blocks/${height}`)),
+  /** Up to `n` block summaries below `before` (indexed range only: empty further back). */
+  blocksBelow: (before: number, n: number) => get<BlockSummary[]>(`/v1/blocks?before=${before}&limit=${n}`),
+  upgrades: () => get<Upgrades>("/v1/upgrades"),
 };
+
+const blockCache = new Map<number, Promise<ArchiveBlock | null>>();
+function cached(height: number, load: () => Promise<ArchiveBlock | null>) {
+  let p = blockCache.get(height);
+  if (!p) {
+    p = load().then((b) => {
+      if (!b) blockCache.delete(height);
+      return b;
+    });
+    blockCache.set(height, p);
+    // keep the 40 most recent
+    if (blockCache.size > 40) blockCache.delete(blockCache.keys().next().value!);
+  }
+  return p;
+}
 
 export const links = {
   tx: (txid: string) => `${EXPLORER}/tx/${txid}`,

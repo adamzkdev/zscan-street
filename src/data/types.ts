@@ -64,6 +64,21 @@ export interface BlockDetail extends BlockSummary {
   pool_deltas?: Record<string, number>;
 }
 
+/** `/v1/blocks/{height}` in full, as the Block Archive reads it (coinbase row included). */
+export interface ArchiveBlock extends BlockDetail {
+  miner?: string | null;
+  coinbase_value?: number;
+  prev_hash?: string;
+  next_hash?: string | null;
+  confirmations?: number;
+}
+
+/** `/v1/upgrades`: the network upgrades and their activation heights. */
+export interface Upgrades {
+  height: number;
+  upgrades: { name: string; label: string; activation_height: number | null; activated: boolean }[];
+}
+
 /** `/v1/collections/zksnarks/items/{id}`. */
 export interface NftItem {
   id: string;

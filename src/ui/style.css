@@ -3239,3 +3239,99 @@ kbd {
     max-height: calc(100% - 96px - var(--lift-h, 0px));
   }
 }
+
+/* ---- Block Archive console (MEMPOOL 1F) ------------------------------------------------------- */
+.archive-bar {
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font: 14px var(--pixel, "DotGothic16", monospace);
+  z-index: 30;
+}
+.archive-bar.on {
+  display: flex;
+}
+.archive-bar .ab-jp {
+  color: #ff9f2e;
+  text-shadow: 0 0 8px rgba(255, 159, 46, 0.6);
+  padding: 0 4px;
+}
+.archive-bar button,
+.archive-bar select {
+  all: unset;
+  cursor: pointer;
+  height: 30px;
+  padding: 0 10px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font: inherit;
+}
+.archive-bar select {
+  display: block;
+  line-height: 30px;
+  max-width: 190px;
+  color: var(--muted);
+}
+.archive-bar button:hover,
+.archive-bar select:hover {
+  border-color: var(--gold);
+  color: var(--gold-ink);
+}
+.archive-bar .ab-live.on {
+  color: #3ee08f;
+  border-color: #3ee08f;
+  text-shadow: 0 0 8px rgba(62, 224, 143, 0.6);
+}
+.archive-bar form {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--gold);
+  color: var(--gold-ink);
+}
+.archive-bar input {
+  all: unset;
+  width: 9ch;
+  font: 600 16px var(--mono);
+  color: var(--text);
+  -moz-appearance: textfield;
+}
+.archive-bar input::-webkit-outer-spin-button,
+.archive-bar input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+@media (max-width: 760px) {
+  .archive-bar {
+    top: calc(118px + env(safe-area-inset-top));
+    left: 12px;
+    right: 12px;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .archive-bar .ab-jp {
+    display: none;
+  }
+  /* an open info panel takes the screen: the console steps aside until it closes */
+  #ui:has(.panel.open) .archive-bar {
+    display: none;
+  }
+  .archive-bar button,
+  .archive-bar select,
+  .archive-bar form {
+    height: 34px;
+  }
+  .archive-bar select {
+    line-height: 34px;
+    max-width: 150px;
+  }
+}
