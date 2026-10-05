@@ -7,7 +7,8 @@ const SPEED = 3.2;
 
 /**
  * First-person walking: ZQSD / WASD / arrows to move, drag to look around, the wheel steps
- * forward and back, Shift to hurry. Walls are 2D rectangles; the walker slides along them.
+ * forward and back, Shift to hurry. On touch screens the on-screen stick (`stick`) moves and a
+ * finger dragged anywhere else looks around. Walls are 2D rectangles; the walker slides along them.
  */
 export class WalkControls {
   readonly camera = new THREE.PerspectiveCamera(62, 1, 0.05, 220);
@@ -17,7 +18,9 @@ export class WalkControls {
   private pitch = -0.08;
   private floorY = 0;
   private keys = new Set<string>();
-  private drag: { x: number; y: number } | null = null;
+  private drag: { x: number; y: number; id: number } | null = null;
+  /** Analog move from the touch stick: x strafes right, y walks forward, both in [-1, 1]. */
+  readonly stick = { x: 0, y: 0 };
   private moved = 0;
   private push = 0;
   /** Where you came in (ground floor only): walking back into that wall takes you out. */
@@ -39,19 +42,28 @@ export class WalkControls {
     window.addEventListener("blur", () => this.keys.clear());
     dom.addEventListener("pointerdown", (e) => {
       if (!this.enabled) return;
-      this.drag = { x: e.clientX, y: e.clientY };
+      // one finger looks around; a second one (on the stick, say) never steals it
+      if (this.drag) return;
+      this.drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
       this.moved = 0;
     });
     window.addEventListener("pointermove", (e) => {
-      if (!this.enabled || !this.drag) return;
+      if (!this.enabled || !this.drag || e.pointerId !== this.drag.id) return;
       const dx = e.clientX - this.drag.x,
         dy = e.clientY - this.drag.y;
       this.moved += Math.abs(dx) + Math.abs(dy);
-      this.drag = { x: e.clientX, y: e.clientY };
-      this.yaw -= dx * 0.004;
-      this.pitch = THREE.MathUtils.clamp(this.pitch - dy * 0.004, -1.2, 1.2);
+      this.drag.x = e.clientX;
+      this.drag.y = e.clientY;
+      // a finger on glass wants a little more turn per pixel than a mouse
+      const k = e.pointerType === "touch" ? 0.0065 : 0.004;
+      this.yaw -= dx * k;
+      this.pitch = THREE.MathUtils.clamp(this.pitch - dy * k, -1.2, 1.2);
     });
-    window.addEventListener("pointerup", () => (this.drag = null));
+    const release = (e: PointerEvent) => {
+      if (this.drag?.id === e.pointerId) this.drag = null;
+    };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
     dom.addEventListener(
       "wheel",
       (e) => {
@@ -86,8 +98,8 @@ export class WalkControls {
     if (!this.enabled) return;
     const k = this.keys;
     // ZQSD and WASD both work, whatever the keyboard
-    let f = (k.has("z") || k.has("w") || k.has("arrowup") ? 1 : 0) - (k.has("s") || k.has("arrowdown") ? 1 : 0);
-    const r = (k.has("d") ? 1 : 0) - (k.has("q") || k.has("a") ? 1 : 0);
+    let f = (k.has("z") || k.has("w") || k.has("arrowup") ? 1 : 0) - (k.has("s") || k.has("arrowdown") ? 1 : 0) + this.stick.y;
+    const r = (k.has("d") ? 1 : 0) - (k.has("q") || k.has("a") ? 1 : 0) + this.stick.x;
     // arrows left/right turn, letters strafe
     this.yaw += ((k.has("arrowleft") ? 1 : 0) - (k.has("arrowright") ? 1 : 0)) * dt * 1.8;
     // the wheel gives a short push forward or back
@@ -96,7 +108,8 @@ export class WalkControls {
       this.push -= step;
       f += step / (SPEED * dt + 1e-6);
     }
-    const speed = SPEED * (k.has("shift") ? 2 : 1);
+    // the stick pushed all the way out runs, like Shift
+    const speed = SPEED * (k.has("shift") || Math.hypot(this.stick.x, this.stick.y) > 0.92 ? 2 : 1);
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
     const move = fwd.multiplyScalar(f).add(right.multiplyScalar(r));

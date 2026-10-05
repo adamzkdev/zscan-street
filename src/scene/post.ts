@@ -38,12 +38,14 @@ export function tiltShift() {
   v.uniforms.dir.value = new THREE.Vector2(0, 1);
   return {
     passes: [h, v],
+    /** Off on the lower render tiers (see quality.ts), whatever the shot asks for. */
+    allowed: true,
     set(amount: number, focus = 0.5, band = 0.18) {
       for (const p of [h, v]) {
         p.uniforms.amount.value = amount;
         p.uniforms.focus.value = focus;
         p.uniforms.band.value = band;
-        p.enabled = amount > 0.01;
+        p.enabled = this.allowed && amount > 0.01;
       }
     },
     resize(w: number, hgt: number) {

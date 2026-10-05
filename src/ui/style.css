@@ -3117,3 +3117,82 @@ kbd {
   display: none;
 }
 .screen canvas { object-fit: contain; }
+
+/* ---- touch stick (on foot, touch screens only) ------------------------------------------------ */
+.stick {
+  position: fixed;
+  left: calc(18px + env(safe-area-inset-left));
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 40;
+  pointer-events: none;
+}
+.stick.on {
+  display: flex;
+}
+.stick-pad {
+  position: relative;
+  width: 116px;
+  height: 116px;
+  pointer-events: auto;
+  touch-action: none;
+  background: rgba(13, 13, 13, 0.42);
+  border: 1px solid rgba(244, 183, 40, 0.55);
+  box-shadow: 0 0 14px rgba(244, 183, 40, 0.18), inset 0 0 18px rgba(244, 183, 40, 0.08);
+  /* stepped voxel corners, like the rest of the city's signage */
+  clip-path: polygon(0 8px, 8px 8px, 8px 0, calc(100% - 8px) 0, calc(100% - 8px) 8px, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 8px calc(100% - 8px), 0 calc(100% - 8px));
+  backdrop-filter: blur(3px);
+}
+.stick-pad::before,
+.stick-pad::after {
+  content: "";
+  position: absolute;
+  background: rgba(244, 183, 40, 0.22);
+}
+.stick-pad::before {
+  left: 50%;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+}
+.stick-pad::after {
+  top: 50%;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+}
+.stick-knob {
+  position: absolute;
+  left: calc(50% - 22px);
+  top: calc(50% - 22px);
+  width: 44px;
+  height: 44px;
+  background: var(--gold);
+  box-shadow: 0 0 16px rgba(244, 183, 40, 0.65);
+  clip-path: polygon(0 6px, 6px 6px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 6px), 0 calc(100% - 6px));
+  transition: transform 0.12s ease-out;
+}
+.stick.held .stick-knob {
+  transition: none;
+}
+.stick-hint {
+  font: 11px/1 var(--pixel, "DotGothic16", monospace);
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(244, 183, 40, 0.6);
+  opacity: 0.85;
+  white-space: nowrap;
+}
+.stick.held .stick-hint {
+  opacity: 0;
+}
+/* touch screens: the stick's own hint replaces the keyboard ones */
+@media (pointer: coarse) {
+  .whint,
+  .ihint {
+    display: none !important;
+  }
+}

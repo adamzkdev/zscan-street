@@ -34,6 +34,8 @@ import { buildTower } from "./interior/tower/index";
 import { Arcade } from "./ui/arcade";
 import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";
+import { Joystick } from "./ui/joystick";
+import { Quality } from "./scene/quality";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
@@ -129,7 +131,20 @@ function resize() {
   bloom.resolution.set(w, h);
   tilt.resize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio());
 }
-resize();
+// resolution, shadows and post effects follow what the device can keep up with
+const quality = new Quality((q) => {
+  const dpr = Math.min(window.devicePixelRatio, q.dpr);
+  renderer.setPixelRatio(dpr);
+  composer.setPixelRatio(dpr);
+  if (q.shadow && moon.shadow.mapSize.x !== q.shadow) {
+    moon.shadow.mapSize.set(q.shadow, q.shadow);
+    moon.shadow.map?.dispose();
+    moon.shadow.map = null;
+  }
+  bloom.enabled = q.bloom;
+  tilt.allowed = q.tilt;
+  resize();
+});
 window.addEventListener("resize", resize);
 
 // ---- choreography + HUD -----------------------------------------------------------------------
@@ -717,6 +732,8 @@ if (new URLSearchParams(location.search).has("debug")) {
   Object.assign(window, {
     street: {
       director,
+      onFoot,
+      quality,
       rig,
       city,
       testVip: (tier: "taxi" | "limo") => director.debugVip(tier),
@@ -902,9 +919,24 @@ function aimCapture(cam: THREE.PerspectiveCamera, s: CapShot) {
   cam.updateProjectionMatrix();
 }
 
+const joystick = new Joystick(document.getElementById("ui")!);
+
+/** Advance the director by `sim` seconds in steps of at most 50 ms. */
+function runDirector(sim: number, t: number, q: THREE.Quaternion, right: THREE.Vector3) {
+  const n = Math.max(1, Math.ceil(sim / 0.05 - 1e-6));
+  for (let i = 0; i < n; i++) director.update(sim / n, t - (sim * (n - 1 - i)) / n, q, right);
+}
+
 function frame(stepDt?: number) {
   timer.update();
-  const dt = stepDt ?? Math.min(timer.getDelta(), 0.05);
+  const real = timer.getDelta();
+  if (stepDt === undefined) quality.sample(real);
+  // The street keeps real time even when frames are slow: the director (traffic, buses, walkers)
+  // runs in steps of at most 50 ms, so a slow device no longer plays it in slow motion while the
+  // buses' timers (dwell, departures) run on the wall clock. Everything else keeps the 50 ms cap
+  // (a first-person step any longer could cross a thin wall).
+  const sim = stepDt ?? Math.min(real, 0.25);
+  const dt = stepDt ?? Math.min(real, 0.05);
   const t = stepDt !== undefined ? (capT += stepDt) : timer.getElapsed();
   const again = () => {
     if (!CAPTURE) requestAnimationFrame(() => frame());
@@ -917,7 +949,8 @@ function frame(stepDt?: number) {
       interiors.walk.enabled = false;
       aimCapture(interiors.walk.camera, capShot);
     }
-    director.update(dt, t, interiors.walk.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(interiors.walk.camera.quaternion));
+    runDirector(sim, t, interiors.walk.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(interiors.walk.camera.quaternion));
+    joystick.sync(interiors.walk);
     renderPass.scene = interiors.active.scene;
     renderPass.camera = interiors.walk.camera;
     tilt.set(0);
@@ -950,7 +983,7 @@ function frame(stepDt?: number) {
   const wide = rig.mode === "overview";
   const ext = wide ? 90 : 30;
   // from that far out shadows are invisible; skip them and keep the frame rate
-  moon.castShadow = !wide;
+  moon.castShadow = !wide && quality.tier.shadow > 0;
   Object.assign(moon.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 160 });
   moon.shadow.camera.updateProjectionMatrix();
   moon.position.copy(focus).add(MOON_OFFSET);
@@ -964,7 +997,8 @@ function frame(stepDt?: number) {
   else tilt.set(wide ? 0 : theme === "day" ? 0.32 : 0.55, 0.5, theme === "day" ? 0.3 : 0.26);
 
   if (!capturing) wallsDown(dt, walking);
-  director.update(dt, t, camQuat, camRight);
+  runDirector(sim, t, camQuat, camRight);
+  joystick.sync(walking ? onFoot : null);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);

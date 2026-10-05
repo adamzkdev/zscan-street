@@ -186,6 +186,8 @@ export class Snark {
   private idleTurnAt = 0;
   private stuck = 0;
   private lastDist = Infinity;
+  /** Seconds left walking through people and props: set when jammed, so nobody stays wedged. */
+  private ghostFor = 0;
 
   constructor(
     readonly id: number,
@@ -308,7 +310,13 @@ export class Snark {
     return this.seated;
   }
 
+  /** Walking through others for now (see `ghostFor`): collisions leave this one alone. */
+  get ghosting() {
+    return this.ghostFor > 0;
+  }
+
   update(dt: number, t: number, camQuat: THREE.Quaternion, camRight: THREE.Vector3) {
+    if (this.ghostFor > 0) this.ghostFor -= dt;
     // billboard in world space, whatever the root is parented to (the street or a bus)
     this.visual.quaternion.copy(this.root.getWorldQuaternion(tmpQ).invert().multiply(camQuat));
     let moving = false;
@@ -323,7 +331,10 @@ export class Snark {
       if (dist < this.lastDist - 0.004) this.stuck = 0;
       else this.stuck += dt;
       this.lastDist = dist;
-      if (dist <= step || (this.stuck > 1.2 && dist < 1.2)) {
+      // jammed further out (a crowd, a corner): slip through for a moment rather than stay wedged
+      if (this.stuck > 2 && this.ghostFor <= 0) this.ghostFor = 2.5;
+      // still nowhere after that: the leg is done, whatever the obstacle
+      if (dist <= step || (this.stuck > 1.2 && dist < 1.2) || this.stuck > 6) {
         this.stuck = 0;
         this.lastDist = Infinity;
         pos.x = target.x;

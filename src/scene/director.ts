@@ -20,6 +20,8 @@ const TAXI_ZAT = 50e8;
 const LIMO_ZAT = 500e8;
 /** How long a bus waits at a stop for riders still on their way. */
 const MAX_DWELL_MS = 14000;
+/** At least this long between two buses leaving the tunnel, so they never arrive as a pack. */
+const BUS_GAP_MS = 12000;
 /** Where vehicles enter and leave the map. */
 /** Vehicles come out of, and drive into, the tunnels at both ends of the avenue. */
 const EDGE = TUNNEL.inside;
@@ -279,8 +281,34 @@ export class Director {
   }
 
   block(b: Block) {
-    // a hidden tab can queue a burst: only a few buses at once, the rest settle straight away
-    void this.runBlock(b, this.buses.size < 3);
+    // nobody is watching a hidden tab: settle now instead of piling buses up for later
+    if (document.hidden) return void this.runBlock(b, false);
+    this.busQueue.push(b);
+    // a backlog (a reconnect, two quick blocks): only the newest still gets its bus
+    while (this.busQueue.length > 1) void this.runBlock(this.busQueue.shift()!, false);
+    void this.pumpBuses();
+  }
+
+  private busQueue: Block[] = [];
+  private lastBusAt = -Infinity;
+  private pumping = false;
+
+  /** Sends queued blocks' buses one at a time, BUS_GAP_MS apart. */
+  private async pumpBuses() {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      while (this.busQueue.length) {
+        const wait = BUS_GAP_MS - (performance.now() - this.lastBusAt);
+        if (wait > 0) await sleep(wait);
+        const b = this.busQueue.shift();
+        if (!b) break;
+        this.lastBusAt = performance.now();
+        void this.runBlock(b, !document.hidden && this.buses.size < 2);
+      }
+    } finally {
+      this.pumping = false;
+    }
   }
 
   /** Txids still waiting according to the API: anything else expired or was replaced. */
@@ -957,6 +985,7 @@ export class Director {
       for (let j = i + 1; j < list.length; j++) {
         const a = list[i],
           b = list[j];
+        if (a.ghosting || b.ghosting) continue;
         const pa = a.root.position,
           pb = b.root.position;
         const dx = pb.x - pa.x,
@@ -973,7 +1002,7 @@ export class Director {
         pb.x += (dx / d) * push * (1 - ka);
         pb.z += (dz / d) * push * (1 - ka);
       }
-    for (const s of list) if (s.isWalking && !s.noClip && s.state !== "boarding" && s.state !== "shopping") this.city.nav.resolve(s.root.position, R);
+    for (const s of list) if (s.isWalking && !s.noClip && !s.ghosting && s.state !== "boarding" && s.state !== "shopping") this.city.nav.resolve(s.root.position, R);
   }
 
   private emitStats() {
