@@ -72,7 +72,7 @@ export interface FactorySite extends Interior {
 
 /** A building you can click to open: the card shop, the bank. */
 export interface Venue extends Interior {
-  kind: "cards" | "bank" | "zsa" | "library";
+  kind: "cards" | "bank" | "zsa" | "library" | "tower";
   door: THREE.Vector3;
   /** Where the clerk stands. */
   keeper: THREE.Vector3;
@@ -226,7 +226,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       const w = (k: string) => toWorld(...m.points![k]);
       venues.push({
         kind: venue,
-        name: venue === "cards" ? "zkCARDS" : venue === "bank" ? "the VIEW KEY BANK" : venue === "library" ? "the LIBRARY" : "the ZSA EXCHANGE",
+        name: venue === "cards" ? "zkCARDS" : venue === "bank" ? "the VIEW KEY BANK" : venue === "library" ? "the LIBRARY" : venue === "tower" ? "the ZK TOWER" : "the ZSA EXCHANGE",
         door,
         occluder: occ,
         keeper: w("keeper").setY(CURB + VOX),

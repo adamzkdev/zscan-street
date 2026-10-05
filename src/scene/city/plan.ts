@@ -143,7 +143,8 @@ export function planCity() {
       // the Zcash Shielded Assets exchange, still a building site (ZIPs 226, 227, 228)
       ["zsa", 101, { venue: "zsa" }, 40],
       ["mempool", 102, {}, 48],
-      ["office", 103, { floors: 10, billboard: "完全な匿名", billboardColor: "#3ef0ff" }, 40],
+      // the ZK TOWER: apartments, an arcade floor, residents (walk-in)
+      ["office", 103, { floors: 10, billboard: "完全な匿名", billboardColor: "#3ef0ff", venue: "tower" }, 40],
       // the card shop (the zkSNARK collection) and the viewing-key bank, next to the MEMPOOL shop
       ["cardshop", 104, { venue: "cards" }, 40],
       ["bank", 105, { venue: "bank" }, 48],

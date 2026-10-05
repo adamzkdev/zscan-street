@@ -36,6 +36,8 @@ step, the lift for floors, Esc to leave. Click things for details and links to Z
 
 | Place | Inside |
 |---|---|
+| ZK TOWER | The office tower between the MEMPOOL and zkCARDS: lobby (concierge, mailboxes, stairs, elevator), 1F fun floor (101 ZEC Snake arcade, 102 zkSNARK memory, 103 ZIP quiz), 2F three flats where zkSNARKs live with the chain on TV. Click the elevator doors to change floor. |
+| LIBRARY | On Transparent Square: G press room (the week's news as front pages, a ticker), 1 ZIP stacks (one book per ZIP; open it to read the real text). |
 | MEMPOOL | One room: drivers set every pending transaction on the pickup table as a parcel, zkSNARKs come in and take theirs; the live mempool board on the back wall. |
 | zkCARDS | A museum of the whole collection: a lobby with the ten Legendaries, then one floor per rank band (10,000 cards). |
 | VIEW KEY BANK | The banking hall: paste a viewing key at a terminal; it is decrypted in this browser and never sent. -1: the vaults of the value pools. |

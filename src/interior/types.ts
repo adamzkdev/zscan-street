@@ -40,6 +40,10 @@ export interface PickInfo {
   link?: { href: string; label: string };
   /** Opens one of the shop panels (the bank's terminals). */
   panel?: "bank" | "cards";
+  /** Starts a mini-game (the ZK TOWER's apartments). */
+  game?: "snake" | "memory" | "quiz";
+  /** Takes the elevator to this floor (clicking its doors). */
+  floor?: number;
   /** Opens a book in the reader (the library's ZIPs). */
   book?: import("../ui/reader").Book;
 }
@@ -54,7 +58,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "cards" | "bank" | "factory" | "zsa" | "library";
+  readonly key: "mempool" | "cards" | "bank" | "factory" | "zsa" | "library" | "tower";
   /** Shown top-left while inside ("zkCARDS"). */
   readonly title: string;
   readonly scene: THREE.Scene;

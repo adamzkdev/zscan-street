@@ -30,6 +30,8 @@ import { buildFactory } from "./interior/factory";
 import { buildMempool } from "./interior/mempool";
 import { buildZsa } from "./interior/zsa";
 import { buildLibrary } from "./interior/library";
+import { buildTower } from "./interior/tower";
+import { Arcade } from "./ui/arcade";
 import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";
 import { get } from "./data/zscan";
@@ -253,7 +255,7 @@ try {
 setTimeout(() => hud.ready(), 15000);
 
 // ---- walk-in places ----------------------------------------------------------------------------
-const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "PROOF FACTORY", zsa: "ZSA EXCHANGE", library: "LIBRARY" };
+const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "PROOF FACTORY", zsa: "ZSA EXCHANGE", library: "LIBRARY", tower: "ZK TOWER" };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 const ictx: InteriorContext = { renderer, director, theme, onBlock: (fn) => blockListeners.push(fn) };
 const interiors = new InteriorManager(
@@ -265,6 +267,7 @@ const interiors = new InteriorManager(
     factory: () => buildFactory(ictx),
     zsa: () => buildZsa(ictx),
     library: () => buildLibrary(ictx),
+    tower: () => buildTower(ictx),
   },
   {
     entered: (i, f) => {
@@ -385,6 +388,8 @@ const reader = new Reader(document.getElementById("ui")!);
 reader.onClose = () => {
   if (interiors.active) interiors.walk.enabled = true;
 };
+const arcade = new Arcade(document.getElementById("ui")!);
+arcade.onClose = reader.onClose;
 
 /** Walk into the card shop or the bank: the inside camera, and its counter on the left. */
 // the places you can walk into, tagged over their doors
@@ -393,7 +398,7 @@ hud.setPlaces([
   ...city.venues.map((v) => ({
     key: v.kind,
     label: PLACES[v.kind],
-    sub: v.kind === "cards" ? "the whole collection" : v.kind === "bank" ? "read a shielded wallet" : v.kind === "library" ? "news · ZIPs" : "shielded assets · coming soon",
+    sub: v.kind === "cards" ? "the whole collection" : v.kind === "bank" ? "read a shielded wallet" : v.kind === "library" ? "news · ZIPs" : v.kind === "tower" ? "apartments · arcade" : "shielded assets · coming soon",
     at: v.door.clone().setY(v.kind === "bank" ? 7.4 : v.kind === "library" ? 7.8 : 5.6),
   })),
   ...(city.factory ? [{ key: "factory", label: "PROOF FACTORY", sub: "shielded tx proved here", at: city.factory.hall.clone().setY(7.2) }] : []),
@@ -423,7 +428,8 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key !== "Escape") return;
   // one handler for Escape, innermost first
-  if (reader.open) reader.close();
+  if (arcade.open) arcade.close();
+  else if (reader.open) reader.close();
   else if (venues.open) venues.close();
   else if (interiors.active) {
     if (document.querySelector("#ui .panel.open")) select(null);
@@ -488,6 +494,16 @@ canvas.addEventListener("pointerup", (e) => {
     if (e.button !== 0 || interiors.walk.dragged) return;
     const info = interiors.pickAt(e.clientX, e.clientY);
     if (info?.panel) return venues.show(info.panel);
+    // the tower: its elevator doors, its arcade games
+    if (info?.floor !== undefined && interiors.active) {
+      interiors.goTo(info.floor);
+      hud.cut();
+      return void hud.renderIndoor(interiors.floor);
+    }
+    if (info?.game) {
+      interiors.walk.enabled = false;
+      return void arcade.show(info.game);
+    }
     // a book in the library: open it and read
     if (info?.book) {
       interiors.walk.enabled = false;

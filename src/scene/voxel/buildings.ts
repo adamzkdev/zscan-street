@@ -215,7 +215,7 @@ export function apartment(seed: number, o: { floors?: number; wall?: Wall; vsign
 }
 
 /** Office tower: ribbon windows, vertical fins, a crown and a rooftop billboard. */
-export function office(seed: number, o: { floors?: number; wall?: Wall; billboard?: string; billboardColor?: string; width?: number } = {}): Built {
+export function office(seed: number, o: { floors?: number; wall?: Wall; billboard?: string; billboardColor?: string; width?: number; venue?: string } = {}): Built {
   const r = rand(seed);
   const W = o.width ?? 40 + Math.floor(r() * 2) * 6;
   const D = 38;
@@ -262,7 +262,17 @@ export function office(seed: number, o: { floors?: number; wall?: Wall; billboar
     signs.push({ text: o.billboard, color: o.billboardColor ?? "#3ef0ff", x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, z: b.z, w: b.x1 - b.x0, h: b.y1 - b.y0, vertical: false, facing: "front" });
   }
   antenna(m, x1 - 8, H + 7, 8, 20);
-  return { model: m, signs, door: [x0 + W / 2, fz + 2], body: [x0, 0, x1, D], lights: [[x0 + W / 2, 8, fz + 2, "#d8ecff"]] };
+  const mid = x0 + W / 2;
+  // a walk-in tower (the ZK TOWER apartments): its name over the lobby canopy
+  if (o.venue) signs.push({ text: "ZK TOWER · 秘密マンション", color: "#3ef0ff", x: mid, y: gh - 3, z: fz + 3.05, w: W - 8, h: 2.2, vertical: false, facing: "front" });
+  return {
+    model: m,
+    signs,
+    door: [mid, fz + 2],
+    body: [x0, 0, x1, D],
+    lights: [[mid, 8, fz + 2, "#d8ecff"]],
+    points: o.venue ? { keeper: [mid, 0, fz - 8], camPos: [mid, 18, fz + 12], camLook: [mid, 8, fz] } : undefined,
+  };
 }
 
 /** The convenience store where zkSNARKs pick up their transactions. */
