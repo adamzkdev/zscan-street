@@ -9,13 +9,20 @@ import { get } from "../data/zscan";
  * Best scores stay in this browser.
  */
 
-export type Game = "snake" | "memory" | "quiz" | "stacker";
+import { flappy, hockey, invaders, kart, whack } from "./games2";
+
+export type Game = "snake" | "memory" | "quiz" | "stacker" | "kart" | "invaders" | "flappy" | "hockey" | "whack";
 
 const TITLES: Record<Game, { name: string; jp: string; color: string; help: string }> = {
   snake: { name: "ZEC SNAKE", jp: "ヘビ", color: "#3ee08f", help: "Arrows / WASD / ZQSD · eat ⓩ coins · red leaks and walls end the run" },
   memory: { name: "zkSNARK MEMORY", jp: "神経衰弱", color: "#b07bff", help: "Click two cards · find all eight pairs in as few moves as you can" },
   quiz: { name: "ZIP QUIZ", jp: "クイズ", color: "#f4b728", help: "Ten questions from the real ZIPs · 1–4 or click an answer" },
   stacker: { name: "BLOCK STACKER", jp: "積み木", color: "#3ef0ff", help: "Space or click to drop the block · only what lands on the chain stays" },
+  kart: { name: "ZK KART", jp: "カート", color: "#f4b728", help: "↑ go · ↓ brake · ← → steer · three laps against Orchard and Sapling · a win takes 10 s off your time" },
+  invaders: { name: "SHIELDED INVADERS", jp: "インベーダー", color: "#3ee08f", help: "← → move · Space fire · shoot the transparent leaks before they land" },
+  flappy: { name: "FLAPPY ZEC", jp: "フラッピー", color: "#f4b728", help: "Space / click to flap through the gaps" },
+  hockey: { name: "AIR HOCKEY", jp: "エアホッケー", color: "#3ef0ff", help: "Mouse or ← → · first to five against the house" },
+  whack: { name: "WHACK-A-LEAK", jp: "モグラ叩き", color: "#ff3e8a", help: "Click the red T leaks · spare the green Z · 30 seconds" },
 };
 
 const best = (g: Game) => {
@@ -95,7 +102,17 @@ export class Arcade {
           ? memory(screen, score, (n) => this.over(g, n, `${n} moves`, true))
           : g === "stacker"
             ? stacker(screen, score, (n) => this.over(g, n, `${n} blocks`))
-            : quiz(screen, score, (n) => this.over(g, n, `${n} / 10`));
+            : g === "kart"
+              ? kart(screen, score, (n) => this.over(g, n, `${n.toFixed(1)} s`, true))
+              : g === "invaders"
+                ? invaders(screen, score, (n) => this.over(g, n, `${n} pts`))
+                : g === "flappy"
+                  ? flappy(screen, score, (n) => this.over(g, n, `${n} gaps`))
+                  : g === "hockey"
+                    ? hockey(screen, score, (n) => this.over(g, n, `${n} pts`))
+                    : g === "whack"
+                      ? whack(screen, score, (n) => this.over(g, n, `${n} pts`))
+                      : quiz(screen, score, (n) => this.over(g, n, `${n} / 10`));
   }
 
   private over(g: Game, n: number, label: string, lowerIsBetter = false) {

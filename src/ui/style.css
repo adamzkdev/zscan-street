@@ -3116,3 +3116,4 @@ kbd {
 .lift.tall .fl small {
   display: none;
 }
+.screen canvas { object-fit: contain; }

@@ -257,7 +257,28 @@ setTimeout(() => hud.ready(), 15000);
 // ---- walk-in places ----------------------------------------------------------------------------
 const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "PROOF FACTORY", zsa: "ZSA EXCHANGE", library: "LIBRARY", tower: "ZK TOWER" };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
-const ictx: InteriorContext = { renderer, director, theme, onBlock: (fn) => blockListeners.push(fn) };
+/** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
+const views = new Map<string, { rt: THREE.WebGLCubeRenderTarget; at: number }>();
+function cityView(place: string, up: number, back = 3): THREE.Texture | null {
+  const v = city.venues.find((x) => x.kind === place);
+  if (!v) return null;
+  const key = `${place}:${up}`;
+  let e = views.get(key);
+  if (e && performance.now() - e.at < 60_000) return e.rt.texture;
+  e ??= { rt: new THREE.WebGLCubeRenderTarget(1024, { type: THREE.HalfFloatType }), at: 0 };
+  e.at = performance.now();
+  views.set(key, e);
+  const cam = new THREE.CubeCamera(0.5, 600, e.rt);
+  cam.position.copy(v.door).add(new THREE.Vector3(0, up, -back));
+  // the place itself must not block its own view
+  const o = v.occluder;
+  const was = [o.full.visible, o.cut.visible, o.extras.visible];
+  o.full.visible = o.cut.visible = o.extras.visible = false;
+  cam.update(renderer, scene);
+  [o.full.visible, o.cut.visible, o.extras.visible] = was;
+  return e.rt.texture;
+}
+const ictx: InteriorContext = { renderer, director, theme, onBlock: (fn) => blockListeners.push(fn), cityView };
 const interiors = new InteriorManager(
   canvas,
   {

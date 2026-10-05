@@ -55,6 +55,12 @@ export interface InteriorContext {
   theme: Theme;
   /** Called on every new block, as soon as it is known (height, mining pool or null). */
   onBlock(fn: (height: number, pool: string | null) => void): void;
+  /**
+   * The real city seen from a walk-in place: a panorama of the street rendered from the place's
+   * position, `up` metres above the pavement (`back` metres behind its door). Use it as the
+   * scene's background so the windows look onto ZStreet itself.
+   */
+  cityView(place: string, up: number, back?: number): import("three").Texture | null;
 }
 
 export interface Interior {
