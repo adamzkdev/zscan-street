@@ -73,7 +73,7 @@ const icon = (k: string) => `<svg class="i" viewBox="0 0 24 24">${ICON[k]}</svg>
 
 /** Pixel-art icons on a 12 × 12 grid, like the sprites and signs of the street. */
 const PIX: Record<string, string[]> = {
-  bus: ["................", "...##########...", "..#..........#..", "..#.########.#..", "..#.#......#.#..", "..#.#......#.#..", "..#.########.#..", "..#..........#..", "..############..", "..#..........#..", "..#.##....##.#..", "..#.##....##.#..", "..############..", "...##......##...", "...##......##...", "................"],
+  bus: ["................", "##############..", "#..#..#..#..#.#.", "#..#..#..#..#..#", "###############.", "#..............#", "#.##...........#", "################", "..###......###..", "..###......###..", "................"],
   parcel: ["....####....", "..##....##..", "##........##", "#.##....##.#", "#...####...#", "#.....#....#", "#.....#....#", "#.....#....#", "#.....#....#", ".##...#..##.", "...##.#.##..", ".....###...."],
   zec: [".....######.....", "...##......##...", "..#....##....#..", ".#.....##.....#.", ".#..########..#.", "#..........##..#", "#.........##...#", "#........##....#", "#.......##.....#", "#......##......#", "#.....##.......#", ".#..########..#.", ".#.....##.....#.", "..#....##....#..", "...##......##...", ".....######....."],
   vault: [".##########.", ".#........#.", ".#.######.#.", ".#......#.#.", ".#.....#..#.", ".#....#...#.", ".#...#....#.", ".#.######.#.", "..#......#..", "...#....#...", "....#..#....", ".....##....."],
@@ -237,6 +237,7 @@ export class Hud {
         <button data-act="walk" class="walk" title="Walk the street (first person)">${pix("walker")}</button>
       </nav>
       <aside class="panel hud"></aside>
+      <section class="sdetails hud hidden"></section>
       <section class="strip hud"></section>
       <div class="toast hud hidden"></div>
       <div class="indoor"></div>
@@ -790,7 +791,7 @@ export class Hud {
         <span class="rv"><small><i>${r.jp}</i>${r.label}</small><span class="v"><b class="mono" data-k="${k}">—</b><em data-k="${k}-sub"></em></span></span>
       </button>`;
     };
-    el.innerHTML = `<div class="details"></div><div class="bar">
+    el.innerHTML = `<div class="bar">
       <span class="live" data-k="status"><i></i><b>…</b></span>
       ${(Object.keys(READINGS) as Section[]).map(rd).join("")}
       <span class="chev" data-sec="block" title="Open / close">${icon("up")}</span>
@@ -842,17 +843,19 @@ export class Hud {
     const sig = [this.section, this.status, lb?.height, Math.floor(sec / 5), txs.length, txs[0]?.txid, this.buses.size, this.history.length, p?.usd, m.supply?.height, this.flowSig].join("|");
     if (!force && sig === this.detailSig) return;
     this.detailSig = sig;
-    const det = el.querySelector<HTMLElement>(".details")!;
+    // the open section is its own card above the bar: the bar never changes size
+    const det = this.$(".sdetails");
+    det.classList.toggle("hidden", !this.section);
     if (!this.section) {
-      det.innerHTML = "";
       this.shown = null;
       return;
     }
+    det.style.width = `${el.offsetWidth}px`;
     // the unfold animation plays when a section opens, not on every refresh
     const fresh = this.section !== this.shown;
     this.shown = this.section;
     const scroll = det.querySelector(".rows")?.scrollTop ?? 0;
-    det.className = `details${fresh ? " anim" : ""}`;
+    det.classList.toggle("anim", fresh);
     det.style.setProperty("--c", READINGS[this.section].color);
     det.innerHTML = this.sectionHtml(this.section);
     const rows = det.querySelector(".rows");

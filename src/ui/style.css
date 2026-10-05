@@ -2781,3 +2781,47 @@ kbd {
     transform: rotateY(180deg);
   }
 }
+
+/* ---- the open section floats above the bar, the bar itself never moves ---- */
+.sdetails {
+  left: 50%;
+  bottom: 82px;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 200px);
+  overflow: auto;
+  padding: 16px 18px 14px;
+  transition: opacity 0.2s;
+}
+.sdetails.hidden {
+  transform: translateX(-50%);
+}
+.sdetails.anim {
+  animation: unfold 0.2s ease-out;
+}
+/* the rail stays where it is when a panel opens: the panel sits left of it */
+.inspecting .rail {
+  right: 16px;
+}
+.panel {
+  right: 66px;
+}
+@media (max-width: 760px) {
+  .panel {
+    right: 0;
+  }
+  .sdetails {
+    bottom: 76px;
+  }
+}
+/* the block tile: a readable bus, the ring alone tells the time (red only on the ring) */
+.tile.prog svg.px {
+  width: 20px;
+  height: 20px;
+}
+.tile.prog.late {
+  --c: #3ef0ff;
+  background:
+    linear-gradient(var(--ink-solid, #0b0913), var(--ink-solid, #0b0913)) center / calc(100% - 6px) calc(100% - 6px) no-repeat,
+    conic-gradient(var(--bad) 1turn, transparent 0);
+}
