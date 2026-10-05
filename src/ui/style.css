@@ -2854,3 +2854,48 @@ kbd {
   background: var(--scan), var(--ink);
   clip-path: var(--step);
 }
+
+/* ---- logos, not boxes: pixel art standing on its own, glowing like a sign ---- */
+.logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--c);
+}
+.logo svg.px {
+  width: 30px;
+  height: 30px;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c) 60%, transparent));
+}
+.rd .logo svg.px[viewBox$="12"] {
+  height: 22.5px;
+}
+.dh .logo svg.px,
+.ihead .logo svg.px {
+  width: 24px;
+  height: 24px;
+}
+.rv {
+  position: relative;
+}
+.eta {
+  display: block;
+  height: 2px;
+  margin-top: 4px;
+  background: color-mix(in srgb, var(--c) 18%, transparent);
+}
+.eta i {
+  display: block;
+  height: 100%;
+  width: calc(var(--k, 0) * 100%);
+  background: var(--c);
+  box-shadow: 0 0 6px var(--c);
+  transition: width 1s linear;
+}
+.eta.late i {
+  background: var(--bad);
+  box-shadow: 0 0 6px var(--bad);
+}
+:root[data-theme="day"] .logo svg.px {
+  filter: none;
+}
