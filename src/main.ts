@@ -30,7 +30,7 @@ import { buildFactory } from "./interior/factory";
 import { buildMempool } from "./interior/mempool";
 import { buildZsa } from "./interior/zsa";
 import { buildLibrary } from "./interior/library";
-import { buildTower } from "./interior/tower";
+import { buildTower } from "./interior/tower/index";
 import { Arcade } from "./ui/arcade";
 import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";

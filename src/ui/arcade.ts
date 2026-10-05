@@ -10,8 +10,9 @@ import { get } from "../data/zscan";
  */
 
 import { flappy, hockey, invaders, kart, whack } from "./games2";
+import { billiards, bowling, dance, karaoke } from "./games3";
 
-export type Game = "snake" | "memory" | "quiz" | "stacker" | "kart" | "invaders" | "flappy" | "hockey" | "whack";
+export type Game = "snake" | "memory" | "quiz" | "stacker" | "kart" | "invaders" | "flappy" | "hockey" | "whack" | "bowling" | "karaoke" | "dance" | "billiards";
 
 const TITLES: Record<Game, { name: string; jp: string; color: string; help: string }> = {
   snake: { name: "ZEC SNAKE", jp: "ヘビ", color: "#3ee08f", help: "Arrows / WASD / ZQSD · eat ⓩ coins · red leaks and walls end the run" },
@@ -22,6 +23,10 @@ const TITLES: Record<Game, { name: string; jp: string; color: string; help: stri
   invaders: { name: "SHIELDED INVADERS", jp: "インベーダー", color: "#3ee08f", help: "← → move · Space fire · shoot the transparent leaks before they land" },
   flappy: { name: "FLAPPY ZEC", jp: "フラッピー", color: "#f4b728", help: "Space / click to flap through the gaps" },
   hockey: { name: "AIR HOCKEY", jp: "エアホッケー", color: "#3ef0ff", help: "Mouse or ← → · first to five against the house" },
+  bowling: { name: "ZK BOWLING", jp: "ボウリング", color: "#2a78d6", help: "Space: lock the aim, Space again for power · ten frames" },
+  karaoke: { name: "KARAOKE", jp: "カラオケ", color: "#ff7ab0", help: "← ↑ → when a note reaches its line · sing \"Shield me\"" },
+  dance: { name: "DANCE ZK", jp: "ダンス", color: "#3ee08f", help: "← ↓ ↑ → as the arrows reach the top · ten misses and you're out" },
+  billiards: { name: "BILLIARDS", jp: "ビリヤード", color: "#3ee08f", help: "Aim with the mouse, hold and release to shoot · pot all ten, fewest shots" },
   whack: { name: "WHACK-A-LEAK", jp: "モグラ叩き", color: "#ff3e8a", help: "Click the red T leaks · spare the green Z · 30 seconds" },
 };
 
@@ -112,6 +117,14 @@ export class Arcade {
                     ? hockey(screen, score, (n) => this.over(g, n, `${n} pts`))
                     : g === "whack"
                       ? whack(screen, score, (n) => this.over(g, n, `${n} pts`))
+                      : g === "bowling"
+                        ? bowling(screen, score, (n) => this.over(g, n, `${n} pins`))
+                        : g === "karaoke"
+                          ? karaoke(screen, score, (n) => this.over(g, n, `${n} pts`))
+                          : g === "dance"
+                            ? dance(screen, score, (n) => this.over(g, n, `${n} pts`))
+                            : g === "billiards"
+                              ? billiards(screen, score, (n) => this.over(g, n, `${n} shots`, true))
                       : quiz(screen, score, (n) => this.over(g, n, `${n} / 10`));
   }
 
