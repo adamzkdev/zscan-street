@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { KIND_LABEL, type ArchiveBlock, type TxKind } from "../../data/types";
+import { NODE_LABEL, shortAddr, zecText, type ArchiveTx, type Node } from "./money";
 import { KIND_COLOR } from "../../scene/snark";
 import { fitText } from "../../scene/fit";
 import { canvasTex, JP, makeCanvas, MONO, scanlines } from "../factory/canvas";
@@ -181,142 +182,170 @@ export function drawCard(s: Screen, st: ArchiveState) {
   });
 }
 
-// ---- right wall: value flowing in and out of the pools --------------------------------------------
+// ---- back wall: one card per transaction, with its real amounts and addresses ---------------------
 
-const POOLS = [
-  ["transparent", "TRANSPARENT", "#ff9a3c"],
-  ["sprout", "SPROUT", "#9a8f7a"],
-  ["sapling", "SAPLING", "#3ec9b0"],
-  ["orchard", "ORCHARD", "#3ee08f"],
-  ["ironwood", "IRONWOOD", "#b07bff"],
-] as const;
+const PER_PAGE = 8;
+const CARD = { x0: 30, y0: 128, w: 360, h: 152, gx: 12, gy: 12 };
 
-/** Redrawn about 20 times a second while you're on the floor: dots stream into or out of each pool. */
-export function drawFlows(s: Screen, st: ArchiveState, t: number) {
-  s.draw((g, W, H) => {
-    frame(g, W, H, TEAL);
-    header(g, "流れ", "POOL FLOWS · THIS BLOCK", TEAL);
-    const b = st.block;
-    const d = b?.pool_deltas ?? {};
-    const shielded = (d.sprout ?? 0) + (d.sapling ?? 0) + (d.orchard ?? 0) + (d.ironwood ?? 0);
-    g.textAlign = "right";
-    g.font = MONO(22, 700);
-    g.fillStyle = shielded > 0 ? "#3ee08f" : shielded < 0 ? "#ffcf4a" : DIM;
-    g.fillText(b ? `SHIELDED NET ${shielded >= 0 ? "+" : "−"}${zec(Math.abs(shielded), 4)} ZEC` : "", W - 40, 60);
-    g.textAlign = "left";
-    const colW = (W - 80) / POOLS.length;
-    const top = 110,
-      bottom = H - 120;
-    const max = Math.max(1, ...POOLS.map(([k]) => Math.abs(d[k] ?? 0)));
-    POOLS.forEach(([k, label, color], i) => {
-      const cx = 40 + colW * (i + 0.5);
-      const v = d[k] ?? 0;
-      // the pipe
-      g.fillStyle = "#101219";
-      g.fillRect(cx - 38, top, 76, bottom - top);
-      g.strokeStyle = v ? color : "#2a2c34";
-      g.lineWidth = 3;
-      g.strokeRect(cx - 38, top, 76, bottom - top);
-      // the stream: dots rising (into the pool) or falling (out of it), denser for bigger flows
-      if (v && b) {
-        const k01 = Math.log10(1 + Math.abs(v) / 1e5) / Math.log10(1 + max / 1e5);
-        const n = Math.round(4 + 22 * k01);
-        const speed = 0.35 + 0.5 * k01;
-        g.fillStyle = color;
-        g.shadowColor = color;
-        g.shadowBlur = 10;
-        for (let j = 0; j < n; j++) {
-          let p = (j / n + t * speed + (i * 0.13)) % 1;
-          if (v < 0) p = 1 - p;
-          const y = bottom - 10 - p * (bottom - top - 20);
-          const x = cx + Math.sin(j * 12.9 + i) * 22;
-          g.fillRect(x - 5, y - 5, 10, 10);
-        }
-        g.shadowBlur = 0;
-        // arrow head
-        g.fillStyle = color;
-        g.beginPath();
-        if (v > 0) {
-          g.moveTo(cx - 26, top - 8);
-          g.lineTo(cx + 26, top - 8);
-          g.lineTo(cx, top - 34);
-        } else {
-          g.moveTo(cx - 26, bottom + 8);
-          g.lineTo(cx + 26, bottom + 8);
-          g.lineTo(cx, bottom + 34);
-        }
-        g.fill();
-      }
-      g.textAlign = "center";
-      g.fillStyle = v ? color : DIM;
-      g.font = MONO(20, 800);
-      fitText(g, label, cx, H - 70, colW - 8);
-      g.fillStyle = v ? INK : "#4a4c56";
-      g.font = MONO(22, 700);
-      fitText(g, v ? `${v > 0 ? "+" : "−"}${zec(Math.abs(v), 3)}` : "—", cx, H - 38, colW - 8);
-      g.textAlign = "left";
-    });
-  });
+/** Card slot under a point of the wall's canvas (0–W, 0–H), for clicks. */
+export function cardAt(st: ArchiveState, txs: ArchiveTx[], x: number, y: number, t: number) {
+  const page = pageOf(st, txs, t);
+  const col = Math.floor((x - CARD.x0) / (CARD.w + CARD.gx)),
+    row = Math.floor((y - CARD.y0) / (CARD.h + CARD.gy));
+  if (col < 0 || col > 3 || row < 0 || row > 1) return null;
+  return txs[page * PER_PAGE + row * 4 + col] ?? null;
 }
 
-// ---- back wall: the departures board, flaps flipping to each transaction --------------------------
+function pageOf(st: ArchiveState, txs: ArchiveTx[], t: number) {
+  const pages = Math.max(1, Math.ceil(txs.length / PER_PAGE));
+  return Math.floor(Math.max(0, t - st.shownAt) / 8) % pages;
+}
 
-const ROWS = 7;
-const FLAP = "ABCDEF0123456789#·-";
+/** What a transaction moved, in one line each way: from → to, the amount. */
+export function summary(x: ArchiveTx) {
+  const f = x.full;
+  const known = x.moves.filter((m) => m.zat !== null);
+  const main = known.sort((a, b) => b.zat! - a.zat!)[0] ?? x.moves[0];
+  const addr = (a: string | null | undefined) => (a ? shortAddr(a) : null);
+  const ins = (f?.inputs ?? []).map((i) => i.address).filter(Boolean) as string[];
+  const outs = (f?.outputs ?? []).map((o) => o.address).filter(Boolean) as string[];
+  const more = (l: string[]) => (l.length > 1 ? ` +${l.length - 1}` : "");
+  const side = (n: Node, list: string[]) => (n === "transparent" ? (list.length ? `${addr(list[0])}${more(list)}` : "transparent") : NODE_LABEL[n]);
+  const from = main ? side(main.from, ins) : "—";
+  const to = main ? side(main.to, outs) : "—";
+  const amount = main?.zat ? `${zecText(main.zat)} ZEC` : x.row.kind === "coinbase" ? "reward" : "🔒 hidden";
+  return { from, to, amount, main };
+}
 
-export function drawBoard(s: Screen, st: ArchiveState, t: number) {
-  s.draw((g, W) => {
-    frame(g, W, s.H, ORANGE);
-    header(g, "出発", "DEPARTURES · TRANSACTIONS IN THIS BLOCK", ORANGE, 34, 56);
+export function drawCards(s: Screen, st: ArchiveState, txs: ArchiveTx[], t: number) {
+  s.draw((g, W, H) => {
+    frame(g, W, H, ORANGE);
+    header(g, "取引", "TRANSACTIONS · WHO SENT WHAT, WHERE", ORANGE, 34, 58);
     const b = st.block;
     if (!b) return;
-    const rows = b.txs.map((x, i) => ({ x, i }));
-    const pages = Math.max(1, Math.ceil(rows.length / ROWS));
-    const since = t - st.shownAt;
-    const page = Math.floor(Math.max(0, since - 2) / 6) % pages;
-    const pageStart = 2 + Math.floor(Math.max(0, since - 2) / 6) * 6;
+    const pages = Math.max(1, Math.ceil(txs.length / PER_PAGE));
+    const page = pageOf(st, txs, t);
     g.textAlign = "right";
     g.fillStyle = DIM;
-    g.font = MONO(20, 600);
-    g.fillText(`${page + 1} / ${pages}`, W - 36, 56);
+    g.font = MONO(22, 600);
+    g.fillText(`${txs.length} tx${pages > 1 ? ` · page ${page + 1}/${pages}` : ""}`, W - 36, 58);
     g.textAlign = "left";
-    const cols = [36, 110, 520, 780, 990, 1190, 1350];
-    g.fillStyle = DIM;
-    g.font = MONO(16, 700);
-    ["#", "TRANSACTION", "KIND", "FEE · ZEC", "SIZE", "IN/OUT", "ACTIONS"].forEach((h, k) => g.fillText(h, cols[k], 96));
-    const flipFrom = page === 0 ? st.shownAt : st.shownAt + pageStart;
-    // empty rows stay on the board as blank flaps, like a quiet departures hall
-    for (let r = Math.min(ROWS, rows.length - page * ROWS); r < ROWS; r++) {
-      const y = 134 + r * 34;
+    // the block's money in one line
+    const fees = b.fees ?? 0;
+    g.fillStyle = INK;
+    g.font = MONO(26, 700);
+    fitText(g, `#${num(b.height)} · ${new Date(Date.parse(b.time)).toISOString().slice(0, 16).replace("T", " ")} UTC · fees ${zec(fees, 6)} ZEC · reward ${zec(b.coinbase_value ?? 0, 4)} ZEC`, 36, 104, W - 72);
+    const since = t - st.shownAt - (page ? 0 : 0);
+    txs.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE).forEach((x, k) => {
+      const col = k % 4,
+        row = Math.floor(k / 4);
+      const cx = CARD.x0 + col * (CARD.w + CARD.gx),
+        cy = CARD.y0 + row * (CARD.h + CARD.gy);
+      const color = KIND_COLOR[x.row.kind];
+      // cards deal in one by one
+      const shown = since > 0.35 + k * 0.12 || page > 0;
       g.fillStyle = "#0e1016";
-      g.fillRect(28, y - 25, W - 56, 30);
-      g.fillStyle = "#23262f";
-      g.font = MONO(20, 600);
-      cols.forEach((cx, k) => g.fillText(k === 1 ? "· · · · · · · ·" : "·", cx, y));
-    }
-    rows.slice(page * ROWS, page * ROWS + ROWS).forEach(({ x, i }, r) => {
-      const y = 134 + r * 34;
-      const acts = (x.n_sapling_spends ?? 0) + (x.n_sapling_outputs ?? 0) + (x.n_orchard_actions ?? 0) + (x.n_ironwood_actions ?? 0);
-      const cells = [String(i), `${x.txid.slice(0, 16)}…${x.txid.slice(-6)}`, KIND_LABEL[x.kind].toUpperCase(), x.fee == null ? "—" : zec(x.fee, 6), `${(x.size / 1000).toFixed(1)}k`, `${x.n_tin ?? 0}/${x.n_tout ?? 0}`, String(acts)];
-      // flaps settle left to right, row by row
-      const settle = flipFrom + 0.25 + r * 0.07;
-      g.fillStyle = "#0e1016";
-      g.fillRect(28, y - 25, W - 56, 30);
-      cells.forEach((text, k) => {
-        const done = t > settle + k * 0.06;
-        g.fillStyle = k === 2 ? KIND_COLOR[x.kind] : k === 1 ? INK : "#c8c4ba";
-        g.font = MONO(20, k === 1 ? 700 : 600);
-        const shown = done ? text : text.replace(/[^ ]/g, () => FLAP[Math.floor(Math.random() * FLAP.length)]);
-        fitText(g, shown, cols[k], y, (cols[k + 1] ?? W - 30) - cols[k] - 12);
-      });
+      g.fillRect(cx, cy, CARD.w, CARD.h);
+      if (!shown) return;
+      g.fillStyle = color;
+      g.fillRect(cx, cy, 8, CARD.h);
+      g.strokeStyle = `${color}66`;
+      g.lineWidth = 2;
+      g.strokeRect(cx + 1, cy + 1, CARD.w - 2, CARD.h - 2);
+      const sm = summary(x);
+      g.fillStyle = color;
+      g.font = MONO(20, 800);
+      fitText(g, `${KIND_LABEL[x.row.kind].toUpperCase()}`, cx + 22, cy + 28, CARD.w - 120);
+      g.textAlign = "right";
+      g.fillStyle = DIM;
+      g.font = MONO(18, 600);
+      g.fillText(`#${txs.indexOf(x)}`, cx + CARD.w - 14, cy + 28);
+      g.textAlign = "left";
+      g.fillStyle = "#ffffff";
+      g.font = MONO(38, 800);
+      fitText(g, x.full || x.row.kind === "coinbase" || sm.main?.zat ? sm.amount : "…", cx + 22, cy + 70, CARD.w - 36);
+      g.font = MONO(19, 600);
+      g.fillStyle = "#c8c4ba";
+      fitText(g, `from ${sm.from}`, cx + 22, cy + 100, CARD.w - 36);
+      fitText(g, `to   ${sm.to}`, cx + 22, cy + 123, CARD.w - 36);
+      g.fillStyle = DIM;
+      g.font = MONO(15, 600);
+      fitText(g, `fee ${x.row.fee == null ? "—" : zec(x.row.fee, 6)} · ${(x.row.size / 1000).toFixed(1)} kB · ${x.row.txid.slice(0, 10)}…`, cx + 22, cy + 143, CARD.w - 36);
     });
   });
 }
 
-/** Still flipping (or paging soon): the board needs redrawing this frame. */
-export function boardBusy(st: ArchiveState, t: number) {
-  const since = t - st.shownAt;
-  if (since < 2) return true;
-  // a page turns every 6 s; its flaps flip for about a second
-  return (since - 2) % 6 < 1.1;
+// ---- right wall: the last 60 blocks, tap a bar to go there ----------------------------------------
+
+export const HISTORY_N = 60;
+const HIST = { x0: 40, y0: 120, w: 944, h: 300 };
+
+export function historyAt(hist: { height: number }[], x: number, y: number) {
+  if (y < HIST.y0 - 20 || y > HIST.y0 + HIST.h + 40 || x < HIST.x0 || x > HIST.x0 + HIST.w) return null;
+  const i = Math.floor(((x - HIST.x0) / HIST.w) * HISTORY_N);
+  return hist[i]?.height ?? null;
+}
+
+export function drawHistory(s: Screen, st: ArchiveState, hist: { height: number; tx_count: number; fees: number | null; time: string }[]) {
+  s.draw((g, W, H) => {
+    frame(g, W, H, TEAL);
+    header(g, "履歴", `HISTORY · THE ${HISTORY_N} BLOCKS UP TO HERE`, TEAL);
+    if (hist.length < 2) {
+      g.fillStyle = DIM;
+      g.font = MONO(26, 600);
+      fitText(g, "This stretch is still being indexed back toward genesis.", 40, 260);
+      fitText(g, "Step through it block by block with ◀ ▶.", 40, 300);
+      return;
+    }
+    const max = Math.max(2, ...hist.map((b) => b.tx_count));
+    const bw = HIST.w / HISTORY_N;
+    hist.forEach((b, i) => {
+      const k = Math.log(1 + b.tx_count) / Math.log(1 + max);
+      const h = Math.max(4, k * HIST.h);
+      const cur = st.block?.height === b.height;
+      g.fillStyle = cur ? "#f4b728" : "#2fb8a8";
+      if (cur) {
+        g.shadowColor = "#f4b728";
+        g.shadowBlur = 16;
+      }
+      g.fillRect(HIST.x0 + i * bw + 1, HIST.y0 + HIST.h - h, bw - 3, h);
+      g.shadowBlur = 0;
+    });
+    // fees as a line over the bars
+    const fmax = Math.max(1, ...hist.map((b) => b.fees ?? 0));
+    g.strokeStyle = "#ff9f2e";
+    g.lineWidth = 3;
+    g.beginPath();
+    hist.forEach((b, i) => {
+      const x = HIST.x0 + (i + 0.5) * bw,
+        y = HIST.y0 + HIST.h - ((b.fees ?? 0) / fmax) * HIST.h * 0.9;
+      if (i) g.lineTo(x, y);
+      else g.moveTo(x, y);
+    });
+    g.stroke();
+    // axis and legend
+    const t0 = Date.parse(hist[0].time),
+      t1 = Date.parse(hist[hist.length - 1].time);
+    const avg = (t1 - t0) / 1000 / (hist.length - 1);
+    g.fillStyle = DIM;
+    g.font = MONO(20, 600);
+    g.fillText(`#${num(hist[0].height)}`, HIST.x0, HIST.y0 + HIST.h + 30);
+    g.textAlign = "right";
+    g.fillText(`#${num(hist[hist.length - 1].height)}`, HIST.x0 + HIST.w, HIST.y0 + HIST.h + 30);
+    g.textAlign = "left";
+    const total = hist.reduce((a, b) => a + b.tx_count, 0);
+    g.fillStyle = INK;
+    g.font = MONO(24, 700);
+    fitText(g, `${num(total)} tx · avg ${Math.round(avg)} s per block · max ${num(max)} tx`, 40, H - 64, W - 80);
+    g.fillStyle = "#2fb8a8";
+    g.fillRect(40, H - 34, 14, 14);
+    g.fillStyle = DIM;
+    g.font = MONO(18, 600);
+    g.fillText("transactions", 60, H - 21);
+    g.fillStyle = "#ff9f2e";
+    g.fillRect(230, H - 30, 22, 4);
+    g.fillStyle = DIM;
+    g.fillText("fees", 258, H - 21);
+    g.fillText("tap a bar to open that block", 330, H - 21);
+  });
 }

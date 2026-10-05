@@ -1,32 +1,40 @@
 import * as THREE from "three";
-import { KIND_HELP, KIND_LABEL, type BlockTxRow } from "../../data/types";
-import { links, ZScan } from "../../data/zscan";
+import { KIND_HELP, KIND_LABEL, type BlockSummary } from "../../data/types";
+import { get, links, ZScan } from "../../data/zscan";
 import { ArchiveBar } from "../../ui/archiveBar";
 import { place, column } from "../furniture";
 import { box, glowMat, room, std, textPlane } from "../kit";
 import type { InteriorContext, PickInfo, Rect } from "../types";
-import { Bricks } from "./bricks";
 import { Chain, SPAN } from "./chain";
-import { boardBusy, drawBoard, drawCard, drawFlows, Screen, type ArchiveState } from "./walls";
+import { FlowScene } from "./flows";
+import { movesOf, NODE_LABEL, routesOf, zecText, type ArchiveTx, type Node, type Route, type TxFull } from "./money";
+import { cardAt, drawCard, drawCards, drawHistory, historyAt, HISTORY_N, Screen, summary, type ArchiveState } from "./walls";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const num = (n: number) => n.toLocaleString("en-US");
 const short = (h: string) => `${h.slice(0, 8)}…${h.slice(-6)}`;
+/** Transactions read in detail per block (amounts, addresses); the rest are shown from their row. */
+const DETAIL_MAX = 40;
+/** Activation heights that decide which pools stand in the room. */
+const SAPLING = 419_200,
+  CANOPY = 1_046_400,
+  NU5 = 1_687_104,
+  IRONWOOD = 3_428_143;
 
-/** The room: 16 × 11 m, the elevator in the front wall, the tower in the middle. */
+/** The room: 16 × 11 m, the elevator in the front wall, the pools' tanks in an arc in the middle. */
 const X0 = -8,
   X1 = 8,
   Z0 = -11,
   Z1 = 0,
-  HEIGHT = 4.6;
-const PLINTH = new THREE.Vector3(0, 0, -5.4);
+  HEIGHT = 6;
 
 /**
- * MEMPOOL 1F, the Block Archive: any block from genesis to the tip, rebuilt in the room. The
- * block stands on the plinth as a tower of bricks (one per transaction), the walls read it out
- * (its card, value flowing through the pools, a departures board of its transactions) and the
- * chain runs along the back wall, a pillar per neighbouring block. The console steps through
- * blocks, takes any height, follows new blocks live or jumps to a landmark.
+ * MEMPOOL 1F, the Block Archive: any block from genesis to the tip, rebuilt in the room. Its money
+ * flows in the middle: a glass tank per value pool and the mint's coin, with a glowing jet for
+ * every route value took (as thick as the amount, tagged with it). The back wall deals a card per
+ * transaction (amount, from, to, fee), the left wall is the block's card, the right wall the 60
+ * blocks before it, and the chain runs under the cards, a pillar per neighbouring block. The
+ * console steps through blocks, takes any height, follows new blocks live or jumps to a landmark.
  */
 export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number) {
   const group = new THREE.Group();
@@ -66,7 +74,7 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     [X0 + 0.5, Z1 - 0.5],
     [X1 - 0.5, Z1 - 0.5],
   ])
-    place(group, "column-4.6", () => column(HEIGHT), x, Y, z);
+    place(group, `column-${HEIGHT}`, () => column(HEIGHT), x, Y, z);
   const steel = std("#8a8e98", 0.35, 0.8);
   box(group, 1.0, 2.5, 0.06, steel, -0.52, Y, Z1 - 0.12);
   box(group, 1.0, 2.5, 0.06, steel, 0.52, Y, Z1 - 0.12);
@@ -79,48 +87,37 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
   for (const x of [X0 + 0.11, X1 - 0.11])
     for (const z of [-10.1, -9.4, -1.6, -0.9]) box(group, 0.02, HEIGHT - 0.9, 0.05, glowMat(z < -5 ? "#b07bff" : "#3ec9b0", 1.1), x, Y + 0.3, z);
 
-  // ---- the plinth --------------------------------------------------------------------------------
-  const base = std("#1c1b24", 0.4, 0.5);
-  box(group, 3.2, 0.42, 3.2, base, PLINTH.x, Y, PLINTH.z);
-  box(group, 3.26, 0.05, 3.26, glowMat("#f4b728", 1.3), PLINTH.x, Y + 0.38, PLINTH.z);
-  const top = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 2.9), new THREE.MeshStandardMaterial({ map: plinthTexture(), roughness: 0.2, metalness: 0.6 }));
-  top.rotation.x = -Math.PI / 2;
-  top.position.set(PLINTH.x, Y + 0.431, PLINTH.z);
-  group.add(top);
-  rects.push([PLINTH.x - 1.8, PLINTH.z - 1.8, PLINTH.x + 1.8, PLINTH.z + 1.8]);
-  // a shaft of light from the ceiling onto the block
-  const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.5, 1.75, HEIGHT - 0.45, 32, 1, true),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color("#ffd98a"), transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
-  );
-  beam.position.set(PLINTH.x, Y + 0.43 + (HEIGHT - 0.45) / 2, PLINTH.z);
-  group.add(beam);
-  box(group, 1.1, 0.06, 1.1, glowMat("#fff4e0", 1.6), PLINTH.x, Y + HEIGHT - 0.07, PLINTH.z);
-  const bricks = new Bricks(group, new THREE.Vector3(PLINTH.x, Y + 0.46, PLINTH.z));
-  pickables.push(bricks.mesh);
+  // ---- the money: tanks for the pools, the mint's coin, jets for every route value took ------------
+  const flows = new FlowScene(group, Y);
+  pickables.push(...flows.pickables);
+  // the tanks stand in an arc: keep the walker out of it
+  rects.push([-5.4, -7.0, 5.4, -5.2]);
 
   // ---- the walls' screens -------------------------------------------------------------------------
   const card = new Screen(1024, 560, 5.6);
-  card.mesh.position.set(X0 + 0.13, Y + 2.25, PLINTH.z);
+  card.mesh.position.set(X0 + 0.13, Y + 2.25, -5.4);
   card.mesh.rotation.y = Math.PI / 2;
   group.add(card.mesh);
   pickables.push(card.mesh);
-  const flows = new Screen(1024, 560, 5.6);
-  flows.mesh.position.set(X1 - 0.13, Y + 2.25, PLINTH.z);
-  flows.mesh.rotation.y = -Math.PI / 2;
-  group.add(flows.mesh);
-  const board = new Screen(1536, 400, 9);
-  board.mesh.position.set(0, Y + 3.0, Z0 + 0.13);
-  group.add(board.mesh);
+  const history = new Screen(1024, 560, 5.6);
+  history.mesh.position.set(X1 - 0.13, Y + 2.25, -5.4);
+  history.mesh.rotation.y = -Math.PI / 2;
+  group.add(history.mesh);
+  pickables.push(history.mesh);
+  const cards = new Screen(1536, 470, 9.6);
+  // high on the back wall: the jets arc below it
+  cards.mesh.position.set(0, Y + 4.42, Z0 + 0.13);
+  group.add(cards.mesh);
+  pickables.push(cards.mesh);
 
-  // ---- the chain along the back wall -------------------------------------------------------------
+  // ---- the chain along the back wall, under the transactions -------------------------------------
   const chain = new Chain(group, -6.8, 6.8, Z0 + 0.75, Y);
   pickables.push(chain.pillars);
   rects.push([-7.2, Z0, 7.2, Z0 + 1.15]);
 
   // ---- the console by the elevator: a lectern with its own screen ------------------------------
   const desk = new THREE.Group();
-  desk.position.set(-2.6, Y, -2.2);
+  desk.position.set(-2.9, Y, -2.0);
   desk.rotation.y = 0.35;
   group.add(desk);
   const dark = std("#22202c", 0.5, 0.4);
@@ -130,18 +127,17 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
   screen.mesh.position.set(0, 1.22, -0.02);
   screen.mesh.rotation.x = -0.5;
   desk.add(screen.mesh);
-  box(desk, 0.7, 0.42, 0.04, dark, 0, 1.0, 0.1).rotation.x = -0.5;
   desk.traverse((o) => (o.userData.console = true));
   pickables.push(desk);
-  rects.push([-3.0, -2.6, -2.2, -1.8]);
+  rects.push([-3.3, -2.4, -2.5, -1.6]);
   const deskSign = textPlane("CONSOLE · 操作", { h: 0.13, color: "#f4b728", glow: true });
   deskSign.position.set(0, 1.72, 0.0);
   desk.add(deskSign);
   const drawConsole = () =>
-    screen.draw((g, W, H) => {
+    screen.draw((g, W) => {
       g.strokeStyle = "#f4b728";
       g.lineWidth = 4;
-      g.strokeRect(8, 8, W - 16, H - 16);
+      g.strokeRect(8, 8, W - 16, 284);
       g.fillStyle = "#f4b728";
       g.font = '700 26px "JetBrains Mono", Menlo, monospace';
       g.fillText("PICK A BLOCK", 30, 58);
@@ -156,13 +152,13 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
 
   // lights: fixed in number and always in the scene (no shader recompiles changing floors)
   for (const [x, z, c, i] of [
-    [0, PLINTH.z, "#fff4e0", 9],
+    [0, -6.5, "#fff4e0", 7],
     [-5, -3, "#ffb070", 3],
     [5, -3, "#80d8ff", 3],
-    [0, -9.5, "#ffd890", 4],
+    [0, -9.5, "#ffd890", 3],
   ] as const) {
-    const l = new THREE.PointLight(c, i, 11, 1.4);
-    l.position.set(x, Y + 3.9, z);
+    const l = new THREE.PointLight(c, i, 12, 1.4);
+    l.position.set(x, Y + HEIGHT - 0.7, z);
     scene.add(l);
   }
 
@@ -170,6 +166,9 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
   const st: ArchiveState = { block: null, loading: null, error: null, era: "", tip: 0, live: true, shownAt: 0 };
   let clock = 0;
   let want = -1;
+  let txs: ArchiveTx[] = [];
+  let routes: Route[] = [];
+  let hist: BlockSummary[] = [];
   const counts = new Map<number, number>();
   let upgrades: { label: string; height: number }[] = [];
   const eraOf = (h: number) => upgrades.filter((u) => u.height <= h).at(-1)?.label ?? "Sprout";
@@ -216,20 +215,38 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     bar.set(h, st.live);
     chain.set(h, st.tip, counts);
     drawConsole();
+    drawCard(card, st);
     const b = await ZScan.blockDetail(h);
     if (want !== h) return;
-    st.loading = null;
     if (!b) {
+      st.loading = null;
       st.error = `Block #${num(h)} not found`;
       return;
     }
+    // each transaction's amounts and addresses (a few at a time through the shared rate limit)
+    const rows = b.txs;
+    const full = await Promise.all(rows.slice(0, DETAIL_MAX).map((r) => get<TxFull>(`/v1/tx/${r.txid}`)));
+    if (want !== h) return;
+    txs = rows.map((row, i) => ({ row, full: full[i] ?? null, moves: movesOf(row, full[i] ?? null) }));
+    routes = routesOf(txs);
     st.block = b;
+    st.loading = null;
     st.era = eraOf(h);
     st.shownAt = clock;
     counts.set(h, b.tx_count);
-    bricks.set(b.txs, clock);
+    // the pools that existed then, plus any this block touched
+    const d = b.pool_deltas ?? {};
+    const nodes: Node[] = ["transparent"];
+    if (h < CANOPY || d.sprout || routes.some((r) => r.from === "sprout" || r.to === "sprout")) nodes.push("sprout");
+    if (h >= SAPLING) nodes.push("sapling");
+    if (h >= NU5) nodes.push("orchard");
+    if (h >= IRONWOOD) nodes.push("ironwood");
+    flows.setNodes(nodes);
+    flows.show(routes, d as Partial<Record<Node, number>>, clock);
     drawCard(card, st);
+    drawCards(cards, st, txs, clock);
     void neighbours(h);
+    void loadHistory(h);
   }
 
   /** Transaction counts around `h`, for the pillars: one list call in the indexed range, else a few singles. */
@@ -249,6 +266,14 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     }
   }
 
+  async function loadHistory(h: number) {
+    const list = await ZScan.blocksBelow(h + 1, HISTORY_N);
+    if (want !== h) return;
+    hist = (list ?? []).slice().reverse();
+    for (const b of hist) counts.set(b.height, b.tx_count);
+    drawHistory(history, st, hist);
+  }
+
   ctx.onBlock((height) => {
     st.tip = Math.max(st.tip, height);
     if (st.live && group.visible) void load(height);
@@ -256,8 +281,8 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
   });
 
   let active = false;
-  let flowAcc = 0,
-    cardAcc = 0;
+  let cardAcc = 0,
+    wallAcc = 0;
   // [ and ] step through blocks while you're on the floor
   window.addEventListener("keydown", (e) => {
     if (!group.visible || !active || /input|textarea|select/i.test((e.target as HTMLElement).tagName)) return;
@@ -268,25 +293,64 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
   });
 
   // ---- picking -------------------------------------------------------------------------------------
-  const txInfo = (r: BlockTxRow, i: number): PickInfo => {
-    const parts = [
-      ["Sapling", (r.n_sapling_spends ?? 0) + (r.n_sapling_outputs ?? 0)],
-      ["Orchard", r.n_orchard_actions ?? 0],
-      ["Ironwood", r.n_ironwood_actions ?? 0],
-    ].filter(([, n]) => n) as [string, number][];
+  /** Canvas point of a hit on one of the wall screens. */
+  const onCanvas = (hit: THREE.Intersection, s: Screen) => (hit.uv ? { x: hit.uv.x * s.W, y: (1 - hit.uv.y) * s.H } : null);
+  const txInfo = (x: ArchiveTx): PickInfo => {
+    const r = x.row;
+    const sm = summary(x);
+    const i = txs.indexOf(x);
+    const moves = x.moves
+      .map((m) => `<div class="row"><span>${esc(NODE_LABEL[m.from])} → ${esc(NODE_LABEL[m.to])}</span><b class="mono">${m.zat === null ? "hidden" : `${zecText(m.zat)} ZEC`}</b></div>`)
+      .join("");
     return {
-      eyebrow: `Block #${num(st.block!.height)} · transaction ${i + 1} of ${st.block!.txs.length}`,
+      eyebrow: `Block #${num(st.block!.height)} · transaction ${i + 1} of ${txs.length}`,
       title: short(r.txid),
       mono: true,
       tag: [KIND_LABEL[r.kind], r.kind === "coinbase" ? "warn" : "info"],
       stats: [
+        ["Amount", sm.amount],
         ["Fee", r.fee == null ? "—" : (r.fee / 1e8).toFixed(6)],
-        ["Size", `${(r.size / 1000).toFixed(1)} kB`],
-        ["In / out", `${r.n_tin ?? 0} / ${r.n_tout ?? 0}`],
-        ["Shielded", parts.length ? parts.map(([k, n]) => `${k} ${n}`).join(" · ") : "—"],
+        ["From", sm.from],
+        ["To", sm.to],
       ],
-      body: `<div class="note">${esc(KIND_HELP[r.kind])}.${r.transparent_out ? ` Public outputs: ${(r.transparent_out / 1e8).toLocaleString("en-US", { maximumFractionDigits: 4 })} ZEC.` : ""} The brick's volume follows the transaction's size in bytes, its colour its kind.</div>`,
+      body: `${moves}<div class="note">${esc(KIND_HELP[r.kind])}.</div>`,
       link: { href: links.tx(r.txid), label: "Transaction on ZScan" },
+    };
+  };
+  const routeInfo = (r: Route): PickInfo => ({
+    eyebrow: `Block #${num(st.block!.height)} · money flow`,
+    title: r.from === r.to ? `${NODE_LABEL[r.to]} · inside` : `${NODE_LABEL[r.from]} → ${NODE_LABEL[r.to]}`,
+    tag: [r.zat ? `${zecText(r.zat)} ZEC` : "hidden amount", r.hidden ? "muted" : "info"],
+    stats: [
+      ["Transactions", String(r.txs.length)],
+      ["Amount", r.zat ? `${zecText(r.zat)} ZEC` : "hidden"],
+    ],
+    body: r.txs
+      .slice(0, 12)
+      .map((x) => `<div class="row"><a href="${links.tx(x.row.txid)}" target="_blank" rel="noopener" class="mono">${esc(short(x.row.txid))}</a><b>${esc(summary(x).amount)}</b></div>`)
+      .join(""),
+  });
+  const poolInfo = (n: Node): PickInfo | null => {
+    const b = st.block;
+    if (!b) return null;
+    const d = (b.pool_deltas as Record<string, number> | undefined)?.[n] ?? 0;
+    const touching = routes.filter((r) => r.from === n || r.to === n);
+    if (n === "mint")
+      return {
+        eyebrow: `Block #${num(b.height)} · new coins`,
+        title: `${zecText(b.coinbase_value ?? 0)} ZEC`,
+        tag: [b.miner_pool ?? "Miner", "warn"],
+        body: `<div class="note">Every block mints new ZEC: the miner's reward and the development funding, paid by the coinbase transaction, plus the fees of the block's transactions.</div>`,
+      };
+    return {
+      eyebrow: `Block #${num(b.height)} · value pool`,
+      title: NODE_LABEL[n],
+      tag: [d ? `${d > 0 ? "+" : "−"}${zecText(Math.abs(d))} ZEC` : "no net change", d > 0 ? "ok" : d < 0 ? "warn" : "muted"],
+      stats: [
+        ["Net change", d ? `${d > 0 ? "+" : "−"}${zecText(Math.abs(d))}` : "0"],
+        ["Flows", String(touching.length)],
+      ],
+      body: touching.map((r) => `<div class="row"><span>${esc(NODE_LABEL[r.from])} → ${esc(NODE_LABEL[r.to])}</span><b class="mono">${r.zat ? `${zecText(r.zat)} ZEC` : "hidden"}</b></div>`).join(""),
     };
   };
   const blockInfo = (): PickInfo | null => {
@@ -320,44 +384,75 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
       if (on && !st.block && st.loading === null) void load(st.tip || Number.MAX_SAFE_INTEGER);
     },
     pick(hit: THREE.Intersection): PickInfo | null {
-      const r = bricks.at(hit);
-      if (r) return txInfo(r, bricks.txs.indexOf(r));
+      const o = hit.object;
+      const route = flows.routeAt(o);
+      if (route) return routeInfo(route);
+      const node = flows.nodeAt(o);
+      if (node) return poolInfo(node);
       const h = chain.at(hit);
       if (h !== null) {
         setLive(false);
         void load(h);
         return null;
       }
-      if (hit.object.userData.console) {
+      if (o === cards.mesh) {
+        const p = onCanvas(hit, cards);
+        const x = p && cardAt(st, txs, p.x, p.y, clock);
+        return x ? txInfo(x) : blockInfo();
+      }
+      if (o === history.mesh) {
+        const p = onCanvas(hit, history);
+        const hh = p && historyAt(hist, p.x, p.y);
+        if (hh !== null && hh !== undefined) {
+          setLive(false);
+          void load(hh);
+        }
+        return null;
+      }
+      if (o.userData.console) {
         bar.focus();
         return {
           eyebrow: "Block archive · console",
           title: "Any block, genesis to now",
-          body: `<div class="note">Type a height in the console at the top, step with ◀ ▶ (or the [ and ] keys), follow new blocks with LIVE, or jump to a network upgrade. Tap a brick for its transaction, a pillar for that block.</div>`,
+          body: `<div class="note">Type a height in the console at the top, step with ◀ ▶ (or the [ and ] keys), follow new blocks with LIVE, or jump to a network upgrade. Tap a jet or a tank to see where the money went, a card for its transaction, a bar or a pillar for another block.</div>`,
         };
       }
-      if (hit.object === card.mesh) return blockInfo();
+      if (o === card.mesh) return blockInfo();
       return null;
     },
     hover(hit: THREE.Intersection): string | null {
-      const r = bricks.at(hit);
-      if (r) return `<b>${short(r.txid)}</b><span>${KIND_LABEL[r.kind]} · ${(r.size / 1000).toFixed(1)} kB</span>`;
+      const o = hit.object;
+      const route = flows.routeAt(o);
+      if (route) return `<b>${route.zat ? `${zecText(route.zat)} ZEC` : "hidden"}</b><span>${NODE_LABEL[route.from].toLowerCase()} → ${NODE_LABEL[route.to].toLowerCase()} · ${route.txs.length} tx</span>`;
+      const node = flows.nodeAt(o);
+      if (node) return `<b>${NODE_LABEL[node]}</b><span>${node === "mint" ? "new coins" : "value pool"}</span>`;
       const h = chain.at(hit);
       if (h !== null) return `<b>#${num(h)}</b><span>${counts.has(h) ? `${num(counts.get(h)!)} tx · ` : ""}open this block</span>`;
-      if (hit.object.userData.console) return "<b>Console</b><span>pick a block</span>";
-      if (hit.object === card.mesh && st.block) return `<b>#${num(st.block.height)}</b><span>block details</span>`;
+      if (o === cards.mesh) {
+        const p = onCanvas(hit, cards);
+        const x = p && cardAt(st, txs, p.x, p.y, clock);
+        return x ? `<b>${short(x.row.txid)}</b><span>${esc(summary(x).amount)}</span>` : null;
+      }
+      if (o === history.mesh) {
+        const p = onCanvas(hit, history);
+        const hh = p && historyAt(hist, p.x, p.y);
+        return hh != null ? `<b>#${num(hh)}</b><span>open this block</span>` : null;
+      }
+      if (o.userData.console) return "<b>Console</b><span>pick a block</span>";
+      if (o === card.mesh && st.block) return `<b>#${num(st.block.height)}</b><span>block details</span>`;
       return null;
     },
     update(dt: number) {
       clock += dt;
       bar.tick();
-      bricks.update(clock);
+      flows.update(dt, clock);
       chain.update(dt);
-      flowAcc += dt;
-      if (flowAcc > 0.05) {
-        flowAcc = 0;
-        drawFlows(flows, st, clock);
-        if (boardBusy(st, clock)) drawBoard(board, st, clock);
+      wallAcc += dt;
+      // the cards deal in for a couple of seconds, then the wall turns its page every 8 s
+      const since = clock - st.shownAt;
+      if (wallAcc > (since < 2.5 ? 0.05 : 1)) {
+        wallAcc = 0;
+        if (st.block) drawCards(cards, st, txs, clock);
       }
       cardAcc += dt;
       if (cardAcc > (st.loading !== null ? 0.3 : 1)) {
@@ -366,26 +461,6 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
       }
     },
   };
-}
-
-/** The plinth's top: a dark slab engraved with a fine gold grid. */
-function plinthTexture() {
-  const c = document.createElement("canvas");
-  c.width = c.height = 256;
-  const g = c.getContext("2d")!;
-  g.fillStyle = "#0b0a10";
-  g.fillRect(0, 0, 256, 256);
-  g.fillStyle = "rgba(244,183,40,0.35)";
-  for (let i = 0; i <= 256; i += 32) {
-    g.fillRect(i, 0, 1, 256);
-    g.fillRect(0, i, 256, 1);
-  }
-  g.strokeStyle = "rgba(244,183,40,0.8)";
-  g.lineWidth = 3;
-  g.strokeRect(3, 3, 250, 250);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
 }
 
 /** Dark polished stone, a faint gold grid like a vault's floor. */

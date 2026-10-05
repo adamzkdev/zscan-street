@@ -60,7 +60,8 @@ export class Chain {
       const real = h >= 0 && h <= tip;
       this.heights[i] = real ? h : null;
       const n = counts.get(h);
-      const tall = !real ? 0 : n === undefined ? 0.18 : 0.3 + (2.0 * Math.log(1 + n)) / Math.log(1 + max);
+      // short: the transactions wall hangs just above them
+      const tall = !real ? 0 : n === undefined ? 0.12 : 0.2 + (0.8 * Math.log(1 + n)) / Math.log(1 + max);
       const w = i === SPAN ? 0.36 : 0.22;
       this.m.compose(new THREE.Vector3(this.slotX(i), this.y + tall / 2, this.z), new THREE.Quaternion(), new THREE.Vector3(real ? w : 0, Math.max(0.001, tall), real ? w : 0));
       this.pillars.setMatrixAt(i, this.m);
