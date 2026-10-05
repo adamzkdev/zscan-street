@@ -2825,3 +2825,32 @@ kbd {
     linear-gradient(var(--ink-solid, #0b0913), var(--ink-solid, #0b0913)) center / calc(100% - 6px) calc(100% - 6px) no-repeat,
     conic-gradient(var(--bad) 1turn, transparent 0);
 }
+
+/* ---- day: neon labels in ink, not glow on paper ---- */
+:root[data-theme="day"] .brand {
+  text-shadow: none;
+  opacity: 1;
+}
+:root[data-theme="day"] .brand span {
+  color: #1c1a24;
+}
+:root[data-theme="day"] .brand b {
+  color: #b07800;
+}
+:root[data-theme="day"] .ihead b,
+:root[data-theme="day"] .dh b,
+:root[data-theme="day"] .rv small i,
+:root[data-theme="day"] .dh b i,
+:root[data-theme="day"] .eyebrow {
+  color: color-mix(in srgb, var(--c, #f4b728) 55%, #1c1a24);
+  text-shadow: none;
+}
+:root[data-theme="day"] svg.px {
+  color: color-mix(in srgb, var(--c, #f4b728) 70%, #1c1a24);
+}
+/* the brand stays readable over any backdrop (a dark ceiling inside, the sky by day) */
+.brand {
+  padding: 4px 9px 4px 6px;
+  background: var(--scan), var(--ink);
+  clip-path: var(--step);
+}

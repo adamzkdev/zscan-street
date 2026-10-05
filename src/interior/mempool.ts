@@ -20,7 +20,7 @@ const ago = (ms: number) => {
 
 /** The shop floor: 12 × 9 m behind a glass front, the pickup table across the middle. */
 const SHOP_Y = 0;
-const TABLE_Z = -4.6,
+const TABLE_Z = -5.4,
   TABLE_TOP = 1.0;
 /** Parcels on the table: two rows of 18, a second layer on top when it fills up. */
 const COLS = 18;
@@ -87,10 +87,10 @@ export function buildMempool(ctx: InteriorContext): Interior {
   table.position.set(0, 0, TABLE_Z);
   scene.add(table);
   rects.push([-4.1, TABLE_Z - 0.62, 4.1, TABLE_Z + 0.62]);
-  const sign = textPlane("受取 · PICKUP · PENDING TX", { h: 0.3, color: "#0d0d0d", bg: "#3ec9b0" });
-  sign.position.set(0, 2.55, TABLE_Z + 0.1);
+  const sign = textPlane("受取 · PICKUP · PENDING TX", { h: 0.17, color: "#0d0d0d", bg: "#3ec9b0" });
+  sign.position.set(0, 2.95, TABLE_Z + 0.1);
   scene.add(sign);
-  for (const x of [-1.8, 1.8]) box(scene, 0.02, 0.7, 0.02, mullion, x, 2.7, TABLE_Z + 0.1);
+  for (const x of [-1.2, 1.2]) box(scene, 0.02, 0.75, 0.02, mullion, x, 3.04, TABLE_Z + 0.1);
   const parcels = new Parcels(ctx, scene, tableSlot);
   pickables.push(parcels.group);
   ticks.push(() => parcels.sync());
@@ -127,7 +127,7 @@ export function buildMempool(ctx: InteriorContext): Interior {
       s.noClip = true;
       s.state = "resident";
       s.role = "Shopkeeper";
-      s.root.position.set(1.2, SHOP_Y, TABLE_Z - 1.1);
+      s.root.position.set(-2.6, SHOP_Y, TABLE_Z - 1.0);
       s.faceDir = new THREE.Vector3(0, 0, 1);
       scene.add(s.root);
       people.push(s);
@@ -191,7 +191,7 @@ export function buildMempool(ctx: InteriorContext): Interior {
     key: "mempool",
     title: "MEMPOOL",
     scene,
-    floors: [{ label: "G", name: "The shop · pending transactions", y: SHOP_Y, spawn: new THREE.Vector3(0, SHOP_Y, -1.2), yaw: 0 }],
+    floors: [{ label: "G", name: "The shop · pending transactions", y: SHOP_Y, spawn: new THREE.Vector3(0, SHOP_Y, -0.9), yaw: 0 }],
     colliders: () => rects,
     pickables: () => pickables,
     pick: (hit) => parcels.pick(hit) ?? (hit.object === board.mesh ? board.info() : null),

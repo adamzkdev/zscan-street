@@ -393,7 +393,7 @@ hud.setPlaces([
   ...city.venues.map((v) => ({
     key: v.kind,
     label: PLACES[v.kind],
-    sub: v.kind === "cards" ? "the whole collection" : v.kind === "bank" ? "read a shielded wallet" : v.kind === "library" ? "news · ZIPs · upgrades" : "shielded assets · coming soon",
+    sub: v.kind === "cards" ? "the whole collection" : v.kind === "bank" ? "read a shielded wallet" : v.kind === "library" ? "news · ZIPs" : "shielded assets · coming soon",
     at: v.door.clone().setY(v.kind === "bank" ? 7.4 : v.kind === "library" ? 7.8 : 5.6),
   })),
   ...(city.factory ? [{ key: "factory", label: "PROOF FACTORY", sub: "shielded tx proved here", at: city.factory.hall.clone().setY(7.2) }] : []),

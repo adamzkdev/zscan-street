@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { get } from "../data/zscan";
 import { fitText } from "../scene/fit";
+import { hash } from "../scene/voxel/model";
 import { Snark, loadArt } from "../scene/snark";
 import { box, glowMat, makeScene, room, std, textPlane } from "./kit";
 import type { Interior, InteriorContext, PickInfo } from "./types";
@@ -9,7 +10,6 @@ import type { Interior, InteriorContext, PickInfo } from "./types";
  * Inside the LIBRARY on Transparent Square: Zcash's public knowledge.
  * G — the press room: today's Zcash news as framed front pages, a ticker of headlines.
  * 1 — the ZIP stacks: one book per Zcash Improvement Proposal, shelved by status.
- * 2 — the upgrades hall: every network upgrade from Overwinter to NU7, on plinths.
  */
 
 interface NewsItem {
@@ -36,18 +36,8 @@ interface Zip {
   live: { href: string; label: string } | null;
 }
 
-interface Upgrade {
-  label: string;
-  activation_height: number | null;
-  activated: boolean;
-  announced_date: string | null;
-  target_block_time: number;
-  branch_id: string | null;
-  summary: string;
-}
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const num = (n: number) => n.toLocaleString("en-US");
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 const CATEGORY: Record<string, { label: string; color: string }> = {
@@ -69,8 +59,7 @@ const SHELVES = [
 ];
 
 const PRESS_Y = 0,
-  STACKS_Y = 6,
-  HALL_Y = 12;
+  STACKS_Y = 6;
 
 /** ZIP list from the API, or the snapshot shipped with the street until the API serves it. */
 async function loadZips(): Promise<Zip[]> {
@@ -190,9 +179,9 @@ export function buildLibrary(ctx: InteriorContext): Interior {
 
   // ---- G: the press room ------------------------------------------------------------------------
   const pressRects = room(scene, {
-    x0: -12,
-    z0: -18,
-    x1: 12,
+    x0: -9,
+    z0: -13,
+    x1: 9,
     z1: 0,
     y: PRESS_Y,
     h: 5,
@@ -202,12 +191,12 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     door: [-1.5, 1.5],
   });
   // wainscot and a picture rail on both long walls
-  for (const x of [-11.88, 11.88]) {
-    box(scene, 0.04, 1.0, 17.6, darkWood, x, PRESS_Y, -9);
-    box(scene, 0.05, 0.06, 17.6, darkWood, x, PRESS_Y + 3.3, -9);
+  for (const x of [-8.88, 8.88]) {
+    box(scene, 0.04, 1.0, 12.6, darkWood, x, PRESS_Y, -6.5);
+    box(scene, 0.05, 0.06, 12.6, darkWood, x, PRESS_Y + 3.3, -6.5);
   }
   const masthead = textPlane("THE ZCASH TIMES · 号外", { h: 0.5, color: "#ffd28a", glow: true });
-  masthead.position.set(0, PRESS_Y + 4.2, -17.85);
+  masthead.position.set(0, PRESS_Y + 4.2, -12.85);
   scene.add(masthead);
   // the ticker over the back wall: every headline, scrolling
   const tick = document.createElement("canvas");
@@ -215,10 +204,10 @@ export function buildLibrary(ctx: InteriorContext): Interior {
   tick.height = 96;
   const tg = tick.getContext("2d")!;
   const tickTex = canvasTexture(tick);
-  const ticker = new THREE.Mesh(new THREE.PlaneGeometry(14, 0.66), new THREE.MeshBasicMaterial({ map: tickTex, toneMapped: false }));
-  ticker.position.set(0, PRESS_Y + 3.35, -17.86);
+  const ticker = new THREE.Mesh(new THREE.PlaneGeometry(11, 0.52), new THREE.MeshBasicMaterial({ map: tickTex, toneMapped: false }));
+  ticker.position.set(0, PRESS_Y + 3.35, -12.86);
   scene.add(ticker);
-  box(scene, 14.2, 0.8, 0.06, std("#111014", 0.5, 0.5), 0, PRESS_Y + 2.95, -17.93);
+  box(scene, 11.2, 0.66, 0.06, std("#111014", 0.5, 0.5), 0, PRESS_Y + 3.02, -12.93);
   let headlines = "  LOADING THE NEWS…  ";
   let tickX = 0;
   ticks.push((dt) => {
@@ -233,29 +222,29 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     tickTex.needsUpdate = true;
   });
   // the editor's desk by the window, and two reading tables with the day's papers
-  box(scene, 3.2, 0.9, 1.1, wood, -7.5, PRESS_Y, -3.2);
-  for (const z of [-7.5, -12.5]) {
+  box(scene, 2.6, 0.9, 1.0, wood, -5.6, PRESS_Y, -2.6);
+  for (const z of [-5.4, -9.2]) {
     box(scene, 6, 0.08, 1.6, wood, 0, PRESS_Y + 0.82, z);
     for (const x of [-2.7, 2.7]) box(scene, 0.12, 0.82, 1.4, darkWood, x, PRESS_Y, z);
     for (let k = 0; k < 4; k++) box(scene, 0.5, 0.03 + k * 0.01, 0.7, std("#efe9dc", 0.95), -2 + k * 1.3, PRESS_Y + 0.86, z + (k % 2 ? 0.2 : -0.2));
   }
-  pressRects.push([-9.2, -3.8, -5.8, -2.6], [-3.1, -8.4, 3.1, -6.6], [-3.1, -13.4, 3.1, -11.6]);
+  pressRects.push([-7, -3.15, -4.2, -2.05], [-3.1, -6.3, 3.1, -4.5], [-3.1, -10.1, 3.1, -8.3]);
   for (const [x, z] of [
-    [-5, -9],
-    [5, -9],
-    [0, -15],
+    [-4, -4],
+    [4, -4],
+    [0, -10],
   ]) {
     const l = new THREE.PointLight("#ffe2b8", 9, 14, 1.6);
     l.position.set(x, PRESS_Y + 4.3, z);
     scene.add(l);
   }
-  void addPerson(4242, new THREE.Vector3(-7.5, PRESS_Y, -4.2), "Editor");
-  void addPerson(808, new THREE.Vector3(4, PRESS_Y, -10), "Reader", [new THREE.Vector3(4, PRESS_Y, -10), new THREE.Vector3(-4, PRESS_Y, -10), new THREE.Vector3(6, PRESS_Y, -15), new THREE.Vector3(-6, PRESS_Y, -5)]);
+  void addPerson(4242, new THREE.Vector3(-5.6, PRESS_Y, -3.5), "Editor");
+  void addPerson(808, new THREE.Vector3(4.5, PRESS_Y, -7.3), "Reader", [new THREE.Vector3(4.5, PRESS_Y, -7.3), new THREE.Vector3(-4.5, PRESS_Y, -7.3), new THREE.Vector3(5, PRESS_Y, -11), new THREE.Vector3(-5, PRESS_Y, -11)]);
   // the front pages, framed along both walls
   const pageSlots: { pos: THREE.Vector3; yaw: number }[] = [];
-  for (let k = 0; k < 6; k++) {
-    const z = -3.4 - k * 2.5;
-    pageSlots.push({ pos: new THREE.Vector3(-11.84, PRESS_Y + 2.05, z), yaw: Math.PI / 2 }, { pos: new THREE.Vector3(11.84, PRESS_Y + 2.05, z), yaw: -Math.PI / 2 });
+  for (let k = 0; k < 5; k++) {
+    const z = -2.4 - k * 2.15;
+    pageSlots.push({ pos: new THREE.Vector3(-8.84, PRESS_Y + 2.05, z), yaw: Math.PI / 2 }, { pos: new THREE.Vector3(8.84, PRESS_Y + 2.05, z), yaw: -Math.PI / 2 });
   }
   void get<NewsItem[]>("/v1/news?limit=40").then((news) => {
     if (!news?.length) return void (headlines = "  THE NEWS DESK IS OFFLINE · news.zscan.cash  ");
@@ -287,9 +276,9 @@ export function buildLibrary(ctx: InteriorContext): Interior {
 
   // ---- 1: the ZIP stacks --------------------------------------------------------------------------
   const stacksRects = room(scene, {
-    x0: -13,
-    z0: -24,
-    x1: 13,
+    x0: -7.5,
+    z0: -12,
+    x1: 7.5,
     z1: 0,
     y: STACKS_Y,
     h: 5.2,
@@ -297,39 +286,54 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     wall: std("#cdbfa8", 0.92),
     ceiling: std("#1e1a17", 0.9),
   });
-  const runs = [-7, 0, 7];
-  const RUN_Z0 = -5,
-    RUN_Z1 = -21;
-  for (const x of runs) {
-    // a double-sided bookcase: back panel, ends, five boards a side
-    box(scene, 0.06, 2.7, RUN_Z0 - RUN_Z1, darkWood, x, STACKS_Y, (RUN_Z0 + RUN_Z1) / 2);
-    for (const z of [RUN_Z0, RUN_Z1]) box(scene, 0.9, 2.8, 0.08, darkWood, x, STACKS_Y, z);
-    for (let k = 0; k < 5; k++) box(scene, 0.86, 0.04, RUN_Z0 - RUN_Z1, wood, x, STACKS_Y + 0.25 + k * 0.55, (RUN_Z0 + RUN_Z1) / 2);
-    box(scene, 0.9, 0.08, RUN_Z0 - RUN_Z1 + 0.1, darkWood, x, STACKS_Y + 2.72, (RUN_Z0 + RUN_Z1) / 2);
-    stacksRects.push([x - 0.5, RUN_Z1 - 0.1, x + 0.5, RUN_Z0 + 0.1]);
-    box(scene, 0.12, 0.04, RUN_Z0 - RUN_Z1, glowMat("#ffd28a", 0.9), x, STACKS_Y + 5.1, (RUN_Z0 + RUN_Z1) / 2);
-  }
+  // a clear aisle down the middle: two double bookcases either side of it, one along each wall
+  const RUN_Z0 = -3.4,
+    RUN_Z1 = -10.6,
+    RUN_L = RUN_Z0 - RUN_Z1,
+    RUN_MID = (RUN_Z0 + RUN_Z1) / 2;
+  const bookcase = (x: number, back: number | null) => {
+    // back: null for a double-sided case, else the side its back panel is on (−1 / +1)
+    const bx = back === null ? x : x + back * 0.42;
+    box(scene, 0.06, 2.7, RUN_L, darkWood, bx, STACKS_Y, RUN_MID);
+    const w = back === null ? 0.9 : 0.48,
+      cx = back === null ? x : x + back * 0.2;
+    for (const z of [RUN_Z0, RUN_Z1]) box(scene, w, 2.8, 0.08, darkWood, cx, STACKS_Y, z);
+    for (let k = 0; k < 5; k++) box(scene, w - 0.04, 0.04, RUN_L, wood, cx, STACKS_Y + 0.25 + k * 0.55, RUN_MID);
+    box(scene, w, 0.08, RUN_L + 0.1, darkWood, cx, STACKS_Y + 2.72, RUN_MID);
+    stacksRects.push([cx - w / 2 - 0.05, RUN_Z1 - 0.1, cx + w / 2 + 0.05, RUN_Z0 + 0.1]);
+  };
+  bookcase(-7, -1);
+  bookcase(-3, null);
+  bookcase(3, null);
+  bookcase(7, 1);
+  for (const x of [-3, 3]) box(scene, 0.12, 0.04, RUN_L, glowMat("#ffd28a", 0.9), x, STACKS_Y + 5.1, RUN_MID);
   for (const [x, z] of [
-    [-3.5, -8],
-    [3.5, -8],
-    [-3.5, -18],
-    [3.5, -18],
-    [-10, -13],
-    [10, -13],
+    [-5, -5],
+    [5, -5],
+    [-5, -9.5],
+    [5, -9.5],
+    [0, -7],
   ]) {
-    const l = new THREE.PointLight("#ffe2b8", 8, 12, 1.6);
+    const l = new THREE.PointLight("#ffe2b8", 7, 11, 1.6);
     l.position.set(x, STACKS_Y + 4.6, z);
     scene.add(l);
   }
-  const stacksTitle = textPlane("THE ZIP STACKS · ZCASH IMPROVEMENT PROPOSALS", { h: 0.4, color: "#ffd28a", glow: true });
-  stacksTitle.position.set(0, STACKS_Y + 4.1, -23.85);
+  const stacksTitle = textPlane("THE ZIP STACKS · ZCASH IMPROVEMENT PROPOSALS", { h: 0.36, color: "#ffd28a", glow: true });
+  stacksTitle.position.set(0, STACKS_Y + 4.1, -11.85);
   scene.add(stacksTitle);
-  void addPerson(1337, new THREE.Vector3(-3.5, STACKS_Y, -12), "Librarian", [-3.5, 3.5, -10.5, 10.5].flatMap((x) => [-7, -13, -19].map((z) => new THREE.Vector3(x, STACKS_Y, z))));
-  /** Faces of the bookcases: [x of the spines, which way they face (+1 / −1)]. */
-  const faces: [number, number][] = runs.flatMap((x) => [
-    [x - 0.46, -1],
-    [x + 0.46, 1],
-  ]);
+  void addPerson(1337, new THREE.Vector3(-5, STACKS_Y, -7), "Librarian", [-5, 0, 5].flatMap((x) => [-4.5, -7, -9.5].map((z) => new THREE.Vector3(x, STACKS_Y, z))));
+  /** Faces of the bookcases, left to right: [x of the spines, which way they face (+1 / −1)]. */
+  const faces: [number, number][] = [
+    [-6.55, 1],
+    [-3.46, -1],
+    [-2.54, 1],
+    [2.54, -1],
+    [3.46, 1],
+    [6.55, -1],
+  ];
+  // every slot a ZIP does not fill gets a plain book, so the shelves look like a library
+  const SLOTS_PER_BOARD = 40;
+  const fillerTaken = new Set<string>();
   void loadZips().then((zips) => {
     if (!zips.length) return;
     // the spines' labels, in one atlas: 32 × 8 cells of 64 × 256
@@ -348,7 +352,7 @@ export function buildLibrary(ctx: InteriorContext): Interior {
       sign.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       scene.add(sign);
       const cover = std(shelf.color, 0.7);
-      const perBoard = 72;
+      const perBoard = SLOTS_PER_BOARD;
       mine.forEach((z, k) => {
         const i = zips.indexOf(z);
         const cx = (i % 32) * 64,
@@ -391,7 +395,8 @@ export function buildLibrary(ctx: InteriorContext): Interior {
         // eye-level board first, then the ones just below and above
         const level = [2, 3, 1, 4, 0][Math.min(4, Math.floor(k / perBoard))],
           slot = k % perBoard;
-        book.position.set(fx - dir * 0.17, STACKS_Y + 0.27 + level * 0.55 + h / 2, RUN_Z0 - 0.5 - slot * 0.2 - Math.random() * 0.03);
+        fillerTaken.add(`${si}:${level}:${slot}`);
+        book.position.set(fx - dir * 0.17, STACKS_Y + 0.27 + level * 0.55 + h / 2, RUN_Z0 - 0.35 - slot * 0.165 - Math.random() * 0.02);
         // a few books lean
         if (Math.random() < 0.08) book.rotation.x = (Math.random() - 0.5) * 0.25;
         book.userData.zip = z;
@@ -414,90 +419,23 @@ export function buildLibrary(ctx: InteriorContext): Interior {
       });
     });
     atlasTex.needsUpdate = true;
-  });
-
-  // ---- 2: the upgrades hall -------------------------------------------------------------------------
-  const hallRects = room(scene, {
-    x0: -10,
-    z0: -26,
-    x1: 10,
-    z1: 0,
-    y: HALL_Y,
-    h: 6,
-    floor: std("#2c2a33", 0.5, 0.2),
-    wall: std("#23212a", 0.9),
-    ceiling: std("#141318", 0.9),
-  });
-  const hallTitle = textPlane("NETWORK UPGRADES · OVERWINTER → NU7", { h: 0.42, color: "#7fe3ff", glow: true });
-  hallTitle.position.set(0, HALL_Y + 4.9, -25.85);
-  scene.add(hallTitle);
-  // a glowing path down the middle, the timeline
-  box(scene, 0.12, 0.02, 22, glowMat("#7fe3ff", 1.1), 0, HALL_Y + 0.01, -13);
-  for (const [x, z] of [
-    [0, -6],
-    [0, -14],
-    [0, -22],
-  ]) {
-    const l = new THREE.PointLight("#cfeaff", 10, 14, 1.6);
-    l.position.set(x, HALL_Y + 5.4, z);
-    scene.add(l);
-  }
-  void get<{ upgrades: Upgrade[]; current: string; height: number }>("/v1/upgrades").then((u) => {
-    if (!u?.upgrades?.length) return;
-    u.upgrades.forEach((up, i) => {
-      const side = i % 2 ? 1 : -1;
-      const z = -3 - i * (21 / Math.max(1, u.upgrades.length - 1));
-      const next = !up.activated;
-      const color = next ? "#f4b728" : "#7fe3ff";
-      const plinth = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.05, 1.0), std(next ? "#3a3020" : "#2a3038", 0.5, 0.3));
-      plinth.position.set(side * 2.6, HALL_Y + 0.525, z);
-      scene.add(plinth);
-      hallRects.push([side * 2.6 - 0.75, z - 0.6, side * 2.6 + 0.75, z + 0.6]);
-      box(scene, 1.32, 0.04, 1.02, glowMat(color, 1.4), side * 2.6, HALL_Y + 1.05, z);
-      // the plaque facing the path: name, height or date
-      const c = document.createElement("canvas");
-      c.width = 512;
-      c.height = 320;
-      const g = c.getContext("2d")!;
-      g.fillStyle = "#0b0d12";
-      g.fillRect(0, 0, 512, 320);
-      g.strokeStyle = color;
-      g.lineWidth = 6;
-      g.strokeRect(8, 8, 496, 304);
-      g.textAlign = "center";
-      g.fillStyle = color;
-      g.font = '800 92px "JetBrains Mono", monospace';
-      fitText(g, up.label, 256, 130);
-      g.fillStyle = "#e9eef7";
-      g.font = '500 34px "JetBrains Mono", monospace';
-      fitText(g, up.activation_height ? `block ${num(up.activation_height)}` : up.announced_date ? `due ${up.announced_date}` : "coming", 256, 200);
-      g.fillStyle = "#8a93a6";
-      g.font = '500 28px "JetBrains Mono", monospace';
-      fitText(g, `${up.target_block_time}s blocks`, 256, 260);
-      const plaque = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.75), new THREE.MeshBasicMaterial({ map: canvasTexture(c), toneMapped: false }));
-      plaque.position.set(side * 2.6 - side * 0.66, HALL_Y + 1.45, z);
-      plaque.rotation.y = side > 0 ? -Math.PI / 2 + 0.35 : Math.PI / 2 - 0.35;
-      scene.add(plaque);
-      pickables.push(plaque, plinth);
-      const zips = [...up.summary.matchAll(/ZIPs? ([\d/ ,]+\d)/g)].flatMap((m) => m[1].split(/[/ ,]+/).filter(Boolean));
-      const info = (): PickInfo => ({
-        eyebrow: `Network upgrade${next ? " · next" : ""}`,
-        title: up.label,
-        tag: [next ? "Coming" : "Active", next ? "warn" : "ok"],
-        stats: [
-          ["Height", up.activation_height ? num(up.activation_height) : "—"],
-          ["Block time", `${up.target_block_time} s`],
-          ["Branch", up.branch_id ?? "—"],
-          ["Date", up.announced_date ?? (up.activated ? "past" : "—")],
-        ],
-        body: `<p>${esc(up.summary)}</p>${zips.length ? `<p>${zips.map((n) => `<a href="https://zips.z.cash/zip-${n.padStart(4, "0")}" target="_blank" rel="noopener">ZIP ${n} ↗</a>`).join(" · ")}</p>` : ""}`,
-        link: { href: "https://zscan.cash/upgrades", label: "Upgrades on ZScan" },
-      });
-      for (const o of [plaque, plinth]) {
-        picks.set(o, info);
-        hovers.set(o, `<b>${esc(up.label)}</b><span>${esc(up.summary)}</span>`);
-      }
+    // the plain books, one instanced mesh
+    const tones = ["#6a3a2e", "#2e4a6a", "#5a5a2e", "#3a5a4a", "#4a3a5a", "#7a6a52", "#2a2a32", "#6a4a2a"];
+    const fill: [number, number, number, number][] = [];
+    faces.forEach(([fx, dir], si) => {
+      for (let level = 0; level < 5; level++)
+        for (let slot = 0; slot < SLOTS_PER_BOARD; slot++) if (!fillerTaken.has(`${si}:${level}:${slot}`) && hash(si, level, slot, 3) > 0.12) fill.push([fx - dir * 0.17, level, slot, si]);
     });
+    const plain = new THREE.InstancedMesh(new THREE.BoxGeometry(0.28, 1, 0.12), new THREE.MeshStandardMaterial({ roughness: 0.8 }), fill.length);
+    const mtx = new THREE.Matrix4(),
+      col = new THREE.Color();
+    fill.forEach(([x, level, slot, si], i) => {
+      const h = 0.32 + hash(si, level, slot, 7) * 0.14;
+      mtx.compose(new THREE.Vector3(x, STACKS_Y + 0.27 + level * 0.55 + h / 2, RUN_Z0 - 0.35 - slot * 0.165), new THREE.Quaternion(), new THREE.Vector3(1, h, 1));
+      plain.setMatrixAt(i, mtx);
+      plain.setColorAt(i, col.set(tones[Math.floor(hash(si, level, slot, 9) * tones.length)]));
+    });
+    scene.add(plain);
   });
 
   // the book under the cursor slides out of the shelf and lights up
@@ -537,10 +475,9 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     scene,
     floors: [
       { label: "G", name: "Press room · Zcash news", y: PRESS_Y, spawn: new THREE.Vector3(0, PRESS_Y, -1.5), yaw: 0 },
-      { label: "1", name: "ZIP stacks · every improvement proposal", y: STACKS_Y, spawn: new THREE.Vector3(0, STACKS_Y, -2), yaw: 0 },
-      { label: "2", name: "Upgrades hall · Overwinter to NU7", y: HALL_Y, spawn: new THREE.Vector3(0, HALL_Y, -1.2), yaw: 0 },
+      { label: "1", name: "ZIP stacks · every improvement proposal", y: STACKS_Y, spawn: new THREE.Vector3(0, STACKS_Y, -1.4), yaw: 0 },
     ],
-    colliders: (f) => (f === 0 ? pressRects : f === 1 ? stacksRects : hallRects),
+    colliders: (f) => (f === 0 ? pressRects : stacksRects),
     pickables: () => pickables,
     pick: (hit) => {
       const o = find(hit.object);
