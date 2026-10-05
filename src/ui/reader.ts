@@ -45,6 +45,11 @@ function inline(s: string) {
   return t;
 }
 
+/** A CSV row: comma-separated, fields optionally in double quotes. */
+function csv(row: string) {
+  return [...row.matchAll(/\s*(?:"((?:[^"]|"")*)"|([^,]*))\s*(?:,|$)/g)].map((m) => (m[1] ?? m[2] ?? "").replace(/""/g, '"').trim()).filter((_, k, a) => k < a.length - 1 || _);
+}
+
 /** The body of a ZIP (preamble dropped) as headings, paragraphs, list items and code. */
 export function parseZip(src: string): Block[] {
   const lines = src.replace(/\r/g, "").split("\n");
@@ -97,10 +102,42 @@ export function parseZip(src: string): Block[] {
       i = j - 1;
       continue;
     }
-    // directives, comments, footnote targets, raw html, images: skipped with their body
+    // rst directives: notes and warnings, footnotes, maths keep their text; images, raw html,
+    // includes and comments are skipped
     if (/^\.\. /.test(t) || t.startsWith("<") || t.startsWith("![")) {
       flush();
-      while (i + 1 < lines.length && (/^\s+\S/.test(lines[i + 1]) || (!lines[i + 1].trim() && /^\s+\S/.test(lines[i + 2] ?? "")))) i++;
+      const head = t;
+      const body: string[] = [];
+      while (i + 1 < lines.length && (/^\s+\S/.test(lines[i + 1]) || (!lines[i + 1].trim() && /^\s+\S/.test(lines[i + 2] ?? "")))) body.push(lines[++i].trim());
+      const text = body.filter(Boolean).join(" ");
+      const adm = /^\.\. (note|warning|important|tip|caution|attention|admonition|hint)::\s*(.*)$/i.exec(head);
+      const foot = /^\.\. \[#?([^\]]+)\]\s*(.*)$/.exec(head);
+      if (adm) out.push({ kind: "quote", html: `<b>${adm[1][0].toUpperCase()}${adm[1].slice(1).toLowerCase()}.</b> ${inline([adm[2], text].filter(Boolean).join(" "))}` });
+      else if (foot) out.push({ kind: "li", html: `<b>[${esc(foot[1])}]</b> ${inline([foot[2], text].filter(Boolean).join(" "))}` });
+      else if (/^\.\. math::/.test(head)) out.push({ kind: "code", html: esc(tex(body.join("\n").trim())) });
+      else if (/^\.\. csv-table::/.test(head)) {
+        // one entry per row: the first column in bold, the others with their header
+        const opts = body.filter((x) => x.startsWith(":"));
+        const header = csv(opts.find((x) => x.startsWith(":header:"))?.replace(":header:", "") ?? "");
+        const rows: string[] = [];
+        for (const x of body.filter((y) => y && !y.startsWith(":"))) {
+          if (x.startsWith('"') || !rows.length) rows.push(x);
+          else rows[rows.length - 1] += ` ${x}`;
+        }
+        for (const r of rows) {
+          const [first, ...rest] = csv(r);
+          const parts = rest.map((c, k) => (c ? `${header[k + 1] ? `<i>${esc(header[k + 1])}:</i> ` : ""}${inline(c)}` : "")).filter(Boolean);
+          out.push({ kind: "li", html: `<b>${inline(first ?? "")}</b>${parts.length ? ` — ${parts.join(" · ")}` : ""}` });
+        }
+      }
+      continue;
+    }
+    // tables (rst grid and simple tables, markdown pipes): kept as they are, monospaced
+    if (/^\+[-=+]+\+$/.test(t) || /^\|.*\|$/.test(t) || /^=+( +=+)+$/.test(t)) {
+      flush();
+      const rows: string[] = [l];
+      while (i + 1 < lines.length && lines[i + 1].trim() && (/^\s*[+|=]/.test(lines[i + 1]) || /^=+( +=+)+$/.test(t))) rows.push(lines[++i]);
+      out.push({ kind: "code", html: esc(rows.join("\n")) });
       continue;
     }
     // list items
