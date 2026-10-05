@@ -215,7 +215,7 @@ export class Reader {
     this.pages = [this.cover(b), `<div class="loadingp">Opening ZIP ${b.number ?? ""}…</div>`];
     this.el.style.setProperty("--c", b.color);
     this.el.classList.remove("hidden");
-    this.render();
+    this.render(true);
     const src = await fetchZip(b.slug);
     if (this.book !== b) return;
     const blocks = src ? parseZip(src) : [];
@@ -306,18 +306,23 @@ export class Reader {
     return `<div class="pg ${side}"><div class="pbody">${content}</div>${n}</div>`;
   }
 
-  private render() {
+  /** The book's frame is built once when it opens (its entrance animation plays once); turning a
+   *  page only swaps the two pages and the counter, so nothing flashes. */
+  private render(frame = false) {
     const b = this.book;
     if (!b) return;
     const per = this.per;
-    const spread = per === 2 ? this.page(this.at, "left") + this.page(this.at + 1, "right") : this.page(this.at, "right");
-    const last = this.at + per >= this.pages.length;
-    this.el.innerHTML = `
+    if (frame || !this.el.querySelector(".tome"))
+      this.el.innerHTML = `
       <div class="tome">
         <div class="spine-top"><span>${b.number != null ? `ZIP ${b.number}` : "DRAFT"}</span><b>${esc(b.title)}</b><button data-r="close" aria-label="Close the book">×</button></div>
-        <div class="spread ${per === 1 ? "one" : ""}">${spread}</div>
-        <div class="nav"><button data-r="prev" ${this.at === 0 ? "disabled" : ""}>◂</button><span>${Math.min(this.pages.length, this.at + per)} / ${this.pages.length}</span><button data-r="next" ${last ? "disabled" : ""}>▸</button></div>
+        <div class="spread ${per === 1 ? "one" : ""}"></div>
+        <div class="nav"><button data-r="prev">◂</button><span class="count"></span><button data-r="next">▸</button></div>
       </div>`;
+    this.el.querySelector<HTMLElement>(".spread")!.innerHTML = per === 2 ? this.page(this.at, "left") + this.page(this.at + 1, "right") : this.page(this.at, "right");
+    this.el.querySelector<HTMLElement>(".count")!.textContent = `${Math.min(this.pages.length, this.at + per)} / ${this.pages.length}`;
+    this.el.querySelector<HTMLButtonElement>("[data-r=prev]")!.disabled = this.at === 0;
+    this.el.querySelector<HTMLButtonElement>("[data-r=next]")!.disabled = this.at + per >= this.pages.length;
   }
 
   /** Turn a leaf: forward, the right page swings over to the left; back, the reverse. */
