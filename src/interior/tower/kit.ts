@@ -74,7 +74,11 @@ export class TowerKit {
   readonly floorOf = new Map<THREE.Object3D, number>();
   private lightCount = LEVELS.map(() => 0);
   current = 0;
-  height = 0;
+  private lastHeight = 0;
+  /** The latest block height: the street's last block, or the newest one announced since. */
+  get height() {
+    return Math.max(this.lastHeight, this.ctx.director.blockHeight ?? 0);
+  }
 
   // shared materials
   readonly glass = new THREE.MeshStandardMaterial({ color: "#9cc3df", transparent: true, opacity: 0.14, roughness: 0.05, metalness: 0.3, depthWrite: false });
@@ -89,7 +93,7 @@ export class TowerKit {
     readonly scene: THREE.Scene,
   ) {
     for (const g of this.groups) scene.add(g);
-    ctx.onBlock((h) => (this.height = h));
+    ctx.onBlock((h) => (this.lastHeight = h));
   }
 
   y(f: number) {

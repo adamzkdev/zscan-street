@@ -679,3 +679,153 @@ export function frame(w: number, h: number, color = "#c9a227") {
 }
 
 export { type Paint };
+
+// ---- the lobby ------------------------------------------------------------------------------------------
+
+/** A marble column `h` metres tall with a gold collar top and bottom. */
+export function column(h: number) {
+  const H = Math.round(h * FINE),
+    v = m(10, H, 10);
+  v.box(0, 0, 0, 10, 2, 10, C("#2a2630"));
+  v.box(1, 2, 1, 9, H - 2, 9, shades(["#ece8e0", "#e4dfd6", "#f2eee6"], 3, 5));
+  v.box(0, 2, 0, 10, 3, 10, C("#c9a227"));
+  v.box(0, H - 3, 0, 10, H - 2, 10, C("#c9a227"));
+  v.box(0, H - 2, 0, 10, H, 10, C("#2a2630"));
+  return v;
+}
+
+/** A grand piano, lid up, on three legs, with its bench. */
+export function grandPiano() {
+  const v = m(18, 16, 24);
+  const k = C("#0e0d12");
+  for (let z = 4; z < 24; z++) {
+    // the curved side: narrower towards the tail
+    const t = (z - 4) / 20;
+    const w = Math.round(17 - Math.max(0, t - 0.3) * 14);
+    v.box(0, 7, z, w, 10, z + 1, k);
+  }
+  v.box(0, 7, 0, 18, 10, 4, k);
+  // keys: white with black on top
+  v.box(1, 9, 0, 17, 10, 3, C("#f4f2ec"));
+  for (let x = 2; x < 16; x += 2) if (x % 7 !== 0) v.box(x, 10, 1, x + 1, 11, 3, k);
+  // the lid propped open
+  for (let z = 4; z < 22; z++) v.box(1, 10 + Math.round((z - 4) * 0.35), z, 15 - Math.max(0, z - 12), 11 + Math.round((z - 4) * 0.35), z + 1, k);
+  v.box(2, 10, 10, 3, 16, 11, C("#c9a227"));
+  for (const [x, z] of [[1, 2], [15, 2], [5, 20]]) v.box(x, 0, z, x + 2, 7, z + 2, k);
+  v.box(6, 3, 4, 10, 4, 6, C("#c9a227"));
+  return v;
+}
+
+export function pianoBench() {
+  const v = m(10, 6, 5);
+  v.box(0, 5, 0, 10, 6, 5, C("#2a2630"));
+  for (const [x, z] of [[0, 0], [9, 0], [0, 4], [9, 4]]) v.box(x, 0, z, x + 1, 5, z + 1, C("#0e0d12"));
+  return v;
+}
+
+/** A security turnstile: a post with a glass flap and a lit reader. */
+export function turnstile() {
+  const v = m(4, 13, 14);
+  v.box(0, 0, 0, 4, 12, 14, shades(["#c8ccd4", "#bcc0c8"], 1, 2));
+  v.box(0, 12, 0, 4, 13, 14, C("#2a2830"));
+  v.box(1, 12, 2, 3, 13, 4, E("#3ee08f", 1.8));
+  v.box(4, 6, 5, 4, 11, 12, G("#9cc3df"));
+  return v;
+}
+
+export function luggageCart() {
+  const v = m(10, 22, 16);
+  const gold = C("#c9a227");
+  v.box(0, 1, 0, 10, 2, 16, C("#7a1a2a"));
+  for (const [x, z] of [[0, 0], [9, 0], [0, 15], [9, 15]]) {
+    v.box(x, 0, z, x + 1, 1, z + 1, C("#1c1a22"));
+    v.box(x, 2, z, x + 1, 20, z + 1, gold);
+  }
+  v.box(0, 20, 0, 10, 21, 1, gold);
+  v.box(0, 20, 15, 10, 21, 16, gold);
+  v.box(4, 20, 0, 5, 21, 16, gold);
+  // a couple of suitcases
+  v.box(1, 2, 2, 8, 10, 7, C("#2a4a6a"));
+  v.box(2, 2, 8, 8, 8, 14, C("#6a3a2a"));
+  v.box(4, 10, 3, 5, 11, 6, C("#1c1a22"));
+  return v;
+}
+
+export function bistroTable() {
+  const v = m(8, 9, 8);
+  v.box(0, 8, 0, 8, 9, 8, C("#ece8e0"));
+  v.box(3, 1, 3, 5, 8, 5, C("#2a2830"));
+  v.box(1, 0, 1, 7, 1, 7, C("#2a2830"));
+  v.set(2, 9, 4, C("#ece8e0"));
+  v.set(5, 9, 3, C("#7a4a2a"));
+  return v;
+}
+
+/** A pastry counter: glass display of cakes and buns, a till on top. */
+export function pastryCase() {
+  const v = m(20, 14, 8);
+  v.box(0, 0, 0, 20, 8, 8, C("#4a3020"));
+  v.box(0, 8, 0, 20, 9, 8, C("#ece8e0"));
+  v.box(1, 9, 1, 19, 13, 7, G("#cfe6f0"));
+  v.clear(2, 9, 2, 18, 12, 7);
+  const cakes = ["#f4d8a0", "#d9a441", "#e8a0b0", "#7a4a2a", "#f4f0e8", "#3ea04a"];
+  for (let x = 2; x < 18; x += 3) {
+    v.box(x, 9, 3, x + 2, 10, 5, C(cakes[(x / 3) % cakes.length | 0]));
+    v.box(x, 10, 3, x + 2, 11, 4, C(cakes[((x / 3) | 0) + 1] ?? "#f4d8a0"));
+  }
+  v.box(0, 13, 0, 20, 14, 8, C("#ece8e0"));
+  v.box(0, 3, 8, 20, 4, 8, E("#ffd28a", 1.2));
+  return v;
+}
+
+/** Smart parcel lockers: a grid of doors, a few lit green (waiting), a screen in the middle. */
+export function parcelLockers(w: number) {
+  const W = Math.round(w * FINE),
+    v = m(W, 26, 7);
+  v.box(0, 0, 0, W, 26, 7, C("#2a2832"));
+  for (let x = 1; x + 5 <= W - 1; x += 6)
+    for (let y = 1; y + 4 <= 25; y += 5) {
+      v.box(x, y, 6, x + 5, y + 4, 7, shades(["#c8ccd4", "#c0c4cc"], 1, x + y));
+      v.set(x + 4, y + 2, 7, hash(x, y, 9) > 0.65 ? E("#3ee08f", 1.6) : C("#4a4a54"));
+    }
+  const mid = Math.floor(W / 2);
+  v.box(mid - 4, 11, 6, mid + 4, 17, 7, C("#0e0d12"));
+  v.box(mid - 3, 12, 7, mid + 3, 16, 7, E("#3ef0ff", 1));
+  return v;
+}
+
+export function bench() {
+  const v = m(20, 6, 6);
+  v.box(0, 4, 0, 20, 6, 6, shades(["#7a5236", "#724c32"], 2, 4));
+  for (const x of [1, 17]) v.box(x, 0, 1, x + 2, 4, 5, C("#2a2830"));
+  return v;
+}
+
+/** An information kiosk: a pedestal with a tilted screen (the live screen sits on it). */
+export function kiosk() {
+  const v = m(8, 16, 6);
+  v.box(2, 0, 1, 6, 12, 5, C("#2a2830"));
+  v.box(0, 0, 0, 8, 1, 6, C("#2a2830"));
+  v.box(0, 12, 0, 8, 16, 2, C("#14121c"));
+  v.box(2, 1, 5, 6, 2, 5, E("#3ef0ff", 1.4));
+  return v;
+}
+
+/** An indoor tree in a big square planter, 3–4 m tall. */
+export function indoorTree(seed = 1) {
+  const v = m(20, 46, 20);
+  v.box(3, 0, 3, 17, 7, 17, C("#2a2630"));
+  v.box(3, 7, 3, 17, 7, 17, C("#4a3020"));
+  v.box(4, 6, 4, 16, 7, 16, C("#3a2a20"));
+  v.box(9, 7, 9, 11, 30, 11, shades(["#5a3e2a", "#4a3020"], 2, seed));
+  v.box(11, 20, 9, 15, 21, 10, C("#4a3020"));
+  v.box(5, 24, 10, 9, 25, 11, C("#4a3020"));
+  const leaf = shades(["#2f8a4a", "#3a9a52", "#287a40", "#45a85a"], 1, seed);
+  for (let i = 0; i < 520; i++) {
+    const a = hash(i, 1, seed) * Math.PI * 2,
+      r = Math.sqrt(hash(i, 2, seed)) * 9,
+      y = 24 + hash(i, 3, seed) * 20 - (r / 9) * 6;
+    v.box(10 + Math.cos(a) * r, y, 10 + Math.sin(a) * r, 11 + Math.cos(a) * r, y + 1, 11 + Math.sin(a) * r, leaf);
+  }
+  return v;
+}
