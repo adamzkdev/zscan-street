@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import type { Interior, PickInfo } from "./types";
 import { WalkControls } from "./walk";
+import { Router } from "./path";
+import type { Snark } from "../scene/snark";
 
 type Key = Interior["key"];
 
@@ -20,6 +22,8 @@ export class InteriorManager {
   active: Interior | null = null;
   floor = 0;
   private cache = new Map<Key, Interior>();
+  private routers = new Map<Interior, Router[]>();
+  private routeCheck = 0;
   private ray = new THREE.Raycaster();
   private ndc = new THREE.Vector2();
 
@@ -67,8 +71,27 @@ export class InteriorManager {
     this.ev.left();
   }
 
+  /** Everyone inside gets the way round the furniture of their floor (people arrive any time). */
+  private giveRoutes(i: Interior) {
+    let rs = this.routers.get(i);
+    if (!rs) this.routers.set(i, (rs = i.floors.map((_, k) => new Router(i.colliders(k)))));
+    i.scene.traverse((o) => {
+      const s = o.userData.snarkRef as Snark | undefined;
+      if (!s || s.router) return;
+      const y = s.root.getWorldPosition(new THREE.Vector3()).y;
+      let best = 0;
+      i.floors.forEach((f, k) => Math.abs(f.y - y) < Math.abs(i.floors[best].y - y) && (best = k));
+      s.router = rs![best];
+    });
+  }
+
   update(dt: number, t: number) {
     if (!this.active) return;
+    this.routeCheck -= dt;
+    if (this.routeCheck <= 0) {
+      this.routeCheck = 0.5;
+      this.giveRoutes(this.active);
+    }
     this.walk.update(dt);
     this.active.update(dt, t, this.walk.camera);
   }

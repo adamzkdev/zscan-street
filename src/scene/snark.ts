@@ -168,6 +168,8 @@ export class Snark {
   role: string | null = null;
   /** Staff who walk into loading bays and behind counters skip the wall collisions. */
   noClip = false;
+  /** Inside a place: finds the way round walls and furniture for every walk (interior/path.ts). */
+  router: { routeAll(from: THREE.Vector3, points: THREE.Vector3[]): THREE.Vector3[] } | null = null;
   private glow: THREE.Mesh;
   private ring: THREE.Mesh;
   private shadow: THREE.Mesh;
@@ -193,6 +195,7 @@ export class Snark {
     this.body = new THREE.Mesh(new THREE.PlaneGeometry(BODY, BODY), mat);
     this.body.position.y = LEG_H + BODY / 2;
     this.body.userData.snark = this;
+    this.root.userData.snarkRef = this;
     this.glow = new THREE.Mesh(this.body.geometry, glowMaterial(art.texture));
     this.glow.position.copy(this.body.position);
     this.glow.position.z = -0.02;
@@ -234,7 +237,7 @@ export class Snark {
 
   /** Walk through `points`; resolves on arrival at the last one. */
   walk(points: THREE.Vector3[], speed = 1.7): Promise<void> {
-    this.path = points.map((p) => p.clone());
+    this.path = (this.router ? this.router.routeAll(this.root.position, points) : points).map((p) => p.clone());
     this.speed = speed;
     this.walking = true;
     this.arrived?.();
