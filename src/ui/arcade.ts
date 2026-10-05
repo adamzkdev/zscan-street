@@ -9,12 +9,13 @@ import { get } from "../data/zscan";
  * Best scores stay in this browser.
  */
 
-export type Game = "snake" | "memory" | "quiz";
+export type Game = "snake" | "memory" | "quiz" | "stacker";
 
 const TITLES: Record<Game, { name: string; jp: string; color: string; help: string }> = {
   snake: { name: "ZEC SNAKE", jp: "ヘビ", color: "#3ee08f", help: "Arrows / WASD / ZQSD · eat ⓩ coins · red leaks and walls end the run" },
   memory: { name: "zkSNARK MEMORY", jp: "神経衰弱", color: "#b07bff", help: "Click two cards · find all eight pairs in as few moves as you can" },
   quiz: { name: "ZIP QUIZ", jp: "クイズ", color: "#f4b728", help: "Ten questions from the real ZIPs · 1–4 or click an answer" },
+  stacker: { name: "BLOCK STACKER", jp: "積み木", color: "#3ef0ff", help: "Space or click to drop the block · only what lands on the chain stays" },
 };
 
 const best = (g: Game) => {
@@ -87,7 +88,14 @@ export class Arcade {
       </div>`;
     const screen = this.el.querySelector<HTMLElement>(".screen")!;
     const score = (s: string) => (this.el.querySelector<HTMLElement>("[data-a=score]")!.textContent = s);
-    this.stop = g === "snake" ? snake(screen, score, (n) => this.over(g, n, `${n} ⓩ`)) : g === "memory" ? memory(screen, score, (n) => this.over(g, n, `${n} moves`, true)) : quiz(screen, score, (n) => this.over(g, n, `${n} / 10`));
+    this.stop =
+      g === "snake"
+        ? snake(screen, score, (n) => this.over(g, n, `${n} ⓩ`))
+        : g === "memory"
+          ? memory(screen, score, (n) => this.over(g, n, `${n} moves`, true))
+          : g === "stacker"
+            ? stacker(screen, score, (n) => this.over(g, n, `${n} blocks`))
+            : quiz(screen, score, (n) => this.over(g, n, `${n} / 10`));
   }
 
   private over(g: Game, n: number, label: string, lowerIsBetter = false) {
@@ -296,5 +304,87 @@ function quiz(host: HTMLElement, score: (s: string) => void, over: (n: number) =
   return () => {
     alive = false;
     if (onKey) window.removeEventListener("keydown", onKey, true);
+  };
+}
+
+// ---- BLOCK STACKER --------------------------------------------------------------------------------
+
+function stacker(host: HTMLElement, score: (s: string) => void, over: (n: number) => void) {
+  const W = 440,
+    H = 440,
+    BH = 22;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  host.appendChild(c);
+  const g = c.getContext("2d")!;
+  /** The chain so far: [left, width] per block, bottom first. */
+  const chain: [number, number][] = [[W / 2 - 90, 180]];
+  let x = 0,
+    w = 180,
+    dir = 1,
+    alive = true,
+    raf = 0,
+    last = 0;
+  const colour = (i: number) => `hsl(${(185 + i * 9) % 360} 85% 60%)`;
+  const draw = () => {
+    g.fillStyle = "#04070c";
+    g.fillRect(0, 0, W, H);
+    // the view climbs with the chain
+    const top = chain.length;
+    const off = Math.max(0, top - 15) * BH;
+    chain.forEach(([l, bw], i) => {
+      const y = H - (i + 1) * BH + off;
+      if (y < -BH || y > H) return;
+      g.fillStyle = colour(i);
+      g.fillRect(l, y, bw, BH - 2);
+      g.fillStyle = "rgba(0,0,0,0.35)";
+      g.font = '700 11px "JetBrains Mono", monospace';
+      g.textAlign = "left";
+      if (bw > 40) g.fillText(`#${i}`, l + 6, y + 15);
+    });
+    if (alive) {
+      g.fillStyle = colour(top);
+      g.fillRect(x, H - (top + 1) * BH + off, w, BH - 2);
+    }
+  };
+  const drop = () => {
+    if (!alive) return;
+    const [pl, pw] = chain[chain.length - 1];
+    const l = Math.max(x, pl),
+      r = Math.min(x + w, pl + pw);
+    if (r - l <= 2) {
+      alive = false;
+      draw();
+      return over(chain.length - 1);
+    }
+    chain.push([l, r - l]);
+    w = r - l;
+    x = dir > 0 ? 0 : W - w;
+    score(`${chain.length - 1} blocks`);
+  };
+  const key = (e: KeyboardEvent) => {
+    if (e.key !== " " && e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    drop();
+  };
+  window.addEventListener("keydown", key, true);
+  c.addEventListener("click", drop);
+  const tick = (t: number) => {
+    raf = requestAnimationFrame(tick);
+    const dt = Math.min(0.05, (t - (last || t)) / 1000);
+    last = t;
+    if (!alive) return;
+    x += dir * (160 + chain.length * 14) * dt;
+    if (x + w > W) (x = W - w), (dir = -1);
+    if (x < 0) (x = 0), (dir = 1);
+    draw();
+  };
+  score("0 blocks");
+  raf = requestAnimationFrame(tick);
+  return () => {
+    cancelAnimationFrame(raf);
+    window.removeEventListener("keydown", key, true);
   };
 }

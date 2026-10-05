@@ -638,7 +638,7 @@ export class Hud {
       <div class="ihead hud" style="--c:${st.color}"><span class="logo">${pix(st.icon)}</span><span class="it"><b>${esc(i.title)}</b><span>${many ? `<em>${esc(f.label)}</em>` : ""}${esc(fname)}${fsub ? ` · ${esc(fsub)}` : ""}</span></span></div>
       ${
         many
-          ? `<nav class="lift hud" style="--c:${st.color}" aria-label="Elevator">
+          ? `<nav class="lift hud${i.floors.length > 4 ? " tall" : ""}" style="--c:${st.color}" aria-label="Elevator">
               <div class="lh"><span class="mh">Elevator</span><span class="ud">
                 <button data-floor="${floor + 1}" ${floor >= i.floors.length - 1 ? "disabled" : ""} title="Up (Page Up)">${icon("up")}</button>
                 <button data-floor="${floor - 1}" ${floor <= 0 ? "disabled" : ""} title="Down (Page Down)" class="dn">${icon("up")}</button>

@@ -3104,3 +3104,15 @@ kbd {
 .quiz .opts button.dim {
   opacity: 0.4;
 }
+/* a tall building's elevator: one line per floor */
+.lift.tall .fl {
+  padding: 4px 8px;
+}
+.lift.tall .fl > b {
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
+}
+.lift.tall .fl small {
+  display: none;
+}

@@ -41,7 +41,7 @@ export interface PickInfo {
   /** Opens one of the shop panels (the bank's terminals). */
   panel?: "bank" | "cards";
   /** Starts a mini-game (the ZK TOWER's apartments). */
-  game?: "snake" | "memory" | "quiz";
+  game?: import("../ui/arcade").Game;
   /** Takes the elevator to this floor (clicking its doors). */
   floor?: number;
   /** Opens a book in the reader (the library's ZIPs). */
@@ -72,6 +72,8 @@ export interface Interior {
   hover?(hit: THREE.Intersection): string | null;
   /** Every frame while inside (and only then). */
   update(dt: number, t: number, camera: THREE.PerspectiveCamera): void;
+  /** The walker arrived on this floor (tall places only draw and light the floor you are on). */
+  setFloor?(floor: number): void;
   /** Day or night outside: interiors may change their windows / light. */
   setTheme?(theme: Theme): void;
 }

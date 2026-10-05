@@ -57,6 +57,7 @@ export class InteriorManager {
     if (!i) return;
     this.floor = THREE.MathUtils.clamp(floor, 0, i.floors.length - 1);
     const f = i.floors[this.floor];
+    i.setFloor?.(this.floor);
     this.walk.place(f.spawn, f.yaw, f.y);
     this.walk.colliders = i.colliders(this.floor);
     // every place is entered from the street side (+z) on its ground floor
