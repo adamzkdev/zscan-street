@@ -57,7 +57,7 @@ export class Joystick {
   }
 
   private set(x: number, y: number) {
-    this.knob.style.transform = `translate(${x * 34}px, ${y * 34}px)`;
+    this.knob.style.transform = `translate(${x * 25}px, ${y * 25}px)`;
     if (this.walker) {
       this.walker.stick.x = x;
       this.walker.stick.y = -y;

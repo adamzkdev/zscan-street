@@ -3121,12 +3121,12 @@ kbd {
 /* ---- touch stick (on foot, touch screens only) ------------------------------------------------ */
 .stick {
   position: fixed;
-  left: calc(18px + env(safe-area-inset-left));
-  bottom: calc(96px + env(safe-area-inset-bottom));
+  left: calc(14px + env(safe-area-inset-left));
+  bottom: calc(18px + env(safe-area-inset-bottom));
   display: none;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   z-index: 40;
   pointer-events: none;
 }
@@ -3135,55 +3135,54 @@ kbd {
 }
 .stick-pad {
   position: relative;
-  width: 116px;
-  height: 116px;
+  width: 86px;
+  height: 86px;
   pointer-events: auto;
   touch-action: none;
-  background: rgba(13, 13, 13, 0.42);
-  border: 1px solid rgba(244, 183, 40, 0.55);
-  box-shadow: 0 0 14px rgba(244, 183, 40, 0.18), inset 0 0 18px rgba(244, 183, 40, 0.08);
+  background: rgba(13, 13, 13, 0.32);
+  border: 1px solid rgba(244, 183, 40, 0.5);
+  box-shadow: 0 0 10px rgba(244, 183, 40, 0.15), inset 0 0 14px rgba(244, 183, 40, 0.06);
   /* stepped voxel corners, like the rest of the city's signage */
-  clip-path: polygon(0 8px, 8px 8px, 8px 0, calc(100% - 8px) 0, calc(100% - 8px) 8px, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 8px calc(100% - 8px), 0 calc(100% - 8px));
-  backdrop-filter: blur(3px);
+  clip-path: polygon(0 6px, 6px 6px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 6px), 0 calc(100% - 6px));
 }
 .stick-pad::before,
 .stick-pad::after {
   content: "";
   position: absolute;
-  background: rgba(244, 183, 40, 0.22);
+  background: rgba(244, 183, 40, 0.2);
 }
 .stick-pad::before {
   left: 50%;
-  top: 14px;
-  bottom: 14px;
+  top: 10px;
+  bottom: 10px;
   width: 1px;
 }
 .stick-pad::after {
   top: 50%;
-  left: 14px;
-  right: 14px;
+  left: 10px;
+  right: 10px;
   height: 1px;
 }
 .stick-knob {
   position: absolute;
-  left: calc(50% - 22px);
-  top: calc(50% - 22px);
-  width: 44px;
-  height: 44px;
+  left: calc(50% - 16px);
+  top: calc(50% - 16px);
+  width: 32px;
+  height: 32px;
   background: var(--gold);
-  box-shadow: 0 0 16px rgba(244, 183, 40, 0.65);
-  clip-path: polygon(0 6px, 6px 6px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 6px), 0 calc(100% - 6px));
+  box-shadow: 0 0 12px rgba(244, 183, 40, 0.6);
+  clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
   transition: transform 0.12s ease-out;
 }
 .stick.held .stick-knob {
   transition: none;
 }
 .stick-hint {
-  font: 11px/1 var(--pixel, "DotGothic16", monospace);
-  letter-spacing: 0.08em;
+  font: 10px/1 var(--pixel, "DotGothic16", monospace);
+  letter-spacing: 0.06em;
   color: var(--gold);
-  text-shadow: 0 0 8px rgba(244, 183, 40, 0.6);
-  opacity: 0.85;
+  text-shadow: 0 0 6px rgba(244, 183, 40, 0.6);
+  opacity: 0.8;
   white-space: nowrap;
 }
 .stick.held .stick-hint {
@@ -3194,5 +3193,49 @@ kbd {
   .whint,
   .ihint {
     display: none !important;
+  }
+}
+
+/* a closed info panel slides away but stays in the page: it must not swallow taps (on phones it
+   sat right over the elevator and the bottom of the screen) */
+#ui .panel:not(.open) {
+  pointer-events: none;
+}
+
+/* phones (portrait, or landscape with little height): no live strip, a folded elevator */
+@media (max-width: 760px), (pointer: coarse) and (max-height: 520px) {
+  .strip {
+    display: none !important;
+  }
+  .lift {
+    width: auto;
+    min-width: 132px;
+    max-width: 210px;
+    right: calc(12px + env(safe-area-inset-right));
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    padding: 6px;
+  }
+  .lift .ud button {
+    width: 34px;
+    height: 32px;
+  }
+  .lift .fl small {
+    display: none;
+  }
+  /* folded: only the floor you're on (tap it to unfold the list) and the up/down buttons */
+  .lift:not(.open) .fl:not(.on) {
+    display: none;
+  }
+  .lift .fl.on::after {
+    content: "▾";
+    margin-left: auto;
+    padding-left: 8px;
+    opacity: 0.6;
+  }
+  .lift.open .fl.on::after {
+    content: "▴";
+  }
+  .indoors .panel {
+    max-height: calc(100% - 96px - var(--lift-h, 0px));
   }
 }

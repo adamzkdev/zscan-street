@@ -483,6 +483,11 @@ export class Hud {
       this.setCam(false);
       return this.cb.lookIn(d.shop);
     }
+    // the floor you're on opens or folds the elevator's list (folded on phones, see style.css)
+    if (d.floor !== undefined && el.classList.contains("fl") && el.classList.contains("on")) {
+      el.closest(".lift")?.classList.toggle("open");
+      return this.fitLift();
+    }
     if (d.floor !== undefined) return this.cb.floor(Number(d.floor));
     if (d.place) {
       this.setCam(false);
