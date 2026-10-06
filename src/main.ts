@@ -36,6 +36,7 @@ import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";
 import { Joystick } from "./ui/joystick";
 import { Quality } from "./scene/quality";
+import { Tracker } from "./ui/track";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
@@ -712,6 +713,24 @@ function opaqueAt(h: THREE.Intersection) {
 
 // ---- live feed --------------------------------------------------------------------------------
 let first = true;
+// "follow your transaction": paste a txid or open zstreet.cash/?tx=…
+const tracker = new Tracker(document.getElementById("ui")!, director, {
+  follow: (s) => {
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    select(s);
+    rig.follow(s);
+    hud.follow(s);
+    syncCamera();
+  },
+  archive: (h) => {
+    if (interiors.active?.key !== "mempool") enterPlace("mempool");
+    interiors.goTo(1);
+    hud.renderIndoor(1);
+    window.dispatchEvent(new CustomEvent("zstreet:archive", { detail: h }));
+  },
+});
+
 connectFeed({
   snapshot: (txs, last) => {
     director.snapshot(txs, last);
@@ -720,6 +739,7 @@ connectFeed({
       const q = new URLSearchParams(location.search).get("interior");
       if (q) setTimeout(() => enterPlace(q), 800);
       setTimeout(() => hud.ready(), 700);
+      setTimeout(() => tracker.fromUrl(), 1200);
     }
   },
   tx: (tx) => director.addTx(tx),

@@ -311,6 +311,21 @@ export class Director {
     }
   }
 
+  /**
+   * A transaction someone asked to follow: put it on the street even if the crowd is at its cap,
+   * and even if the live feed hasn't shown it yet. Its carrier appears as for any other.
+   */
+  track(tx: Tx) {
+    if (this.confirmedTx.has(tx.txid)) return;
+    if (!this.mempool.has(tx.txid)) this.mempool.set(tx.txid, tx);
+    const t = this.mempool.get(tx.txid)!;
+    if (this.byTx.has(t.txid) || this.loading.has(t.txid)) return;
+    void withTimeout(ZScan.enrich(t), 3000).then(() => {
+      if (this.mempool.has(t.txid) && !this.byTx.has(t.txid) && !this.loading.has(t.txid)) void this.spawnCarrier(t, "walk");
+    });
+    this.emitStats();
+  }
+
   /** Txids still waiting according to the API: anything else expired or was replaced. */
   sweep(alive: Set<string>) {
     for (const [txid, tx] of this.mempool) {

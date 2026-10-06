@@ -221,10 +221,14 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     if (st.block) st.era = eraOf(st.block.height);
   });
 
+  /** Each load takes a ticket: a later request wins, even one made while this one waits. */
+  let ticket = 0;
   async function load(height: number) {
+    const mine = ++ticket;
     if (!st.tip) {
       const lb = await ZScan.latestBlock();
       if (lb) st.tip = lb.height;
+      if (mine !== ticket) return;
     }
     const h = Math.max(0, Math.min(st.tip || height, Math.floor(height)));
     want = h;
@@ -287,6 +291,12 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     st.tip = Math.max(st.tip, height);
     if (st.live && group.visible) void load(height);
     else if (st.block && Math.abs(height - st.block.height) <= SPAN) chain.set(st.block.height, st.tip, counts);
+  });
+
+  // the transaction tracker opens a given block here
+  window.addEventListener("zstreet:archive", (e) => {
+    setLive(false);
+    void load((e as CustomEvent<number>).detail);
   });
 
   let active = false;

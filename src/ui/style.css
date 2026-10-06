@@ -3335,3 +3335,159 @@ kbd {
     max-width: 150px;
   }
 }
+
+/* ---- follow your transaction ------------------------------------------------------------------ */
+.track-btn svg.i {
+  width: 18px;
+  height: 18px;
+}
+.track-pop {
+  top: 62px;
+  right: 16px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 12px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 45;
+}
+.track-pop.open {
+  display: flex;
+}
+.track-pop label {
+  font: 12px var(--pixel, monospace);
+  letter-spacing: 0.08em;
+  color: var(--gold-ink);
+}
+.track-pop .row {
+  display: flex;
+  gap: 6px;
+}
+.track-pop input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  font: 600 13px var(--mono);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--gold);
+  outline: none;
+}
+.track-pop .go {
+  all: unset;
+  cursor: pointer;
+  height: 34px;
+  padding: 0 14px;
+  display: grid;
+  place-items: center;
+  background: var(--gold);
+  color: #0d0d0d;
+  font: 14px var(--pixel, monospace);
+}
+.track-pop .err {
+  color: #ff6a6a;
+  min-height: 1em;
+  font-size: 12px;
+}
+.track-card {
+  bottom: 96px;
+  left: 20px;
+  width: min(380px, calc(100vw - 40px));
+  padding: 12px 14px 12px;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 35;
+}
+.track-card.on {
+  display: flex;
+}
+.indoors .track-card {
+  bottom: 24px;
+}
+.track-card .x {
+  all: unset;
+  cursor: pointer;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.track-card .x svg {
+  width: 14px;
+  height: 14px;
+}
+.tc-eyebrow {
+  font: 11px var(--pixel, monospace);
+  letter-spacing: 0.1em;
+  color: var(--gold-ink);
+}
+.tc-id {
+  font: 700 16px var(--mono);
+  color: var(--text);
+}
+.tc-kind {
+  font: 11px var(--pixel, monospace);
+  color: var(--muted);
+  margin-left: 6px;
+}
+.tc-line {
+  font: 14px var(--pixel, monospace);
+  line-height: 1.35;
+}
+.tc-line.pending {
+  color: #ffb04a;
+}
+.tc-line.mined {
+  color: #3ee08f;
+  text-shadow: 0 0 8px rgba(62, 224, 143, 0.5);
+}
+.tc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.tc-actions button,
+.tc-actions a {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  font: 13px var(--pixel, monospace);
+  color: var(--text);
+}
+.tc-actions button:hover,
+.tc-actions a:hover {
+  border-color: var(--gold);
+  color: var(--gold-ink);
+}
+.tc-actions svg.i {
+  width: 14px;
+  height: 14px;
+}
+.tc-actions [data-t="share"] {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #0d0d0d;
+}
+@media (max-width: 760px) {
+  .track-card {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  .indoors .track-card {
+    display: none;
+  }
+}
