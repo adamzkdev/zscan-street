@@ -28,7 +28,7 @@ export interface Here {
 /**
  * The other people in the city, live: each one is their own zkSNARK (picked once, kept in this
  * browser), walking to wherever they are looking or standing, with a cyan marker over the head and
- * a bubble when they send an emoji. A small counter says how many are here. Presence goes through
+ * a bubble when they send an emoji. Presence goes through
  * the API's `/v1/street/presence` socket; nothing is stored, no text is ever exchanged.
  */
 export class Visitors {
@@ -41,7 +41,6 @@ export class Visitors {
   private sentAt = 0;
   private pendingEmoji: number | null = null;
   private count = 0;
-  private chip: HTMLElement;
   private markerMat: THREE.SpriteMaterial;
 
   constructor(
@@ -61,19 +60,6 @@ export class Visitors {
     }
     this.avatar = a;
     this.markerMat = new THREE.SpriteMaterial({ map: markerTexture(), toneMapped: false, depthWrite: false, transparent: true });
-    // the counter and the emoji picker, top left under the brand
-    this.chip = document.createElement("div");
-    this.chip.className = "visitors hud";
-    this.chip.innerHTML = `<span class="v-dot"></span><b class="v-n">1</b><span class="v-l">in the city</span><span class="v-emo">${EMOJIS.map((e, i) => `<button data-e="${i}" aria-label="Send ${e}">${e}</button>`).join("")}</span>`;
-    ui.append(this.chip);
-    this.chip.addEventListener("click", (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-e]");
-      if (b) {
-        this.pendingEmoji = Number(b.dataset.e);
-        b.classList.add("sent");
-        setTimeout(() => b.classList.remove("sent"), 600);
-      }
-    });
     this.connect();
   }
 
@@ -104,7 +90,6 @@ export class Visitors {
 
   private onList(n: number, list: [number, number, number, number, number, number][]) {
     this.count = n;
-    (this.chip.querySelector(".v-n") as HTMLElement).textContent = String(Math.max(1, n));
     const now = performance.now();
     const h = this.here();
     // the nearest ones out on the street (not inside a place), up to SHOWN

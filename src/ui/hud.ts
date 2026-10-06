@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Block, BlockSummary, Tx } from "../data/types";
 import { KIND_HELP, KIND_LABEL } from "../data/types";
 import { Market, type BlockFlow } from "../data/market";
-import { API, EXPLORER, links, ZScan } from "../data/zscan";
+import { API, links, ZScan } from "../data/zscan";
 import type { Mode, Shot } from "../scene/camera";
 import { AREAS } from "../scene/city";
 import type { BusPhase, Director } from "../scene/director";
@@ -26,8 +26,6 @@ const ago = (ms: number) => {
   return m < 60 ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
 };
 
-/** The ZScan shield (brand/zscan-mark.svg): gold shield, Z, dashed green line. */
-const MARK = `<svg class="mark" viewBox="0 0 32 32"><path d="M16 2.5 27.5 7v8.6c0 7-4.8 11.9-11.5 13.9C9.3 27.5 4.5 22.6 4.5 15.6V7L16 2.5Z" fill="none" stroke="#f4b728" stroke-width="2" stroke-linejoin="round"/><path d="M11 11h10l-10 10h10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 16h17" stroke="#1baf7a" stroke-width="1.2" stroke-dasharray="2 2" opacity=".85"/></svg>`;
 
 const ICON: Record<string, string> = {
   follow: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
@@ -227,7 +225,6 @@ export class Hud {
     this.root.innerHTML = `
       <div class="lb"><i></i><i></i></div>
       <div class="labels"></div>
-      <a class="brand" href="${EXPLORER}" target="_blank" rel="noopener" title="ZScan explorer">${MARK}<span><b>Z</b>STREET</span></a>
       <div class="corner">
         <button class="hbtn exit" data-act="leave" aria-label="Leave" title="Leave (Esc)"><svg viewBox="0 0 24 24" class="door"><path class="frame" d="M5 21V3h14v18"/><rect class="gap" x="6.5" y="4.5" width="11" height="16.5"/><g class="leaf"><rect x="6.5" y="4.5" width="11" height="16.5"/><circle cx="15" cy="13" r="1"/></g><path class="floor" d="M3 21h18"/></svg></button>
         <div class="seg" role="group" aria-label="Theme"><button data-theme="day" aria-label="Day" title="Day">${icon("sun")}</button><button data-theme="night" aria-label="Night" title="Night">${icon("moon")}</button></div>
