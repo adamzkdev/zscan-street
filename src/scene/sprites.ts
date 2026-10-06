@@ -7,7 +7,10 @@ import type { TxKind } from "../data/types";
  */
 export const GRID = 26;
 
-export type ItemKind = TxKind | "briefcase" | "goldcase";
+export type ItemKind = TxKind | "briefcase" | "goldcase" | LifeItem;
+
+/** What residents (people with no transaction) have in hand. */
+export type LifeItem = "coffee" | "can" | "bag" | "phone" | "flowers" | "fish" | "basket";
 
 type Px = (x: number, y: number, w: number, h: number, c: string) => void;
 
@@ -145,6 +148,58 @@ export function itemSprite(kind: ItemKind) {
         px(0, 6, 12, 1, shade(body, 0.75));
         break;
       }
+      case "coffee":
+        px(4, 2, 4, 1, "#f0ece4");
+        px(4, 3, 4, 7, "#e8e2d6");
+        px(4, 5, 4, 2, "#9a6a3a");
+        px(7, 3, 1, 7, "#c8c0b0");
+        px(5, 0, 1, 1, "#dcdce4");
+        px(6, 1, 1, 1, "#dcdce4");
+        break;
+      case "can":
+        px(4, 3, 4, 7, "#e05a5a");
+        px(4, 3, 4, 1, "#c8c8d0");
+        px(4, 6, 4, 2, "#f0f0f0");
+        px(7, 4, 1, 6, "#a83a3a");
+        break;
+      case "bag":
+        px(3, 0, 1, 3, "#2a2830");
+        px(8, 0, 1, 3, "#2a2830");
+        px(4, 0, 4, 1, "#2a2830");
+        px(1, 3, 10, 7, "#f4f0e8");
+        px(1, 3, 10, 1, "#ffffff");
+        px(1, 9, 10, 1, "#c8c0b0");
+        px(4, 5, 4, 3, "#f4b728");
+        px(5, 6, 2, 1, "#a8700e");
+        break;
+      case "phone":
+        px(4, 1, 4, 8, "#1a1820");
+        px(5, 2, 2, 5, "#7fd3ff");
+        px(5, 2, 1, 1, "#d8f4ff");
+        px(5, 8, 2, 1, "#3a3848");
+        break;
+      case "flowers":
+        px(5, 5, 2, 5, "#3a8a4a");
+        px(3, 1, 2, 2, "#ff7aa8");
+        px(7, 0, 2, 2, "#ffd84a");
+        px(5, 2, 2, 2, "#ff5a6a");
+        px(2, 4, 8, 2, "#f0ece4");
+        px(3, 6, 6, 1, "#d8d0c4");
+        break;
+      case "fish":
+        px(1, 4, 8, 3, "#ff8a3a");
+        px(1, 4, 8, 1, "#ffb07a");
+        px(9, 3, 2, 5, "#e0602a");
+        px(2, 5, 1, 1, "#1a1820");
+        break;
+      case "basket":
+        px(2, 2, 8, 1, "#8a5e34");
+        px(1, 4, 10, 6, "#b0804c");
+        px(1, 4, 10, 1, "#c89660");
+        px(2, 3, 3, 2, "#ff7a2a");
+        px(6, 3, 3, 2, "#ff9a3a");
+        px(4, 2, 2, 2, "#ff8a2a");
+        break;
       default:
         px(0, 2, 12, 8, "#8a8494");
         px(0, 2, 12, 1, "#a8a2b2");
@@ -153,5 +208,68 @@ export function itemSprite(kind: ItemKind) {
     }
   });
   itemCache.set(kind, s);
+  return s;
+}
+
+const umbrellaCache = new Map<string, ReturnType<typeof sprite>>();
+/** A paper umbrella seen from the side: canopy with ribs, a stick down to the hands. */
+export function umbrellaSprite(color: string) {
+  let s = umbrellaCache.get(color);
+  if (!s) {
+    s = sprite(24, 18, (px) => {
+      px(8, 0, 8, 1, shade(color, 1.15));
+      px(4, 1, 16, 1, color);
+      px(2, 2, 20, 1, color);
+      px(1, 3, 22, 1, color);
+      px(0, 4, 24, 2, color);
+      px(0, 5, 24, 1, shade(color, 0.7));
+      for (const x of [0, 6, 12, 18, 23]) px(x, 6, 1, 1, shade(color, 0.55));
+      px(6, 1, 1, 4, shade(color, 1.25));
+      px(11, 0, 2, 1, "#2a2830");
+      px(12, 6, 1, 12, "#2a2830");
+    });
+    umbrellaCache.set(color, s);
+  }
+  return s;
+}
+
+/** What a speech bubble shows: a reaction, never words. */
+export type Emote = "!" | "?" | "note" | "heart" | "zec" | "dots" | "zzz" | "up" | "down" | "sad" | "star";
+
+const GLYPH: Record<Emote, [string, string[]]> = {
+  "!": ["#e0302a", ["..#..", "..#..", "..#..", ".....", "..#.."]],
+  "?": ["#3a5ac0", [".###.", "...#.", "..#..", ".....", "..#.."]],
+  note: ["#2a2830", ["..##.", "..#.#", "..#..", "###..", "##..."]],
+  heart: ["#e0305a", [".#.#.", "#####", "#####", ".###.", "..#.."]],
+  zec: ["#d8a020", [".###.", "#...#", "#.#.#", "#...#", ".###."]],
+  dots: ["#2a2830", [".....", ".....", "#.#.#", ".....", "....."]],
+  zzz: ["#5a6ac0", ["####.", "..#..", ".#...", "####.", "....."]],
+  up: ["#1aa05a", ["..#..", ".###.", "#.#.#", "..#..", "..#.."]],
+  down: ["#e0302a", ["..#..", "..#..", "#.#.#", ".###.", "..#.."]],
+  sad: ["#2a2830", ["#...#", ".....", ".###.", "#...#", "....."]],
+  star: ["#f4b728", ["..#..", ".###.", "#####", ".###.", ".#.#."]],
+};
+
+const bubbleCache = new Map<Emote, ReturnType<typeof sprite>>();
+/** A pixel speech bubble with one glyph, outlined like the portraits. */
+export function bubbleSprite(e: Emote) {
+  let s = bubbleCache.get(e);
+  if (!s) {
+    const [col, rows] = GLYPH[e];
+    s = sprite(11, 11, (px) => {
+      px(1, 0, 9, 1, "#1a1820");
+      px(1, 8, 9, 1, "#1a1820");
+      px(0, 1, 1, 7, "#1a1820");
+      px(10, 1, 1, 7, "#1a1820");
+      px(1, 1, 9, 7, "#fbf8f0");
+      px(1, 7, 9, 1, "#dcd6c8");
+      // the tail, bottom left
+      px(2, 9, 2, 1, "#1a1820");
+      px(2, 8, 2, 1, "#fbf8f0");
+      px(2, 10, 1, 1, "#1a1820");
+      rows.forEach((r, y) => [...r].forEach((ch, x) => ch === "#" && px(3 + x, 2 + y, 1, 1, col)));
+    });
+    bubbleCache.set(e, s);
+  }
   return s;
 }

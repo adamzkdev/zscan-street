@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { NftItem, Tx, TxKind } from "../data/types";
 import { ZScan } from "../data/zscan";
 import { blobTexture } from "./textures";
-import { GRID, handSprite, itemSprite, legSprite, type ItemKind } from "./sprites";
+import { GRID, bubbleSprite, handSprite, itemSprite, legSprite, umbrellaSprite, type Emote, type ItemKind } from "./sprites";
 
 /** Parcel colours per transaction kind: restrained, readable at a glance. */
 export const KIND_COLOR: Record<TxKind, string> = {
@@ -291,6 +291,45 @@ export class Snark {
     return this.visual;
   }
 
+  private umbrella: THREE.Mesh | null = null;
+  /** Open an umbrella over the head (rain), or fold it away. */
+  setUmbrella(color: string | null) {
+    if (this.umbrella) this.visual.remove(this.umbrella);
+    this.umbrella = null;
+    if (!color) return;
+    const u = pixelPlane(umbrellaSprite(color), 0.04);
+    // the stick ends in the hands, the canopy clears the head
+    u.position.set(snap(BUST_X + PX), LEG_H + BODY + 2 * PX, 0.04);
+    this.umbrella = u;
+    this.visual.add(u);
+  }
+
+  private bubble: THREE.Mesh | null = null;
+  private bubbleFor = 0;
+  private bubbleAge = 0;
+  /** A pixel speech bubble over the head for a few seconds: a reaction, never words. */
+  emote(e: Emote, seconds = 2.6) {
+    if (this.bubble) this.visual.remove(this.bubble);
+    const b = pixelPlane(bubbleSprite(e), 0.06);
+    b.position.set(snap(BUST_X + 9 * PX), LEG_H + BODY + 3 * PX, 0.06);
+    b.scale.setScalar(0.01);
+    this.bubble = b;
+    this.bubbleFor = seconds;
+    this.bubbleAge = 0;
+    this.visual.add(b);
+  }
+
+  private perchY = 0;
+  /** Sit on a bench (legs dangling) at `height` above the ground under it; 0 stands back up. */
+  perch(height: number) {
+    this.perchY = height ? height - LEG_H + PX : 0;
+    this.visual.position.y = this.perchY;
+  }
+
+  get isPerched() {
+    return this.perchY !== 0;
+  }
+
   private seated = false;
   /** Sit down on a bus seat (legs tucked away) or stand in the aisle holding a strap. */
   sit(seated: boolean) {
@@ -380,6 +419,17 @@ export class Snark {
         // now and then a resident glances the other way
         this.idleTurnAt = t + 4 + Math.random() * 8;
         if (this.state === "waiting" || this.state === "resident") this.facing *= Math.random() < 0.5 ? -1 : 1;
+      }
+    }
+    if (this.bubble) {
+      this.bubbleFor -= dt;
+      this.bubbleAge += dt;
+      // pops in, bobs, pops out
+      this.bubble.scale.setScalar(Math.max(0.01, Math.min(1, this.bubbleAge * 7, this.bubbleFor * 6)));
+      this.bubble.position.y = LEG_H + BODY + 3 * PX + snap(Math.max(0, Math.sin(t * 5)) * PX);
+      if (this.bubbleFor <= 0) {
+        this.visual.remove(this.bubble);
+        this.bubble = null;
       }
     }
     this.glow.position.y = this.body.position.y;

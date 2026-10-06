@@ -165,7 +165,7 @@ export class Director {
   }
 
   /** Wait at the kerb until the crossing is clear of traffic. */
-  private async waitToCross(x: number) {
+  async waitToCross(x: number) {
     while (!this.traffic.safeToCross(x, 1.3)) await sleep(150);
   }
 
@@ -354,9 +354,22 @@ export class Director {
     void this.spawnCarrier(tx, how);
   }
 
-  private async newSnark(id: number) {
+  async newSnark(id: number) {
     while ([...this.snarks].some((s) => s.id === id)) id = (id % 10000) + 1;
     return new Snark(id, await loadArt(id));
+  }
+
+  /** A resident (scene/residents.ts) joins the street: updated, collided and clickable like the rest. */
+  adopt(s: Snark) {
+    s.state = "resident";
+    s.district = "downtown";
+    this.snarks.add(s);
+    this.scene.add(s.root);
+  }
+
+  /** A resident goes home. */
+  release(s: Snark) {
+    this.remove(s);
   }
 
   private tierOf(tx: Tx): "taxi" | "limo" | null {
@@ -495,7 +508,7 @@ export class Director {
     this.ev.removed(s);
   }
 
-  /** Shopkeepers behind every counter, and a couple of neighbours out walking in each district. */
+  /** Shopkeepers behind every counter. */
   private async spawnLocals() {
     const keepers = [6221];
     let k = 0;
@@ -511,31 +524,7 @@ export class Director {
         this.scene.add(s.root);
       } catch {}
     }
-    // neighbours out for a walk: the orchard park, the square, the plaza, the yard, the Orchard pavement
-    const homes = [
-      { x0: -46, x1: -32, z0: 10, z1: 28, y: CITY.curb },
-      { x0: -10, x1: 10, z0: 15, z1: 23, y: CITY.curb },
-      { x0: 28, x1: 48, z0: 4, z1: 6.5, y: CITY.curb },
-      { x0: -15, x1: -3, z0: 7.8, z1: 10, y: CITY.curb + 0.15 },
-      { x0: -47, x1: -31, z0: nz(-5.2), z1: nz(-3), y: CITY.curb },
-    ];
-    const locals = [2967, 4051, 5430, 7081, 5791, 2, 1, 4242];
-    locals.forEach(async (id, i) => {
-      try {
-        const s = await this.newSnark(id);
-        s.state = "resident";
-        s.district = "downtown";
-        const h = homes[i % homes.length];
-        const at = () => v(h.x0 + Math.random() * (h.x1 - h.x0), h.z0 + Math.random() * (h.z1 - h.z0), h.y);
-        s.root.position.copy(at());
-        this.snarks.add(s);
-        this.scene.add(s.root);
-        while (this.snarks.has(s)) {
-          await sleep(2500 + Math.random() * 6000);
-          await s.walk([at()], 1.1);
-        }
-      } catch {}
-    });
+    // neighbours out and about are scene/residents.ts
   }
 
   // ---- deliveries -----------------------------------------------------------------------------

@@ -8,7 +8,7 @@ import { connectFeed, ZScan } from "./data/zscan";
 import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
-import { AREAS, buildCity, CURB, CUT_VOX, type Occluder } from "./scene/city";
+import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
 import { buildDecor } from "./scene/decor";
@@ -36,6 +36,7 @@ import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";
 import { Joystick } from "./ui/joystick";
 import { Quality } from "./scene/quality";
+import { Residents } from "./scene/residents";
 import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
 import { Photo } from "./ui/photo";
@@ -176,6 +177,7 @@ const director = new Director(scene, city, {
     }
     if (phase === "confirmed") shelf?.push({ height: b.height, hash: "", time: new Date(b.time).toISOString(), tx_count: b.txs.length + 1, size: b.size, fees: b.fees, miner_pool: b.pool });
     rig.busEvent(phase, bus);
+    residents.busEvent(phase, new THREE.Vector3(DISTRICTS[0].stopX, 0, CITY.laneEast));
     if (phase === "arriving" && rideNextBus) {
       rideNextBus = false;
       rig.followTheBus(bus);
@@ -195,6 +197,16 @@ const director = new Director(scene, city, {
     if (selected === s) select(null);
   },
 });
+
+// the people who live here: how many are out follows the device's budget and the mempool
+const residents = new Residents(director);
+const RESIDENTS_BY_TIER = [24, 22, 16, 10, 6];
+function crowd() {
+  residents.setTarget(RESIDENTS_BY_TIER[quality.level] + Math.min(8, Math.floor(director.mempoolList().length / 2)));
+}
+crowd();
+setInterval(crowd, 5000);
+residents.setRain(rainOn && theme === "night");
 
 /** What each walk-in place is, for the people who work there. */
 const PLACE_ABOUT: Record<string, string> = {
@@ -243,12 +255,14 @@ hud = new Hud(
     setTheme: (t) => {
       setTheme(t);
       sound.setRain(t === "night" && rainOn);
+      residents.setRain(t === "night" && rainOn);
     },
     setRain: (on) => {
       rainOn = on;
       setRainWanted(on);
       decor.setRain(on && theme === "night");
       sound.setRain(on && theme === "night");
+      residents.setRain(on && theme === "night");
     },
     setSound: async (on) => {
       if (on) await sound.start();
@@ -832,6 +846,7 @@ if (new URLSearchParams(location.search).has("debug")) {
   Object.assign(window, {
     street: {
       director,
+      residents,
       nu7,
       onFoot,
       quality,
