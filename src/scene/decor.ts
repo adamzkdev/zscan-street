@@ -44,6 +44,7 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
   Market.subscribe((m) => (live.market = m));
   ads(city, ticks, live);
   neonTrim(city);
+  lampGlow(city, ticks);
   const rain = rainfall(scene, ticks);
   hologram(scene, ticks);
   koi(scene, ticks);
@@ -473,6 +474,64 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
       s.tex.needsUpdate = true;
     }
   });
+}
+
+// ---- lamp glow ----------------------------------------------------------------------------------
+
+/**
+ * At night each street lamp gets a soft halo around its head and a faint cone of light down to
+ * the pavement, where the rain shows. Two draw calls for the whole city (points and an instanced
+ * cone); hidden by day through the theme's `night` tag.
+ */
+function lampGlow(city: City, ticks: Tick[]) {
+  const lamps = city.lamps.filter((l) => (l.intensity ?? 14) >= 10);
+  if (!lamps.length) return;
+  // halos: one point each, a radial glow texture
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, "rgba(255,255,255,0.95)");
+  grad.addColorStop(0.18, "rgba(255,255,255,0.45)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  const tmp = new THREE.Color();
+  const haloMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  haloMat.userData.night = true;
+  const halos = new THREE.InstancedMesh(new THREE.PlaneGeometry(2.8, 2.8), haloMat, lamps.length);
+  lamps.forEach((l, i) => halos.setColorAt(i, tmp.set(l.color)));
+  halos.renderOrder = 3;
+  halos.frustumCulled = false;
+  city.group.add(halos);
+  // the halos turn to face the camera
+  const dummy = new THREE.Object3D();
+  ticks.push((_t, _dt, _focus, camPos) => {
+    if (!halos.visible) return;
+    lamps.forEach((l, i) => {
+      dummy.position.copy(l.pos);
+      dummy.lookAt(camPos);
+      dummy.updateMatrix();
+      halos.setMatrixAt(i, dummy.matrix);
+    });
+    halos.instanceMatrix.needsUpdate = true;
+  });
+  // cones of light down to the pavement
+  const cone = new THREE.ConeGeometry(1.5, 1, 20, 1, true);
+  cone.translate(0, -0.5, 0);
+  const coneMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.07, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false });
+  coneMat.userData.night = true;
+  const cones = new THREE.InstancedMesh(cone, coneMat, lamps.length);
+  const m = new THREE.Matrix4();
+  lamps.forEach((l, i) => {
+    const h = Math.max(1, l.pos.y - CURB);
+    m.compose(l.pos.clone().add(new THREE.Vector3(0, -0.1, 0)), new THREE.Quaternion(), new THREE.Vector3(1, h, 1));
+    cones.setMatrixAt(i, m);
+    cones.setColorAt(i, tmp.set(l.color));
+  });
+  cones.renderOrder = 2;
+  city.group.add(cones);
 }
 
 // ---- neon tubes ---------------------------------------------------------------------------------

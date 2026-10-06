@@ -3491,3 +3491,64 @@ kbd {
     display: none;
   }
 }
+
+/* ---- photo mode --------------------------------------------------------------------------------- */
+.photo-btn svg.i {
+  width: 18px;
+  height: 18px;
+}
+#ui.photo > *:not(.photo-bar) {
+  display: none !important;
+}
+.photo-bar {
+  display: none;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font: 14px var(--pixel, monospace);
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#ui.photo .photo-bar {
+  display: flex;
+}
+.photo-bar .pb-jp {
+  color: var(--gold-ink);
+  padding: 0 4px;
+}
+.photo-bar .pb-filters {
+  display: flex;
+  gap: 4px;
+}
+.photo-bar button {
+  all: unset;
+  cursor: pointer;
+  height: 30px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.photo-bar button.on {
+  border-color: var(--gold);
+  color: var(--gold-ink);
+}
+.photo-bar .pb-shot {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #0d0d0d;
+}
+.photo-bar .pb-shot.done {
+  background: #3ee08f;
+  border-color: #3ee08f;
+}
+.photo-bar svg.i {
+  width: 16px;
+  height: 16px;
+}

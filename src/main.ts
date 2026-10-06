@@ -38,6 +38,7 @@ import { Joystick } from "./ui/joystick";
 import { Quality } from "./scene/quality";
 import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
+import { Photo } from "./ui/photo";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
@@ -735,6 +736,13 @@ const tracker = new Tracker(document.getElementById("ui")!, director, {
   },
 });
 
+// photo mode: the HUD steps aside, a filter, a signed PNG of the frame
+let grabbers: ((c: HTMLCanvasElement) => void)[] = [];
+new Photo(document.getElementById("ui")!, canvas, {
+  grab: (fn) => grabbers.push(fn),
+  height: () => director.blockHeight,
+});
+
 connectFeed({
   snapshot: (txs, last) => {
     director.snapshot(txs, last);
@@ -980,6 +988,11 @@ function frame(stepDt?: number) {
     renderPass.camera = interiors.walk.camera;
     tilt.set(0);
     composer.render();
+    if (grabbers.length) {
+      const g = grabbers;
+      grabbers = [];
+      for (const fn of g) fn(canvas);
+    }
     hud.frame(() => null);
     again();
     return;
@@ -1032,6 +1045,12 @@ function frame(stepDt?: number) {
   hall?.update(t, dt);
   press?.update(t, dt);
   composer.render();
+  // a photo is read from the canvas right after the frame is drawn (the buffer isn't kept)
+  if (grabbers.length) {
+    const g = grabbers;
+    grabbers = [];
+    for (const fn of g) fn(canvas);
+  }
   hud.frame(project);
   again();
 }
