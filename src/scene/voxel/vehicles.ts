@@ -284,3 +284,30 @@ export function sedanModel(paint: string, glow: string) {
   }
   return m;
 }
+
+/**
+ * Delivery scooter: a step-through with a top box at the back (the rider sits in front of it),
+ * headlight and tail light lit. Front is +x; the wheels are added by the Scooter class.
+ */
+export function scooterModel(paint: string, box: string) {
+  const w = 12,
+    d = 4;
+  const m = new VoxelModel(w, 10, d);
+  const body = C(paint);
+  const dark = C("#1a1820");
+  // deck and rear body over the back wheel
+  m.box(3, 2, 1, 9, 3, 3, body);
+  m.box(1, 2, 1, 5, 4, 3, body);
+  // seat
+  m.box(3, 4, 1, 7, 5, 3, dark);
+  // front column, apron and handlebar
+  m.box(9, 2, 1, 10, 7, 3, body);
+  m.box(10, 1, 1, 11, 3, 3, body);
+  m.box(9, 7, 0, 11, 8, d, dark);
+  m.box(10, 6, 1, 11, 7, 3, E("#fff6e0", 3));
+  // the delivery box
+  m.box(0, 4, 0, 3, 8, d, C(box));
+  m.box(0, 6, 0, 3, 7, d, E(box, 1.4));
+  m.box(0, 3, 1, 1, 4, 3, E("#ff2a1a", 2.4));
+  return m;
+}

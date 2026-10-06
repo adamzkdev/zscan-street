@@ -38,6 +38,7 @@ import { Joystick } from "./ui/joystick";
 import { Quality } from "./scene/quality";
 import { Residents } from "./scene/residents";
 import { CityPulse } from "./scene/pulse";
+import { Critters } from "./scene/critters";
 import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
 import { Photo } from "./ui/photo";
@@ -209,6 +210,8 @@ function crowd() {
 crowd();
 setInterval(crowd, 5000);
 residents.setRain(rainOn && theme === "night");
+// pigeons and street cats (fewer on small devices)
+const critters = new Critters(scene, director, quality.level >= 3 ? 8 : 16, quality.level >= 3 ? 2 : 3);
 // the city reacts to each real event: block, empty block, heavy shielded tx, price move
 const pulse = new CityPulse(city, decor, sound, residents, nu7);
 
@@ -855,6 +858,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       director,
       residents,
       pulse,
+      critters,
       nu7,
       onFoot,
       quality,
@@ -1133,6 +1137,7 @@ function frame(stepDt?: number) {
   if (!capturing) wallsDown(dt, walking);
   runDirector(sim, t, camQuat, camRight);
   visitors.update(dt, t, camQuat, camRight);
+  critters.update(dt, cam);
   joystick.sync(walking ? onFoot : null);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });

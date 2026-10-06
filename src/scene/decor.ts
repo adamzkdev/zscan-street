@@ -4,6 +4,7 @@ import { CURB } from "./city";
 import { Market, type MarketState } from "../data/market";
 import { blobTexture, zcashBadge } from "./textures";
 import { fitText, shrink } from "./fit";
+import { EMIT_TIME } from "./voxel/mesher";
 
 /**
  * Cyberpunk dressing on top of the city: animated ad screens (some showing live chain data),
@@ -64,6 +65,7 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
   spray(scene, ticks);
   return {
     update(t, dt, focus, camPos) {
+      EMIT_TIME.value = t;
       for (const k of ticks) k(t, dt, focus, camPos);
     },
     setLive(d) {

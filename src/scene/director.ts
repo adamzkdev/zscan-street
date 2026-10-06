@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Block, BlockSummary, Tx } from "../data/types";
 import { ZScan } from "../data/zscan";
 import { BlockBus } from "./bus";
-import { Car, Truck, type CarKind } from "./car";
+import { Car, Scooter, Truck, type CarKind } from "./car";
 import { CITY, DISTRICTS, type City, type DistrictKey, type ShopSite } from "./city";
 import { nz, TUNNEL } from "./city/plan";
 import type { DistrictPlan } from "./city/plan";
@@ -677,6 +677,10 @@ export class Director {
       if (this.cars.size > 7) continue;
       const lane = Math.random() < 0.5 ? "eastFast" : "westFast";
       const startX = lane === "eastFast" ? -EDGE : EDGE;
+      if (Math.random() < 0.3) {
+        void this.courier(lane, startX);
+        continue;
+      }
       const car = new Car("sedan");
       if (!this.traffic.clearAt(lane, startX, car.length)) continue;
       this.cars.add(car);
@@ -688,6 +692,40 @@ export class Director {
         this.cars.delete(car);
       });
     }
+  }
+
+  private couriers = 0;
+  /** A delivery scooter with a zkSNARK courier, zipping down the avenue. */
+  private async courier(lane: "eastFast" | "westFast", startX: number) {
+    if (this.couriers >= 2) return;
+    const scooter = new Scooter();
+    if (!this.traffic.clearAt(lane, startX, scooter.length + 2)) return;
+    this.couriers++;
+    let rider: Snark | null = null;
+    try {
+      rider = await this.newSnark(1 + Math.floor(Math.random() * 10000));
+    } catch {}
+    if (rider) {
+      rider.state = "resident";
+      rider.role = "Courier";
+      rider.district = "downtown";
+      rider.root.position.copy(scooter.saddle);
+      rider.perch(0.8);
+      rider.setScale(0.9);
+      rider.faceDir = new THREE.Vector3(lane === "eastFast" ? 1 : -1, 0, 0);
+      scooter.group.add(rider.root);
+      this.snarks.add(rider);
+    }
+    this.scene.add(scooter.group);
+    const veh = this.traffic.add(new Vehicle(scooter, lane, startX, 10 + Math.random() * 3));
+    await veh.leaveTo(lane === "eastFast" ? EDGE : -EDGE);
+    this.traffic.remove(veh);
+    this.scene.remove(scooter.group);
+    if (rider) {
+      this.snarks.delete(rider);
+      this.ev.removed(rider);
+    }
+    this.couriers--;
   }
 
   private crateMat(tx: Tx) {

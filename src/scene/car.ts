@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { toObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
-import { limoModel, sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
+import { limoModel, scooterModel, sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
 
 export type CarKind = "taxi" | "limo" | "sedan";
 
@@ -167,5 +167,40 @@ export class Truck {
     this.shutter.scale.y = Math.max(0.01, this.shut);
     this.shutter.position.y = (5 + 6 * this.shut) * VOX + 6 * VOX * (1 - this.shut);
     if (this.shut < 0.02 && this.shutTarget === 0) this.shutter.visible = false;
+  }
+}
+
+const LIVERIES = [
+  ["#c0303a", "#f4b728"],
+  ["#2e5ab8", "#ffffff"],
+  ["#2a2a34", "#3ee08f"],
+  ["#e8e4dc", "#ff3e8a"],
+];
+
+/** A delivery scooter: two wheels, a top box, a zkSNARK courier riding it (set by the director). */
+export class Scooter {
+  readonly group = new THREE.Group();
+  readonly length = 12 * VOX;
+  /** Where the rider's feet go (scooter frame). */
+  readonly saddle = new THREE.Vector3(-0.75 * VOX, 0, 0);
+  private wheels: THREE.Mesh[] = [];
+
+  constructor() {
+    const [paint, box] = LIVERIES[Math.floor(Math.random() * LIVERIES.length)];
+    this.group.add(toObject(scooterModel(paint, box)));
+    const geo = new THREE.CylinderGeometry(0.2, 0.2, 0.14, 12);
+    const mat = new THREE.MeshStandardMaterial({ color: "#101014", roughness: 0.9 });
+    for (const vx of [2.5, 10]) {
+      const w = new THREE.Mesh(geo, mat);
+      w.rotation.x = Math.PI / 2;
+      w.position.set((vx - 6) * VOX, 0.2, 0);
+      w.castShadow = true;
+      this.group.add(w);
+      this.wheels.push(w);
+    }
+  }
+
+  spin(distance: number) {
+    for (const w of this.wheels) w.rotation.y -= distance / 0.2;
   }
 }

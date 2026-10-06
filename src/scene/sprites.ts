@@ -12,9 +12,9 @@ export type ItemKind = TxKind | "briefcase" | "goldcase" | LifeItem;
 /** What residents (people with no transaction) have in hand. */
 export type LifeItem = "coffee" | "can" | "bag" | "phone" | "flowers" | "fish" | "basket";
 
-type Px = (x: number, y: number, w: number, h: number, c: string) => void;
+export type Px = (x: number, y: number, w: number, h: number, c: string) => void;
 
-function sprite(w: number, h: number, draw: (px: Px) => void) {
+export function sprite(w: number, h: number, draw: (px: Px) => void) {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;

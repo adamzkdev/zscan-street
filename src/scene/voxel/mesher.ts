@@ -152,6 +152,46 @@ export const MATERIALS = {
   emit: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
 };
 
+/** Seconds, advanced by the decor each frame: drives the lit windows and the neon below. */
+export const EMIT_TIME = { value: 0 };
+
+/**
+ * The city's lights live a little, on the GPU and at no cost: on the upper floors a window goes
+ * dark now and then and another comes on (per window cell, every minute or two), and now and
+ * again a neon stutters for a moment. Pale, warm lights are windows; saturated ones are signs,
+ * which never go dark, only flicker.
+ */
+MATERIALS.emit.onBeforeCompile = (sh) => {
+  sh.uniforms.uTime = EMIT_TIME;
+  sh.vertexShader = sh.vertexShader
+    .replace("#include <common>", "#include <common>\nvarying vec3 vCityPos;")
+    .replace("#include <project_vertex>", "#include <project_vertex>\nvCityPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+  sh.fragmentShader = sh.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying vec3 vCityPos;\nuniform float uTime;\nfloat cityHash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }")
+    .replace(
+      "#include <color_fragment>",
+      `#include <color_fragment>
+      {
+        // one cell per window bay, per floor
+        vec3 cell = floor(vCityPos / vec3(1.35, 1.25, 1.35));
+        float h = cityHash(cell);
+        float hi = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
+        float sat = hi > 0.0 ? (hi - min(diffuseColor.r, min(diffuseColor.g, diffuseColor.b))) / hi : 0.0;
+        if (vCityPos.y > 3.4 && sat < 0.5) {
+          float period = 50.0 + h * 90.0;
+          float epoch = floor((uTime + h * 400.0) / period);
+          float off = step(fract(h * 17.31 + epoch * 0.6180339), 0.16);
+          diffuseColor.rgb *= mix(1.0, 0.1, off);
+        }
+        if (h > 0.97) {
+          float burst = step(fract(uTime * 0.045 + h * 7.0), 0.035);
+          float buzz = step(0.45, fract(sin(floor(uTime * 24.0) + h * 91.0) * 43758.5453));
+          diffuseColor.rgb *= mix(1.0, 0.25 + 0.75 * buzz, burst);
+        }
+      }`,
+    );
+};
+
 /** A model as a group of up to three meshes (solid, glass, light). */
 export function toObject(m: VoxelModel, opts: { shadows?: boolean; own?: boolean } = {}) {
   const geos = meshModel(m);
