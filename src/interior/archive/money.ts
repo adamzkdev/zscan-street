@@ -123,31 +123,6 @@ export function movesOf(r: BlockTxRow, f: TxFull | null): Move[] {
   return moves;
 }
 
-/** Moves added up by route, for the jets: one jet per (from, to) pair. */
-export interface Route {
-  from: Node;
-  to: Node;
-  /** Known total (hidden amounts excluded), and whether some amounts are hidden. */
-  zat: number;
-  hidden: boolean;
-  txs: ArchiveTx[];
-}
-
-export function routesOf(txs: ArchiveTx[]): Route[] {
-  const map = new Map<string, Route>();
-  for (const t of txs)
-    for (const m of t.moves) {
-      const k = `${m.from}>${m.to}`;
-      let r = map.get(k);
-      if (!r) map.set(k, (r = { from: m.from, to: m.to, zat: 0, hidden: false, txs: [] }));
-      if (m.zat === null) r.hidden = true;
-      else r.zat += m.zat;
-      if (!r.txs.includes(t)) r.txs.push(t);
-    }
-  // the mint first, then the biggest flows
-  return [...map.values()].sort((a, b) => (a.from === "mint" ? -1 : b.from === "mint" ? 1 : b.zat - a.zat));
-}
-
 export const zecText = (zat: number) => {
   const z = zat / 1e8;
   return z >= 1000 ? `${Math.round(z).toLocaleString("en-US")}` : z >= 1 ? z.toFixed(2) : z >= 0.001 ? z.toFixed(4) : z.toFixed(8).replace(/0+$/, "");

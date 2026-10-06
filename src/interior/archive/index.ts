@@ -1,27 +1,22 @@
 import * as THREE from "three";
-import { KIND_HELP, KIND_LABEL, type BlockSummary } from "../../data/types";
+import { KIND_HELP, KIND_LABEL, type BlockSummary, type Tx } from "../../data/types";
 import { get, links, ZScan } from "../../data/zscan";
 import { ArchiveBar } from "../../ui/archiveBar";
 import { place, column } from "../furniture";
 import { box, glowMat, room, std, textPlane } from "../kit";
 import type { InteriorContext, PickInfo, Rect } from "../types";
 import { Chain, SPAN } from "./chain";
-import { FlowScene } from "./flows";
-import { movesOf, NODE_LABEL, routesOf, zecText, type ArchiveTx, type Node, type Route, type TxFull } from "./money";
-import { cardAt, drawCard, drawCards, drawHistory, historyAt, HISTORY_N, Screen, summary, type ArchiveState } from "./walls";
+import { Mosaic, valueOf } from "./mosaic";
+import { movesOf, NODE_LABEL, zecText, type ArchiveTx, type TxFull } from "./money";
+import { drawCard, drawHistory, historyAt, HISTORY_N, Screen, summary, type ArchiveState } from "./walls";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const num = (n: number) => n.toLocaleString("en-US");
 const short = (h: string) => `${h.slice(0, 8)}…${h.slice(-6)}`;
 /** Transactions read in detail per block (amounts, addresses); the rest are shown from their row. */
 const DETAIL_MAX = 40;
-/** Activation heights that decide which pools stand in the room. */
-const SAPLING = 419_200,
-  CANOPY = 1_046_400,
-  NU5 = 1_687_104,
-  IRONWOOD = 3_428_143;
 
-/** The room: 16 × 11 m, the elevator in the front wall, the pools' tanks in an arc in the middle. */
+/** The room: 16 × 11 m, the elevator in the front wall, the block's mosaic standing in the middle. */
 const X0 = -8,
   X1 = 8,
   Z0 = -11,
@@ -29,11 +24,12 @@ const X0 = -8,
   HEIGHT = 6;
 
 /**
- * MEMPOOL 1F, the Block Archive: any block from genesis to the tip, rebuilt in the room. Its money
- * flows in the middle: a glass tank per value pool and the mint's coin, with a glowing jet for
- * every route value took (as thick as the amount, tagged with it). The back wall deals a card per
- * transaction (amount, from, to, fee), the left wall is the block's card, the right wall the 60
- * blocks before it, and the chain runs under the cards, a pillar per neighbouring block. The
+ * MEMPOOL 1F, the Block Archive: any block from genesis to the tip, rebuilt in the room. The block
+ * stands in the middle as a glowing mosaic, one tile per transaction sized by the value it moved
+ * (Bitfeed-style): tiles fly in and snap into place, the big ones carry their amount, a tap opens
+ * the transaction. Following the chain live, the mempool's pending transactions float beside it
+ * and fly in when the next block is mined. The left wall is the block's card, the right wall the
+ * 60 blocks before it, and the chain runs along the back, a pillar per neighbouring block. The
  * console steps through blocks, takes any height, follows new blocks live or jumps to a landmark.
  */
 export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number) {
@@ -87,11 +83,18 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
   for (const x of [X0 + 0.11, X1 - 0.11])
     for (const z of [-10.1, -9.4, -1.6, -0.9]) box(group, 0.02, HEIGHT - 0.9, 0.05, glowMat(z < -5 ? "#b07bff" : "#3ec9b0", 1.1), x, Y + 0.3, z);
 
-  // ---- the money: tanks for the pools, the mint's coin, jets for every route value took ------------
-  const flows = new FlowScene(group, Y);
-  pickables.push(...flows.pickables);
-  // the tanks stand in an arc: keep the walker out of it
-  rects.push([-5.4, -7.0, 5.4, -5.2]);
+  // ---- the block: a mosaic of its transactions on a pedestal -----------------------------------
+  const MOSAIC_Z = -8.4;
+  box(group, 5.4, 0.4, 1.4, std("#17161f", 0.4, 0.5), 0, Y, MOSAIC_Z + 0.1);
+  box(group, 5.46, 0.04, 1.46, glowMat("#f4b728", 1.2), 0, Y + 0.38, MOSAIC_Z + 0.1);
+  const mosaic = new Mosaic(group, new THREE.Vector3(0, Y + 0.42, MOSAIC_Z));
+  pickables.push(mosaic.tiles, mosaic.cloud);
+  rects.push([-2.9, MOSAIC_Z - 0.7, 2.9, MOSAIC_Z + 1.0]);
+  // a title over the block
+  // the block's line, lit on the front of the pedestal
+  const title = new Screen(1024, 70, 5.3);
+  title.mesh.position.set(0, Y + 0.2, MOSAIC_Z + 0.81);
+  group.add(title.mesh);
 
   // ---- the walls' screens -------------------------------------------------------------------------
   const card = new Screen(1024, 560, 5.6);
@@ -104,11 +107,6 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
   history.mesh.rotation.y = -Math.PI / 2;
   group.add(history.mesh);
   pickables.push(history.mesh);
-  const cards = new Screen(1536, 470, 9.6);
-  // high on the back wall: the jets arc below it
-  cards.mesh.position.set(0, Y + 4.42, Z0 + 0.13);
-  group.add(cards.mesh);
-  pickables.push(cards.mesh);
 
   // ---- the chain along the back wall, under the transactions -------------------------------------
   const chain = new Chain(group, -6.8, 6.8, Z0 + 0.75, Y);
@@ -150,6 +148,27 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
       g.fillText(st.live ? "● LIVE · FOLLOWING THE CHAIN" : "TAP · TYPE ANY HEIGHT", W / 2, 230);
     });
 
+  /** Over the mosaic: the block in one line. */
+  const drawTitle = () =>
+    title.draw((g, W, H) => {
+      const b = st.block;
+      g.textBaseline = "middle";
+      g.fillStyle = "#f4b728";
+      g.shadowColor = "#f4b728";
+      g.shadowBlur = 12;
+      g.font = '800 40px "JetBrains Mono", Menlo, monospace';
+      const label = st.loading !== null ? `#${num(st.loading)} …` : b ? `#${num(b.height)}` : "";
+      g.fillText(label, 24, H / 2 + 2, W * 0.42);
+      g.shadowBlur = 0;
+      if (b && st.loading === null) {
+        const moved = txs.reduce((a, x) => a + (x.row.kind === "coinbase" ? 0 : (valueOf(x) ?? 0)), 0);
+        g.textAlign = "right";
+        g.fillStyle = "#e8e4da";
+        g.font = '700 26px "JetBrains Mono", Menlo, monospace';
+        g.fillText(`${num(b.tx_count)} tx · ${zecText(moved)} ZEC moved · ${st.era}`, W - 24, H / 2 + 2, W * 0.56);
+      }
+    });
+
   // lights: fixed in number and always in the scene (no shader recompiles changing floors)
   for (const [x, z, c, i] of [
     [0, -6.5, "#fff4e0", 7],
@@ -167,7 +186,6 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
   let clock = 0;
   let want = -1;
   let txs: ArchiveTx[] = [];
-  let routes: Route[] = [];
   let hist: BlockSummary[] = [];
   const counts = new Map<number, number>();
   let upgrades: { label: string; height: number }[] = [];
@@ -228,23 +246,14 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     const full = await Promise.all(rows.slice(0, DETAIL_MAX).map((r) => get<TxFull>(`/v1/tx/${r.txid}`)));
     if (want !== h) return;
     txs = rows.map((row, i) => ({ row, full: full[i] ?? null, moves: movesOf(row, full[i] ?? null) }));
-    routes = routesOf(txs);
     st.block = b;
     st.loading = null;
     st.era = eraOf(h);
     st.shownAt = clock;
     counts.set(h, b.tx_count);
-    // the pools that existed then, plus any this block touched
-    const d = b.pool_deltas ?? {};
-    const nodes: Node[] = ["transparent"];
-    if (h < CANOPY || d.sprout || routes.some((r) => r.from === "sprout" || r.to === "sprout")) nodes.push("sprout");
-    if (h >= SAPLING) nodes.push("sapling");
-    if (h >= NU5) nodes.push("orchard");
-    if (h >= IRONWOOD) nodes.push("ironwood");
-    flows.setNodes(nodes);
-    flows.show(routes, d as Partial<Record<Node, number>>, clock);
+    mosaic.set(txs, clock);
+    drawTitle();
     drawCard(card, st);
-    drawCards(cards, st, txs, clock);
     void neighbours(h);
     void loadHistory(h);
   }
@@ -282,7 +291,7 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
 
   let active = false;
   let cardAcc = 0,
-    wallAcc = 0;
+    pendAcc = 0;
   // [ and ] step through blocks while you're on the floor
   window.addEventListener("keydown", (e) => {
     if (!group.visible || !active || /input|textarea|select/i.test((e.target as HTMLElement).tagName)) return;
@@ -317,42 +326,19 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
       link: { href: links.tx(r.txid), label: "Transaction on ZScan" },
     };
   };
-  const routeInfo = (r: Route): PickInfo => ({
-    eyebrow: `Block #${num(st.block!.height)} · money flow`,
-    title: r.from === r.to ? `${NODE_LABEL[r.to]} · inside` : `${NODE_LABEL[r.from]} → ${NODE_LABEL[r.to]}`,
-    tag: [r.zat ? `${zecText(r.zat)} ZEC` : "hidden amount", r.hidden ? "muted" : "info"],
+  const pendingInfo = (p: Tx): PickInfo => ({
+    eyebrow: "Mempool · waiting for the next block",
+    title: short(p.txid),
+    mono: true,
+    tag: [KIND_LABEL[p.kind], "warn"],
     stats: [
-      ["Transactions", String(r.txs.length)],
-      ["Amount", r.zat ? `${zecText(r.zat)} ZEC` : "hidden"],
+      ["Fee", p.fee == null ? "—" : (p.fee / 1e8).toFixed(6)],
+      ["Size", `${(p.size / 1000).toFixed(1)} kB`],
     ],
-    body: r.txs
-      .slice(0, 12)
-      .map((x) => `<div class="row"><a href="${links.tx(x.row.txid)}" target="_blank" rel="noopener" class="mono">${esc(short(x.row.txid))}</a><b>${esc(summary(x).amount)}</b></div>`)
-      .join(""),
+    body: `<div class="note">Pending: it flies into the mosaic when a block takes it.</div>`,
+    link: { href: links.tx(p.txid), label: "Transaction on ZScan" },
   });
-  const poolInfo = (n: Node): PickInfo | null => {
-    const b = st.block;
-    if (!b) return null;
-    const d = (b.pool_deltas as Record<string, number> | undefined)?.[n] ?? 0;
-    const touching = routes.filter((r) => r.from === n || r.to === n);
-    if (n === "mint")
-      return {
-        eyebrow: `Block #${num(b.height)} · new coins`,
-        title: `${zecText(b.coinbase_value ?? 0)} ZEC`,
-        tag: [b.miner_pool ?? "Miner", "warn"],
-        body: `<div class="note">Every block mints new ZEC: the miner's reward and the development funding, paid by the coinbase transaction, plus the fees of the block's transactions.</div>`,
-      };
-    return {
-      eyebrow: `Block #${num(b.height)} · value pool`,
-      title: NODE_LABEL[n],
-      tag: [d ? `${d > 0 ? "+" : "−"}${zecText(Math.abs(d))} ZEC` : "no net change", d > 0 ? "ok" : d < 0 ? "warn" : "muted"],
-      stats: [
-        ["Net change", d ? `${d > 0 ? "+" : "−"}${zecText(Math.abs(d))}` : "0"],
-        ["Flows", String(touching.length)],
-      ],
-      body: touching.map((r) => `<div class="row"><span>${esc(NODE_LABEL[r.from])} → ${esc(NODE_LABEL[r.to])}</span><b class="mono">${r.zat ? `${zecText(r.zat)} ZEC` : "hidden"}</b></div>`).join(""),
-    };
-  };
+
   const blockInfo = (): PickInfo | null => {
     const b = st.block;
     if (!b) return null;
@@ -385,24 +371,19 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     },
     pick(hit: THREE.Intersection): PickInfo | null {
       const o = hit.object;
-      const route = flows.routeAt(o);
-      if (route) return routeInfo(route);
-      const node = flows.nodeAt(o);
-      if (node) return poolInfo(node);
+      const x = mosaic.at(hit);
+      if (x) return txInfo(x);
+      const p = mosaic.pendingAt(hit);
+      if (p) return pendingInfo(p);
       const h = chain.at(hit);
       if (h !== null) {
         setLive(false);
         void load(h);
         return null;
       }
-      if (o === cards.mesh) {
-        const p = onCanvas(hit, cards);
-        const x = p && cardAt(st, txs, p.x, p.y, clock);
-        return x ? txInfo(x) : blockInfo();
-      }
       if (o === history.mesh) {
-        const p = onCanvas(hit, history);
-        const hh = p && historyAt(hist, p.x, p.y);
+        const c = onCanvas(hit, history);
+        const hh = c && historyAt(hist, c.x, c.y);
         if (hh !== null && hh !== undefined) {
           setLive(false);
           void load(hh);
@@ -414,7 +395,7 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
         return {
           eyebrow: "Block archive · console",
           title: "Any block, genesis to now",
-          body: `<div class="note">Type a height in the console at the top, step with ◀ ▶ (or the [ and ] keys), follow new blocks with LIVE, or jump to a network upgrade. Tap a jet or a tank to see where the money went, a card for its transaction, a bar or a pillar for another block.</div>`,
+          body: `<div class="note">Type a height in the console at the top, step with ◀ ▶ (or the [ and ] keys), follow new blocks with LIVE, or jump to a network upgrade. Each tile of the mosaic is a transaction, sized by the value it moved: tap one to open it. Tap a bar or a pillar for another block.</div>`,
         };
       }
       if (o === card.mesh) return blockInfo();
@@ -422,20 +403,18 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     },
     hover(hit: THREE.Intersection): string | null {
       const o = hit.object;
-      const route = flows.routeAt(o);
-      if (route) return `<b>${route.zat ? `${zecText(route.zat)} ZEC` : "hidden"}</b><span>${NODE_LABEL[route.from].toLowerCase()} → ${NODE_LABEL[route.to].toLowerCase()} · ${route.txs.length} tx</span>`;
-      const node = flows.nodeAt(o);
-      if (node) return `<b>${NODE_LABEL[node]}</b><span>${node === "mint" ? "new coins" : "value pool"}</span>`;
+      const x = mosaic.at(hit);
+      if (x) {
+        const v = valueOf(x);
+        return `<b>${v ? `${zecText(v)} ZEC` : "hidden amount"}</b><span>${esc(KIND_LABEL[x.row.kind])} · ${esc(summary(x).from)} → ${esc(summary(x).to)}</span>`;
+      }
+      const p = mosaic.pendingAt(hit);
+      if (p) return `<b>${short(p.txid)}</b><span>pending · ${esc(KIND_LABEL[p.kind])}</span>`;
       const h = chain.at(hit);
       if (h !== null) return `<b>#${num(h)}</b><span>${counts.has(h) ? `${num(counts.get(h)!)} tx · ` : ""}open this block</span>`;
-      if (o === cards.mesh) {
-        const p = onCanvas(hit, cards);
-        const x = p && cardAt(st, txs, p.x, p.y, clock);
-        return x ? `<b>${short(x.row.txid)}</b><span>${esc(summary(x).amount)}</span>` : null;
-      }
       if (o === history.mesh) {
-        const p = onCanvas(hit, history);
-        const hh = p && historyAt(hist, p.x, p.y);
+        const c = onCanvas(hit, history);
+        const hh = c && historyAt(hist, c.x, c.y);
         return hh != null ? `<b>#${num(hh)}</b><span>open this block</span>` : null;
       }
       if (o.userData.console) return "<b>Console</b><span>pick a block</span>";
@@ -445,19 +424,19 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
     update(dt: number) {
       clock += dt;
       bar.tick();
-      flows.update(dt, clock);
+      mosaic.update(clock);
       chain.update(dt);
-      wallAcc += dt;
-      // the cards deal in for a couple of seconds, then the wall turns its page every 8 s
-      const since = clock - st.shownAt;
-      if (wallAcc > (since < 2.5 ? 0.05 : 1)) {
-        wallAcc = 0;
-        if (st.block) drawCards(cards, st, txs, clock);
+      // following the tip: the mempool floats beside the block, waiting
+      pendAcc += dt;
+      if (pendAcc > 2) {
+        pendAcc = 0;
+        mosaic.setPending(st.live && st.block?.height === st.tip ? ctx.director.mempoolList() : []);
       }
       cardAcc += dt;
       if (cardAcc > (st.loading !== null ? 0.3 : 1)) {
         cardAcc = 0;
         drawCard(card, st);
+        drawTitle();
       }
     },
   };

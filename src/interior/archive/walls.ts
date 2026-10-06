@@ -182,24 +182,7 @@ export function drawCard(s: Screen, st: ArchiveState) {
   });
 }
 
-// ---- back wall: one card per transaction, with its real amounts and addresses ---------------------
-
-const PER_PAGE = 8;
-const CARD = { x0: 30, y0: 128, w: 360, h: 152, gx: 12, gy: 12 };
-
-/** Card slot under a point of the wall's canvas (0–W, 0–H), for clicks. */
-export function cardAt(st: ArchiveState, txs: ArchiveTx[], x: number, y: number, t: number) {
-  const page = pageOf(st, txs, t);
-  const col = Math.floor((x - CARD.x0) / (CARD.w + CARD.gx)),
-    row = Math.floor((y - CARD.y0) / (CARD.h + CARD.gy));
-  if (col < 0 || col > 3 || row < 0 || row > 1) return null;
-  return txs[page * PER_PAGE + row * 4 + col] ?? null;
-}
-
-function pageOf(st: ArchiveState, txs: ArchiveTx[], t: number) {
-  const pages = Math.max(1, Math.ceil(txs.length / PER_PAGE));
-  return Math.floor(Math.max(0, t - st.shownAt) / 8) % pages;
-}
+// ---- shared: a transaction in one line ------------------------------------------------------------
 
 /** What a transaction moved, in one line each way: from → to, the amount. */
 export function summary(x: ArchiveTx) {
@@ -215,64 +198,6 @@ export function summary(x: ArchiveTx) {
   const to = main ? side(main.to, outs) : "—";
   const amount = main?.zat ? `${zecText(main.zat)} ZEC` : x.row.kind === "coinbase" ? "reward" : "🔒 hidden";
   return { from, to, amount, main };
-}
-
-export function drawCards(s: Screen, st: ArchiveState, txs: ArchiveTx[], t: number) {
-  s.draw((g, W, H) => {
-    frame(g, W, H, ORANGE);
-    header(g, "取引", "TRANSACTIONS · WHO SENT WHAT, WHERE", ORANGE, 34, 58);
-    const b = st.block;
-    if (!b) return;
-    const pages = Math.max(1, Math.ceil(txs.length / PER_PAGE));
-    const page = pageOf(st, txs, t);
-    g.textAlign = "right";
-    g.fillStyle = DIM;
-    g.font = MONO(22, 600);
-    g.fillText(`${txs.length} tx${pages > 1 ? ` · page ${page + 1}/${pages}` : ""}`, W - 36, 58);
-    g.textAlign = "left";
-    // the block's money in one line
-    const fees = b.fees ?? 0;
-    g.fillStyle = INK;
-    g.font = MONO(26, 700);
-    fitText(g, `#${num(b.height)} · ${new Date(Date.parse(b.time)).toISOString().slice(0, 16).replace("T", " ")} UTC · fees ${zec(fees, 6)} ZEC · reward ${zec(b.coinbase_value ?? 0, 4)} ZEC`, 36, 104, W - 72);
-    const since = t - st.shownAt - (page ? 0 : 0);
-    txs.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE).forEach((x, k) => {
-      const col = k % 4,
-        row = Math.floor(k / 4);
-      const cx = CARD.x0 + col * (CARD.w + CARD.gx),
-        cy = CARD.y0 + row * (CARD.h + CARD.gy);
-      const color = KIND_COLOR[x.row.kind];
-      // cards deal in one by one
-      const shown = since > 0.35 + k * 0.12 || page > 0;
-      g.fillStyle = "#0e1016";
-      g.fillRect(cx, cy, CARD.w, CARD.h);
-      if (!shown) return;
-      g.fillStyle = color;
-      g.fillRect(cx, cy, 8, CARD.h);
-      g.strokeStyle = `${color}66`;
-      g.lineWidth = 2;
-      g.strokeRect(cx + 1, cy + 1, CARD.w - 2, CARD.h - 2);
-      const sm = summary(x);
-      g.fillStyle = color;
-      g.font = MONO(20, 800);
-      fitText(g, `${KIND_LABEL[x.row.kind].toUpperCase()}`, cx + 22, cy + 28, CARD.w - 120);
-      g.textAlign = "right";
-      g.fillStyle = DIM;
-      g.font = MONO(18, 600);
-      g.fillText(`#${txs.indexOf(x)}`, cx + CARD.w - 14, cy + 28);
-      g.textAlign = "left";
-      g.fillStyle = "#ffffff";
-      g.font = MONO(38, 800);
-      fitText(g, x.full || x.row.kind === "coinbase" || sm.main?.zat ? sm.amount : "…", cx + 22, cy + 70, CARD.w - 36);
-      g.font = MONO(19, 600);
-      g.fillStyle = "#c8c4ba";
-      fitText(g, `from ${sm.from}`, cx + 22, cy + 100, CARD.w - 36);
-      fitText(g, `to   ${sm.to}`, cx + 22, cy + 123, CARD.w - 36);
-      g.fillStyle = DIM;
-      g.font = MONO(15, 600);
-      fitText(g, `fee ${x.row.fee == null ? "—" : zec(x.row.fee, 6)} · ${(x.row.size / 1000).toFixed(1)} kB · ${x.row.txid.slice(0, 10)}…`, cx + 22, cy + 143, CARD.w - 36);
-    });
-  });
 }
 
 // ---- right wall: the last 60 blocks, tap a bar to go there ----------------------------------------
