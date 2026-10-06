@@ -39,6 +39,7 @@ import { Quality } from "./scene/quality";
 import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
 import { Photo } from "./ui/photo";
+import { Visitors } from "./scene/visitors";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
@@ -736,6 +737,12 @@ const tracker = new Tracker(document.getElementById("ui")!, director, {
   },
 });
 
+// the other visitors in the city, live (presence through the API)
+const visitors = new Visitors(scene, document.getElementById("ui")!, () => {
+  const p = walking ? onFoot.camera.position : rig.focus;
+  return { x: p.x, z: p.z, mode: interiors.active ? 2 : walking ? 1 : 0 };
+});
+
 // photo mode: the HUD steps aside, a filter, a signed PNG of the frame
 let grabbers: ((c: HTMLCanvasElement) => void)[] = [];
 new Photo(document.getElementById("ui")!, canvas, {
@@ -1036,6 +1043,7 @@ function frame(stepDt?: number) {
 
   if (!capturing) wallsDown(dt, walking);
   runDirector(sim, t, camQuat, camRight);
+  visitors.update(dt, t, camQuat, camRight);
   joystick.sync(walking ? onFoot : null);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });

@@ -3552,3 +3552,63 @@ kbd {
   width: 16px;
   height: 16px;
 }
+
+/* ---- visitors: who else is in the city ---------------------------------------------------------- */
+.visitors {
+  top: 54px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  font: 13px var(--pixel, monospace);
+}
+.indoors .visitors,
+.following .visitors,
+.walking .visitors {
+  display: none;
+}
+.visitors .v-dot {
+  width: 8px;
+  height: 8px;
+  background: #3ef0ff;
+  box-shadow: 0 0 8px #3ef0ff;
+  animation: vblink 1.6s steps(2) infinite;
+}
+@keyframes vblink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.visitors .v-n {
+  color: var(--text);
+}
+.visitors .v-l {
+  color: var(--muted);
+  margin-right: 4px;
+}
+.visitors .v-emo {
+  display: flex;
+  gap: 2px;
+  border-left: 1px solid var(--line);
+  padding-left: 6px;
+}
+.visitors .v-emo button {
+  all: unset;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 3px;
+  transition: transform 0.15s;
+}
+.visitors .v-emo button:hover {
+  transform: scale(1.25);
+}
+.visitors .v-emo button.sent {
+  transform: scale(1.5) translateY(-4px);
+}
+@media (max-width: 760px) {
+  .visitors .v-l {
+    display: none;
+  }
+}
