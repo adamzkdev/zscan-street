@@ -1091,7 +1091,7 @@ export class Hud {
         tab === "txs"
           ? s.txs.length
             ? s.txs.map((t) => this.txRow(t)).join("")
-            : `<div class="note">${stage < 0 ? "Residents live in the city and carry nothing. Carriers appear when real transactions enter the mempool." : "Not carrying anything right now."}</div>`
+            : `<div class="note">Not carrying anything.</div>`
           : `<div class="chips">${(it?.traits ?? [])
               .filter((t) => t.trait_type !== "Background")
               .map((t) => `<div><small>${esc(t.trait_type)}</small><b>${esc(t.value)}</b></div>`)
@@ -1101,7 +1101,6 @@ export class Hud {
         <button class="btn primary talkbtn" data-act="talk">💬 Talk</button>
         <button class="btn ${following ? "" : "primary"}" data-act="${following ? "unfollow" : "follow"}">${icon("follow")}${following ? "Stop following" : "Follow"}</button>
         <a class="btn" href="${s.txs[0] ? links.tx(s.txs[0].txid) : it?.url ?? "https://zilkroad.com"}" target="_blank" rel="noopener">${s.txs[0] ? "ZScan" : "Zilkroad"} ${icon("ext")}</a>
-      </div>
-      <div class="note">The carrier is picked from the transaction id: casting, not ownership.</div>`;
+      </div>`;
   }
 }

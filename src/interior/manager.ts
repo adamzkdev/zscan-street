@@ -62,7 +62,8 @@ export class InteriorManager {
     this.walk.place(f.spawn, f.yaw, f.y);
     this.walk.colliders = i.colliders(this.floor);
     // every place is entered from the street side (+z) on its ground floor
-    this.walk.door = this.floor === 0 ? { x: f.spawn.x, z: f.spawn.z } : null;
+    this.walk.door = this.floor === 0 ? doorOf(f, this.walk.colliders) : null;
+    this.walk.arrived();
   }
 
   exit() {
@@ -95,6 +96,8 @@ export class InteriorManager {
       this.giveRoutes(this.active);
     }
     this.walk.update(dt);
+    // walking out of the door closes the place mid-frame
+    if (!this.active) return;
     this.active.update(dt, t, this.walk.camera);
   }
 
@@ -155,7 +158,23 @@ function exitSign(i: Interior) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.34), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: new THREE.Color(1.3, 1.3, 1.3), side: THREE.DoubleSide }));
-  sign.position.set(f.spawn.x, f.y + 2.55, f.spawn.z + 0.72);
+  const d = doorOf(f, i.colliders(0));
+  sign.position.set(d.x, f.y + 2.45, d.z - 0.06);
   sign.rotation.y = Math.PI;
   i.scene.add(sign);
+}
+
+/**
+ * The way out of a ground floor: the wall behind where you come in (every place is entered from
+ * the street side, +z). Its line is the nearest collider edge behind the spawn point.
+ */
+function doorOf(f: { spawn: THREE.Vector3 }, rects: [number, number, number, number][]) {
+  let z = f.spawn.z + 0.9;
+  let best = Infinity;
+  for (const [x0, z0, x1] of rects)
+    if (f.spawn.x > x0 - 0.5 && f.spawn.x < x1 + 0.5 && z0 > f.spawn.z && z0 - f.spawn.z < best) {
+      best = z0 - f.spawn.z;
+      z = z0;
+    }
+  return { x: f.spawn.x, z };
 }

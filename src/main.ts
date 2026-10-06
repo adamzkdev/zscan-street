@@ -1046,10 +1046,10 @@ function frame(stepDt?: number) {
   // inside a place: its own scene and the walking camera; the city keeps living (but unseen)
   if (interiors.active) {
     interiors.update(dt, t);
+    if (!interiors.active) return again();
     // near the way out (ground floor): say so
-    const door = interiors.walk.door,
-      cp = interiors.walk.camera.position;
-    prompt(door && Math.hypot(cp.x - door.x, cp.z - door.z) < 2.6 ? `<b>EXIT · 出口</b><span>▼ walk out the door to the street</span>` : null);
+    const out = interiors.walk.exitAhead();
+    prompt(out && out.facing && out.dist < 3.2 ? `<b>EXIT · 出口</b><span>▲ keep walking to go out</span>` : null);
     if (CAPTURE && capShot) {
       interiors.walk.enabled = false;
       aimCapture(interiors.walk.camera, capShot);

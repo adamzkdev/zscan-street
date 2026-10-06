@@ -28,7 +28,7 @@ export class WalkControls {
   /** Obstacles other than `colliders` (the street uses its own grid). */
   collide?: (x: number, z: number) => boolean;
   onExit?: () => void;
-  private leaving = 0;
+  private sinceArrival = 0;
 
   constructor(dom: HTMLElement) {
     this.camera.rotation.order = "YXZ";
@@ -73,6 +73,20 @@ export class WalkControls {
       },
       { passive: false },
     );
+  }
+
+  /** Just placed (entered, took the elevator): no walking straight back out for a moment. */
+  arrived() {
+    this.sinceArrival = 0;
+  }
+
+  /** How far the way out is, and whether the walker faces it (for the EXIT prompt). */
+  exitAhead(): { dist: number; facing: boolean } | null {
+    const d = this.door;
+    if (!d) return null;
+    const p = this.camera.position;
+    const dist = Math.hypot(p.x - d.x, Math.max(0, d.z - p.z));
+    return { dist, facing: -Math.cos(this.yaw) > 0.35 && Math.abs(p.x - d.x) < 2.5 };
   }
 
   /** Was the last press a drag (a look around) rather than a click? */
@@ -120,18 +134,11 @@ export class WalkControls {
     p.x += move.x;
     if (this.blocked(p.x, p.z)) p.x -= move.x;
     p.z += move.z;
-    if (this.blocked(p.x, p.z)) {
-      p.z -= move.z;
-      // pressing on the entrance (behind where you came in) for a moment: out to the street
-      const d = this.door;
-      if (d && move.z > 0 && Math.abs(p.x - d.x) < 1.7 && p.z > d.z - 0.2) {
-        this.leaving += dt;
-        if (this.leaving > 0.18) {
-          this.leaving = 0;
-          this.onExit?.();
-        }
-      } else this.leaving = 0;
-    } else this.leaving = 0;
+    if (this.blocked(p.x, p.z)) p.z -= move.z;
+    // walking out through the door (the wall behind where you came in): back to the street
+    const d = this.door;
+    this.sinceArrival += dt;
+    if (d && this.sinceArrival > 0.8 && move.z > 0 && Math.abs(p.x - d.x) < 1.7 && p.z > d.z - 0.75) this.onExit?.();
     p.y += (this.floorY + EYE - p.y) * Math.min(1, dt * 10);
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }

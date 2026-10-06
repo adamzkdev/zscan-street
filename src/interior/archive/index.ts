@@ -345,7 +345,6 @@ export function buildArchive(ctx: InteriorContext, scene: THREE.Scene, Y: number
       ["Fee", p.fee == null ? "—" : (p.fee / 1e8).toFixed(6)],
       ["Size", `${(p.size / 1000).toFixed(1)} kB`],
     ],
-    body: `<div class="note">Pending: it flies into the mosaic when a block takes it.</div>`,
     link: { href: links.tx(p.txid), label: "Transaction on ZScan" },
   });
 

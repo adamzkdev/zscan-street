@@ -156,7 +156,7 @@ export function buildGallery(ctx: InteriorContext): Interior {
         ["Last", last != null ? zec(last).replace(" ZEC", "") : "—"],
         ["Sales", String(sales)],
       ],
-      body: `<dl class="kvlist">${traits.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><div class="note">Hung on floor ${band + 1} (${esc(BANDS[band].name)}, ranks ${ranks(BANDS[band])}). Prices in ZEC on Zilkroad.</div>`,
+      body: `<dl class="kvlist">${traits.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>`,
       link: { href: `https://zilkroad.com/#/${id}`, label: "Zilkroad" },
     };
   };
@@ -220,7 +220,6 @@ export function buildGallery(ctx: InteriorContext): Interior {
                 ["24h volume", zec(data.volume24, 1)],
               ]
             : undefined,
-          body: `<div class="note">10,000 pixel portraits. Every floor above hangs one rank band, rarest first; take the elevator to walk the whole collection.</div>`,
           panel: "cards",
         };
       const it = itemAt(hit);
