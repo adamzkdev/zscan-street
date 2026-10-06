@@ -39,6 +39,7 @@ import { Quality } from "./scene/quality";
 import { Residents } from "./scene/residents";
 import { CityPulse } from "./scene/pulse";
 import { Critters } from "./scene/critters";
+import { TvMode } from "./scene/tv";
 import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
 import { Photo } from "./ui/photo";
@@ -99,6 +100,8 @@ const sound = new Soundscape();
 
 // ---- camera rig + post ------------------------------------------------------------------------
 let hud: Hud;
+// TV mode (camera cuts on its own); made once the HUD exists
+let tv: TvMode | undefined;
 const rig = new CameraRig(canvas, {
   cut: () => hud?.cut(),
   shot: () => syncCamera(),
@@ -113,24 +116,64 @@ const tilt = tiltShift();
 for (const p of tilt.passes) composer.addPass(p);
 composer.addPass(new OutputPass());
 
-let theme: Theme = (() => {
-  const q = new URLSearchParams(location.search).get("theme");
-  if (q === "day" || q === "night") return q;
+/** Day, night, or "auto": follows the visitor's own clock (night from 19:00 to 7:00). */
+type ThemePref = Theme | "auto";
+const fixedTheme = new URLSearchParams(location.search).get("theme");
+let themePref: ThemePref = (() => {
+  if (fixedTheme === "day" || fixedTheme === "night" || fixedTheme === "auto") return fixedTheme;
   try {
     const v = localStorage.getItem("street.theme");
-    if (v === "day" || v === "night") return v;
+    if (v === "day" || v === "night" || v === "auto") return v;
   } catch {}
-  return "day";
+  return "auto";
 })();
+const clockTheme = (): Theme => {
+  const h = new Date().getHours();
+  return h >= 19 || h < 7 ? "night" : "day";
+};
+let theme: Theme = themePref === "auto" ? clockTheme() : themePref;
 function setTheme(t: Theme) {
   theme = t;
   applyTheme({ renderer, scene, hemi, sun: moon, bloom, lamps: lampLights, decor, city: city.group }, t);
-  try {
-    localStorage.setItem("street.theme", t);
-  } catch {}
+  hud?.setNight(t === "night");
+  weather(true);
 }
+function setThemePref(p: ThemePref) {
+  themePref = p;
+  try {
+    localStorage.setItem("street.theme", p);
+  } catch {}
+  setTheme(p === "auto" ? clockTheme() : p);
+}
+// on "auto", dusk and dawn come with the visitor's clock
+setInterval(() => {
+  if (themePref !== "auto" || clockTheme() === theme) return;
+  hud?.cut();
+  setTheme(clockTheme());
+}, 60_000);
+
+// ---- weather: at night, passing showers (when rain is on), a few minutes wet, a few dry ----
+let rainOn = true;
+let showering = true;
+const rainListeners: ((on: boolean) => void)[] = [];
+function weather(now = false) {
+  const raining = rainOn && theme === "night" && showering;
+  setRainWanted(rainOn && showering);
+  decor.setRain(raining, now);
+  sound.setRain(raining);
+  for (const fn of rainListeners) fn(raining);
+}
+(function showers() {
+  setTimeout(
+    () => {
+      showering = !showering;
+      weather();
+      showers();
+    },
+    (showering ? 240 + Math.random() * 180 : 150 + Math.random() * 180) * 1000,
+  );
+})();
 setTheme(theme);
-sound.setRain(theme === "night");
 
 function resize() {
   const w = window.innerWidth,
@@ -160,7 +203,6 @@ window.addEventListener("resize", resize);
 // ---- choreography + HUD -----------------------------------------------------------------------
 let selected: Snark | null = null;
 let rideNextBus = false;
-let rainOn = true;
 
 const director = new Director(scene, city, {
   stats: (s) => {
@@ -180,6 +222,7 @@ const director = new Director(scene, city, {
     }
     if (phase === "confirmed") shelf?.push({ height: b.height, hash: "", time: new Date(b.time).toISOString(), tx_count: b.txs.length + 1, size: b.size, fees: b.fees, miner_pool: b.pool });
     rig.busEvent(phase, bus);
+    tv?.bus(phase, bus);
     residents.busEvent(phase, new THREE.Vector3(DISTRICTS[0].stopX, 0, CITY.laneEast));
     if (phase === "arriving" && rideNextBus) {
       rideNextBus = false;
@@ -209,7 +252,8 @@ function crowd() {
 }
 crowd();
 setInterval(crowd, 5000);
-residents.setRain(rainOn && theme === "night");
+rainListeners.push((on) => residents.setRain(on));
+weather(true);
 // pigeons and street cats (fewer on small devices)
 const critters = new Critters(scene, director, quality.level >= 3 ? 8 : 16, quality.level >= 3 ? 2 : 3);
 // the city reacts to each real event: block, empty block, heavy shielded tx, price move
@@ -259,17 +303,12 @@ hud = new Hud(
       rig.pick(s);
       syncCamera();
     },
-    setTheme: (t) => {
-      setTheme(t);
-      sound.setRain(t === "night" && rainOn);
-      residents.setRain(t === "night" && rainOn);
-    },
+    setTheme: (t) => setThemePref(t),
     setRain: (on) => {
       rainOn = on;
-      setRainWanted(on);
-      decor.setRain(on && theme === "night");
-      sound.setRain(on && theme === "night");
-      residents.setRain(on && theme === "night");
+      // switching rain on brings a shower now
+      if (on) showering = true;
+      weather();
     },
     setSound: async (on) => {
       if (on) await sound.start();
@@ -278,6 +317,7 @@ hud = new Hud(
         localStorage.setItem("street.sound", on ? "1" : "0");
       } catch {}
     },
+    setTv: (on) => (on ? tv?.start() : tv?.stop()),
     setAuto: (on) => {
       rig.auto = on;
       syncCamera();
@@ -301,8 +341,9 @@ hud = new Hud(
     walk: (on) => setWalking(on),
   },
   director,
-  theme,
+  themePref,
 );
+hud.setNight(theme === "night");
 
 // sound stays as it was left; browsers only let it start on the first touch or click
 try {
@@ -469,6 +510,9 @@ function throughDoors(dt: number) {
   }
 }
 const footFocus = new THREE.Vector3();
+
+tv = new TvMode(rig, director, (on) => hud.setTv(on));
+if (new URLSearchParams(location.search).has("tv")) setTimeout(() => tv?.start(), 4000);
 
 if (city.factory) director.spawnMiners(city.factory.patrol);
 // the card shop's walls, and a clerk in each shop
@@ -859,6 +903,8 @@ if (new URLSearchParams(location.search).has("debug")) {
       residents,
       pulse,
       critters,
+      tv,
+      sound,
       nu7,
       onFoot,
       quality,
@@ -1055,6 +1101,34 @@ function runDirector(sim: number, t: number, q: THREE.Quaternion, right: THREE.V
   for (let i = 0; i < n; i++) director.update(sim / n, t - (sim * (n - 1 - i)) / n, q, right);
 }
 
+/** What the camera hears: people and traffic near the point it looks at, the zebra's signal. */
+let earT = 0;
+const earTmp = new THREE.Vector3();
+function listen(focus: THREE.Vector3) {
+  if (!sound.on) return;
+  // close views hear the street; the wide map only a hint of it
+  const close = walking || rig.shot ? 1 : rig.mode === "overview" ? 0.15 : THREE.MathUtils.clamp(0.25 + rig.iso.zoom * 0.25, 0.3, 0.9);
+  let people = 0;
+  for (const s of director.snarks) {
+    if (!s.root.visible || s.root.parent !== scene) continue;
+    const d = s.root.position.distanceTo(focus);
+    if (d < 20) people += 1 - d / 20;
+  }
+  let cars = 0;
+  for (const v of director.traffic.vehicles) {
+    const d = v.mover.group.position.distanceTo(focus);
+    if (d < 32) cars += (1 - d / 32) * Math.min(1, v.v / 8 + 0.2);
+  }
+  const zebra = director.traffic.crossings[0];
+  let crossing: { level: number; pan: number } | null = null;
+  if (zebra?.busy()) {
+    earTmp.set(zebra.x, 0, (CITY.road.z0 + CITY.road.z1) / 2);
+    const d = earTmp.distanceTo(focus);
+    if (d < 26) crossing = { level: close * (1 - d / 26), pan: earTmp.sub(focus).dot(camRight) / 12 };
+  }
+  sound.ambience(close * Math.min(1, people / 8), close * Math.min(1, cars / 2.5), crossing);
+}
+
 function frame(stepDt?: number) {
   timer.update();
   const real = timer.getDelta();
@@ -1082,6 +1156,8 @@ function frame(stepDt?: number) {
       aimCapture(interiors.walk.camera, capShot);
     }
     runDirector(sim, t, interiors.walk.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(interiors.walk.camera.quaternion));
+    // indoors the street goes quiet
+    sound.ambience(0, 0, null);
     joystick.sync(interiors.walk);
     renderPass.scene = interiors.active.scene;
     renderPass.camera = interiors.walk.camera;
@@ -1138,6 +1214,11 @@ function frame(stepDt?: number) {
   runDirector(sim, t, camQuat, camRight);
   visitors.update(dt, t, camQuat, camRight);
   critters.update(dt, cam);
+  if ((earT += sim) > 0.2) {
+    earT = 0;
+    listen(focus);
+  }
+  tv?.update(dt);
   joystick.sync(walking ? onFoot : null);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });

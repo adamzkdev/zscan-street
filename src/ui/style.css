@@ -1299,6 +1299,12 @@ kbd {
   top: calc(5vh + 12px);
 }
 
+/* TV mode: only the city */
+.tv .followhead,
+.tv .shots {
+  display: none !important;
+}
+
 /* ---- loading ---- */
 .loading,
 #boot {

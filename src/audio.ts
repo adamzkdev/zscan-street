@@ -11,6 +11,9 @@ export class Soundscape {
   private musicGain!: GainNode;
   private sfxGain!: GainNode;
   private rainOn = true;
+  private crowdGain: GainNode | null = null;
+  private trafficGain: GainNode | null = null;
+  private lastPiyo = 0;
   private timer: ReturnType<typeof setInterval> | undefined;
   on = false;
 
@@ -159,6 +162,88 @@ export class Soundscape {
     this.rain();
     this.hum();
     this.music();
+    this.street();
+  }
+
+  /**
+   * The street around the camera: a murmur of voices (louder with more people near) and the
+   * rumble of passing traffic. Levels come from `ambience`, a few times a second.
+   */
+  private street() {
+    const ctx = this.ctx!;
+    // voices: band-passed noise whose loudness wobbles like several conversations at once
+    const v = ctx.createBufferSource();
+    v.buffer = this.noise(6);
+    v.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 620;
+    bp.Q.value = 0.9;
+    const wobble = ctx.createGain();
+    wobble.gain.value = 0.6;
+    for (const [f, d] of [
+      [0.7, 0.25],
+      [1.9, 0.15],
+    ]) {
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = f;
+      const depth = ctx.createGain();
+      depth.gain.value = d;
+      lfo.connect(depth).connect(wobble.gain);
+      lfo.start();
+    }
+    this.crowdGain = ctx.createGain();
+    this.crowdGain.gain.value = 0;
+    v.connect(bp).connect(wobble).connect(this.crowdGain).connect(this.master);
+    v.start();
+    // traffic: a low rumble with a little tyre hiss on top
+    const t = ctx.createBufferSource();
+    t.buffer = this.noise(5, true);
+    t.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 420;
+    this.trafficGain = ctx.createGain();
+    this.trafficGain.gain.value = 0;
+    t.connect(lp).connect(this.trafficGain).connect(this.master);
+    t.start();
+  }
+
+  /**
+   * What the camera hears, 0..1 each: people nearby, traffic nearby, and the pedestrian crossing's
+   * signal (null when nobody is crossing or it is too far), panned left or right (-1..1).
+   */
+  ambience(crowd: number, traffic: number, crossing: { level: number; pan: number } | null) {
+    if (!this.ctx || !this.on || !this.crowdGain || !this.trafficGain) return;
+    const t = this.ctx.currentTime;
+    this.crowdGain.gain.setTargetAtTime(crowd * 0.09, t, 0.6);
+    this.trafficGain.gain.setTargetAtTime(traffic * 0.22, t, 0.4);
+    if (crossing && crossing.level > 0.05 && t - this.lastPiyo > 0.62) {
+      this.lastPiyo = t;
+      this.piyo(crossing.level, crossing.pan);
+    }
+  }
+
+  /** The Japanese crossing signal for the blind: a two-chirp "piyo" (a rising whistle). */
+  private piyo(level: number, pan: number) {
+    const ctx = this.ctx!;
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    p.connect(this.sfxGain);
+    const t0 = ctx.currentTime + 0.02;
+    [0, 0.17].forEach((dt) => {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(2300, t0 + dt);
+      o.frequency.exponentialRampToValueAtTime(3300, t0 + dt + 0.09);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t0 + dt);
+      g.gain.linearRampToValueAtTime(0.03 * level, t0 + dt + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.12);
+      o.connect(g).connect(p);
+      o.start(t0 + dt);
+      o.stop(t0 + dt + 0.14);
+    });
   }
 
   /** Rain: two layers of filtered noise (the hiss of the shower, the patter on the ground) plus drips. */

@@ -31,7 +31,8 @@ export type Alert =
 export interface Decor {
   update(t: number, dt: number, focus: THREE.Vector3, camPos: THREE.Vector3): void;
   setLive(d: Partial<LiveData>): void;
-  setRain(on: boolean): void;
+  /** Rain on or off; it builds up and dies away unless `now`. */
+  setRain(on: boolean, now?: boolean): void;
   alert(a: Alert): void;
   /** The neon tubes all swing to `color` and glow brighter, then settle back over `seconds`. */
   pulse(color: string, seconds: number): void;
@@ -71,8 +72,8 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
     setLive(d) {
       Object.assign(live, d);
     },
-    setRain(on) {
-      rain.visible = on;
+    setRain(on, now) {
+      rain.set(on, now);
     },
     alert: (a) => screens.alert(a),
     pulse: (c, sec) => neon.pulse(c, sec),
@@ -766,12 +767,15 @@ function rainfall(scene: THREE.Scene, ticks: Tick[]) {
   const mat = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    uniforms: { t: { value: 0 }, color: { value: new THREE.Color(0.55, 0.6, 0.85) } },
+    uniforms: { t: { value: 0 }, amount: { value: 1 }, color: { value: new THREE.Color(0.55, 0.6, 0.85) } },
     vertexShader: `
       attribute float tip;
       uniform float t;
+      uniform float amount;
       varying float a;
       void main() {
+        // a shower builds up and dies away: fewer streaks, not fainter ones
+        if (fract(sin(dot(position.xz, vec2(12.9898, 78.233))) * 43758.5453) > amount) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
         vec3 p = position;
         p.y = mod(p.y - t * 16.0, ${H.toFixed(1)});
         p.x += p.y * 0.12 + tip * 0.05;
@@ -787,10 +791,21 @@ function rainfall(scene: THREE.Scene, ticks: Tick[]) {
   const lines = new THREE.LineSegments(geo, mat);
   lines.frustumCulled = false;
   scene.add(lines);
-  ticks.push((t) => {
+  let target = 1;
+  ticks.push((t, dt) => {
+    const u = mat.uniforms.amount;
+    u.value += Math.sign(target - u.value) * Math.min(Math.abs(target - u.value), dt / 6);
+    lines.visible = u.value > 0.001;
     if (lines.visible) mat.uniforms.t.value = t;
   });
-  return lines;
+  return {
+    /** Start or stop the rain: it builds up or dies away over a few seconds. */
+    set(on: boolean, now = false) {
+      target = on ? 1 : 0;
+      if (now) mat.uniforms.amount.value = target;
+      lines.visible = mat.uniforms.amount.value > 0.001;
+    },
+  };
 }
 
 // ---- hologram -------------------------------------------------------------------------------------

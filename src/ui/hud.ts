@@ -41,6 +41,7 @@ const ICON: Record<string, string> = {
   map: '<path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/>',
   parcel: '<path d="M3 8l9-5 9 5-9 5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>',
   hand: '<path d="M7 11V6.5a1.5 1.5 0 0 1 3 0V11M10 10V4.5a1.5 1.5 0 0 1 3 0V10M13 10V5.5a1.5 1.5 0 0 1 3 0V12M16 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3.6 14.6a1.5 1.5 0 0 1 2.4-1.8L7 14"/>',
   stop: '<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>',
@@ -109,8 +110,11 @@ export interface HudCallbacks {
   followNextBus(): void;
   pickShot(s: Shot | null): void;
   setAuto(on: boolean): void;
+  /** TV mode: the camera cuts to what is happening on its own. */
+  setTv(on: boolean): void;
   setRain(on: boolean): void;
-  setTheme(t: Theme): void;
+  /** Day, night, or follow the visitor's clock. */
+  setTheme(t: Theme | "auto"): void;
   setSound(on: boolean): Promise<void>;
   zoom(k: number): void;
   turn(rad: number): void;
@@ -210,8 +214,11 @@ export class Hud {
   /** Block a followed zkSNARK was confirmed in (kept after it leaves the street). */
   private flowDone: { s: Snark; height: number } | null = null;
   private auto = false;
+  private tv = false;
   private rain = true;
-  private theme: Theme;
+  private theme: Theme | "auto";
+  /** What is showing right now (on "auto" it depends on the hour). */
+  private night = false;
   private sig = "";
   private camOpen = false;
   private labels = new Map<string, HTMLElement>();
@@ -219,7 +226,7 @@ export class Hud {
   constructor(
     private cb: HudCallbacks,
     private director: Director,
-    theme: Theme,
+    theme: Theme | "auto",
   ) {
     this.theme = theme;
     this.root.innerHTML = `
@@ -227,7 +234,7 @@ export class Hud {
       <div class="labels"></div>
       <div class="corner">
         <button class="hbtn exit" data-act="leave" aria-label="Leave" title="Leave (Esc)"><svg viewBox="0 0 24 24" class="door"><path class="frame" d="M5 21V3h14v18"/><rect class="gap" x="6.5" y="4.5" width="11" height="16.5"/><g class="leaf"><rect x="6.5" y="4.5" width="11" height="16.5"/><circle cx="15" cy="13" r="1"/></g><path class="floor" d="M3 21h18"/></svg></button>
-        <div class="seg" role="group" aria-label="Theme"><button data-theme="day" aria-label="Day" title="Day">${icon("sun")}</button><button data-theme="night" aria-label="Night" title="Night">${icon("moon")}</button></div>
+        <div class="seg" role="group" aria-label="Theme"><button data-theme="day" aria-label="Day" title="Day">${icon("sun")}</button><button data-theme="night" aria-label="Night" title="Night">${icon("moon")}</button><button data-theme="auto" aria-label="Follow my clock" title="Follow my clock">${icon("clock")}</button></div>
         <button class="hbtn sound" data-act="sound" aria-label="Sound" title="Sound">${icon("sound")}</button>
       </div>
       <nav class="rail">
@@ -339,6 +346,19 @@ export class Hud {
       }, 6000);
     }
     this.renderStrip(true);
+  }
+
+  /** Night or day is showing (the rain switch only makes sense at night). */
+  setNight(on: boolean) {
+    this.night = on;
+    if (this.camOpen) this.renderCam();
+  }
+
+  /** TV mode on or off (the follow header and the shot picker stay hidden while it runs). */
+  setTv(on: boolean) {
+    this.tv = on;
+    this.root.classList.toggle("tv", on);
+    if (this.camOpen) this.renderCam();
   }
 
   /** Camera told us what it is showing. */
@@ -472,7 +492,7 @@ export class Hud {
     if (!el) return;
     const d = el.dataset;
     if (d.theme) {
-      this.theme = d.theme as Theme;
+      this.theme = d.theme as Theme | "auto";
       this.renderTheme();
       this.cb.setTheme(this.theme);
       if (this.camOpen) this.renderCam();
@@ -551,6 +571,9 @@ export class Hud {
       case "auto":
         this.cb.setAuto(!this.auto);
         return this.renderCam();
+      case "tv":
+        this.setCam(false);
+        return this.cb.setTv(!this.tv);
       case "sound": {
         const on = !el.classList.contains("on");
         el.classList.toggle("on", on);
@@ -777,8 +800,9 @@ export class Hud {
       ${AREAS.map((d) => `<button class="row" data-district="${d.key}"><i class="kind" style="background:${d.color}"></i><span>${d.name}</span></button>`).join("")}
       <button class="row" data-shop="downtown">${icon("parcel")}<span>Inside the MEMPOOL shop</span><small>${sites[0]?.waiting ?? 0}</small></button>
       <div class="mh">Options</div>
+      <div class="switch"><span>TV mode</span><button class="toggle ${this.tv ? "on" : ""}" data-act="tv" aria-label="Toggle TV mode"></button></div>
       <div class="switch"><span>Cut to the bus stop</span><button class="toggle ${this.auto ? "on" : ""}" data-act="auto" aria-label="Toggle cinematic cuts"></button></div>
-      ${this.theme === "night" ? `<div class="switch"><span>Rain</span><button class="toggle ${this.rain ? "on" : ""}" data-act="rain" aria-label="Toggle rain"></button></div>` : ""}
+      ${this.night ? `<div class="switch"><span>Rain</span><button class="toggle ${this.rain ? "on" : ""}" data-act="rain" aria-label="Toggle rain"></button></div>` : ""}
       <div class="keys">drag move · right-drag turn · scroll zoom · WASD fly</div>`;
   }
 
