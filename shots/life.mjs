@@ -16,6 +16,7 @@ await p.evaluate((ms) => new Promise((r) => { const id = setInterval(() => captu
 if (!views) views = await p.evaluate(process.argv[3].slice(5));
 let i = 0;
 for (const v of views) {
+  if (v.js) await p.evaluate(v.js);
   await p.evaluate((v) => {
     capture.shot(v);
     for (let k = 0; k < (v.steps ?? 3); k++) capture.step(1 / 30);

@@ -37,6 +37,7 @@ import { Reader } from "./ui/reader";
 import { Joystick } from "./ui/joystick";
 import { Quality } from "./scene/quality";
 import { Residents } from "./scene/residents";
+import { CityPulse } from "./scene/pulse";
 import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
 import { Photo } from "./ui/photo";
@@ -172,6 +173,7 @@ const director = new Director(scene, city, {
     if (phase === "boarding") sound.busArrives();
     hud.bus(phase, b, carried, district?.name ?? null);
     if (phase === "arriving") {
+      pulse.block(b);
       hall?.found(b.height, b.pool);
       for (const fn of blockListeners) fn(b.height, b.pool);
     }
@@ -207,6 +209,8 @@ function crowd() {
 crowd();
 setInterval(crowd, 5000);
 residents.setRain(rainOn && theme === "night");
+// the city reacts to each real event: block, empty block, heavy shielded tx, price move
+const pulse = new CityPulse(city, decor, sound, residents, nu7);
 
 /** What each walk-in place is, for the people who work there. */
 const PLACE_ABOUT: Record<string, string> = {
@@ -836,7 +840,10 @@ connectFeed({
       setTimeout(() => tracker.fromUrl(), 1200);
     }
   },
-  tx: (tx) => director.addTx(tx),
+  tx: (tx) => {
+    director.addTx(tx);
+    pulse.tx(tx);
+  },
   block: (b) => director.block(b),
   mempool: (ids) => director.sweep(ids),
   status: (s) => hud.setStatus(s),
@@ -847,6 +854,7 @@ if (new URLSearchParams(location.search).has("debug")) {
     street: {
       director,
       residents,
+      pulse,
       nu7,
       onFoot,
       quality,

@@ -59,6 +59,82 @@ export class Soundscape {
     [659.3, 830.6, 987.8].forEach((f, i) => this.bell(f, t + 0.5 + i * 0.16, 0.5, 0.05));
   }
 
+  /** A new block: a short departure melody, as Japanese stations play before the doors close. */
+  blockMelody(big = false) {
+    if (!this.on || !this.ctx) return;
+    const t = this.ctx.currentTime + 0.05;
+    const notes = big ? [784, 988, 1175, 1568, 1175, 1319, 1568, 1976] : [659.3, 784, 987.8, 880, 1046.5, 987.8];
+    notes.forEach((f, i) => this.bell(f, t + i * 0.13, 0.55, 0.045));
+  }
+
+  /** An empty block: the bus drives through with nobody aboard, two low falling honks. */
+  emptyHorn() {
+    if (!this.on || !this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.05;
+    [
+      [311, 294, 0],
+      [262, 233, 0.42],
+    ].forEach(([f0, f1, at]) => {
+      const o = ctx.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(f0, t + at);
+      o.frequency.linearRampToValueAtTime(f1, t + at + 0.36);
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 900;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t + at);
+      g.gain.linearRampToValueAtTime(0.05, t + at + 0.03);
+      g.gain.setValueAtTime(0.05, t + at + 0.28);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.4);
+      o.connect(lp).connect(g).connect(this.sfxGain);
+      o.start(t + at);
+      o.stop(t + at + 0.45);
+    });
+  }
+
+  /** Thunder after the lightning: a crack, then a long low roll. */
+  thunder() {
+    if (!this.on || !this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.35;
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise(3.5, true);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(1800, t);
+    lp.frequency.exponentialRampToValueAtTime(120, t + 2.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.32, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.5);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.4);
+    n.connect(lp).connect(g).connect(this.sfxGain);
+    n.start(t);
+  }
+
+  /** The crowd reacts: a short swell of voices (cheer when `up`, a groan otherwise). */
+  crowd(up: boolean) {
+    if (!this.on || !this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.1;
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise(2.2);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(up ? 900 : 520, t);
+    bp.frequency.linearRampToValueAtTime(up ? 1500 : 330, t + 1.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.09, t + 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2);
+    n.connect(bp).connect(g).connect(this.sfxGain);
+    n.start(t);
+    if (up) [1046.5, 1318.5].forEach((f, i) => this.bell(f, t + 0.2 + i * 0.12, 0.4, 0.03));
+  }
+
   private build() {
     const ctx = new AudioContext();
     this.ctx = ctx;

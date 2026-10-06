@@ -20,10 +20,22 @@ export interface LiveData {
   nu7?: { height: number | null; date: string | null; activated: boolean };
 }
 
+/** Something just happened on the chain: every LED screen in the city shows it for a few seconds. */
+export type Alert =
+  | { kind: "block"; height: number; txs: number; pool: string | null }
+  | { kind: "empty"; height: number; pool: string | null }
+  | { kind: "proof"; actions: number; pool: string | null }
+  | { kind: "price"; usd: number; pct: number };
+
 export interface Decor {
   update(t: number, dt: number, focus: THREE.Vector3, camPos: THREE.Vector3): void;
   setLive(d: Partial<LiveData>): void;
   setRain(on: boolean): void;
+  alert(a: Alert): void;
+  /** The neon tubes all swing to `color` and glow brighter, then settle back over `seconds`. */
+  pulse(color: string, seconds: number): void;
+  /** Lightning on the Proof Factory's roof (a big shielded transaction being proven). */
+  strike(): void;
 }
 
 type Tick = (t: number, dt: number, focus: THREE.Vector3, camPos: THREE.Vector3) => void;
@@ -42,8 +54,9 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
   const ticks: Tick[] = [];
   const live: LiveData = { height: null, mempool: 0, since: 0 };
   Market.subscribe((m) => (live.market = m));
-  ads(city, ticks, live);
-  neonTrim(city);
+  const screens = ads(city, ticks, live);
+  const neon = neonTrim(city, ticks);
+  const bolt = lightning(scene, city, ticks);
   lampGlow(city, ticks);
   const rain = rainfall(scene, ticks);
   hologram(scene, ticks);
@@ -59,6 +72,9 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
     setRain(on) {
       rain.visible = on;
     },
+    alert: (a) => screens.alert(a),
+    pulse: (c, sec) => neon.pulse(c, sec),
+    strike: () => bolt(),
   };
 }
 
@@ -451,10 +467,21 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
   city.group.add(yardBoard);
 
   let last = 0;
+  let now = 0;
+  let alert: { a: Alert; from: number; until: number } | null = null;
   ticks.push((t) => {
+    now = t;
     if (t - last < 1 / 15) return;
     last = t;
+    if (alert && t > alert.until) alert = null;
     for (const s of screens) {
+      if (alert) {
+        alertAd(s.ctx, s.w, s.h, t - alert.from, alert.a);
+        s.ctx.fillStyle = "rgba(0,0,0,0.18)";
+        for (let y = 0; y < s.h; y += 3) s.ctx.fillRect(0, y, s.w, 1);
+        s.tex.needsUpdate = true;
+        continue;
+      }
       // NU7 takes a turn on every screen until (and after) it activates
       const list = live.nu7 ? [...s.ads, NU7_AD] : s.ads;
       const slot = Math.floor((t + s.at) / 7) % list.length;
@@ -474,6 +501,58 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
       s.tex.needsUpdate = true;
     }
   });
+  return {
+    alert(a: Alert) {
+      alert = { a, from: now, until: now + (a.kind === "block" || a.kind === "empty" ? 6.5 : 5) };
+    },
+  };
+}
+
+const POOL_NAME: Record<string, string> = { orchard: "ORCHARD", ironwood: "IRONWOOD", sapling: "SAPLING" };
+
+/** What every screen shows while an alert is on: a flash, a band, one big figure, one line. */
+function alertAd(ctx: CanvasRenderingContext2D, w: number, h: number, age: number, a: Alert) {
+  const look = {
+    block: { bg: "#06070a", band: "#f4b728", ink: "#0d0d0d", title: "NEW BLOCK  新ブロック", big: "", line: "", lineCol: "#f4b728" },
+    empty: { bg: "#0b0b0e", band: "#5a5866", ink: "#e8e6ee", title: "EMPTY BLOCK  空", big: "", line: "", lineCol: "#8a8896" },
+    proof: { bg: "#05100b", band: "#3ee08f", ink: "#04140c", title: "SHIELDED  秘密", big: "", line: "", lineCol: "#3ee08f" },
+    price: { bg: "#06070a", band: "#2fbf9c", ink: "#04140c", title: "ZEC / USD", big: "", line: "", lineCol: "#2fbf9c" },
+  }[a.kind];
+  if (a.kind === "block") {
+    look.big = `#${a.height.toLocaleString("en-US")}`;
+    look.line = `${a.txs} TX${a.pool ? ` · ${a.pool.toUpperCase()}` : ""}`;
+  } else if (a.kind === "empty") {
+    look.big = `#${a.height.toLocaleString("en-US")}`;
+    look.line = `COINBASE ONLY${a.pool ? ` · ${a.pool.toUpperCase()}` : ""}`;
+  } else if (a.kind === "proof") {
+    look.big = `${a.actions} ACTIONS`;
+    look.line = a.pool ? `${POOL_NAME[a.pool] ?? a.pool.toUpperCase()} POOL` : "SHIELDED POOL";
+  } else {
+    const up = a.pct >= 0;
+    look.band = look.lineCol = up ? "#2fbf9c" : "#f06b76";
+    look.big = `${up ? "▲" : "▼"} ${Math.abs(a.pct).toFixed(2)}%`;
+    look.line = usd(a.usd);
+  }
+  ctx.fillStyle = look.bg;
+  ctx.fillRect(0, 0, w, h);
+  // the band blinks for the first two seconds
+  const on = age > 2 || Math.floor(age * 4) % 2 === 0;
+  ctx.fillStyle = on ? look.band : look.bg;
+  ctx.fillRect(0, 0, w, h * 0.26);
+  ctx.fillStyle = on ? look.ink : look.band;
+  ctx.font = `800 ${h * 0.14}px ${FONT}`;
+  fitText(ctx, look.title, w * 0.05, h * 0.18, w * 0.9);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `800 ${h * 0.3}px ${MONO}`;
+  fitText(ctx, look.big, w * 0.05, h * 0.62, w * 0.9);
+  ctx.fillStyle = look.lineCol;
+  ctx.font = `700 ${h * 0.13}px ${MONO}`;
+  fitText(ctx, look.line, w * 0.05, h * 0.86, w * 0.9);
+  // the cut-in: a white flash that fades
+  if (age < 0.5) {
+    ctx.fillStyle = `rgba(255,255,255,${(1 - age / 0.5) * 0.85})`;
+    ctx.fillRect(0, 0, w, h);
+  }
 }
 
 // ---- lamp glow ----------------------------------------------------------------------------------
@@ -537,13 +616,15 @@ function lampGlow(city: City, ticks: Tick[]) {
 // ---- neon tubes ---------------------------------------------------------------------------------
 
 /** Thin neon tubes along the roof lines and corners of the downtown buildings. */
-function neonTrim(city: City) {
+function neonTrim(city: City, ticks: Tick[]) {
   const colors = ["#3ef0ff", "#ff3e8a", "#b07bff", "#ff9f2e", "#38ff9c"];
   const rand = r(9);
+  const tubes: { m: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
   for (const f of city.facades) {
     if (f.face !== "s" || !f.frontRow || f.type === "house" || f.type === "mempool") continue;
     const c = new THREE.Color(colors[Math.floor(rand() * colors.length)]).multiplyScalar(2.4);
     const m = new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
+    tubes.push({ m, base: c.clone() });
     const w = f.x1 - f.x0;
     const top = CURB + f.height + 0.05;
     const tube = (sx: number, sy: number, sz: number, x: number, y: number, z: number) => {
@@ -557,6 +638,102 @@ function neonTrim(city: City) {
       tube(0.06, f.height - 3, 0.06, f.x0 + 0.1, CURB + 3 + (f.height - 3) / 2, f.z + 0.1);
     }
   }
+  let pulse: { color: THREE.Color; left: number; len: number } | null = null;
+  ticks.push((_t, dt) => {
+    if (!pulse) return;
+    pulse.left -= dt;
+    const k = Math.max(0, pulse.left / pulse.len);
+    for (const tb of tubes) tb.m.color.copy(tb.base).lerp(pulse.color, Math.min(1, k * 1.6)).multiplyScalar(1 + k * 0.9);
+    if (pulse.left <= 0) pulse = null;
+  });
+  return {
+    pulse(color: string, seconds: number) {
+      pulse = { color: new THREE.Color(color).multiplyScalar(2.4), left: seconds, len: seconds };
+    },
+  };
+}
+
+// ---- lightning ------------------------------------------------------------------------------------
+
+/**
+ * A bolt from the sky onto the Proof Factory's roof, flickering twice, with a glow where it lands.
+ * Plain lines and one additive plane: no extra light in the scene (that would recompile every
+ * material).
+ */
+function lightning(scene: THREE.Scene, city: City, ticks: Tick[]) {
+  const hall = city.factory?.hall;
+  if (!hall) return () => {};
+  const occ = city.occluders.find((o) => o.box.containsPoint(new THREE.Vector3(hall.x, CURB + 1, hall.z)));
+  const top = occ ? occ.box.max.y : CURB + 10;
+  const mat = new THREE.LineBasicMaterial({ color: new THREE.Color(2.2, 2.6, 3.2), toneMapped: false, transparent: true });
+  const bolt = new THREE.LineSegments(new THREE.BufferGeometry(), mat);
+  bolt.frustumCulled = false;
+  bolt.visible = false;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(220,240,255,1)");
+  grad.addColorStop(0.3, "rgba(140,200,255,0.5)");
+  grad.addColorStop(1, "rgba(120,160,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.set(hall.x, top + 0.2, hall.z);
+  glow.visible = false;
+  scene.add(bolt, glow);
+  let age = -1;
+  const shape = () => {
+    // a main channel zig-zagging down, with two short forks
+    const pts: number[] = [];
+    let x = hall.x + (Math.random() - 0.5) * 6,
+      z = hall.z + (Math.random() - 0.5) * 3,
+      y = top + 34;
+    const seg = (x2: number, y2: number, z2: number) => {
+      pts.push(x, y, z, x2, y2, z2);
+      x = x2;
+      y = y2;
+      z = z2;
+    };
+    const fork = (fx: number, fy: number, fz: number) => {
+      let a = fx,
+        b = fy,
+        cz = fz;
+      for (let i = 0; i < 3; i++) {
+        const na = a + (Math.random() - 0.5) * 3,
+          nb = b - 2 - Math.random() * 2,
+          nc = cz + (Math.random() - 0.5) * 2;
+        pts.push(a, b, cz, na, nb, nc);
+        a = na;
+        b = nb;
+        cz = nc;
+      }
+    };
+    for (let i = 0; i < 12; i++) {
+      seg(hall.x + (Math.random() - 0.5) * 3 * (1 - i / 12), Math.max(top, y - (34 / 12) * (0.6 + Math.random() * 0.8)), hall.z + (Math.random() - 0.5) * 2);
+      if (i === 4 || i === 8) fork(x, y, z);
+    }
+    seg(hall.x, top, hall.z);
+    bolt.geometry.dispose();
+    bolt.geometry = new THREE.BufferGeometry();
+    bolt.geometry.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  };
+  ticks.push((_t, dt) => {
+    if (age < 0) return;
+    age += dt;
+    // on, off, on again (a new shape), then out
+    const on = age < 0.09 || (age > 0.16 && age < 0.34);
+    if (age > 0.16 && age - dt <= 0.16) shape();
+    bolt.visible = on;
+    glow.visible = age < 0.9;
+    (glow.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - age / 0.9);
+    if (age > 0.9) age = -1;
+  });
+  return () => {
+    shape();
+    age = 0;
+  };
 }
 
 // ---- rain ---------------------------------------------------------------------------------------
