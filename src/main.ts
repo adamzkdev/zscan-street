@@ -37,6 +37,7 @@ import { Reader } from "./ui/reader";
 import { Joystick } from "./ui/joystick";
 import { Quality } from "./scene/quality";
 import { Tracker } from "./ui/track";
+import { Nu7 } from "./scene/nu7";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
@@ -78,6 +79,8 @@ console.info(`city built in ${Math.round(performance.now() - t0)} ms`);
 scene.add(city.group);
 const lampLights = new LampLights(scene, city.lamps, 12);
 const decor = buildDecor(scene, city);
+// the NU7 upgrade: countdown on the screens, fireworks when it activates
+const nu7 = new Nu7(scene, city, decor);
 // the MEMPOOL shop's shelves hold the last blocks
 const shelf = city.shops[0] ? new BlockShelf(scene, city.shops[0]) : null;
 void get<BlockSummary[]>("/v1/blocks?limit=100").then((b) => b && shelf?.set(b));
@@ -158,6 +161,7 @@ const director = new Director(scene, city, {
     hud.setStats(s);
     if (s.lastBlock) hall?.setLast(s.lastBlock.height, s.lastBlock.miner_pool, Date.parse(s.lastBlock.time));
     decor.setLive({ height: s.lastBlock?.height ?? null, mempool: s.mempool });
+    nu7.setTip(s.lastBlock?.height ?? null);
   },
   door: () => sound.chime(),
   bus: (phase, b, carried, bus, district) => {
@@ -752,6 +756,7 @@ if (new URLSearchParams(location.search).has("debug")) {
   Object.assign(window, {
     street: {
       director,
+      nu7,
       onFoot,
       quality,
       rig,
@@ -1021,6 +1026,7 @@ function frame(stepDt?: number) {
   joystick.sync(walking ? onFoot : null);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
+  nu7.update(dt);
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   city.update(t, dt);
   hall?.update(t, dt);

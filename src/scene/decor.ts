@@ -16,6 +16,8 @@ export interface LiveData {
   mempool: number;
   since: number;
   market?: MarketState;
+  /** The NU7 upgrade: its height once set, the announced date, and whether it is live. */
+  nu7?: { height: number | null; date: string | null; activated: boolean };
 }
 
 export interface Decor {
@@ -201,6 +203,68 @@ const MARKET_ADS: Ad[] = [
     }
   },
 ];
+
+/**
+ * NU7 on every screen in turn: a countdown to the announced date (or, once the height is set, the
+ * blocks left), then "NU7 IS LIVE" with what changed.
+ */
+const NU7_AD: Ad = (ctx, w, h, t, live) => {
+  const n = live.nu7!;
+  ctx.fillStyle = "#07060c";
+  ctx.fillRect(0, 0, w, h);
+  const glow = ctx.createRadialGradient(w / 2, h * 0.55, 4, w / 2, h * 0.55, w * 0.7);
+  glow.addColorStop(0, n.activated ? "rgba(62,224,143,0.32)" : "rgba(176,123,255,0.32)");
+  glow.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+  ctx.textAlign = "center";
+  const accent = n.activated ? "#3ee08f" : "#b07bff";
+  ctx.fillStyle = accent;
+  ctx.font = `800 ${h * 0.13}px ${FONT}`;
+  fitText(ctx, n.activated ? "NU7 稼働中 · IS LIVE" : "NU7 · アップグレード", w / 2, h * 0.2);
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = h * 0.08;
+  if (n.activated) {
+    ctx.font = `800 ${h * 0.24}px ${MONO}`;
+    fitText(ctx, "25 s BLOCKS", w / 2, h * 0.52);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#cfc8e8";
+    ctx.font = `600 ${h * 0.085}px ${MONO}`;
+    fitText(ctx, "NSM · 60% OF FEES → RESERVE", w / 2, h * 0.72);
+    fitText(ctx, n.height ? `SINCE BLOCK #${n.height.toLocaleString("en-US")}` : "", w / 2, h * 0.86);
+  } else if (n.height && live.height) {
+    const left = Math.max(0, n.height - live.height);
+    ctx.font = `800 ${h * 0.26}px ${MONO}`;
+    fitText(ctx, left.toLocaleString("en-US"), w / 2, h * 0.53);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#cfc8e8";
+    ctx.font = `600 ${h * 0.085}px ${MONO}`;
+    fitText(ctx, `BLOCKS TO #${n.height.toLocaleString("en-US")}`, w / 2, h * 0.72);
+    const eta = new Date(Date.now() + left * 75_000);
+    fitText(ctx, `≈ ${eta.toISOString().slice(0, 16).replace("T", " ")} UTC`, w / 2, h * 0.86);
+  } else {
+    // only a date announced: count down to it (mid-day UTC)
+    const target = Date.parse(`${n.date ?? "2026-11-05"}T12:00:00Z`);
+    const s = Math.max(0, Math.floor((target - Date.now()) / 1000));
+    const d = Math.floor(s / 86400),
+      hh = Math.floor((s % 86400) / 3600),
+      mm = Math.floor((s % 3600) / 60),
+      ss = s % 60;
+    ctx.font = `800 ${h * 0.2}px ${MONO}`;
+    fitText(ctx, `${d}d ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`, w / 2, h * 0.52);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#cfc8e8";
+    ctx.font = `600 ${h * 0.085}px ${MONO}`;
+    fitText(ctx, `TARGET ${n.date ?? "2026-11-05"} · 25 s BLOCKS`, w / 2, h * 0.72);
+    fitText(ctx, "HEIGHT TO BE SET · ZEBRA 7", w / 2, h * 0.86);
+  }
+  ctx.shadowBlur = 0;
+  ctx.textAlign = "left";
+  // a pulse bar along the bottom
+  ctx.fillStyle = accent;
+  ctx.fillRect(0, h - h * 0.03, w * ((t * 0.25) % 1), h * 0.03);
+};
 
 const ADS: Ad[] = [
   // SHIELD EVERYTHING, gold on black, logo pulsing
@@ -390,9 +454,11 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
     if (t - last < 1 / 15) return;
     last = t;
     for (const s of screens) {
-      const slot = Math.floor((t + s.at) / 7) % s.ads.length;
+      // NU7 takes a turn on every screen until (and after) it activates
+      const list = live.nu7 ? [...s.ads, NU7_AD] : s.ads;
+      const slot = Math.floor((t + s.at) / 7) % list.length;
       const phase = (t + s.at) % 7;
-      s.ads[slot](s.ctx, s.w, s.h, t, live);
+      list[slot](s.ctx, s.w, s.h, t, live);
       // scan lines, and a glitch on the cut between two ads
       s.ctx.fillStyle = "rgba(0,0,0,0.18)";
       for (let y = 0; y < s.h; y += 3) s.ctx.fillRect(0, y, s.w, 1);
