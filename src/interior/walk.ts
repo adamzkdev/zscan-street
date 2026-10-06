@@ -23,10 +23,16 @@ export class WalkControls {
   readonly stick = { x: 0, y: 0 };
   private moved = 0;
   private push = 0;
+  /** Jumping (Space): height above the floor and vertical speed. */
+  private hop = 0;
+  private vy = 0;
   /** Where you came in (ground floor only): walking back into that wall takes you out. */
   door: { x: number; z: number } | null = null;
   /** Obstacles other than `colliders` (the street uses its own grid). */
   collide?: (x: number, z: number) => boolean;
+  /** Floor height under (x, z) on the street (stairs, platforms, bridges); the base floor if null. */
+  ground?: (x: number, z: number) => number | null;
+  private baseFloor = 0;
   onExit?: () => void;
   private sinceArrival = 0;
 
@@ -102,6 +108,7 @@ export class WalkControls {
   /** Stand somewhere, looking along `yaw` (0 = toward −z). */
   place(p: THREE.Vector3, yaw: number, floorY = p.y) {
     this.floorY = floorY;
+    this.baseFloor = floorY;
     this.camera.position.set(p.x, floorY + EYE, p.z);
     this.yaw = yaw;
     this.pitch = -0.08;
@@ -139,8 +146,23 @@ export class WalkControls {
     const d = this.door;
     this.sinceArrival += dt;
     if (d && this.sinceArrival > 0.8 && move.z > 0 && Math.abs(p.x - d.x) < 1.7 && p.z > d.z - 0.75) this.onExit?.();
+    // stairs, platforms, bridges: the floor follows the ground under you
+    if (this.ground) this.floorY = this.ground(p.x, p.z) ?? this.baseFloor;
+    // Space jumps
+    if (k.has(" ") && this.hop <= 0.001 && this.vy <= 0) this.vy = 4.6;
+    if (this.vy !== 0 || this.hop > 0) {
+      this.vy -= 13 * dt;
+      this.hop = Math.max(0, this.hop + this.vy * dt);
+      if (this.hop === 0) this.vy = 0;
+    }
     p.y += (this.floorY + EYE - p.y) * Math.min(1, dt * 10);
+    p.y += this.hop;
     this.camera.rotation.set(this.pitch, this.yaw, 0);
+  }
+
+  /** The floor height the walker stands on now. */
+  get floor() {
+    return this.floorY;
   }
 
   /** The way the walker looks (0 = toward −z). */

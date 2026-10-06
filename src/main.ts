@@ -9,6 +9,7 @@ import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
 import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
+import { GRID, RIVER } from "./scene/city/plan";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
 import { buildDecor } from "./scene/decor";
@@ -38,6 +39,16 @@ import { Joystick } from "./ui/joystick";
 import { Quality } from "./scene/quality";
 import { Residents } from "./scene/residents";
 import { CityPulse } from "./scene/pulse";
+import { Metro, NU7_LINE } from "./scene/metro";
+import { Tram } from "./scene/tram";
+import { CityTraffic } from "./scene/citytraffic";
+import { Life } from "./scene/life";
+import { Horns } from "./scene/horns";
+import { Prison, PRISON } from "./scene/prison";
+import { policeModel } from "./scene/voxel/vehicles";
+import { toObject } from "./scene/voxel/mesher";
+import { storeInfo } from "./ui/stores";
+import type { PickInfo } from "./interior/types";
 import { Critters } from "./scene/critters";
 import { TvMode } from "./scene/tv";
 import { Tracker } from "./ui/track";
@@ -202,10 +213,12 @@ window.addEventListener("resize", resize);
 
 // ---- choreography + HUD -----------------------------------------------------------------------
 let selected: Snark | null = null;
+let lastSummary: BlockSummary | null = null;
 let rideNextBus = false;
 
 const director = new Director(scene, city, {
   stats: (s) => {
+    lastSummary = s.lastBlock;
     hud.setStats(s);
     if (s.lastBlock) hall?.setLast(s.lastBlock.height, s.lastBlock.miner_pool, Date.parse(s.lastBlock.time));
     decor.setLive({ height: s.lastBlock?.height ?? null, mempool: s.mempool });
@@ -221,10 +234,10 @@ const director = new Director(scene, city, {
       for (const fn of blockListeners) fn(b.height, b.pool);
     }
     if (phase === "confirmed") shelf?.push({ height: b.height, hash: "", time: new Date(b.time).toISOString(), tx_count: b.txs.length + 1, size: b.size, fees: b.fees, miner_pool: b.pool });
-    rig.busEvent(phase, bus);
-    tv?.bus(phase, bus);
+    if (bus) rig.busEvent(phase, bus);
+    if (bus) tv?.bus(phase, bus);
     residents.busEvent(phase, new THREE.Vector3(DISTRICTS[0].stopX, 0, CITY.laneEast));
-    if (phase === "arriving" && rideNextBus) {
+    if (phase === "arriving" && rideNextBus && bus) {
       rideNextBus = false;
       rig.followTheBus(bus);
       hud.follow(null);
@@ -256,6 +269,136 @@ rainListeners.push((on) => residents.setRain(on));
 weather(true);
 // pigeons and street cats (fewer on small devices)
 const critters = new Critters(scene, director, quality.level >= 3 ? 8 : 16, quality.level >= 3 ? 2 : 3);
+// the ZEC Line: the elevated metro, a train for every block
+const metro = new Metro(scene, city.nav);
+director.metro = metro;
+// the tram, along the street under the metro
+const tram = new Tram(scene, city.nav);
+// traffic lights at the junctions, cars and a police car on the other streets
+const cityTraffic = new CityTraffic(scene, director.traffic, [16, 14, 10, 7, 5][quality.level], city.nav);
+// the second elevated line: the NU7 line, a shuttle north–south along the east avenue
+const metro2 = new Metro(scene, city.nav, NU7_LINE());
+// horns: you (on foot) or a jaywalker in front of a vehicle; trains and trams sound off too
+const earPos = new THREE.Vector3();
+const horns = new Horns(
+  director,
+  director.traffic,
+  cityTraffic,
+  sound,
+  () => (walking ? onFoot.camera.position : null),
+  () => ({ pos: walking ? onFoot.camera.position : earPos.copy(rig.focus), right: camRight }),
+);
+const soundAt = (p: THREE.Vector3) => {
+  const e = walking ? onFoot.camera.position : rig.focus;
+  return { level: Math.max(0, 1 - p.distanceTo(e) / 80), pan: THREE.MathUtils.clamp(p.clone().sub(e).dot(camRight) / 25, -1, 1) };
+};
+metro.onHorn = metro2.onHorn = (p) => {
+  const w = soundAt(p);
+  sound.horn("metro", w.level, w.pan);
+};
+tram.blockers = () => (walking ? [{ x: onFoot.camera.position.x, z: onFoot.camera.position.z }] : []);
+tram.onBell = (p) => {
+  const w = soundAt(p);
+  sound.tramBell(w.level, w.pan);
+};
+// the prison, past the north-west corner; annoy the police enough and you end up in it
+const prison = new Prison(scene, city.nav, director);
+const jailBanner = document.createElement("div");
+jailBanner.className = "jail";
+document.getElementById("ui")!.append(jailBanner);
+let jailed = false;
+horns.onArrest = () => void arrest();
+async function arrest() {
+  if (!walking || jailed) return horns.pardoned();
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const me = onFoot.camera.position.clone().setY(CURB);
+  // a patrol car pulls up beside you, lights going
+  const car = new THREE.Group();
+  car.add(toObject(policeModel()));
+  const lamps = (["#ff2a2a", "#2a6aff"] as const).map((c, i) => {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.18, 0.5), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(3.2), toneMapped: false }));
+    l.position.set(0.17, 11.5 / 6, i ? 0.32 : -0.32);
+    car.add(l);
+    return l;
+  });
+  const from = me.x + 26 < CITY.maxX ? me.x + 26 : me.x - 26;
+  const stopX = me.x + Math.sign(from - me.x) * 4;
+  car.rotation.y = from > me.x ? Math.PI : 0;
+  car.position.set(from, 0, me.z + 2.2);
+  scene.add(car);
+  const t0 = performance.now();
+  await new Promise<void>((done) => {
+    const tick = () => {
+      const k = Math.min(1, (performance.now() - t0) / 2600);
+      car.position.x = from + (stopX - from) * (1 - (1 - k) ** 2);
+      const on = Math.floor(performance.now() / 180) % 2;
+      lamps[0].visible = !!on;
+      lamps[1].visible = !on;
+      if (k < 1) requestAnimationFrame(tick);
+      else done();
+    };
+    tick();
+  });
+  const w = soundAt(car.position);
+  sound.horn("police", w.level, w.pan, true);
+  const flash = setInterval(() => {
+    const on = Math.floor(performance.now() / 180) % 2;
+    lamps[0].visible = !!on;
+    lamps[1].visible = !on;
+  }, 90);
+  // an officer gets out
+  const cop = await director.newSnark(1977 + Math.floor(Math.random() * 50));
+  director.adopt(cop);
+  cop.role = "Police officer";
+  cop.setCap();
+  cop.noClip = true;
+  cop.root.position.set(car.position.x, CURB, me.z + 0.9);
+  cop.say("STOP RIGHT THERE!", 2.4, "shout");
+  cop.emote("!", 2);
+  await cop.walk([new THREE.Vector3(me.x + Math.sign(from - me.x) * 1.1, CURB, me.z)], 2.6);
+  onFoot.enabled = false;
+  cop.say("YOU'RE UNDER ARREST!", 2.6, "shout");
+  await wait(2600);
+  cop.say("Annoying the traffic. Again.", 2.2);
+  await wait(1800);
+  // inside
+  hud.cut();
+  clearInterval(flash);
+  scene.remove(car);
+  director.release(cop);
+  jailed = true;
+  onFoot.place(prison.cell.clone(), Math.PI);
+  onFoot.enabled = walking;
+  for (let left = 40; left > 0; left--) {
+    jailBanner.innerHTML = `<b>JAILED · 透明刑務所</b><span>disturbing the traffic · out in ${left}s</span>`;
+    jailBanner.classList.add("on");
+    await wait(1000);
+  }
+  if (prison.guard) {
+    prison.guard.say("TIME SERVED. BEHAVE.", 3);
+  }
+  await wait(1200);
+  hud.cut();
+  jailBanner.classList.remove("on");
+  jailed = false;
+  if (walking) onFoot.place(prison.release.clone(), -Math.PI / 2);
+  horns.pardoned();
+}
+// life in every district: anglers, boats, balconies, the park, the shōtengai
+const life = new Life(scene, city, director, [1, 0.9, 0.6, 0.4, 0.25][quality.level]);
+// two police officers at the avenue's junctions, watching the traffic
+for (const [x, z, id] of [
+  [GRID.xs[2] + 5.4, CITY.south.z0 + 0.7, 4911],
+  [GRID.xs[1] - 5.4, CITY.north.z1 - 0.7, 1977],
+] as const)
+  void director.newSnark(id).then((s) => {
+    director.adopt(s);
+    s.role = "Police officer";
+    s.setCap();
+    s.root.position.set(x, CURB, z);
+    s.faceDir = new THREE.Vector3(x > 0 ? -1 : 1, 0, 0);
+    setInterval(() => Math.random() < 0.35 && s.emote(Math.random() < 0.5 ? "!" : "note", 1.8), 9000);
+  });
 // the city reacts to each real event: block, empty block, heavy shielded tx, price move
 const pulse = new CityPulse(city, decor, sound, residents, nu7);
 
@@ -418,8 +561,55 @@ window.addEventListener("resize", () => {
 const onFoot = new WalkControls(canvas);
 onFoot.camera.far = 400;
 onFoot.resize(window.innerWidth, window.innerHeight);
-const BOARD = { x0: -49.4, x1: 49.4, z0: -38.6, z1: 31.6 };
-onFoot.collide = (x, z) => x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1 || !city.nav.free(x, z, 0.28);
+/** On foot: the whole city, edge to edge. */
+const BOARD = { x0: CITY.minX + 0.6, x1: CITY.maxX - 0.6, z0: CITY.minZ + 0.6, z1: CITY.maxZ - 0.6 };
+/** Floor heights on foot off the street level: station platforms and stairs, the footbridges. */
+function groundAt(x: number, z: number): number | null {
+  const m = metro.heightAt(x, z) ?? metro2.heightAt(x, z);
+  if (m !== null) return m;
+  const R = RIVER;
+  for (const fx of R.foot)
+    if (Math.abs(x - fx) < 1.3 && z > R.z0 - 0.5 && z < R.z1 + 0.5) {
+      const t = (z - (R.z0 - 0.5)) / (R.z1 - R.z0 + 1);
+      return CURB + Math.sin(t * Math.PI) * 2.2;
+    }
+  return null;
+}
+onFoot.ground = groundAt;
+/** Vehicles and people, where they are right now: you walk round them, not through them. */
+function dynamicHit(x: number, z: number) {
+  for (const v of director.traffic.vehicles) {
+    const p = v.mover.group.position;
+    const half = v.mover.length / 2 + 0.35;
+    if (Math.abs(x - p.x) < half && Math.abs(z - p.z) < 1.45) return true;
+  }
+  for (const m of cityTraffic.movers) {
+    const p = m.group.position;
+    const along = m.line.axis === "x";
+    if (Math.abs((along ? x : z) - (along ? p.x : p.z)) < 2.4 && Math.abs((along ? z : x) - (along ? p.z : p.x)) < 1.3) return true;
+  }
+  for (const t of tram.sets) {
+    const p = t.group.position;
+    if (Math.abs(x - p.x) < 7.4 && Math.abs(z - p.z) < 1.5) return true;
+  }
+  for (const s of director.snarks) {
+    if (!s.root.visible || s.root.parent !== scene || s.state === "riding") continue;
+    const p = s.root.position;
+    if ((x - p.x) ** 2 + (z - p.z) ** 2 < 0.5 * 0.5) return true;
+  }
+  return false;
+}
+onFoot.collide = (x, z) => {
+  const inPrison = x > PRISON.x0 + 0.6 && x < PRISON.x1 && z > PRISON.z0 + 0.6 && z < PRISON.z1 - 0.6;
+  if (!inPrison && (x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1)) return true;
+  const here = onFoot.floor;
+  const there = groundAt(x, z) ?? CURB;
+  // no walking off a platform, no walking into the side of a staircase
+  if (Math.abs(there - here) > 0.75) return true;
+  // up there, the street's obstacles are below you
+  if (there > 1.2) return false;
+  return !city.nav.free(x, z, 0.28) || dynamicHit(x, z);
+};
 let walking = false;
 /** The place walked into, to step back out of its door. */
 let cameIn: Interior["key"] | null = null;
@@ -687,6 +877,14 @@ canvas.addEventListener("pointerup", (e) => {
     if (item) select(null);
     if (item?.block) return void hud.showBlock(item.block);
     if (item?.tx) return void hud.showTx(item.tx);
+    // a metro train: ride it, from inside
+    const car = trainCarAt(e.clientX, e.clientY);
+    if (car) {
+      if (walking) setWalking(false);
+      rig.rideTrain(car);
+      hud.follow(null);
+      return syncCamera();
+    }
     // a bus: ride it, from inside
     const bus = busAt(e.clientX, e.clientY);
     if (bus) {
@@ -695,6 +893,9 @@ canvas.addEventListener("pointerup", (e) => {
       hud.follow(null);
       return syncCamera();
     }
+    // a shop of the shōtengai: its counter, live
+    const st = storeAt(e.clientX, e.clientY);
+    if (st) return void openStore(st.id);
     // a walk-in place: in you go
     const place = placeAt(e.clientX, e.clientY);
     if (place) return enterPlace(place);
@@ -719,15 +920,19 @@ canvas.addEventListener("pointermove", (e) => {
   if (e.buttons) return void hud.hover(null);
   const hit = hitAt(e.clientX, e.clientY);
   const item = hit ? null : itemAt(e.clientX, e.clientY);
-  const bus = hit || item ? null : busAt(e.clientX, e.clientY);
-  const place = hit || item || bus ? null : placeAt(e.clientX, e.clientY);
-  canvas.style.cursor = hit || item || place || bus ? "pointer" : "";
+  const train = hit || item ? null : trainCarAt(e.clientX, e.clientY);
+  const bus = hit || item || train ? null : busAt(e.clientX, e.clientY);
+  const store = hit || item || bus ? null : storeAt(e.clientX, e.clientY);
+  const place = hit || item || bus || store ? null : placeAt(e.clientX, e.clientY);
+  canvas.style.cursor = hit || item || place || bus || store || train ? "pointer" : "";
   // hovering a place lights it up, with its name and the way in over its door
   if (place) hud.hoverPlace(place);
   highlight(place);
   if (hit) hud.hover(hit.object.userData.snark as Snark, e.clientX, e.clientY);
   else if (item?.block) hud.hoverText(`<b>Block ${item.block.height.toLocaleString("en-US")}</b><span>${Math.max(0, item.block.tx_count - 1)} tx · click to open</span>`, e.clientX, e.clientY);
   else if (item?.tx) hud.hoverText(`<b>Parcel</b><span>${item.tx.kind} tx waiting for a block</span>`, e.clientX, e.clientY);
+  else if (train) hud.hoverText(`<b>ZEC LINE</b><span>click to ride inside</span>`, e.clientX, e.clientY);
+  else if (store) hud.hoverText(`<b>${store.name}</b><span>click for the counter</span>`, e.clientX, e.clientY);
   else if (bus) hud.hoverText(`<b>Block bus${bus.blockHeight ? ` ${bus.blockHeight.toLocaleString("en-US")}` : ""}</b><span>click to ride inside</span>`, e.clientX, e.clientY);
   else hud.hover(null);
 });
@@ -735,6 +940,43 @@ canvas.addEventListener("pointerleave", () => {
   hud.hover(null);
   highlight(null);
 });
+
+/** A car of a metro train under the cursor. */
+function trainCarAt(x: number, y: number) {
+  if (!metro.trains.length && !metro2.trains.length) return null;
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, viewCam());
+  for (const t of [...metro.trains, ...metro2.trains])
+    for (const c of t.cars) {
+      if (!c.visible) continue;
+      if (ray.intersectObject(c, true).length) return c;
+    }
+  return null;
+}
+
+/** A shop of the shōtengai under the cursor. */
+function storeAt(x: number, y: number) {
+  if (rig.mode === "inspect" || rig.mode === "follow" || !city.stores.length) return null;
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, viewCam());
+  let best: { s: (typeof city.stores)[number]; d: number } | null = null;
+  for (const st of city.stores) {
+    const o = st.occluder;
+    const h = ray.intersectObject(o.full.visible ? o.full : o.cut, true)[0];
+    if (h && (!best || h.distance < best.d)) best = { s: st, d: h.distance };
+  }
+  return best?.s ?? null;
+}
+
+async function openStore(id: string) {
+  const info = await storeInfo(id, {
+    mempool: () => director.mempoolList(),
+    lastBlock: () => (lastSummary ? { height: lastSummary.height, time: Date.parse(lastSummary.time), txs: lastSummary.tx_count, pool: lastSummary.miner_pool } : null),
+    nu7: () => ({ height: nu7.height, date: nu7.date, activated: nu7.activated, tip: director.blockHeight }),
+  });
+  if ("game" in info && !("title" in info)) return void arcade.show(info.game);
+  hud.showPick(info as PickInfo);
+}
 
 function shopAt(x: number, y: number) {
   ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
@@ -900,6 +1142,18 @@ if (new URLSearchParams(location.search).has("debug")) {
   Object.assign(window, {
     street: {
       director,
+      renderer,
+      metro,
+      tram,
+      cityTraffic,
+      life,
+      metro2,
+      horns,
+      prison,
+      arrest: () => arrest(),
+      walk: (on: boolean) => setWalking(on),
+      storeAt: (x: number, y: number) => storeAt(x, y)?.id ?? null,
+      openStore: (id: string) => openStore(id),
       residents,
       pulse,
       critters,
@@ -1186,6 +1440,12 @@ function frame(stepDt?: number) {
     rig.controls.target.set(capShot!.look[0], 1, capShot!.look[2]);
   }
   const cam = capturing ? capCam : walking ? onFoot.camera : rig.camera;
+  // the fog is measured from the camera: the iso camera stands far back, so push it out by as much
+  if (scene.fog instanceof THREE.Fog) {
+    const iso = cam === rig.iso;
+    scene.fog.near = (theme === "day" ? 170 : 150) + (iso ? 260 : 0);
+    scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 : 0);
+  }
   renderPass.camera = cam;
   cam.getWorldQuaternion(camQuat);
   camRight.set(1, 0, 0).applyQuaternion(camQuat);
@@ -1214,6 +1474,12 @@ function frame(stepDt?: number) {
   runDirector(sim, t, camQuat, camRight);
   visitors.update(dt, t, camQuat, camRight);
   critters.update(dt, cam);
+  metro.update(sim);
+  tram.update(sim);
+  cityTraffic.update(sim);
+  metro2.update(sim);
+  horns.update(sim);
+  prison.update(sim);
   if ((earT += sim) > 0.2) {
     earT = 0;
     listen(focus);
@@ -1224,6 +1490,9 @@ function frame(stepDt?: number) {
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
   nu7.update(dt);
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
+  // close-ups keep full detail further out; the whole-city view is mostly simplified
+  if (wide) city.lod(focus, 0, 50);
+  else city.lod(focus, rig.shot ? 60 : 40, rig.shot ? 140 : 95);
   city.update(t, dt);
   hall?.update(t, dt);
   press?.update(t, dt);

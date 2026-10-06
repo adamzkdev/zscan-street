@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { meshModel } from "../voxel/mesher";
-import { C, palette, VOX, type Kind } from "../voxel/model";
+import { C, palette, VOX, VoxelModel, type Kind } from "../voxel/model";
 import type { Prop } from "../voxel/props";
 import { buildJob, propModel } from "./build";
 import type { BuildingJob, PropJob } from "./plan";
@@ -51,6 +51,47 @@ function capped(m: import("../voxel/model").VoxelModel) {
   return m;
 }
 
+function scaled(geos: Partial<Record<Kind, THREE.BufferGeometry>>, k: number) {
+  for (const g of Object.values(geos)) g.scale(k, k, k);
+  return geos;
+}
+
+/**
+ * Half-resolution copy of a model, for buildings seen from afar: each 2×2×2 cell becomes one
+ * voxel of its most common colour (lit windows win, so the city still glows at night). Meshed at
+ * double scale, it lines up with the full model.
+ */
+function half(m: VoxelModel) {
+  const w = Math.ceil(m.w / 2),
+    h = Math.ceil(m.h / 2),
+    d = Math.ceil(m.d / 2);
+  const o = new VoxelModel(w, h, d);
+  const count = new Map<number, number>();
+  for (let y = 0; y < h; y++)
+    for (let z = 0; z < d; z++)
+      for (let x = 0; x < w; x++) {
+        count.clear();
+        let filled = 0,
+          emit = 0;
+        for (let k = 0; k < 8; k++) {
+          const c = m.get(x * 2 + (k & 1), y * 2 + ((k >> 1) & 1), z * 2 + ((k >> 2) & 1));
+          if (!c) continue;
+          filled++;
+          if (palette.entries[c].kind === "emit") emit = c;
+          count.set(c, (count.get(c) ?? 0) + 1);
+        }
+        if (filled < 2 && !emit) continue;
+        let best = 0,
+          n = 0;
+        for (const [c, k] of count) if (k > n) (best = c), (n = k);
+        o.set(x, y, z, emit || best);
+      }
+  return o;
+}
+
+/** Props that block with their whole footprint (a bench is two metres long, not a post). */
+const SOLID = new Set(["bench", "shelter", "stall", "container", "greenhouse", "vending", "bicycle", "crates", "trashBags", "planter", "fence", "mailbox", "barrel"]);
+
 self.onmessage = (e: MessageEvent) => {
   const msg = e.data as { kind: "buildings"; jobs: BuildingJob[] } | { kind: "props"; props: PropJob[] };
   const transfer: Transferable[] = [];
@@ -61,7 +102,10 @@ self.onmessage = (e: MessageEvent) => {
       return {
         id: j.id,
         full: pack(meshModel(m), transfer),
-        cut: pack(meshModel(capped(m.slice(CUT_VOX))), transfer),
+        // the bigger city's buildings: a far copy instead of the walls-down cut
+        cut: j.ext ? {} : pack(meshModel(capped(m.slice(CUT_VOX))), transfer),
+        lod: j.ext ? pack(scaled(meshModel(half(m)), 2), transfer) : undefined,
+        lod2: j.ext ? pack(scaled(meshModel(half(half(m))), 4), transfer) : undefined,
         meta: { w: m.w, h: m.h, d: m.d, signs: b.signs, door: b.door, body: b.body, lights: b.lights, walls: b.walls, points: b.points },
       };
     });
@@ -72,6 +116,7 @@ self.onmessage = (e: MessageEvent) => {
   const cache = new Map<string, { prop: Prop; geos: Partial<Record<Kind, THREE.BufferGeometry>> }>();
   const parts = new Map<string, Record<Kind, THREE.BufferGeometry[]>>();
   const circles: [number, number, number][] = [];
+  const rects: [number, number, number, number][] = [];
   const lamps: [number, number, number, string][] = [];
   const canopies: [number, number, number, number][] = [];
   const Y = new THREE.Vector3(0, 1, 0);
@@ -89,7 +134,13 @@ self.onmessage = (e: MessageEvent) => {
     for (const [k, g] of Object.entries(c.geos) as [Kind, THREE.BufferGeometry][]) bucket[k].push(g.clone().applyMatrix4(mtx));
     const pr = c.prop;
     const local = (x: number, y: number, z: number) => new THREE.Vector3((x - pr.model.w / 2) * VOX, y * VOX, (z - pr.model.d / 2) * VOX).applyMatrix4(mtx);
-    if (pr.radius > 0) circles.push([p.x, p.z, pr.radius]);
+    // things you would bump into get their whole footprint; posts and trunks a circle
+    if (SOLID.has(p.type)) {
+      const turned = Math.abs(Math.sin(p.rot)) > 0.7;
+      const hw = ((turned ? pr.model.d : pr.model.w) * VOX) / 2,
+        hd = ((turned ? pr.model.w : pr.model.d) * VOX) / 2;
+      rects.push([p.x - hw, p.z - hd, p.x + hw, p.z + hd]);
+    } else if (pr.radius > 0) circles.push([p.x, p.z, pr.radius]);
     if (pr.light) {
       const v = local(pr.light[0], pr.light[1], pr.light[2]);
       lamps.push([v.x, v.y, v.z, pr.light[3]]);
@@ -105,5 +156,5 @@ self.onmessage = (e: MessageEvent) => {
     for (const k of ["solid", "glass", "emit"] as Kind[]) if (bucket[k].length) merged[k] = mergeGeometries(bucket[k], false);
     chunks.push({ district, geos: pack(merged, transfer) });
   }
-  (self as unknown as Worker).postMessage({ kind: "props", chunks, circles, lamps, canopies }, transfer);
+  (self as unknown as Worker).postMessage({ kind: "props", chunks, circles, rects, lamps, canopies }, transfer);
 };

@@ -10,7 +10,7 @@ export const GRID = 26;
 export type ItemKind = TxKind | "briefcase" | "goldcase" | LifeItem;
 
 /** What residents (people with no transaction) have in hand. */
-export type LifeItem = "coffee" | "can" | "bag" | "phone" | "flowers" | "fish" | "basket";
+export type LifeItem = "coffee" | "can" | "bag" | "phone" | "flowers" | "fish" | "basket" | "rod" | "book";
 
 export type Px = (x: number, y: number, w: number, h: number, c: string) => void;
 
@@ -148,6 +148,17 @@ export function itemSprite(kind: ItemKind) {
         px(0, 6, 12, 1, shade(body, 0.75));
         break;
       }
+      case "rod":
+        // a fishing rod held low, the tip up and out to the right, a reel by the hands
+        for (let k = 0; k < 10; k++) px(1 + k, 9 - k, 1, 1, k < 3 ? "#3a2a1a" : "#8a6a4a");
+        px(2, 6, 2, 2, "#c0c0c8");
+        break;
+      case "book":
+        px(1, 2, 10, 8, "#2e5ab8");
+        px(1, 2, 10, 1, "#4a7ad0");
+        px(5, 2, 2, 8, "#f0ece0");
+        px(2, 4, 3, 1, "#f4b728");
+        break;
       case "coffee":
         px(4, 2, 4, 1, "#f0ece4");
         px(4, 3, 4, 7, "#e8e2d6");
@@ -234,7 +245,7 @@ export function umbrellaSprite(color: string) {
 }
 
 /** What a speech bubble shows: a reaction, never words. */
-export type Emote = "!" | "?" | "note" | "heart" | "zec" | "dots" | "zzz" | "up" | "down" | "sad" | "star";
+export type Emote = "!" | "?" | "note" | "heart" | "zec" | "dots" | "zzz" | "up" | "down" | "sad" | "star" | "angry";
 
 const GLYPH: Record<Emote, [string, string[]]> = {
   "!": ["#e0302a", ["..#..", "..#..", "..#..", ".....", "..#.."]],
@@ -248,6 +259,8 @@ const GLYPH: Record<Emote, [string, string[]]> = {
   down: ["#e0302a", ["..#..", "..#..", "#.#.#", ".###.", "..#.."]],
   sad: ["#2a2830", ["#...#", ".....", ".###.", "#...#", "....."]],
   star: ["#f4b728", ["..#..", ".###.", "#####", ".###.", ".#.#."]],
+  // the anime anger vein
+  angry: ["#e0202a", ["##.##", "#...#", ".....", "#...#", "##.##"]],
 };
 
 const bubbleCache = new Map<Emote, ReturnType<typeof sprite>>();
@@ -272,4 +285,19 @@ export function bubbleSprite(e: Emote) {
     bubbleCache.set(e, s);
   }
   return s;
+}
+
+let capCache: ReturnType<typeof sprite> | null = null;
+/** A police cap: navy crown, black peak, a gold badge. */
+export function policeCapSprite() {
+  if (!capCache)
+    capCache = sprite(14, 7, (px) => {
+      px(2, 0, 10, 1, "#1a2a5a");
+      px(1, 1, 12, 3, "#22346e");
+      px(1, 1, 12, 1, "#3a4c8e");
+      px(6, 1, 2, 2, "#f4b728");
+      px(1, 4, 12, 1, "#f0f0f0");
+      px(0, 5, 14, 2, "#121218");
+    });
+  return capCache;
 }

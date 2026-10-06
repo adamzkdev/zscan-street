@@ -224,6 +224,106 @@ export class Soundscape {
     }
   }
 
+  /**
+   * A horn, by vehicle: the bus's low two-tone, a taxi's quick double beep, a car's honk, the
+   * limousine's deep one, the truck's air horn, the scooter's meep, the police whoop, the metro's
+   * chord. `level` 0..1 with the distance, `pan` −1..1, `long` holds it down.
+   */
+  horn(kind: string, level: number, pan: number, long = false) {
+    if (!this.on || !this.ctx || level < 0.03) return;
+    const ctx = this.ctx;
+    const out = ctx.createStereoPanner();
+    out.pan.value = Math.max(-1, Math.min(1, pan));
+    out.connect(this.sfxGain);
+    const t0 = ctx.currentTime + 0.02;
+    const tone = (freqs: number[], at: number, len: number, type: OscillatorType, vol: number, sweep?: [number, number]) => {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t0 + at);
+      g.gain.linearRampToValueAtTime(vol * level, t0 + at + 0.02);
+      g.gain.setValueAtTime(vol * level, t0 + at + len - 0.04);
+      g.gain.linearRampToValueAtTime(0, t0 + at + len);
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 2400;
+      g.connect(lp).connect(out);
+      for (const f of freqs) {
+        const o = ctx.createOscillator();
+        o.type = type;
+        o.frequency.setValueAtTime(sweep ? sweep[0] : f, t0 + at);
+        if (sweep) {
+          o.frequency.linearRampToValueAtTime(sweep[1], t0 + at + len / 2);
+          o.frequency.linearRampToValueAtTime(sweep[0], t0 + at + len);
+        }
+        o.connect(g);
+        o.start(t0 + at);
+        o.stop(t0 + at + len + 0.05);
+      }
+    };
+    const L = long ? 2.4 : 1;
+    switch (kind) {
+      case "bus":
+        tone([233, 294], 0, 0.7 * L, "sawtooth", 0.05);
+        break;
+      case "truck":
+        tone([147, 175, 220], 0, 0.9 * L, "sawtooth", 0.06);
+        break;
+      case "limo":
+        tone([175, 220], 0, 0.6 * L, "sawtooth", 0.05);
+        break;
+      case "taxi":
+        tone([466, 554], 0, 0.12, "square", 0.035);
+        tone([466, 554], 0.18, long ? 0.8 : 0.14, "square", 0.035);
+        break;
+      case "scooter":
+        tone([880], 0, 0.09, "square", 0.03);
+        tone([880], 0.14, long ? 0.5 : 0.09, "square", 0.03);
+        break;
+      case "police":
+        tone([0], 0, 1.4 * L, "sawtooth", 0.035, [620, 1240]);
+        break;
+      case "metro":
+        tone([311, 392, 466], 0, 1.3, "sawtooth", 0.045);
+        break;
+      default:
+        tone([349, 440], 0, 0.35 * L, "sawtooth", 0.045);
+    }
+  }
+
+  /** The tram's bell: two dings. */
+  tramBell(level: number, pan: number) {
+    if (!this.on || !this.ctx || level < 0.03) return;
+    const t = this.ctx.currentTime + 0.02;
+    this.bell(1568, t, 0.5, 0.05 * level);
+    this.bell(1568, t + 0.28, 0.6, 0.05 * level);
+    void pan;
+  }
+
+  /** An angry driver: a low "hmph!" and a mutter, through a voice-like filter. */
+  grumble(level: number) {
+    if (!this.on || !this.ctx || level < 0.03) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    for (let i = 0; i < 5; i++) {
+      const at = t0 + i * 0.16 + (i ? 0.25 : 0);
+      const o = ctx.createOscillator();
+      o.type = "sawtooth";
+      const f = (i ? 150 : 210) + Math.random() * 40;
+      o.frequency.setValueAtTime(f, at);
+      o.frequency.linearRampToValueAtTime(f * (i ? 0.85 : 0.7), at + 0.14);
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = 700 + Math.random() * 300;
+      bp.Q.value = 3;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime((i ? 0.1 : 0.16) * level, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.15);
+      o.connect(bp).connect(g).connect(this.sfxGain);
+      o.start(at);
+      o.stop(at + 0.2);
+    }
+  }
+
   /** The Japanese crossing signal for the blind: a two-chirp "piyo" (a rising whistle). */
   private piyo(level: number, pan: number) {
     const ctx = this.ctx!;

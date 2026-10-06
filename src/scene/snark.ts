@@ -2,7 +2,8 @@ import * as THREE from "three";
 import type { NftItem, Tx, TxKind } from "../data/types";
 import { ZScan } from "../data/zscan";
 import { blobTexture } from "./textures";
-import { GRID, bubbleSprite, handSprite, itemSprite, legSprite, umbrellaSprite, type Emote, type ItemKind } from "./sprites";
+import { sayAt } from "./speech";
+import { GRID, bubbleSprite, handSprite, itemSprite, legSprite, policeCapSprite, umbrellaSprite, type Emote, type ItemKind } from "./sprites";
 
 /** Parcel colours per transaction kind: restrained, readable at a glance. */
 export const KIND_COLOR: Record<TxKind, string> = {
@@ -302,6 +303,20 @@ export class Snark {
     u.position.set(snap(BUST_X + PX), LEG_H + BODY + 2 * PX, 0.04);
     this.umbrella = u;
     this.visual.add(u);
+  }
+
+  /** A police cap on the head. */
+  setCap() {
+    const c = pixelPlane(policeCapSprite(), 0.05);
+    c.position.set(snap(BUST_X + PX), LEG_H + BODY - 1.5 * PX, 0.05);
+    this.visual.add(c);
+  }
+
+  private said: THREE.Sprite | null = null;
+  /** Words in a speech bubble over the head (never mirrored, whichever way it faces). */
+  say(text: string, seconds = 3, tone: import("./speech").Tone = "talk") {
+    if (this.said) this.root.remove(this.said);
+    this.said = sayAt(this.root, text, tone, LEG_H + BODY + 0.3, seconds);
   }
 
   private bubble: THREE.Mesh | null = null;

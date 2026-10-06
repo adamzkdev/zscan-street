@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { busLocal, type BlockBus } from "./bus";
 import { BUS } from "./voxel/vehicles";
-import { DISTRICTS, type Interior } from "./city";
+import { CITY, DISTRICTS, type Interior } from "./city";
 import type { Snark } from "./snark";
 
 export type Mode = "live" | "overview" | "free" | "district" | "follow" | "inspect";
@@ -12,8 +12,9 @@ export const FOLLOW_SHOTS: Shot[] = ["three-quarter", "street", "high"];
 
 const AZ = THREE.MathUtils.degToRad(34);
 const EL = THREE.MathUtils.degToRad(34);
-const DIST = 120;
-const VIEW = { live: 30, overview: 78, free: 30, district: 30, follow: 30, inspect: 30 };
+/** Far enough above the city that the supertalls (≈ 95 m) never cut through the view. */
+const DIST = 320;
+const VIEW = { live: 30, overview: 170, free: 30, district: 30, follow: 30, inspect: 30 };
 /** Live view opens on downtown: the MEMPOOL shop, the zebra and the bus stop. */
 const HOME = new THREE.Vector3(DISTRICTS[0].crossX + 2, 1, -0.5);
 /** Follow shots rotate on their own unless the viewer picks one. */
@@ -45,6 +46,8 @@ export class CameraRig {
   following: Snark | null = null;
   /** The bus the camera is about (followed, boarding, or carrying the followed zkSNARK). */
   bus: BlockBus | null = null;
+  /** A metro car being ridden (inside view), or watched from alongside. */
+  car: THREE.Object3D | null = null;
   /** The shop being looked into. */
   shopSite: Interior | null = null;
   private followBus = false;
@@ -67,7 +70,7 @@ export class CameraRig {
     dom: HTMLElement,
     private ev: RigEvents,
   ) {
-    this.iso = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 600);
+    this.iso = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2000);
     const offset = this.isoOffset();
     this.iso.position.copy(HOME).add(offset);
     this.iso.lookAt(HOME);
@@ -75,8 +78,8 @@ export class CameraRig {
     this.controls.target.copy(HOME);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.minZoom = 0.35;
-    this.controls.maxZoom = 4;
+    this.controls.minZoom = 0.12;
+    this.controls.maxZoom = 9;
     this.controls.screenSpacePanning = false;
     // a map, not a model viewer: drag to move around, right-drag to turn, wheel zooms where you point
     // the wheel button (and right button) turns around the city; the wheel itself still zooms
@@ -142,6 +145,7 @@ export class CameraRig {
   }
 
   setMode(m: Exclude<Mode, "follow" | "district">) {
+    this.car = null;
     this.following = null;
     this.followBus = false;
     this.mode = m;
@@ -180,11 +184,23 @@ export class CameraRig {
   }
 
   followTheBus(bus: BlockBus) {
+    this.car = null;
     this.bus = bus;
     this.following = null;
     this.followBus = true;
     this.mode = "follow";
     this.setShot("bus-side");
+    this.ev.shot(this.shot, this.mode);
+  }
+
+  /** Ride the metro: a car of the train, from inside (a CCTV corner), then alongside when it runs. */
+  rideTrain(car: THREE.Object3D) {
+    this.car = car;
+    this.bus = null;
+    this.following = null;
+    this.followBus = false;
+    this.mode = "follow";
+    this.setShot("inside");
     this.ev.shot(this.shot, this.mode);
   }
 
@@ -279,6 +295,9 @@ export class CameraRig {
           const i = FOLLOW_SHOTS.indexOf(this.shot as Shot);
           this.setShot(FOLLOW_SHOTS[(i + 1) % FOLLOW_SHOTS.length]);
         }
+      } else if (this.car) {
+        // the train went back into its portal
+        if (!this.car.parent?.parent || !this.car.visible) this.setMode("live");
       } else if (this.followBus && (!this.bus || !this.bus.group.parent)) this.setMode("live");
     }
     const bp = this.bus?.phase;
@@ -293,8 +312,8 @@ export class CameraRig {
   /** Keep the view over the city. */
   private clampTarget() {
     const t = this.controls.target;
-    const cx = THREE.MathUtils.clamp(t.x, -86, 86),
-      cz = THREE.MathUtils.clamp(t.z, -34, 30);
+    const cx = THREE.MathUtils.clamp(t.x, CITY.minX - 70, CITY.maxX + 30),
+      cz = THREE.MathUtils.clamp(t.z, CITY.minZ + 4, CITY.maxZ - 2);
     if (cx !== t.x || cz !== t.z) {
       const d = new THREE.Vector3(cx - t.x, 0, cz - t.z);
       t.add(d);
@@ -385,6 +404,13 @@ export class CameraRig {
         look.set(p.x, p.y + 0.5, p.z);
         break;
       case "inside":
+        if (this.car) {
+          // a CCTV corner at the back of the car, looking down both benches to the front
+          this.car.updateMatrixWorld();
+          pos.copy(this.car.localToWorld(new THREE.Vector3(-4.25, 2.6, 0)));
+          look.copy(this.car.localToWorld(new THREE.Vector3(4.2, 0.9, 0)));
+          break;
+        }
         // a CCTV corner high at the back: the aisle, both rows of seats, the doors on the right
         pos.copy(bus.localToWorld(busLocal(3.2, BUS.h - 4.2, 2.6)));
         look.copy(bus.localToWorld(busLocal(BUS.w - 16, BUS.floor + 3, 9.5)));

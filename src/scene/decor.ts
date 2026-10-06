@@ -433,8 +433,12 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
     screens.push({ ctx: c.getContext("2d")!, tex, ads: list, at: Math.random() * 10, w: W, h: H });
   };
   const rand = r(77);
+  // out in the bigger city, only a few towers carry screens (each one redraws its canvas)
+  let extScreens = 0;
   for (const f of city.facades) {
     if (f.face !== "s" || f.height < 7) continue;
+    if (f.ext && (f.type !== "office" || extScreens >= 14 || rand() > 0.4)) continue;
+    if (f.ext) extScreens++;
     const width = f.x1 - f.x0;
     const z = f.z + 0.12;
     if (f.type === "office" && f.height > 14) {

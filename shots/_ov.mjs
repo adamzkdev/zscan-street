@@ -1,0 +1,15 @@
+import puppeteer from "puppeteer-core";
+const theme = process.argv[2] ?? "night";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 300000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1500, height: 900 } });
+const p = await b.newPage();
+await p.goto(`http://localhost:3007/?debug&theme=${theme}`);
+await p.waitForFunction(() => window.street, { timeout: 120000 });
+await new Promise((r) => setTimeout(r, 7000));
+await p.screenshot({ path: `shots/ov-${theme}-live.png` });
+await p.evaluate(() => street.rig.setMode("overview"));
+await new Promise((r) => setTimeout(r, 4000));
+await p.screenshot({ path: `shots/ov-${theme}-all.png` });
+await p.evaluate(() => street.rig.flyTo(new street.rig.focus.constructor(0, 1, -80), 1.1));
+await new Promise((r) => setTimeout(r, 4000));
+await p.screenshot({ path: `shots/ov-${theme}-park.png` });
+await b.close();

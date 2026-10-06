@@ -311,3 +311,39 @@ export function scooterModel(paint: string, box: string) {
   m.box(0, 3, 1, 1, 4, 3, E("#ff2a1a", 2.4));
   return m;
 }
+
+/**
+ * Police car, Japanese style: black lower body, white upper, a red light bar across the roof (the
+ * lamps themselves are separate meshes, so they can flash), push bar, a gold badge on the doors.
+ */
+export function policeModel() {
+  const w = 26,
+    d = 11;
+  const m = new VoxelModel(w, 14, d);
+  const black = C("#16161c"),
+    white = C("#f2f2f6"),
+    glass = G("#1a2436");
+  m.box(1, 1, 0, w - 1, 4, d, black);
+  m.box(0, 2, 1, w, 4, d - 1, black);
+  m.box(1, 4, 0, w - 1, 5, d, white);
+  m.box(6, 5, 1, w - 7, 9, d - 1, white);
+  m.box(7, 6, 0, w - 8, 8, d, glass);
+  m.box(w - 8, 5, 1, w - 7, 8, d - 1, glass);
+  m.box(5, 5, 1, 6, 8, d - 1, glass);
+  m.box(6, 9, 1, w - 7, 10, d - 1, white);
+  // light bar base and its housing
+  m.box(10, 10, 1, w - 11, 11, d - 1, C("#2a2a30"));
+  // push bar, headlights, tail lights
+  m.box(w, 1, 2, w + 0, 4, d - 2, black);
+  m.box(w - 1, 3, 1, w, 4, 3, E("#fff6e0", 3));
+  m.box(w - 1, 3, d - 3, w, 4, d - 1, E("#fff6e0", 3));
+  m.box(0, 3, 1, 1, 4, 3, E("#ff2a1a", 2.4));
+  m.box(0, 3, d - 3, 1, 4, d - 1, E("#ff2a1a", 2.4));
+  // the badge on both doors
+  for (const z of [0, d - 1]) m.box(12, 2, z, 14, 4, z + 1, E("#f4b728", 1.4));
+  for (const x of [5, w - 6]) {
+    m.clear(x - 2, 0, 0, x + 3, 2, 1);
+    m.clear(x - 2, 0, d - 1, x + 3, 2, d);
+  }
+  return m;
+}

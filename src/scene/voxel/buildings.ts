@@ -215,7 +215,7 @@ export function apartment(seed: number, o: { floors?: number; wall?: Wall; vsign
 }
 
 /** Office tower: ribbon windows, vertical fins, a crown and a rooftop billboard. */
-export function office(seed: number, o: { floors?: number; wall?: Wall; billboard?: string; billboardColor?: string; width?: number; venue?: string } = {}): Built {
+export function office(seed: number, o: { floors?: number; wall?: Wall; billboard?: string; billboardColor?: string; width?: number; venue?: string; crown?: string; spire?: number } = {}): Built {
   const r = rand(seed);
   const W = o.width ?? 40 + Math.floor(r() * 2) * 6;
   const D = 38;
@@ -261,7 +261,24 @@ export function office(seed: number, o: { floors?: number; wall?: Wall; billboar
     const b = billboardFrame(m, x0 + 6, x1 - 6, H + 7, D - 8, 12);
     signs.push({ text: o.billboard, color: o.billboardColor ?? "#3ef0ff", x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, z: b.z, w: b.x1 - b.x0, h: b.y1 - b.y0, vertical: false, facing: "front" });
   }
-  antenna(m, x1 - 8, H + 7, 8, 20);
+  if (o.crown) {
+    // a supertall's signature: neon edges up every corner and a lit ring round the top
+    const neon = E(o.crown, 2.4);
+    for (const x of [x0 - 1, x1]) for (const z of [D + 1, 0]) m.box(x, gh, z, x + 1, H + 6, z + 1, neon);
+    m.box(x0 + 3, H + 5, 3, x1 - 3, H + 6, 4, neon);
+    m.box(x0 + 3, H + 5, D - 4, x1 - 3, H + 6, D - 3, neon);
+    m.box(x0 + 3, H + 5, 3, x0 + 4, H + 6, D - 3, neon);
+    m.box(x1 - 4, H + 5, 3, x1 - 3, H + 6, D - 3, neon);
+  }
+  if (o.spire) {
+    // a mast from the middle of the roof, tapering, a red light on the tip
+    const cx = Math.round(x0 + W / 2),
+      cz = Math.round(D / 2);
+    m.box(cx - 3, H + 7, cz - 3, cx + 3, H + 12, cz + 3, C("#4a4656"));
+    m.box(cx - 1, H + 12, cz - 1, cx + 1, H + 12 + o.spire, cz + 1, C("#8a8698"));
+    m.box(cx - 1, H + 12 + o.spire, cz - 1, cx + 1, H + 14 + o.spire, cz + 1, E("#ff2a2a", 3));
+    if (o.crown) m.box(cx - 2, H + 12 + Math.round(o.spire * 0.6), cz - 2, cx + 2, H + 13 + Math.round(o.spire * 0.6), cz + 2, E(o.crown, 2.2));
+  } else antenna(m, x1 - 8, H + 7, 8, 20);
   const mid = x0 + W / 2;
   // a walk-in tower (the ZK TOWER apartments): its name over the lobby canopy
   if (o.venue) signs.push({ text: "ZK TOWER · 秘密マンション", color: "#3ef0ff", x: mid, y: gh - 3, z: fz + 3.05, w: W - 8, h: 2.2, vertical: false, facing: "front" });

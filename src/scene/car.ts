@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { busSign, canvasTexture } from "./textures";
 import { toObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
 import { limoModel, scooterModel, sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
@@ -64,6 +65,15 @@ export class Car {
       glow.position.set(0, 1.2, 0);
       this.group.add(glow);
     }
+  }
+
+  /** A lit sign on the roof, both sides (the block number, when it carries a block). */
+  roofSign(text: string) {
+    const tex = canvasTexture(busSign(text));
+    const m = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, side: THREE.DoubleSide });
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.42), m);
+    plate.position.set(-0.2, 2.05, 0);
+    this.group.add(plate);
   }
 
   /** Where a passenger stands to get in or out (world), on the door side. */

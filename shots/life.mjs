@@ -10,9 +10,16 @@ const logs = [];
 p.on("console", (m) => (m.type() === "error" || m.text().startsWith("[life]")) && logs.push(m.text()));
 p.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
 await p.goto(`http://localhost:3007/?debug&capture&theme=${theme}`);
-await new Promise((r) => setTimeout(r, 6000));
+const tb = Date.now();
+await p.waitForFunction(() => window.capture && window.street, { timeout: 120000 });
+console.log("[life] city ready in", ((Date.now() - tb) / 1000).toFixed(1), "s");
 // capture mode only moves when stepped: run the world in real time for the rest of the wait
-await p.evaluate((ms) => new Promise((r) => { const id = setInterval(() => capture.step(1 / 30), 33); setTimeout(() => { clearInterval(id); r(); }, ms); }), Math.max(0, wait - 6000));
+// (stepped from here, one short call at a time: an in-page timer loop could freeze the page)
+const tw = Date.now() + Math.max(0, wait - 6000);
+while (Date.now() < tw) {
+  await p.evaluate(() => capture.step(1 / 30));
+  await new Promise((r) => setTimeout(r, 20));
+}
 if (!views) views = await p.evaluate(process.argv[3].slice(5));
 let i = 0;
 for (const v of views) {

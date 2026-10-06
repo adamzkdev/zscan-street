@@ -1,0 +1,18 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 300000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1500, height: 900 } });
+const p = await b.newPage();
+p.on("pageerror", (e) => console.log("ERR", e.message));
+await p.goto(`http://localhost:3007/?debug&theme=night`);
+await p.waitForFunction(() => window.street, { timeout: 120000 });
+await new Promise((r) => setTimeout(r, 6000));
+await p.evaluate(() => street.rig.flyTo(new street.rig.focus.constructor(-86, 1, -20), 1.4));
+await new Promise((r) => setTimeout(r, 4000));
+const pt = await p.evaluate(() => { const s = street.city.stores.find((x) => x.id === "konbini"); const v = s.door.clone(); v.y += 1.5; v.project(street.rig.camera); return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight }; });
+console.log("pt", JSON.stringify(pt), "storeAt", await p.evaluate((pt) => street.storeAt(pt.x, pt.y), pt));
+await p.evaluate(() => street.openStore("konbini"));
+await new Promise((r) => setTimeout(r, 1200));
+await p.screenshot({ path: "shots/shop2-0.png" });
+await p.evaluate(() => street.openStore("florist"));
+await new Promise((r) => setTimeout(r, 1200));
+await p.screenshot({ path: "shots/shop2-1.png" });
+await b.close();

@@ -4,10 +4,11 @@ import { ZScan } from "../data/zscan";
 import { BlockBus } from "./bus";
 import { Car, Scooter, Truck, type CarKind } from "./car";
 import { CITY, DISTRICTS, type City, type DistrictKey, type ShopSite } from "./city";
-import { nz, TUNNEL } from "./city/plan";
+import { CORE, GRID, nz, TUNNEL } from "./city/plan";
 import type { DistrictPlan } from "./city/plan";
 import { KIND_COLOR, Snark, loadArt } from "./snark";
 import { Traffic, Vehicle } from "./traffic";
+import type { Metro, Station, Train } from "./metro";
 
 /** At most this many zkSNARKs carry parcels at once, across the city. */
 const CAP = 36;
@@ -47,7 +48,8 @@ export type BusPhase = "arriving" | "boarding" | "departing" | "confirmed";
 
 export interface DirectorEvents {
   stats(s: { mempool: number; shown: number; lastBlock: BlockSummary | null }): void;
-  bus(phase: BusPhase, b: Block, carried: number, bus: BlockBus, district: DistrictPlan | null): void;
+  /** A block's vehicle: `bus` is null when a taxi or the metro carries it. */
+  bus(phase: BusPhase, b: Block, carried: number, bus: BlockBus | null, district: DistrictPlan | null): void;
   removed(s: Snark): void;
   /** Someone walks into the MEMPOOL shop (the door chime). */
   door?(): void;
@@ -105,8 +107,23 @@ interface Vip {
   pending: boolean;
 }
 
+/**
+ * What carries a block, by how many transactions it has: a taxi for a few (an empty one just
+ * drives past), the bus for a handful, the metro for a full block. Big visible amounts still
+ * leave in their taxis and limousines.
+ */
+export type BlockVehicle = "empty" | "taxi" | "bus" | "metro";
+export function vehicleFor(n: number, metro: boolean): BlockVehicle {
+  if (n === 0) return "empty";
+  if (n <= 3) return "taxi";
+  if (n >= 10 && metro) return "metro";
+  return "bus";
+}
+
 export class Director {
   readonly snarks = new Set<Snark>();
+  /** The elevated line (scene/metro.ts), set by main once built. */
+  metro: Metro | null = null;
   readonly traffic = new Traffic();
   readonly buses = new Set<BlockBus>();
   private byTx = new Map<string, Snark>();
@@ -157,7 +174,8 @@ export class Director {
         for (const s of this.snarks) {
           const p = s.root.position;
           if (s.root.parent !== this.scene || !s.root.visible) continue;
-          if (Math.abs(p.x - zx) < 1.8 && p.z > CITY.road.z0 - 0.6 && p.z < CITY.road.z1 + 0.6 && (s.isWalking || (p.z > CITY.road.z0 && p.z < CITY.road.z1))) return true;
+          // only someone actually on the asphalt: people at the kerb wait for a gap (waitToCross)
+          if (Math.abs(p.x - zx) < 1.8 && p.z > CITY.road.z0 - 0.1 && p.z < CITY.road.z1 + 0.1) return true;
         }
         return false;
       },
@@ -622,7 +640,9 @@ export class Director {
     const cx = CITY.cross[0];
     await veh.stopAt(cx + CITY.crossHalf + truck.length / 2 + 0.5);
     this.traffic.remove(veh);
-    await this.drivePath(truck, [v(cx + 1.6, CITY.laneWest, 0), v(cx + 1.1, CITY.laneWest - 3, 0), v(cx + 1.1, CITY.minZ - 8, 0)], 6);
+    // up to the ring street round the heart, then west along it and off the board
+    const ring = GRID.zs[1] + 1.6;
+    await this.drivePath(truck, [v(cx + 1.6, CITY.laneWest, 0), v(cx + 1.1, CITY.laneWest - 3, 0), v(cx + 1.1, ring + 2, 0), v(cx - 3, ring, 0), v(CITY.minX - 10, ring, 0)], 7);
     this.scene.remove(truck.group);
     this.trucks.delete(truck);
   }
@@ -893,6 +913,9 @@ export class Director {
     }
     // riders anywhere in the chain hurry
     for (const s of riders) if (s.state !== "waiting") s.rush = 1.9;
+    const kind = vehicleFor(b.txs.length, !!this.metro);
+    if (kind === "metro") return void this.runMetro(b, riders, carried, vipRides);
+    if (kind !== "bus") return void this.runTaxi(b, riders, carried, vipRides, kind === "empty");
     while (!this.traffic.clearAt("east", -EDGE, bus.length)) await sleep(300);
     this.buses.add(bus);
     this.scene.add(bus.group);
@@ -941,6 +964,126 @@ export class Director {
       }
     for (const s of riders) if (this.snarks.has(s) && s.state !== "riding") this.settle(s, b.height);
     this.ev.bus("confirmed", b, carried, bus, null);
+  }
+
+  /** A small block: a taxi with the block number on its roof picks its few riders up at the stop. */
+  private async runTaxi(b: Block, riders: Snark[], carried: number, vipRides: Vip[], empty: boolean) {
+    const d = DISTRICTS[0];
+    const car = new Car("taxi");
+    car.roofSign(empty ? `#${b.height.toLocaleString("en-US")} · EMPTY` : `#${b.height.toLocaleString("en-US")}`);
+    while (!this.traffic.clearAt("east", -EDGE, car.length)) await sleep(300);
+    this.cars.add(car);
+    this.scene.add(car.group);
+    const veh = this.traffic.add(new Vehicle(car, "east", -EDGE, 12));
+    this.ev.bus("arriving", b, carried, null, null);
+    for (const vp of vipRides) {
+      if (vp.ready) setTimeout(() => void this.convoy(vp), 1800);
+      else vp.pending = true;
+    }
+    const here = riders.filter((s) => this.snarks.has(s) && s.state !== "leaving" && s.state !== "riding");
+    if (!empty && here.length) {
+      await veh.stopAt(d.stopX);
+      await car.openDoor();
+      this.ev.bus("boarding", b, carried, null, d);
+      const t0 = performance.now();
+      const line = this.stopLines.get(d.key)!;
+      here
+        .filter((s) => s.state === "waiting")
+        .sort((a, c) => line.people.indexOf(a) - line.people.indexOf(c))
+        .forEach((s, i) =>
+          setTimeout(async () => {
+            if (s.state !== "waiting") return;
+            s.state = "boarding";
+            s.faceDir = null;
+            this.leaveLines(s);
+            await s.walk([v(s.root.position.x, CITY.south.z0 + 0.4), car.doorPoint().setY(CITY.curb)], 2);
+            if (s.state === "boarding") this.remove(s);
+          }, i * 420),
+        );
+      const done = () => here.every((s) => !this.snarks.has(s) || s.state === "leaving" || !s.txs.some((t) => t.height === b.height));
+      await sleep(1500);
+      while (!done() && performance.now() - t0 < MAX_DWELL_MS) await sleep(250);
+      await sleep(900);
+      await car.closeDoor();
+      this.ev.bus("departing", b, carried, null, d);
+    }
+    await veh.leaveTo(EDGE);
+    this.traffic.remove(veh);
+    this.scene.remove(car.group);
+    this.cars.delete(car);
+    for (const s of riders) if (this.snarks.has(s) && s.state !== "riding") this.settle(s, b.height);
+    this.ev.bus("confirmed", b, carried, null, null);
+  }
+
+  /** A full block: the metro. Its riders go up to the SQUARE station and board the train there. */
+  private async runMetro(b: Block, riders: Snark[], carried: number, vipRides: Vip[]) {
+    const metro = this.metro!;
+    const st = metro.station("SQUARE");
+    const train = metro.block(b);
+    train.hold = st.at[0];
+    this.ev.bus("arriving", b, carried, null, null);
+    for (const vp of vipRides) {
+      if (vp.ready) setTimeout(() => void this.convoy(vp), 1800);
+      else vp.pending = true;
+    }
+    const goers = riders.filter((s) => this.snarks.has(s) && s.state !== "leaving" && s.state !== "riding");
+    goers.forEach((s, i) => setTimeout(() => void this.toStation(s, st, train, i), i * 350));
+    // the train pulls in, waits for its riders (or not for ever), and goes
+    while (!train.done && !train.standingAt(st.at[0])) await sleep(250);
+    if (!train.done) {
+      this.ev.bus("boarding", b, carried, null, null);
+      const t0 = performance.now();
+      const aboard = () => goers.every((s) => !this.snarks.has(s) || s.state === "leaving" || s.state === "riding");
+      while (!aboard() && train.held && performance.now() - t0 < 24000) await sleep(250);
+      train.release();
+      this.ev.bus("departing", b, carried, null, null);
+    }
+    while (!train.done) await sleep(500);
+    // the riders leave with the train
+    for (const s of goers)
+      if (this.snarks.has(s) && s.state === "riding") {
+        s.root.parent?.remove(s.root);
+        this.snarks.delete(s);
+        this.ev.removed(s);
+      }
+    for (const s of riders) if (this.snarks.has(s)) this.settle(s, b.height);
+    this.ev.bus("confirmed", b, carried, null, null);
+  }
+
+  /** From the bus stop to the station: along the pavement, across, up the stairs, onto the platform. */
+  private async toStation(s: Snark, st: Station, train: Train, i: number) {
+    if (s.state === "boarding" || s.state === "riding" || s.state === "leaving") return;
+    s.state = "boarding";
+    s.faceDir = null;
+    s.noClip = true;
+    s.rush = 1.3;
+    this.leaveLines(s);
+    const foot = st.stairs[0];
+    const kerb = CITY.south.z1 - 0.6;
+    const lane = CITY.cross[1] - CITY.crossHalf - 1.4;
+    await s.walk([v(s.root.position.x, kerb), v(lane, kerb), v(lane, CORE.maxZ - 0.6), v(lane, foot.z), v(foot.x + 0.6, foot.z), ...st.stairs.map((p) => p.clone())], 2);
+    if (s.state !== "boarding") return;
+    // wait on the platform, spread out along it
+    const wait = st.platform.clone().addScaledVector(new THREE.Vector3(-st.side.z, 0, st.side.x), -2 - (i % 6) * 1.6);
+    await s.walk([wait], 1.4);
+    s.faceDir = st.side.clone().negate();
+    while (s.state === "boarding" && !train.done && !train.standingAt(st.at[0])) await sleep(200);
+    if (s.state !== "boarding" || train.done) return;
+    // into the nearest car
+    let car = train.cars[0];
+    for (const c of train.cars) if (c.position.distanceTo(s.root.position) < car.position.distanceTo(s.root.position)) car = c;
+    const door = car.position.clone().addScaledVector(st.side, 1.3).setY(st.platform.y);
+    await s.walk([door], 1.8);
+    if (s.state !== "boarding" || train.done) return;
+    // aboard: a seat on the bench, riding with the train
+    for (const t of s.txs) this.byTx.delete(t.txid);
+    s.state = "riding";
+    s.noClip = false;
+    s.rush = 1;
+    s.setScale(0.78);
+    s.sit(true);
+    const row = train.seat(s.root);
+    s.faceDir = new THREE.Vector3(0, 0, row ? -1 : 1);
   }
 
   /** After a block: drop mined parcels; anyone left with nothing walks off. */
