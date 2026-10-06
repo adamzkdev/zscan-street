@@ -562,38 +562,54 @@ function neonTrim(city: City) {
 // ---- rain ---------------------------------------------------------------------------------------
 
 /** Fine rain falling around what the camera looks at: streaks, slanted by a light wind. */
+/**
+ * Rain over the whole map: streaks seeded once across the diorama (and the causeways out to the
+ * tunnels), falling in the vertex shader, so it costs nothing on the CPU however big the area.
+ */
 function rainfall(scene: THREE.Scene, ticks: Tick[]) {
-  const N = 2600,
-    R = 26,
-    H = 22;
-  const pos = new Float32Array(N * 6);
-  const seeds = new Float32Array(N * 3);
+  const N = 16000,
+    X = 120,
+    Z = 90,
+    H = 24;
+  const seed = new Float32Array(N * 2 * 3);
+  const end = new Float32Array(N * 2);
   for (let i = 0; i < N; i++) {
-    seeds[i * 3] = (Math.random() - 0.5) * 2 * R;
-    seeds[i * 3 + 1] = Math.random() * H;
-    seeds[i * 3 + 2] = (Math.random() - 0.5) * 2 * R;
+    const x = (Math.random() - 0.5) * X,
+      y = Math.random() * H,
+      z = (Math.random() - 0.5) * Z - 3;
+    seed.set([x, y, z, x, y, z], i * 6);
+    end[i * 2] = 0;
+    end[i * 2 + 1] = 1;
   }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: new THREE.Color(0.55, 0.6, 0.85), transparent: true, opacity: 0.32, depthWrite: false }));
+  geo.setAttribute("position", new THREE.BufferAttribute(seed, 3));
+  geo.setAttribute("tip", new THREE.BufferAttribute(end, 1));
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: { t: { value: 0 }, color: { value: new THREE.Color(0.55, 0.6, 0.85) } },
+    vertexShader: `
+      attribute float tip;
+      uniform float t;
+      varying float a;
+      void main() {
+        vec3 p = position;
+        p.y = mod(p.y - t * 16.0, ${H.toFixed(1)});
+        p.x += p.y * 0.12 + tip * 0.05;
+        p.y += tip * 0.42;
+        a = 0.32 * (1.0 - tip * 0.5);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 color;
+      varying float a;
+      void main() { gl_FragColor = vec4(color, a); }`,
+  });
+  const lines = new THREE.LineSegments(geo, mat);
   lines.frustumCulled = false;
   scene.add(lines);
-  ticks.push((_t, dt, focus) => {
-    if (!lines.visible) return;
-    for (let i = 0; i < N; i++) {
-      let y = seeds[i * 3 + 1] - dt * 16;
-      if (y < 0) y += H;
-      seeds[i * 3 + 1] = y;
-      const x = focus.x + seeds[i * 3] + y * 0.12,
-        z = focus.z + seeds[i * 3 + 2];
-      pos[i * 6] = x;
-      pos[i * 6 + 1] = y;
-      pos[i * 6 + 2] = z;
-      pos[i * 6 + 3] = x + 0.05;
-      pos[i * 6 + 4] = y + 0.42;
-      pos[i * 6 + 5] = z;
-    }
-    geo.attributes.position.needsUpdate = true;
+  ticks.push((t) => {
+    if (lines.visible) mat.uniforms.t.value = t;
   });
   return lines;
 }

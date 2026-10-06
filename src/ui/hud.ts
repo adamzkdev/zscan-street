@@ -125,6 +125,8 @@ export interface HudCallbacks {
   /** On foot in the street (first person), or back to the map. */
   walk(on: boolean): void;
   leave(): void;
+  /** Open a conversation with this zkSNARK. */
+  talk(s: Snark): void;
 }
 
 type Section = "block" | "mempool" | "market" | "supply" | "network";
@@ -539,6 +541,9 @@ export class Hud {
         return this.cb.leave();
       case "follow":
         if (this.selected) this.cb.follow(this.selected);
+        return;
+      case "talk":
+        if (this.selected) this.cb.talk(this.selected);
         return;
       case "unfollow":
       case "exit":
@@ -1093,6 +1098,7 @@ export class Hud {
               .join("")}${it ? "" : `<div><small>Traits</small><b>Loading…</b></div>`}</div>${it?.last ? `<div class="note">Last sale ${zec(it.last, 3)} on Zilkroad.</div>` : ""}`
       }</div>
       <div class="actions">
+        <button class="btn primary talkbtn" data-act="talk">💬 Talk</button>
         <button class="btn ${following ? "" : "primary"}" data-act="${following ? "unfollow" : "follow"}">${icon("follow")}${following ? "Stop following" : "Follow"}</button>
         <a class="btn" href="${s.txs[0] ? links.tx(s.txs[0].txid) : it?.url ?? "https://zilkroad.com"}" target="_blank" rel="noopener">${s.txs[0] ? "ZScan" : "Zilkroad"} ${icon("ext")}</a>
       </div>

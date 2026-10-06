@@ -40,6 +40,7 @@ import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
 import { Photo } from "./ui/photo";
 import { Visitors } from "./scene/visitors";
+import { npcSpeaker, snarkSpeaker, Talk } from "./ui/talk";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
@@ -195,6 +196,21 @@ const director = new Director(scene, city, {
   },
 });
 
+/** What each walk-in place is, for the people who work there. */
+const PLACE_ABOUT: Record<string, string> = {
+  mempool: "The MEMPOOL shop holds every pending Zcash transaction as a parcel on the pickup table; truck drivers bring them in, zkSNARKs pick them up and wait at the bus stop for a block. Upstairs (1F) is the Block Archive, where any block since genesis can be rebuilt.",
+  factory: "The Proof Factory is the mining hall: rows of miners per mining pool press each new block, which rolls down a conveyor. Shielded parcels leave from its dock.",
+  cards: "zkCARDS is the museum of the zkSNARKs collection: all 10,000 characters on eight floors, ranked by rarity.",
+  bank: "The View Key Bank: visitors paste a viewing key and the vault shows their shielded balance, computed in their own browser; the key never leaves it.",
+  zsa: "The ZSA Exchange is a building site for Zcash Shielded Assets (ZIPs 226, 227, 228): custom tokens inside the shielded pool, coming in a future upgrade.",
+  library: "The Library keeps the Zcash news and every ZIP (Zcash Improvement Proposal) on its shelves.",
+  tower: "ZK TOWER is a condo tower with flats, an arcade, a bowling alley, a gym, a pool and a rooftop.",
+};
+
+// conversations with the characters (zkSNARKs on the street, people inside places); created
+// once the HUD has drawn #ui
+let talk: Talk;
+
 hud = new Hud(
   {
     mode: (m) => {
@@ -260,6 +276,7 @@ hud = new Hud(
       hud.renderIndoor(interiors.floor);
     },
     leave: () => interiors.exit(),
+    talk: (s) => talk.show(snarkSpeaker(s, director)),
     walk: (on) => setWalking(on),
   },
   director,
@@ -396,15 +413,39 @@ function setWalking(on: boolean) {
   hud.cut();
 }
 /** Walking into a walk-in door takes you inside. */
+/** The walk-in door the walker is heading for, and how far (for the "Enter" prompt). */
+const doorPrompt = document.createElement("div");
+doorPrompt.className = "door-prompt hud";
+document.getElementById("ui")!.append(doorPrompt);
+function prompt(text: string | null) {
+  if (doorPrompt.textContent !== (text ?? "")) doorPrompt.innerHTML = text ?? "";
+  doorPrompt.classList.toggle("on", !!text);
+}
+const lastFoot = new THREE.Vector3();
 function throughDoors(dt: number) {
   doorCool -= dt;
-  if (doorCool > 0) return;
   const p = onFoot.camera.position;
-  for (const d of doors)
-    if (Math.hypot(p.x - d.at.x, p.z - d.at.z) < 1.15) {
-      enterPlace(d.key);
-      return;
-    }
+  const fx = -Math.sin(onFoot.heading),
+    fz = -Math.cos(onFoot.heading);
+  let best: { d: (typeof doors)[number]; dist: number; facing: number } | null = null;
+  for (const d of doors) {
+    const dx = d.at.x - p.x,
+      dz = d.at.z - p.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 5) continue;
+    const facing = (dx * fx + dz * fz) / Math.max(1e-6, dist);
+    if (!best || dist < best.dist) best = { d, dist, facing };
+  }
+  if (best && (best.facing > 0.35 || best.dist < 1.6)) prompt(`<b>${PLACES[best.d.key]}</b><span>▲ keep walking to enter</span>`);
+  else prompt(null);
+  if (doorCool > 0 || !best) return;
+  // close to the door and walking at it (the facade's collider may stop you a step short)
+  const moving = Math.hypot(p.x - lastFoot.x, p.z - lastFoot.z) > 0.002;
+  lastFoot.set(p.x, 0, p.z);
+  if (best.dist < 1.15 || (moving && best.dist < 2.4 && best.facing > 0.6)) {
+    prompt(null);
+    enterPlace(best.d.key);
+  }
 }
 const footFocus = new THREE.Vector3();
 
@@ -535,6 +576,24 @@ canvas.addEventListener("pointerup", (e) => {
   // inside a place: a click (not a look-around drag) inspects what is under it
   if (interiors.active) {
     if (e.button !== 0 || interiors.walk.dragged) return;
+    // the people inside: talk to them
+    const npc = interiors.snarkAt(e.clientX, e.clientY);
+    if (npc && interiors.active) {
+      const place = interiors.active;
+      const floor = place.floors[interiors.floor];
+      const job = npc.role ?? "visitor";
+      return talk.show(
+        npcSpeaker(
+          `${place.key}-${npc.id}-${job}`,
+          `${npc.name} · ${job}`,
+          `${npc.name}, the ${job.toLowerCase()} at the ${place.title} in ZStreet`,
+          ZScan.zkSnarkImage(npc.id),
+          `Welcome to the ${place.title}! I'm the ${job.toLowerCase()} here. What can I tell you?`,
+          () => `You work at the ${place.title} (${floor.name}). ${PLACE_ABOUT[place.key] ?? ""}${npc.txs.length ? ` You hold transaction ${npc.txs[0].txid} (${npc.txs[0].kind}).` : ""}`,
+          director,
+        ),
+      );
+    }
     const info = interiors.pickAt(e.clientX, e.clientY);
     if (info?.panel) return venues.show(info.panel);
     // the tower: its elevator doors, its arcade games
@@ -719,6 +778,8 @@ function opaqueAt(h: THREE.Intersection) {
 
 // ---- live feed --------------------------------------------------------------------------------
 let first = true;
+talk = new Talk(document.getElementById("ui")!);
+
 // "follow your transaction": paste a txid or open zstreet.cash/?tx=…
 const tracker = new Tracker(document.getElementById("ui")!, director, {
   follow: (s) => {
@@ -985,6 +1046,10 @@ function frame(stepDt?: number) {
   // inside a place: its own scene and the walking camera; the city keeps living (but unseen)
   if (interiors.active) {
     interiors.update(dt, t);
+    // near the way out (ground floor): say so
+    const door = interiors.walk.door,
+      cp = interiors.walk.camera.position;
+    prompt(door && Math.hypot(cp.x - door.x, cp.z - door.z) < 2.6 ? `<b>EXIT · 出口</b><span>▼ walk out the door to the street</span>` : null);
     if (CAPTURE && capShot) {
       interiors.walk.enabled = false;
       aimCapture(interiors.walk.camera, capShot);
@@ -1005,6 +1070,7 @@ function frame(stepDt?: number) {
     return;
   }
   renderPass.scene = scene;
+  if (!walking) prompt(null);
   if (walking) {
     onFoot.update(dt);
     throughDoors(dt);
