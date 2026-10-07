@@ -169,6 +169,11 @@ export class CameraRig {
     this.ev.shot(this.shot, this.mode);
   }
 
+  /** A camera flight (to a district, home, the overview) is under way. */
+  get flying() {
+    return this.flight !== null;
+  }
+
   flyTo(to: THREE.Vector3, zoom: number) {
     this.flight = { to: to.clone(), zoom };
   }

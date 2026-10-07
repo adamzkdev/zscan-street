@@ -46,6 +46,47 @@ export class InteriorManager {
   keep = 8;
   private parked = new Set<Interior>();
 
+  /**
+   * Compiles a scene's shaders ahead of its first frame (set by the app: renderer.compileAsync on
+   * one object per variant). While it runs `warming` is true and the app holds the frame behind
+   * the entry fade instead of stalling on the first draw.
+   */
+  compile: ((scene: THREE.Scene, camera: THREE.Camera) => Promise<unknown>) | null = null;
+  warming = false;
+  private warmId = 0;
+
+  private warmUp(i: Interior) {
+    if (!this.compile) return;
+    const id = ++this.warmId;
+    const t0 = performance.now();
+    this.warming = true;
+    const done = () => {
+      if (id !== this.warmId || !this.warming) return;
+      this.warming = false;
+      // a long wait: the place is revealed with a fresh fade
+      if (performance.now() - t0 > 150 && this.active === i) this.ev.fade();
+    };
+    try {
+      this.compile(i.scene, this.walk.camera).then(done, done);
+    } catch {
+      this.warming = false;
+      return;
+    }
+    setTimeout(done, 1500);
+  }
+
+  /** Build a place ahead of its first visit (idle time); it is the first one parked. */
+  prebuild(key: Key): Interior | null {
+    if (this.cache.has(key) || !this.build[key]) return null;
+    const i = this.build[key]();
+    exitSign(i);
+    const rest = [...this.cache];
+    this.cache.clear();
+    this.cache.set(key, i);
+    for (const [k, v] of rest) this.cache.set(k, v);
+    return i;
+  }
+
   /** Walk into a place, on its ground floor (or `floor`). */
   enter(key: Key, floor = 0) {
     let i = this.cache.get(key);
@@ -93,11 +134,14 @@ export class InteriorManager {
     // every place is entered from the street side (+z) on its ground floor
     this.walk.door = this.floor === 0 ? doorOf(f, this.walk.colliders) : null;
     this.walk.arrived();
+    // this floor's lights make its own shader variants: compile them before the first frame
+    this.warmUp(i);
   }
 
   exit() {
     if (!this.active) return;
     this.ev.fade();
+    this.warming = false;
     this.active = null;
     this.walk.enabled = false;
     this.ev.left();

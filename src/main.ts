@@ -62,6 +62,9 @@ import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";
 import { Joystick } from "./ui/joystick";
 import { Quality } from "./scene/quality";
+import { warm, idle, warmTarget } from "./scene/warm";
+import { pxPerMetre } from "./scene/farview";
+import { LightBudget } from "./scene/lights";
 import { Residents } from "./scene/residents";
 import { CityPulse } from "./scene/pulse";
 import { Metro, NU7_LINE } from "./scene/metro";
@@ -119,6 +122,8 @@ moon.shadow.mapSize.set(4096, 4096);
 moon.shadow.bias = -0.0006;
 moon.shadow.normalBias = 0.03;
 scene.add(moon, moon.target);
+// buses and VIP cars bring their own lights: the count the shaders see stays constant
+const lightBudget = new LightBudget(scene);
 const MOON_OFFSET = new THREE.Vector3(-18, 34, 22);
 
 // ---- world ------------------------------------------------------------------------------------
@@ -186,11 +191,14 @@ function setTheme(t: Theme) {
   weather(true);
   // the place you are in follows (its windows, its light); the others catch up when entered
   themeHook?.(t);
+  moonShadow = moon.shadow.intensity;
   shibuyaNight?.(t === "night");
 }
 let shibuyaNight: ((night: boolean) => void) | null = null;
 /** Set once the walk-in places exist (they are built further down). */
 let themeHook: ((t: Theme) => void) | null = null;
+/** The moon's shadow strength for the theme (shadows are faded out, never switched off: see frame). */
+let moonShadow = 1;
 function setThemePref(p: ThemePref) {
   themePref = p;
   try {
@@ -798,11 +806,24 @@ const interiors = new InteriorManager(
       cameIn = null;
       syncCamera();
     },
-    fade: () => hud.cut(),
+    fade: () => {
+      lastJump = performance.now();
+      hud.cut();
+    },
   },
 );
 // phones and modest machines keep fewer walk-in places on the GPU at once
 interiors.keep = quality.level >= 2 ? 3 : 8;
+warmTarget(() => composer.readBuffer);
+interiors.compile = (s, c) => warm(renderer, s, c);
+// frames during an entry, a camera flight or right after a tier change say nothing about the device
+// (and neither do the boot screen's, while the city warms up and places are built ahead)
+quality.busy = () => interiors.warming || rig.flying || performance.now() - lastJump < 1500 || bootUp();
+function bootUp() {
+  const b = document.getElementById("boot");
+  return !!b && !b.dataset.gone;
+}
+let lastJump = 0;
 interiors.walk.resize(window.innerWidth, window.innerHeight);
 window.addEventListener("resize", () => {
   interiors.walk.resize(window.innerWidth, window.innerHeight);
@@ -1763,7 +1784,8 @@ function frameBody(stepDt?: number) {
     renderPass.scene = interiors.active.scene;
     renderPass.camera = interiors.walk.camera;
     tilt.set(0);
-    composer.render();
+    // its shaders are still compiling: hold the last frame behind the entry fade, no stall
+    if (!interiors.warming) composer.render();
     if (grabbers.length) {
       const g = grabbers;
       grabbers = [];
@@ -1809,10 +1831,21 @@ function frameBody(stepDt?: number) {
   // on foot, lights and shadows follow a point a few steps ahead
   const focus = walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
   lampLights.update(t, focus);
+  // the whole-city map: the lamps' pools are a few pixels there, the lights cost a third of the frame
+  lampLights.setOn(!(cam === rig.iso && pxPerMetre(renderer, rig.iso) < 6));
   const wide = rig.mode === "overview";
   const ext = wide ? 90 : 30;
   // from that far out shadows are invisible; skip them and keep the frame rate
-  moon.castShadow = !wide && quality.tier.shadow > 0;
+  // Switching castShadow (or the shadow map type) changes every material's shader: each flip
+  // compiled a new variant of all of them. The moon always casts; when shadows aren't wanted its
+  // map just stops being rendered and the shadow is faded to nothing (a uniform).
+  const shadows = !wide && quality.tier.shadow > 0;
+  moon.shadow.autoUpdate = shadows;
+  // (a map must exist all the same: after a resize to a new tier it is re-made once, unseen)
+  if (!moon.shadow.map) moon.shadow.needsUpdate = true;
+  // off: every fragment falls outside the map, so the shader skips the shadow lookups altogether
+  if (!shadows) moon.shadow.matrix.makeScale(0, 0, 0).setPosition(-2, -2, -2);
+  moon.shadow.intensity = shadows ? moonShadow : 0;
   Object.assign(moon.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 160 });
   moon.shadow.camera.updateProjectionMatrix();
   moon.position.copy(focus).add(MOON_OFFSET);
@@ -1882,6 +1915,7 @@ function frameBody(stepDt?: number) {
   city.update(t, dt);
   hall?.update(t, dt);
   press?.update(t, dt);
+  lightBudget.update();
   composer.render();
   // a photo is read from the canvas right after the frame is drawn (the buffer isn't kept)
   if (grabbers.length) {
@@ -1893,4 +1927,41 @@ function frameBody(stepDt?: number) {
   again();
 }
 frame();
+// Shaders of the whole city (every district, the night-only lights, the rides' cabins) compile
+// while the boot screen is up, so the first flight to a district no longer stalls on them; then
+// the most visited places are built ahead (only behind the boot screen or in a hidden tab: a
+// build is a 0.1–0.3 s task that would show as a hitch in the live city).
+idle(() => {
+  const t0 = performance.now();
+  warm(renderer, scene, rig.camera).then(() => console.info(`shaders warmed in ${Math.round(performance.now() - t0)} ms (${renderer.info.programs?.length ?? 0} programs)`));
+  // and the variant without the lamps' lights (the whole-city map)
+  lampLights.warmOff(() => warm(renderer, scene, rig.camera));
+  const ahead: Interior["key"][] = quality.level >= 2 ? [] : ["tower", "mempool", "factory"];
+  const unseen = () => document.hidden || bootUp();
+  const next = () => {
+    if (!ahead.length) return;
+    if (interiors.active || !unseen()) return void document.addEventListener("visibilitychange", () => idle(next), { once: true });
+    const i = interiors.prebuild(ahead.shift()!);
+    if (i) warm(renderer, i.scene, interiors.walk.camera);
+    setTimeout(next, 30);
+  };
+  setTimeout(next, 30);
+  // the day textures of the roads (painted the first time the day comes: a 0.25 s stall), one per
+  // idle moment, uploaded too
+  const dayMaps: THREE.Material[] = [];
+  city.group.traverse((o) => {
+    const ms = (o as THREE.Mesh).material;
+    for (const m of Array.isArray(ms) ? ms : ms ? [ms] : []) if (m.userData.dayMap && !m.userData.dayTex && !dayMaps.includes(m)) dayMaps.push(m);
+  });
+  const paint = () => {
+    const m = dayMaps.shift();
+    if (!m) return;
+    if (!(m.userData.dayTex instanceof THREE.Texture)) {
+      m.userData.dayTex = m.userData.dayMap();
+      renderer.initTexture(m.userData.dayTex);
+    }
+    idle(paint, 4000);
+  };
+  idle(paint, 4000);
+}, 100);
 syncCamera();

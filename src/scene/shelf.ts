@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { farProbe } from "./farview";
 import type { BlockSummary } from "../data/types";
 import type { ShopSite } from "./city";
 
@@ -15,13 +16,17 @@ export class BlockShelf {
   readonly group = new THREE.Group();
   private boxes = new Map<number, THREE.Mesh>();
   private blocks: BlockSummary[] = [];
-  private geo = new THREE.BoxGeometry(1, 1, 1);
+  private geo = labelledBox();
+  /** The five plain faces share one material per colour; only the label is the box's own. */
+  private sides = { full: side("#f4b728"), empty: side("#8a8692") };
 
   constructor(
     parent: THREE.Object3D,
     private site: ShopSite,
   ) {
     parent.add(this.group);
+    // from the whole-city map the boxes are a pixel each, inside the shop: not drawn there
+    parent.add(farProbe(4.5, (far) => (this.group.visible = !far)));
   }
 
   get capacity() {
@@ -48,7 +53,9 @@ export class BlockShelf {
     for (const [h, m] of this.boxes)
       if (!keep.has(h)) {
         this.group.remove(m);
-        (m.material as THREE.Material[]).forEach((x) => x.dispose());
+        const label = (m.material as THREE.MeshStandardMaterial[])[1];
+        label.map?.dispose();
+        label.dispose();
         this.boxes.delete(h);
       }
     const max = Math.max(4, ...this.blocks.map((b) => b.tx_count));
@@ -74,13 +81,30 @@ export class BlockShelf {
     const txs = Math.max(0, b.tx_count - 1);
     const k = Math.min(1, txs / max);
     const s = 0.22 + k * 0.14;
-    const mats = [0, 1, 2, 3, 4, 5].map((f) => new THREE.MeshStandardMaterial({ color: txs ? "#f4b728" : "#8a8692", roughness: 0.6, metalness: 0.1, map: f === 4 ? label(b, txs) : null }));
+    const mats = [txs ? this.sides.full : this.sides.empty, new THREE.MeshStandardMaterial({ color: txs ? "#f4b728" : "#8a8692", roughness: 0.6, metalness: 0.1, map: label(b, txs) })];
     const m = new THREE.Mesh(this.geo, mats);
     m.scale.set(s, s * 0.9, s * 0.8);
     m.castShadow = true;
     m.userData.block = b;
     return m;
   }
+}
+
+function side(color: string) {
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1 });
+}
+
+/** A unit box in two draw calls, not six: the five plain faces first (group 0), the front (+z) label last (group 1). */
+function labelledBox() {
+  const g = new THREE.BoxGeometry(1, 1, 1);
+  const idx = g.index!.array;
+  // BoxGeometry's faces, 6 indices each: +x, -x, +y, -y, +z, -z
+  const order = [0, 1, 2, 3, 5, 4].flatMap((f) => Array.from(idx.slice(f * 6, f * 6 + 6)));
+  g.setIndex(order);
+  g.clearGroups();
+  g.addGroup(0, 30, 0);
+  g.addGroup(30, 6, 1);
+  return g;
 }
 
 /** Front label: the height, and a bar for how full the block was. */

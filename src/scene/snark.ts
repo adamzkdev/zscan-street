@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { pxPerMetre } from "./farview";
 import type { NftItem, Tx, TxKind } from "../data/types";
 import { ZScan } from "../data/zscan";
 import { blobTexture } from "./textures";
@@ -163,6 +164,8 @@ const LEG_H = 6 * PX;
 const shadowTex = blobTexture();
 /** Where the bust's centre sits on the portrait (the dissolve trail fills the left). */
 const BUST_X = 2.5 * PX;
+/** Below this many screen pixels per metre (the overview), the small parts are skipped. */
+const FAR_PX_PER_M = 4.5;
 
 function pixelPlane(t: { texture: THREE.Texture; w: number; h: number }, z: number) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(t.w * PX, t.h * PX), new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, alphaTest: 0.5 }));
@@ -309,6 +312,26 @@ export class Snark {
     this.ring.position.set(0.15, 0.02, 0);
     this.ring.visible = false;
     this.root.add(this.ring);
+    // seen from far up (the whole-city map) a zkSNARK is a few pixels tall: its legs, arms and
+    // shadow are under a pixel each, so they are skipped there (five draw calls of six, per person)
+    this.body.onBeforeRender = (r, _s, cam) => {
+      const far = pxPerMetre(r, cam) < FAR_PX_PER_M;
+      if (far !== this.far) {
+        this.far = far;
+        this.applyDetail();
+      }
+    };
+  }
+
+  /** Seen from far away (see the constructor), and whether its legs show at all (seated, in a bus). */
+  private far = false;
+  private legsOn = true;
+  private applyDetail() {
+    const near = !this.far;
+    for (const l of this.legs) l.visible = near && this.legsOn;
+    this.shadow.visible = near;
+    // an open umbrella still reads from up there (a dot of colour over the crowd)
+    this.hold.visible = near || !!this.umbrellaColor;
   }
 
   private readonly art: Art;
@@ -402,7 +425,8 @@ export class Snark {
   takeVisual() {
     this.root.remove(this.visual);
     this.visual.position.set(0, 0, 0);
-    this.legs.forEach((l) => (l.visible = false));
+    this.legsOn = false;
+    this.applyDetail();
     return this.visual;
   }
 
@@ -410,6 +434,7 @@ export class Snark {
   setUmbrella(color: string | null) {
     this.umbrellaColor = color;
     this.refreshPose();
+    this.applyDetail();
   }
 
   /** A police cap on the head. */
@@ -457,7 +482,8 @@ export class Snark {
   sit(seated: boolean) {
     this.seated = seated;
     this.refreshPose();
-    this.legs.forEach((l) => (l.visible = !seated));
+    this.legsOn = !seated;
+    this.applyDetail();
     this.visual.position.y = seated ? -LEG_H * 0.75 : 0;
   }
 

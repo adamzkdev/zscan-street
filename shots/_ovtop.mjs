@@ -1,0 +1,14 @@
+import puppeteer from "puppeteer-core";
+import fs from "node:fs";
+const port = process.argv[2] ?? 3024;
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 300000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: Number(process.env.W ?? 1600), height: Number(process.env.H ?? 1000), deviceScaleFactor: Number(process.env.DPR ?? 1) } });
+const p = await b.newPage();
+await p.goto(`http://localhost:${port}/?debug&quality=0&theme=night`);
+await p.waitForFunction(() => window.street, { timeout: 120000 });
+await new Promise((r) => setTimeout(r, 8000));
+await p.evaluate(() => { const R = street.renderer; const o = R.render.bind(R); R.render = (s, c) => { if (!window.__scene && s.isScene && s.children.length > 20) window.__scene = s; o(s, c); }; });
+await p.evaluate((m) => street.rig.setMode(m), process.env.MODE ?? "overview");
+await new Promise((r) => setTimeout(r, 4000));
+const fn = fs.readFileSync(process.argv[3], "utf8");
+const out = await p.evaluate(`(${fn})()`); console.log(Array.isArray(out) ? out.join("\n") : out);
+await b.close();

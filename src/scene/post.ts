@@ -76,6 +76,29 @@ export class LampLights {
     }
   }
 
+  private on = true;
+  /**
+   * Off on the whole-city map: there a lamp's pool is a few pixels, but a dozen point lights in
+   * every lit shader (even skipped) cost a third of the frame on a retina screen. Hidden lights
+   * select another shader variant: warm it ahead with `warmOff`.
+   */
+  setOn(on: boolean) {
+    if (on === this.on) return;
+    this.on = on;
+    for (const l of this.lights) l.visible = on;
+  }
+
+  /** Run `compile` (a shader warm-up) as if the lamps were off, so switching them costs no compile. */
+  warmOff<T>(compile: () => T): T {
+    const was = this.lights.map((l) => l.visible);
+    for (const l of this.lights) l.visible = false;
+    try {
+      return compile();
+    } finally {
+      this.lights.forEach((l, i) => (l.visible = was[i]));
+    }
+  }
+
   update(t: number, focus: THREE.Vector3, force = false) {
     if (!force && t - this.lastPick < 0.3) return;
     this.lastPick = t;

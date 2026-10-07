@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { busSign, canvasTexture } from "./textures";
+import { trackLight } from "./lights";
 import { toObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
 import { limoModel, scooterModel, sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
@@ -61,7 +62,7 @@ export class Car {
     this.group.add(hinge);
     this.door = hinge;
     if (kind !== "sedan") {
-      const glow = new THREE.PointLight(kind === "limo" ? "#b07bff" : "#ffd28a", 2.5, 4, 2);
+      const glow = trackLight(new THREE.PointLight(kind === "limo" ? "#b07bff" : "#ffd28a", 2.5, 4, 2));
       glow.position.set(0, 1.2, 0);
       this.group.add(glow);
     }

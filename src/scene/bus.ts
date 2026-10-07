@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { CITY } from "./city";
+import { trackLight } from "./lights";
 import { busSign, canvasTexture, updateCanvasTexture, zcashBadge } from "./textures";
 import { toObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
@@ -84,11 +85,11 @@ export class BlockBus {
     }
 
     // lights
-    this.headlight = new THREE.SpotLight("#fff1d6", 30, 18, 0.5, 0.6, 1.5);
+    this.headlight = trackLight(new THREE.SpotLight("#fff1d6", 30, 18, 0.5, 0.6, 1.5));
     this.headlight.position.set(LEN / 2, 1, 0);
     this.headlight.target.position.set(LEN / 2 + 6, 0, 0);
     g.add(this.headlight, this.headlight.target);
-    const inside = new THREE.PointLight("#ffd9a8", 7, 7, 1.6);
+    const inside = trackLight(new THREE.PointLight("#ffd9a8", 7, 7, 1.6));
     inside.position.set(0, (BUS.h - 4) * VOX, 0);
     g.add(inside);
 

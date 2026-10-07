@@ -211,6 +211,101 @@ function objectFrom(geos: Geos, own: boolean) {
 }
 
 /**
+ * The ground's plain pieces (kerbs, quays, piers, puddles, lily pads: boxes and discs straight
+ * under the city group, none of them animated) merged per material: ~200 draw calls fewer.
+ */
+function mergeGround(g: THREE.Group) {
+  const buckets = new Map<string, THREE.Mesh[]>();
+  for (const o of g.children) {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || (m as unknown as THREE.InstancedMesh).isInstancedMesh || (m as unknown as THREE.BatchedMesh).isBatchedMesh || Array.isArray(m.material)) continue;
+    if (!["BoxGeometry", "CircleGeometry"].includes(m.geometry.type) || (m.material as THREE.ShaderMaterial).isShaderMaterial) continue;
+    const k = `${m.material.uuid}|${m.castShadow}|${m.receiveShadow}|${m.geometry.type}`;
+    const list = buckets.get(k);
+    if (list) list.push(m);
+    else buckets.set(k, [m]);
+  }
+  for (const list of buckets.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map((m) => {
+      m.updateMatrix();
+      return m.geometry.clone().applyMatrix4(m.matrix);
+    });
+    const merged = mergeGeometries(geos, false);
+    if (!merged) continue;
+    for (const q of geos) q.dispose();
+    const mesh = new THREE.Mesh(merged, list[0].material);
+    mesh.castShadow = list[0].castShadow;
+    mesh.receiveShadow = list[0].receiveShadow;
+    mesh.matrixAutoUpdate = false;
+    for (const m of list) g.remove(m);
+    g.add(mesh);
+  }
+}
+
+/**
+ * The bigger city's buildings, every variant and every level of detail, in one batched mesh per
+ * material: three draw calls for the thousands of copies (each copy is still frustum-culled on
+ * its own), where an instanced mesh per variant, sector and level took well over a thousand.
+ * Every copy gets one instance per level; lod() shows the right one.
+ */
+type LodSet = { mats: THREE.Matrix4[]; levels: (Geos | undefined)[]; at: THREE.Vector3[]; ids: { mesh: THREE.BatchedMesh; id: number; level: number; copy: number; shown: boolean }[] };
+function extBatch(g: THREE.Group, lods: LodSet[], shadows = false) {
+  const size = new Map<Kind, { n: number; v: number; i: number; seen: Set<object> }>();
+  for (const l of lods)
+    for (const geos of l.levels)
+      for (const [kind, d] of Object.entries(geos ?? {}) as [Kind, NonNullable<Geos[Kind]>][]) {
+        const s = size.get(kind) ?? { n: 0, v: 0, i: 0, seen: new Set() };
+        size.set(kind, s);
+        s.n += l.mats.length;
+        if (s.seen.has(d)) continue;
+        s.seen.add(d);
+        s.v += d.pos.length / 3;
+        s.i += d.idx.length;
+      }
+  for (const [kind, s] of size) {
+    const mesh = new THREE.BatchedMesh(s.n, s.v, s.i, MATERIALS[kind]);
+    // (the far level never casts: shadows are drawn round the focus only, where the near one is)
+    mesh.castShadow = shadows && kind !== "emit";
+    mesh.receiveShadow = kind !== "emit";
+    // opaque, and drawn from above: depth sorting would only cost time
+    mesh.sortObjects = false;
+    const geoIds = new Map<object, number>();
+    for (const l of lods)
+      l.levels.forEach((geos, level) => {
+        const d = geos?.[kind];
+        if (!d) return;
+        let gid = geoIds.get(d);
+        if (gid === undefined) {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute("position", new THREE.BufferAttribute(d.pos, 3));
+          geo.setAttribute("normal", new THREE.BufferAttribute(d.nor, 3, true));
+          geo.setAttribute("color", half(d.col));
+          geo.setIndex(new THREE.BufferAttribute(d.idx, 1));
+          gid = mesh.addGeometry(geo);
+          geoIds.set(d, gid);
+          // the batch's own colour buffer is created as plain shorts: they are half floats
+          const col = mesh.geometry.getAttribute("color") as THREE.BufferAttribute;
+          if (!(col as unknown as { isFloat16BufferAttribute?: boolean }).isFloat16BufferAttribute) {
+            Object.setPrototypeOf(col, THREE.Float16BufferAttribute.prototype);
+            (col as unknown as { isFloat16BufferAttribute: boolean }).isFloat16BufferAttribute = true;
+          }
+        }
+        l.mats.forEach((mx, copy) => {
+          const id = mesh.addInstance(gid);
+          mesh.setMatrixAt(id, mx);
+          mesh.setVisibleAt(id, false);
+          l.ids.push({ mesh, id, level, copy, shown: false });
+        });
+      });
+    mesh.computeBoundingBox();
+    mesh.computeBoundingSphere();
+    mesh.matrixAutoUpdate = false;
+    g.add(mesh);
+  }
+}
+
+/**
  * Build the city. The voxel work happens in a pool of workers; this assembles meshes, signs,
  * collisions, the ground and the atmosphere. `progress` reports 0..1.
  */
@@ -427,12 +522,13 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
 
   /** Each variant of the bigger city: its copies, in full near the focus and half-resolution beyond. */
   /** Street furniture and trees, merged per 96 m sector, in full and at half resolution. */
-  const propChunks: { near: THREE.Object3D; far: THREE.Object3D; at: THREE.Vector3 }[] = [];
+  const propChunks: LodSet[] = [];
   /** Landmarks' near and far meshes, and each one's centre. */
   const landmarkLods: { full: THREE.Object3D; far: THREE.Object3D; at: THREE.Vector3 }[] = [];
   /** The bigger city's signs and screens, per building: hidden far from the focus. */
   const farExtras: { group: THREE.Object3D; at: THREE.Vector3 }[] = [];
-  const lods: { mats: THREE.Matrix4[]; full: THREE.InstancedMesh[]; lod: THREE.InstancedMesh[]; lod2: THREE.InstancedMesh[]; at: THREE.Vector3[] }[] = [];
+  /** Each variant's copies (full, half and quarter resolution), batched once the whole city is in (extBatch). */
+  const lods: LodSet[] = [];
   let lodDirty = true;
   const lodFocus = new THREE.Vector3(1e9, 0, 0);
   let lodNear = -1;
@@ -450,16 +546,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       const [fx, fz] = j.face === "s" || j.face === "n" ? [j.along, j.front] : [j.front, j.along];
       return new THREE.Matrix4().compose(new THREE.Vector3(fx - fc.x, CURB, fz - fc.z), new THREE.Quaternion().setFromAxisAngle(Y, rot), new THREE.Vector3(1, 1, 1));
     });
-    const sets = (geos: Geos | undefined) =>
-      Object.entries(geos ?? {}).map(([kind, d]) => {
-        const im = new THREE.InstancedMesh(geometry(d as NonNullable<Geos[Kind]>), MATERIALS[kind as Kind], mats.length);
-        im.castShadow = false;
-        im.receiveShadow = kind !== "emit";
-        im.count = 0;
-        g.add(im);
-        return im;
-      });
-    lods.push({ mats, full: sets(r.full), lod: sets(r.lod), lod2: sets(r.lod2), at: mats.map((mx) => new THREE.Vector3().setFromMatrixPosition(mx)) });
+    lods.push({ mats, levels: [r.full, r.lod, r.lod2], at: mats.map((mx) => new THREE.Vector3().setFromMatrixPosition(mx)), ids: [] });
     lodDirty = true;
     list.forEach((j, i) => {
       const mx = mats[i];
@@ -537,14 +624,8 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     new Promise<void>((resolve) => {
       const w = spawn();
       w.onmessage = (e) => {
-        for (const c of e.data.chunks) {
-          const near = objectFrom(c.geos, false),
-            far = objectFrom(c.far, false);
-          far.traverse((o) => ((o as THREE.Mesh).castShadow = false));
-          far.visible = false;
-          g.add(near, far);
-          propChunks.push({ near, far, at: new THREE.Vector3(c.centre[0], 0, c.centre[1]) });
-        }
+        // (batched with the others once all is in: see extBatch)
+        for (const c of e.data.chunks) propChunks.push({ mats: [new THREE.Matrix4()], levels: [c.geos, c.far], at: [new THREE.Vector3(c.centre[0], 0, c.centre[1])], ids: [] });
         for (const [x, z, r] of e.data.circles) nav.addCircle(x, z, r);
         for (const [x0, z0, x1, z1] of e.data.rects) nav.addRect(x0, z0, x1, z1);
         for (const [x, y, z, color] of e.data.lamps) lamps.push({ pos: new THREE.Vector3(x, y, z), color });
@@ -562,6 +643,8 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     }),
   ]);
   for (const w of workers) w.terminate();
+  extBatch(g, lods);
+  extBatch(g, propChunks, true);
   if (location.search.includes("timings")) {
     const per = workers.map((_, i) => timings.filter((t) => t[2] === i).reduce((a, t) => a + t[0], 0));
     console.log(`workers ${workers.length}: ${per.join(" ")} ms; variants ${unique.length}; slowest: ${timings.sort((a, b) => b[0] - a[0]).slice(0, 12).map((t) => `${t[1]} ${t[0]}`).join(", ")}`);
@@ -691,6 +774,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     [-15.8, CURB + 9, nz(-9)],
     [12.4, CURB + 6.4, nz(-8.6)],
   ]);
+  mergeGround(g);
 
   return {
     group: g,
@@ -718,9 +802,11 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       for (const e of farExtras) e.group.visible = e.at.distanceToSquared(focus) < m2 * 2.2;
       for (const c of propChunks) {
         // a sector is 96 m across: measure to its nearest edge, roughly
-        const far = c.at.distanceTo(focus) - 48 > mid;
-        c.near.visible = !far;
-        c.far.visible = far;
+        const level = c.at[0].distanceTo(focus) - 48 > mid ? 1 : 0;
+        for (const k of c.ids) {
+          const show = k.level === level;
+          if (show !== k.shown) k.mesh.setVisibleAt(k.id, (k.shown = show));
+        }
       }
       for (const l of landmarkLods) {
         // the full model's own meshes off, its far copy (a child) on
@@ -729,23 +815,16 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
         for (const c of l.full.children) if (c !== l.far) c.visible = !far;
       }
       for (const v of lods) {
-        const counts = [0, 0, 0];
-        const levels = [v.full, v.lod, v.lod2];
-        v.at.forEach((p, i) => {
+        const level = v.at.map((p) => {
           const dx = p.x - focus.x,
             dz = p.z - focus.z;
           const d2 = dx * dx + dz * dz;
-          const l = d2 < n2 ? 0 : d2 < m2 ? 1 : 2;
-          for (const m of levels[l]) m.setMatrixAt(counts[l], v.mats[i]);
-          counts[l]++;
+          return d2 < n2 ? 0 : d2 < m2 ? 1 : 2;
         });
-        levels.forEach((list, l) => {
-          for (const m of list) {
-            m.count = counts[l];
-            m.instanceMatrix.needsUpdate = true;
-            m.computeBoundingSphere();
-          }
-        });
+        for (const k of v.ids) {
+          const show = level[k.copy] === k.level;
+          if (show !== k.shown) k.mesh.setVisibleAt(k.id, (k.shown = show));
+        }
       }
     },
     update(t: number, dt: number) {
