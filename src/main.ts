@@ -32,10 +32,16 @@ import { buildOpera } from "./interior/opera";
 import { buildBigBen } from "./interior/bigben";
 import { buildStatue } from "./interior/statue";
 import { buildArab } from "./interior/arab";
+import { buildGardens } from "./interior/gardens";
+import { buildPalm } from "./interior/palm";
+import { buildOrchard } from "./interior/zktowers/orchard";
+import { buildSapling } from "./interior/zktowers/sapling";
+import { buildHalo } from "./interior/zktowers/halo";
 import { StadiumLive } from "./scene/stadium";
-import { Sky } from "./scene/sky";
+import { type RideKind, Sky } from "./scene/sky";
 import { Shibuya } from "./scene/shibuya";
 import { GoldenGate } from "./scene/goldengate";
+import { Forest } from "./scene/forest";
 import { Chatter } from "./scene/chatter";
 import { setBubbleScale } from "./scene/speech";
 import { PLACE_LORE } from "./data/lore";
@@ -65,6 +71,7 @@ import { Metro, NU7_LINE } from "./scene/metro";
 import { Tram } from "./scene/tram";
 import { CityTraffic } from "./scene/citytraffic";
 import { Life } from "./scene/life";
+import { Alive } from "./scene/alive";
 import { Horns } from "./scene/horns";
 import { Prison, PRISON } from "./scene/prison";
 import { policeModel } from "./scene/voxel/vehicles";
@@ -126,7 +133,7 @@ const shelf = city.shops[0] ? new BlockShelf(scene, city.shops[0]) : null;
 void get<BlockSummary[]>("/v1/blocks?limit=100").then((b) => b && shelf?.set(b));
 // the mining hall in the Proof Factory: its live wall
 const hall = city.factory ? new MiningHall(scene, city.factory) : null;
-// the library's headline ticker, over its door (it faces the square, away from the avenue)
+// the library's headline ticker, over its door (the Binhai, on the south bank, facing the river)
 const libraryDoor = city.venues.find((v) => v.kind === "library")?.door;
 const press = libraryDoor ? newsTicker(scene, libraryDoor.clone().add(new THREE.Vector3(0, 4.15, -0.35)), Math.PI) : null;
 const sound = new Soundscape();
@@ -437,6 +444,8 @@ async function arrest() {
 }
 // life in every district: anglers, boats, balconies, the park, the shōtengai
 const life = new Life(scene, city, director, [1, 0.9, 0.6, 0.4, 0.25][quality.level]);
+// the megalopolis busier: crowds on every pavement, street events, the sky and the bay
+const alive = new Alive(scene, city, director, [1, 0.85, 0.6, 0.4, 0.25][quality.level]);
 // two police officers at the avenue's junctions, watching the traffic
 for (const [x, z, id] of [
   [ST.heartE + 5.4, CITY.south.z0 + 0.7, 4911],
@@ -457,8 +466,23 @@ const stadium = new StadiumLive(scene, city, (up) => sound.crowd(up));
 // the ZEC Flyer turning by the river, the ZEC blimp over the city
 const sky = new Sky(city);
 let flyerRide = false;
+/** Board the Flyer or the blimp: first person inside, LEAVE (Esc) goes back. */
+function boardSky(kind: RideKind) {
+  rig.rideTrain(sky.board(kind, rig.focus, rig.iso.zoom));
+  flyerRide = true;
+  hud.setRide(kind === "blimp" ? "ZEC BLIMP" : "ZEC FLYER");
+}
+/** The Flyer, the blimp or its mooring mast under the cursor. */
+function skyAt(x: number, y: number) {
+  if (walking || interiors.active) return null;
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, viewCam());
+  return sky.hit(ray);
+}
 // the Golden Gate: traffic over it, and its deck to walk on
 const goldenGate = new GoldenGate(scene, city);
+// Shielded Woods: the redwood forest on the headland across the bridge, walkable off its deck
+const forest = new Forest(scene, city, director, (z) => goldenGate.deckAt(z));
 // people talk to each other wherever the camera looks
 const chatter = new Chatter(director, city, scene, [3, 3, 2, 2, 1][quality.level]);
 // a goal inside the stadium: the crowd's roar (or groan)
@@ -485,6 +509,11 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
   bigben: "up to the bell",
   statue: "climb to the crown",
   arab: "seven-star hotel · helipad",
+  gardens: "Supertrees · Skyway · Cloud Forest",
+  palm: "beach · villa · boardwalk · marina",
+  "tower-orchard": "art deco · observatory",
+  "tower-sapling": "sky gardens · infinity pool",
+  "tower-halo": "trading floor · helipad",
 };
 
 /** What each walk-in place is, for the people who work there. */
@@ -505,6 +534,9 @@ const PLACE_ABOUT: Record<string, string> = {
   pyramid: "The Great Pyramid hides a labyrinth; the King's Chamber keeps the genesis block's treasure.",
   eiffel: "The Tour Eiffel: the esplanade, the glass floor of the first platform, the second floor and the summit.",
   colosseum: "The Colosseum hosts the Proof Games: a Shielded gladiator against a Transparent one, a bout per block.",
+  "tower-orchard": "ZK TOWER ORCHARD is the art-deco supertall of Midtown: a gold and black marble lobby, offices, a jazz club and an observatory deck with telescopes under its steel crown.",
+  "tower-sapling": "ZK TOWER SAPLING is the green tower by the marina: sky gardens every few floors, flats, and an infinity pool with a rooftop bar.",
+  "tower-halo": "ZK TOWER HALO is the twisted glass tower on Wall Street: a trading floor with live Zcash charts, a VIP lounge and a helipad on the roof.",
 };
 
 // conversations with the characters (zkSNARKs on the street, people inside places); created
@@ -611,7 +643,7 @@ const PLACES: Record<Interior["key"], string> = {
   bank: "VIEW KEY BANK",
   factory: "PROOF FACTORY",
   zsa: "ZSA EXCHANGE",
-  library: "LIBRARY",
+  library: "BINHAI LIBRARY",
   tower: "ZK TOWER",
   museum: "zkSNARK MUSEUM",
   stadium: "BLOCK STADIUM",
@@ -627,6 +659,11 @@ const PLACES: Record<Interior["key"], string> = {
   bigben: "BIG BEN",
   statue: "zkSNARK OF LIBERTY",
   arab: "BURJ AL ZEC",
+  gardens: "GARDENS BY THE BAY",
+  palm: "THE PALM",
+  "tower-orchard": "ZK TOWER ORCHARD",
+  "tower-sapling": "ZK TOWER SAPLING",
+  "tower-halo": "ZK TOWER HALO",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
@@ -694,6 +731,11 @@ const interiors = new InteriorManager(
     bigben: () => buildBigBen(ictx),
     statue: () => buildStatue(ictx),
     arab: () => buildArab(ictx),
+    gardens: () => buildGardens(ictx),
+    palm: () => buildPalm(ictx),
+    "tower-orchard": () => buildOrchard(ictx),
+    "tower-sapling": () => buildSapling(ictx),
+    "tower-halo": () => buildHalo(ictx),
   },
   {
     entered: (i, f) => {
@@ -731,6 +773,10 @@ function groundAt(x: number, z: number): number | null {
   if (pg !== null) return pg;
   const gg = goldenGate.groundAt(x, z);
   if (gg !== null) return gg;
+  const fg = forest.groundAt(x, z);
+  if (fg !== null) return fg;
+  const sg = sky.groundAt(x, z);
+  if (sg !== null) return sg;
   const m = metro.heightAt(x, z) ?? metro2.heightAt(x, z);
   if (m !== null) return m;
   const R = RIVER;
@@ -776,6 +822,8 @@ onFoot.collide = (x, z) => {
   if (inPrison) return !prison.free(x, z, 0.28);
   // on the Golden Gate: between its railings
   if (goldenGate.onDeck(x, z)) return false;
+  // in the woods across it: trunks, rocks, the creek, the cliffs
+  if (forest.owns(x, z)) return forest.blocked(x, z);
   // up there, the street's obstacles are below you
   if (there > 1.2) return false;
   return !city.nav.free(x, z, 0.28) || dynamicHit(x, z);
@@ -1112,12 +1160,8 @@ canvas.addEventListener("pointerup", (e) => {
     // the ZEC Flyer: board a capsule and go round once, the city below
     ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
     ray.setFromCamera(ndc, viewCam());
-    if (!walking && sky.hit(ray)) {
-      rig.rideTrain(sky.board());
-      flyerRide = true;
-      hud.setRide("the ZEC Flyer");
-      return;
-    }
+    const ride = walking ? null : sky.hit(ray);
+    if (ride) return boardSky(ride);
     // a walk-in place: in you go
     const place = placeAt(e.clientX, e.clientY);
     if (place) return enterPlace(place);
@@ -1156,7 +1200,12 @@ canvas.addEventListener("pointermove", (e) => {
   else if (train) hud.hoverText(`<b>ZEC LINE</b><span>click to ride inside</span>`, e.clientX, e.clientY);
   else if (store) hud.hoverText(`<b>${store.name}</b><span>click for the counter</span>`, e.clientX, e.clientY);
   else if (bus) hud.hoverText(`<b>Block bus${bus.blockHeight ? ` ${bus.blockHeight.toLocaleString("en-US")}` : ""}</b><span>click to ride inside</span>`, e.clientX, e.clientY);
-  else hud.hover(null);
+  else {
+    const flying = place ? null : skyAt(e.clientX, e.clientY);
+    if (flying) canvas.style.cursor = "pointer";
+    if (flying) hud.hoverText(flying === "blimp" ? `<b>ZEC BLIMP</b><span>click to board · city tour</span>` : `<b>ZEC FLYER</b><span>click to ride a capsule</span>`, e.clientX, e.clientY);
+    else hud.hover(null);
+  }
 });
 canvas.addEventListener("pointerleave", () => {
   hud.hover(null);
@@ -1370,16 +1419,15 @@ if (new URLSearchParams(location.search).has("debug")) {
       stadium,
       sky,
       goldenGate,
+      forest,
       chatter,
-      rideFlyer: () => {
-        rig.rideTrain(sky.board());
-        flyerRide = true;
-        hud.setRide("the ZEC Flyer");
-      },
+      rideFlyer: () => boardSky("flyer"),
+      rideBlimp: () => boardSky("blimp"),
       metro,
       tram,
       cityTraffic,
       life,
+      alive,
       metro2,
       horns,
       prison,
@@ -1619,7 +1667,23 @@ function listen(focus: THREE.Vector3) {
   sound.ambience(close * Math.min(1, people / 8), close * Math.min(1, cars / 2.5), crossing);
 }
 
+// One bad update (a module throwing on odd data) must not freeze the whole city: the frame is
+// guarded, the error reported once per message, and the loop keeps going.
+const frameErrors = new Set<string>();
 function frame(stepDt?: number) {
+  try {
+    frameBody(stepDt);
+  } catch (e) {
+    const msg = String((e as Error)?.stack ?? e);
+    if (frameErrors.size < 50 && !frameErrors.has(msg)) {
+      frameErrors.add(msg);
+      console.error("frame:", e);
+    }
+    if (!CAPTURE) requestAnimationFrame(() => frame());
+    else throw e;
+  }
+}
+function frameBody(stepDt?: number) {
   timer.update();
   const real = timer.getDelta();
   if (stepDt === undefined) quality.sample(real);
@@ -1668,7 +1732,13 @@ function frame(stepDt?: number) {
     onFoot.update(dt);
     throughDoors(dt);
     if (interiors.active) return again();
-  } else rig.update(dt);
+  } else {
+    rig.update(dt);
+    sky.aim(rig.persp);
+    // from a capsule or the gondola you see the whole city: draw farther while riding
+    const far = sky.riding ? 1100 : 400;
+    if (rig.persp.far !== far) (rig.persp.far = far), rig.persp.updateProjectionMatrix();
+  }
   const capturing = CAPTURE && capShot;
   if (capturing) {
     aimCapture(capCam, capShot!);
@@ -1679,8 +1749,10 @@ function frame(stepDt?: number) {
   // the fog is measured from the camera: the iso camera stands far back, so push it out by as much
   if (scene.fog instanceof THREE.Fog) {
     const iso = cam === rig.iso;
-    scene.fog.near = (theme === "day" ? 170 : 150) + (iso ? 260 : 0);
-    scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 : 0);
+    // up high (the wheel, the blimp) the ground is far away: the fog recedes with the height
+    const up = iso ? 0 : Math.max(0, cam.position.y - 15) * 3.5;
+    scene.fog.near = (theme === "day" ? 170 : 150) + (iso ? 260 : 0) + up;
+    scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 : 0) + up * 1.6;
   }
   renderPass.camera = cam;
   cam.getWorldQuaternion(camQuat);
@@ -1717,14 +1789,22 @@ function frame(stepDt?: number) {
   overlays.update(dt);
   stadium.setMempool(mempoolCount);
   sky.setHeight(lastSummary?.height ?? null);
-  sky.update(t, sim);
+  sky.update(t, sim, camQuat, camRight);
+  if (!walking) sky.aim(rig.persp);
   goldenGate.update(sim);
+  forest.update(sim, t, cam, focus, theme === "night", walking, wide);
   // the ride is over (or the camera went elsewhere): back to the map
   if (flyerRide && (!sky.riding || rig.mode !== "follow")) {
     flyerRide = false;
     hud.setRide(null);
-    if (sky.riding) sky.stopRide();
-    else rig.setMode("live");
+    // a full lap of the wheel: step out onto its deck; otherwise back to the map view you left
+    const off = sky.leave();
+    if (off.walk) {
+      rig.setMode("live");
+      setWalking(true);
+      onFoot.place(off.walk.pos, off.walk.yaw, CURB);
+    } else if (off.back) rig.district(off.back.at, off.back.zoom);
+    else if (rig.mode === "follow") rig.setMode("live");
   }
   chatter.setLive(lastSummary?.height ?? null, mempoolCount);
   // speech bubbles keep a readable size on screen over the map (about 3% of its height)
@@ -1736,6 +1816,7 @@ function frame(stepDt?: number) {
   metro2.update(sim);
   horns.update(sim);
   prison.update(sim);
+  alive.update(sim, t, focus, cam, wide, walking);
   if ((earT += sim) > 0.2) {
     earT = 0;
     listen(focus);

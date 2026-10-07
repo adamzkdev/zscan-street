@@ -169,7 +169,13 @@ function spiral(k: ArabKit, f: number, to: number, top: boolean) {
     hole.raycast = () => {};
     k.groups[f].add(hole);
   }
-  k.ring(f, x, z, 1.5);
+  // upstairs the balustrade is open on the east (+x) side, where the steps come out
+  // (the well itself stays closed: you step out at its rim)
+  if (top) {
+    k.ring(f, x, z, 1.5, Math.PI * 0.75, Math.PI * 2.25);
+    k.solid(f, x - 1.05, z - 1.05, x + 1.05, z + 1.05);
+  }
+  else k.ring(f, x, z, 1.5);
   const L = LEVELS[to];
   k.hit(f, 3, 2.4, 3, x, 0, z, `<b>Spiral staircase</b><span>${top ? "down to the salon" : "up to the bedroom"}</span>`, () => ({ eyebrow: "Royal Suite", title: top ? "Down to the salon" : "Up to the bedroom", floor: to, stats: [["Floor", L.label]] }));
 }

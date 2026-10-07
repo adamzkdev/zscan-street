@@ -645,19 +645,19 @@ export function zsaShop(seed: number, o: { width?: number } = {}): Built {
 }
 
 /**
- * The LIBRARY (図書館) on Transparent Square: Zcash's public knowledge. A low civic hall in warm
- * timber and stone under a copper-green roof: the ZIP stacks seen through a tall glass atrium in
- * the middle, the press room in the left wing (the newspaper kiosk stands in front of it), the
- * reading room in the right wing.
+ * The bookshop-café and newsstand (本屋) on Transparent Square: a low hall in warm timber and
+ * stone under a slate roof: three floors of books seen through the tall glass atrium in the
+ * middle, the newsstand in the left wing, the café in the right one, its tables out on the square
+ * under green-and-cream awnings. (The Library itself is the Binhai on the south bank.)
  */
-export function library(seed: number, o: { width?: number } = {}): Built {
+export function bookshop(seed: number, o: { width?: number } = {}): Built {
   const W = o.width ?? 108,
     D = 34,
     H = 44;
   const { m, x0, x1, fz } = body(W, D, H);
   const stone = shades(["#bdb3a2", "#b5ab9a", "#c4baa9"], 2, seed);
   const timber = shades(["#6a4630", "#634229", "#704b34"], 2, seed + 1);
-  const copper = shades(["#3f8a78", "#3a8070", "#46937f"], 2, seed + 2);
+  const copper = shades(["#4a4e58", "#454953", "#50545e"], 2, seed + 2);
   const dark = C("#2a2622");
   const mid = x0 + Math.floor(W / 2);
   const aw = 30; // atrium width
@@ -716,14 +716,28 @@ export function library(seed: number, o: { width?: number } = {}): Built {
   }
   for (let k = 0; k < 7; k++) m.box(a0 - 3 + k, 36 + k, -1 + k, a1 + 3 - k, 37 + k, D + 1 - k, copper);
   m.box(a0 + 4, 43, D / 2 - 1, a1 - 4, 44, D / 2 + 1, E("#ffd28a", 1.2));
-  // the press wing's vertical sign and two paper lanterns by the door
+  // striped awnings over the ground-floor windows, the café's tables out front
+  for (const [w0, w1] of [
+    [x0 + 2, a0 - 3],
+    [a1 + 3, x1 - 2],
+  ])
+    for (let x = w0; x < w1; x++) for (let z = D - 2; z < D + 3; z++) m.set(x, 14 - Math.floor((z - D + 2) / 2), z, C(((x - w0) >> 1) % 2 ? "#ece4cc" : "#2e6a4a"));
+  for (let x = a1 + 5; x + 4 < x1 - 2; x += 9) {
+    m.box(x + 1, 0, D + 5, x + 2, 3, D + 6, C("#2a2622"));
+    m.box(x, 3, D + 4, x + 3, 4, D + 7, C("#e8e0cf"));
+    for (const cx of [x - 1, x + 3]) m.box(cx, 0, D + 5, cx + 1, 2, D + 6, C("#6a4630"));
+  }
+  // the newsstand: racks of papers and magazines under the left awning
+  for (let x = x0 + 4; x < a0 - 6; x += 3) m.box(x, 0, D, x + 2, 5, D + 1, C(["#e8e4dc", "#c03a3a", "#3a6ea5", "#f4b728"][(x >> 1) % 4]));
+  // the newsstand's vertical sign and two paper lanterns by the door
   verticalSignBox(m, x0 + 3, 8, D, 18, 5);
   lantern(m, mid - 9, 8, D + 1, "#ffd28a");
   lantern(m, mid + 6, 8, D + 1, "#ffd28a");
 
   const signs: SignSpot[] = [
-    { text: "図書館 LIBRARY", color: "#ffd28a", x: mid, y: 32.5, z: D + 0.05, w: aw - 4, h: 3.4, vertical: false, facing: "front" },
-    { text: "PRESS · ZIPs", color: "#7fe3ff", x: (x0 + a0) / 2, y: 15, z: D - 0.9, w: 20, h: 2, vertical: false, facing: "front" },
+    { text: "本屋 BOOKS & COFFEE", color: "#ffd28a", x: mid, y: 32.5, z: D + 0.05, w: aw - 4, h: 3.4, vertical: false, facing: "front" },
+    { text: "NEWS · MAGAZINES", color: "#7fe3ff", x: (x0 + a0) / 2, y: 17, z: D - 0.9, w: 20, h: 2, vertical: false, facing: "front" },
+    { text: "CAFÉ", color: "#ffd28a", x: (a1 + x1) / 2, y: 17, z: D - 0.9, w: 12, h: 2, vertical: false, facing: "front" },
     { text: "新聞", color: "#ff8a5a", x: x0 + 4, y: 17, z: D + 2.5, w: 5, h: 14, vertical: true, facing: "side" },
   ];
   return {

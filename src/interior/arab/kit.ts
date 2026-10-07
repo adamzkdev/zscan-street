@@ -30,7 +30,7 @@ export const LEVELS: Level[] = [
   { label: "G", name: "Gold Atrium · lobby, dancing fountain", y: 0, spawn: [0, 4.2], yaw: 0 },
   { label: "B", name: "Al Mahara · underwater restaurant", y: -16, spawn: [0, -2.4], yaw: 0 },
   { label: "25", name: "Royal Suite · salon", y: 40, spawn: [0, -2.4], yaw: 0, view: 38 },
-  { label: "26", name: "Royal Suite · bedroom", y: 45, spawn: [7.6, -11], yaw: Math.PI / 2, view: 43 },
+  { label: "26", name: "Royal Suite · bedroom", y: 45, spawn: [10.6, -11], yaw: Math.PI / 2, view: 43 },
   { label: "H", name: "Helipad · tennis court, golf tee", y: 56, spawn: [9.4, -14], yaw: Math.PI / 2, view: 50 },
 ];
 export const F = { atrium: 0, mahara: 1, salon: 2, bedroom: 3, helipad: 4 } as const;

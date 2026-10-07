@@ -271,7 +271,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     full.rotation.y = ROT[j.face];
     // s/n rows run along x with their fronts on a z line; e/w rows the other way round
     const [fx, fz] = j.face === "s" || j.face === "n" ? [j.along, j.front] : [j.front, j.along];
-    // a landmark can sit lower than the street (the Redeemer's mountain stands in the water)
+    // a landmark can sit lower than the street (the Palm sits low in the water)
     full.position.set(fx - fc.x, CURB - ((j.opts as { dy?: number }).dy ?? 0), fz - fc.z);
     full.updateMatrixWorld(true);
     cut.position.copy(full.position);
@@ -349,7 +349,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       const pts = m.points ?? {};
       const front = new THREE.Vector3(0, 0, 1).applyAxisAngle(Y, ROT[j.face]);
       const w = (k: string) => (pts[k] ? toWorld(...(pts[k] as [number, number, number])) : k === "camPos" ? door.clone().addScaledVector(front, 14).setY(9) : k === "camLook" ? door.clone().setY(4) : door.clone().addScaledVector(front, -1.5));
-      const NAMES: Record<string, string> = { museum: "the zkSNARK MUSEUM", stadium: "BLOCK STADIUM", mall: "the ZK MALL", hotel: "the MARINA ZEC HOTEL", needle: "the ZEC NEEDLE", pyramid: "the GREAT PYRAMID", eiffel: "the TOUR EIFFEL", colosseum: "the COLOSSEUM", arab: "the BURJ AL ZEC", reserve: "the ZEC RESERVE", opera: "the OPERA HOUSE", bigben: "BIG BEN", statue: "the zkSNARK OF LIBERTY" };
+      const NAMES: Record<string, string> = { museum: "the zkSNARK MUSEUM", stadium: "BLOCK STADIUM", mall: "the ZK MALL", hotel: "the MARINA ZEC HOTEL", needle: "the ZEC NEEDLE", pyramid: "the GREAT PYRAMID", eiffel: "the TOUR EIFFEL", colosseum: "the COLOSSEUM", arab: "the BURJ AL ZEC", gardens: "GARDENS BY THE BAY", palm: "THE PALM", reserve: "the ZEC RESERVE", opera: "the OPERA HOUSE", bigben: "BIG BEN", statue: "the zkSNARK OF LIBERTY", "tower-orchard": "ZK TOWER ORCHARD", "tower-sapling": "ZK TOWER SAPLING", "tower-halo": "ZK TOWER HALO", library: "the BINHAI LIBRARY" };
       venues.push({
         kind: venue,
         name: j.type === "landmark" ? (NAMES[venue] ?? "the ZEC RESERVE") : venue === "cards" ? "zkCARDS" : venue === "bank" ? "the VIEW KEY BANK" : venue === "library" ? "the LIBRARY" : venue === "tower" ? "the ZK TOWER" : "the ZSA EXCHANGE",
@@ -1231,18 +1231,7 @@ function bay(g: THREE.Group, nav: Nav, animated: ((t: number, dt: number) => voi
       p.boat.rotation.y = k < 32 ? -Math.PI / 2 : Math.PI / 2;
     }
   });
-  // the headland across the bay: green hills falling to rocks, the bridge's landing cut through
-  const H = BAY.headland;
-  const bx = BAY.bridge.x;
-  terrain(g, H.x0, CT.maxX, H.z0 - 8, CT.maxZ, 2, BAY.bed, (x, z) => {
-    const shore = H.z0 + noise(x, 0, 1) * 4 - Math.max(0, H.x0 + 20 - x) * 0.6;
-    if (z < shore) return null;
-    const up = Math.min(1, (z - shore) / 10);
-    let h = BAY.water + up * (6 + noise(x, z, 3) * 4 + (x - H.x0) * 0.04);
-    // the road onto the bridge stays level
-    if (Math.abs(x - bx) < 6) h = Math.min(h, CURB + 9);
-    return Math.round(h * 2) / 2;
-  }, (x, z, h) => (h < BAY.water + 1.5 ? "#6a6470" : Math.abs(x - bx) < 6 && h >= CURB + 8.9 ? "#3a3844" : noise(x, z, 6) > 0.7 ? "#7a8a52" : noise(x, z, 9) > 0.2 ? "#4f8a4a" : "#5f9a56"));
+  // the headland across the bay is Shielded Woods, the redwood forest (scene/forest)
 }
 
 /** The shōtengai: paving over the street, a translucent arched roof on steel ribs, lanterns, gates. */

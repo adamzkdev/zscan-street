@@ -1,5 +1,5 @@
 /**
- * The building blocks of every soundscape, all synthesised with Web Audio (no files):
+ * The building blocks of every soundscape (the recorded beds are in ./samples.ts):
  * a `Scene` (a fader, a dry bus and a reverb send through a generated impulse response, its
  * looping beds, its random one-shot "jobs" and its music sequencers), and the little instruments
  * the scenes are made of: noise beds, drones, wind, water, crowds, footsteps, bells, clanks…
@@ -170,6 +170,12 @@ export class Scene {
     return src;
   }
 
+  private closers: (() => void)[] = [];
+  /** Something to let go of once the scene has faded out (a recording's source). */
+  onClose(fn: () => void) {
+    this.closers.push(fn);
+  }
+
   /** Something that happens every `min`…`max` seconds (a gull, a door slam, a "shh"). */
   every(name: string, min: number, max: number, fn: (t: number) => void, first?: number) {
     this.jobs.push({ name, min, max, fn, next: this.now + (first ?? min + Math.random() * (max - min)) });
@@ -221,6 +227,8 @@ export class Scene {
           }
         }
         this.srcs = [];
+        for (const fn of this.closers) fn();
+        this.closers = [];
         this.out.disconnect();
       },
       s * 1000 + 200,

@@ -301,7 +301,7 @@ function balcony(k: StatueKit, f: number) {
   const couple1 = p(106, [-8.6, 2.5], "Couple", [-12, 2.5]);
   const couple2 = p(107, [-8.6, 3.5], "Couple", [-12, 3.5]);
   k.chat(f, [couple1, couple2], [
-    [[0, "You can see the Redeemer from here."], [1, "And the bridge. Look, the lights just came on."], [0, "Best view in the bay."]],
+    [[0, "You can see the redwoods across the bay."], [1, "And the bridge. Look, the lights just came on."], [0, "Best view in the bay."]],
     [[1, "Remember our first transaction?"], [0, "I don't. That was the point."], [1, "Romantic."]],
   ]);
   void p(108, [3.5, 8.6], "Guide", [3.5, 12], { wander: [[3.5, 8.6], [-3, 8.8], [8.4, 4]] });

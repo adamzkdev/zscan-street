@@ -1,16 +1,19 @@
 /**
- * The street's districts, each with its own layer over the city mix: Shibuya's crossing (chatter,
- * the "piyo" signal, the giant screens' jingles), the river and the bay (water lapping, gulls,
- * a ferry's horn), Central Park (birds by day, crickets at night, the fountain), the Proof Factory
- * district (an industrial hum), Block Stadium (a distant roar). Each district's weight comes from
- * how close the ear is to it; a district's scene is built when you get near, torn down after you
- * have been away a while.
+ * The street's districts, each with its own layer of real recordings over the city's bed: Shibuya's
+ * crossing (the crowd on the scramble, the "kakkō" crossing signal, the giant screens' jingles), the
+ * river and the bay (a harbour, gulls, a ship's horn), the Golden Gate (wind, the fog horn), the
+ * Palm (the sea on the beach), Central Park and the gardens (birds by day, crickets at night, the
+ * fountain, the waterfall), the Proof Factory district (machines, forklifts), Block Stadium and the
+ * Colosseum (crowds from afar), Paris (a street with an accordion), Westminster (Big Ben on the
+ * hour). Each district's weight comes from how close the ear is to it; a district's scene is built
+ * when you get near, torn down after you have been away a while.
  */
 import { BAY, GRID, LOTS, PARK, RIVER } from "../scene/city/plan";
-import { bed, bell, bird, brass, burst, clank, cricket, drum, fountain, gull, lapping, murmur, type Room, Scene, tone, wind, type Bufs } from "./lib";
+import { bell, drum, type Room, Scene, tone, type Bufs } from "./lib";
+import { loop, preload, shot } from "./samples";
+import { bigBenHours } from "./scenes";
 
 const OPEN: Room = { len: 1.4, decay: 3.5, tone: 0.4, wet: 0.25 };
-const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const side = () => Math.random() * 1.6 - 0.8;
 
 interface Rect {
@@ -42,32 +45,25 @@ interface District {
 const SHIBUYA = lot("shibuya");
 const STADIUM = lot("stadium");
 const PORT = lot("port");
+const GARDENS = lot("gardens");
+const ROME = lot("colosseum");
+const PARIS = lot("eiffel");
+const WESTMINSTER = lot("parliament");
 const PARKR = { x0: GRID.park.x0, x1: GRID.park.x1, z0: GRID.park.z0, z1: GRID.park.z1 };
+const PALM = { x0: Math.min(BAY.palm.x0, BAY.arab.x0), x1: Math.max(BAY.palm.x1, BAY.arab.x1), z0: Math.min(BAY.palm.z0, BAY.arab.z0), z1: Math.max(BAY.palm.z1, BAY.arab.z1) };
+/** The suspension bridge over the bay's mouth, as a thin strip. */
+const BRIDGE = { x0: BAY.bridge.x - 6, x1: BAY.bridge.x + 6, z0: BAY.z0 - 10, z1: BAY.headland.z0 + 10 };
 
 const DISTRICTS: Record<string, District> = {
   shibuya: {
     weight: (e) => fall(dRect(SHIBUYA, e.x, e.z), 45),
     build(s) {
-      murmur(s, "scramble-chatter", 0.1, 0.25, 0.2);
-      // the scramble: the crossing's "piyo-piyo" while everyone walks, then the cars' turn
-      let next = s.now + 1;
-      let phase = 0;
-      s.seq((until) => {
-        while (next < until) {
-          const walk = phase % 60 < 22;
-          if (walk) {
-            for (const dt of [0, 0.17]) tone(s, next + dt, 2300, "sine", 0.025, 0.12, 0.2, { to: 3300, pan: -0.3 });
-            next += 0.62;
-            phase += 0.62;
-          } else {
-            next += 1;
-            phase += 1;
-          }
-        }
-      });
-      s.layers.push("piyo-signal");
+      preload(s.ctx, "crossing-cuckoo");
+      loop(s, "shibuya", 1);
+      // the scramble's crossing signal while everyone walks
+      s.every("crossing-signal", 22, 34, (t) => shot(s, "crossing-cuckoo", t, 0.35, { pan: -0.3 }), 3);
       // the giant screens' jingles and ads
-      s.every("screen-jingle", 10, 22, (t) => {
+      s.every("screen-jingle", 14, 28, (t) => {
         const tunes = [
           [72, 76, 79, 84, 79],
           [67, 72, 74, 76, 79, 76],
@@ -75,58 +71,50 @@ const DISTRICTS: Record<string, District> = {
         ];
         const tune = tunes[Math.floor(Math.random() * tunes.length)];
         const pan = side();
-        tune.forEach((n, i) => tone(s, t + i * 0.16, 440 * Math.pow(2, (n - 69) / 12), "square", 0.012, 0.14, 0.5, { lp: 2500, pan }));
-        drum(s, t, 60, 0.05, 0.5, pan);
+        tune.forEach((n, i) => tone(s, t + i * 0.16, 440 * Math.pow(2, (n - 69) / 12), "square", 0.008, 0.14, 0.5, { lp: 2500, pan }));
+        drum(s, t, 60, 0.04, 0.5, pan);
       });
-      s.every("station-melody", 30, 60, (t) => [659, 784, 988, 880, 1047].forEach((f, i) => bell(s, t + i * 0.14, f, 0.5, 0.02, 0.5, 0.6)));
+      s.every("station-melody", 40, 70, (t) => [659, 784, 988, 880, 1047].forEach((f, i) => bell(s, t + i * 0.14, f, 0.5, 0.015, 0.5, 0.6)));
     },
   },
   river: {
     weight: (e) => fall(Math.max(0, Math.abs(e.z - (RIVER.z0 + RIVER.z1) / 2) - (RIVER.z1 - RIVER.z0) / 2), 28),
-    build(s, e) {
-      lapping(s, 0.16, 0.1);
-      if (!e.night) s.every("gulls", 6, 16, (t) => gull(s, t, 0.02, side()));
-      s.every("boat-engine", 25, 50, (t) => tone(s, t, 58, "sawtooth", 0.03, 2, 0.2, { a: 3, hold: 4, lp: 220, pan: side() }));
+    build(s) {
+      loop(s, "harbour", 0.45, { lp: 2500 });
     },
   },
   bay: {
     weight: (e) => fall(Math.max(0, BAY.z0 - 8 - e.z), 50),
     build(s, e) {
-      lapping(s, 0.2, 0.15);
-      wind(s, 0.04);
-      s.every("gulls", e.night ? 20 : 4, e.night ? 40 : 11, (t) => gull(s, t, 0.03, side()));
+      preload(s.ctx, "ship-horn");
+      loop(s, "harbour", 0.85);
+      loop(s, "gulls", e.night ? 0.12 : 0.35);
       // the ferry's deep horn across the water
-      s.every(
-        "ferry-horn",
-        30,
-        70,
-        (t) => {
-          for (const f of [110, 138.6]) brass(s, t, f, 2.2, 0.035, 0.7, 600);
-        },
-        10,
-      );
-      s.every("buoy-bell", 12, 25, (t) => bell(s, t, 660, 2.5, 0.015, 0.6, side()));
+      s.every("ship-horn", 45, 90, (t) => shot(s, "ship-horn", t, 0.45, { pan: side(), lp: 2000 }), 12);
+    },
+  },
+  bridge: {
+    weight: (e) => fall(dRect(BRIDGE, e.x, e.z), 45),
+    build(s) {
+      preload(s.ctx, "foghorn");
+      loop(s, "wind", 0.6);
+      s.every("foghorn", 25, 45, (t) => shot(s, "foghorn", t, 0.6, { pan: side() }), 4);
+    },
+  },
+  palm: {
+    weight: (e) => fall(dRect(PALM, e.x, e.z), 35),
+    build(s) {
+      loop(s, "waves", 0.9);
+      loop(s, "wind", 0.12);
     },
   },
   park: {
     weight: (e) => fall(dRect(PARKR, e.x, e.z), 22),
     build(s, e) {
-      bed(s, "leaves", { kind: "pink", type: "highpass", f: 2500, gain: 0.03, am: [[0.13, 0.6]] });
-      if (e.night) {
-        s.every("crickets", 0.3, 1.2, (t) => cricket(s, t, 0.012, side()));
-        s.every("owl", 25, 50, (t) => {
-          tone(s, t, 420, "sine", 0.03, 0.4, 0.4, { a: 0.05, hold: 0.15, to: 380 });
-          tone(s, t + 0.7, 420, "sine", 0.025, 0.6, 0.4, { a: 0.05, hold: 0.3, to: 370 });
-        });
-      } else {
-        s.every("birds", 0.5, 2.5, (t) => bird(s, t, 0.018, side()));
-        s.every("ducks", 20, 45, (t) => {
-          for (let i = 0; i < 3; i++) tone(s, t + i * 0.18, rnd(500, 600), "sawtooth", 0.02, 0.12, 0.1, { lp: 1600, to: 380 });
-        });
-      }
+      loop(s, e.night ? "night-crickets" : "birds", 0.9);
       // the fountain terrace: louder as you walk up to it
       const f = s.child("park-fountain");
-      fountain(f, 1, 0.2);
+      loop(f, "waterfall", 1, { hp: 350 });
       s.layers.push("fountain");
       s.knobs.fountain = f.out.gain;
     },
@@ -134,41 +122,57 @@ const DISTRICTS: Record<string, District> = {
       s.knobs.fountain?.setTargetAtTime(parkFountainLevel(e), s.now, 0.5);
     },
   },
+  gardens: {
+    weight: (e) => fall(dRect(GARDENS, e.x, e.z), 30),
+    build(s, e) {
+      loop(s, e.night ? "night-crickets" : "birds", 0.7);
+      loop(s, "waterfall", 0.45);
+    },
+  },
   factory: {
     weight: (e) => fall(dRect(PORT, e.x, e.z), 40),
     build(s) {
-      bed(s, "industrial-hum", { kind: "brown", type: "lowpass", f: 160, gain: 0.25 });
-      bed(s, "vents", { kind: "pink", type: "bandpass", f: 500, q: 0.7, gain: 0.08, am: [[4, 0.1]] });
-      s.every("machine-clank", 3, 8, (t) => clank(s, t, rnd(150, 220), 0.05, 0.8, 0.4, side()));
-      s.every("steam", 10, 20, (t) => burst(s, t, "white", "highpass", 3000, 0.7, 0.05, 1, 0.3, side(), 0.05));
-      s.every("truck-reverse", 15, 35, (t) => {
-        for (let i = 0; i < 5; i++) tone(s, t + i * 0.8, 1000, "square", 0.01, 0.03, 0.3, { hold: 0.4, lp: 3000, pan: side() });
-      });
+      preload(s.ctx, "forklift");
+      loop(s, "industry", 0.8);
+      s.every("forklift", 15, 35, (t) => shot(s, "forklift", t, 0.4, { pan: side() }), 5);
     },
   },
   stadium: {
     weight: (e) => fall(dRect(STADIUM, e.x, e.z), 90),
     build(s) {
-      const roar = bed(s, "distant-roar", { kind: "pink", type: "lowpass", f: 650, gain: 0.18, am: [[0.1, 0.3], [0.31, 0.15]] });
+      preload(s.ctx, "goal");
+      const roar = loop(s, "stadium", 0.6, { lp: 900 });
       s.knobs.crowd = roar.gain;
-      s.every("distant-swell", 4, 10, (t) => {
-        roar.gain.setTargetAtTime(0.3, t, 0.5);
-        roar.gain.setTargetAtTime(0.18, t + 2, 1);
-      });
-      s.every("distant-drums", 8, 16, (t) => {
-        for (let i = 0; i < 8; i++) drum(s, t + i * 0.375, 70, 0.05, 0.5);
-      });
-      s.on.goal = (t) => {
+      s.on.goal = (t, up) => {
+        shot(s, "goal", t, up === false ? 0.5 : 0.8, { lp: 1400 });
         roar.gain.cancelScheduledValues(t);
-        roar.gain.setTargetAtTime(0.7, t, 0.15);
-        roar.gain.setTargetAtTime(0.18, t + 3.5, 1.5);
+        roar.gain.setTargetAtTime(0.9, t, 0.15);
+        roar.gain.setTargetAtTime(0.6, t + 3.5, 1.5);
       };
+    },
+  },
+  rome: {
+    weight: (e) => fall(dRect(ROME, e.x, e.z), 50),
+    build(s) {
+      loop(s, "crowd-arena", 0.4, { lp: 800 });
+    },
+  },
+  paris: {
+    weight: (e) => fall(dRect(PARIS, e.x, e.z), 35),
+    build(s) {
+      loop(s, "paris", 0.75);
+    },
+  },
+  westminster: {
+    weight: (e) => fall(dRect(WESTMINSTER, e.x, e.z), 140),
+    build(s) {
+      bigBenHours(s, 0.9, { wet: 0.3 });
     },
   },
 };
 
 /** The fountain's distance in Central Park, for its own level. */
-export const parkFountainLevel = (e: StreetEar) => fall(Math.hypot(e.x - PARK.fountain.x, e.z - PARK.fountain.z), 30) * 0.08 + 0.005;
+export const parkFountainLevel = (e: StreetEar) => fall(Math.hypot(e.x - PARK.fountain.x, e.z - PARK.fountain.z), 30) * 0.45 + 0.02;
 
 interface Live {
   scene: Scene;

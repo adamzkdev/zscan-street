@@ -156,6 +156,11 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   bigben: { icon: "tower", color: "#ffd28a" },
   statue: { icon: "tower", color: "#5cff9a" },
   arab: { icon: "tower", color: "#f4b728" },
+  gardens: { icon: "tower", color: "#c060ff" },
+  palm: { icon: "tower", color: "#1baf7a" },
+  "tower-orchard": { icon: "tower", color: "#d9b25a" },
+  "tower-sapling": { icon: "tower", color: "#5cff9a" },
+  "tower-halo": { icon: "tower", color: "#3ef0ff" },
 };
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
@@ -1051,7 +1056,7 @@ export class Hud {
     const s = this.followed;
     if (this.ride) {
       this.$(".followhead").innerHTML = `<span class="rec"></span><span>RIDING</span><b>${this.ride}</b>`;
-      this.$(".shots").innerHTML = `<button data-act="exit">Exit <kbd>Esc</kbd></button>`;
+      this.$(".shots").innerHTML = `<button data-act="exit">${this.ride.startsWith("ZEC ") ? "Leave" : "Exit"} <kbd>Esc</kbd></button>`;
       return;
     }
     const subject = this.mode === "inspect" ? this.place : s ? `zkSNARK #${num(s.id)}` : this.busBlock ? `block ${num(this.busBlock.height)}` : "the next block";

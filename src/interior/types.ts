@@ -64,7 +64,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "cards" | "bank" | "factory" | "zsa" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab";
+  readonly key: "mempool" | "cards" | "bank" | "factory" | "zsa" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo";
   /** Shown top-left while inside ("zkCARDS"). */
   readonly title: string;
   readonly scene: THREE.Scene;

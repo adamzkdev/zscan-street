@@ -84,8 +84,6 @@ export const BAY = {
   palm: { x0: -234, x1: -178, z0: 150, z1: 234 },
   /** The sail-shaped hotel on its own little island, off the palm. */
   arab: { x0: -172, x1: -152, z0: 152, z1: 176 },
-  /** Corcovado on the headland: the Redeemer's mountain. */
-  christ: { x0: 184, x1: 228, z0: 210, z1: 236 },
 };
 
 /** The covered shopping street: the street at x = -86 along the heart, under a canopy. */
@@ -95,7 +93,7 @@ export const SHOTENGAI = { x: ST.shotengai, z0: -39.4 + 1, z1: 32 - 1, half: 4 +
  * The landmarks' lots: whole blocks (merged across the small streets inside them) kept for a
  * building of their own, placed like a city planner would.
  */
-export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya";
+export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai";
 export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: number }[] = [
   // the Block Stadium, out west on the park's latitude
   { kind: "stadium", x0: -221, x1: -129, z0: -116, z1: CORE.minZ - 8 },
@@ -125,6 +123,12 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
   // the ZEC Flyer (scene/sky.ts) in the riverside park
   { kind: "flyer", x0: -82, x1: -58, z0: 77, z1: 100 },
   { kind: "green", x0: 129, x1: 154, z0: -223, z1: -196 },
+  // the ZK towers: ORCHARD (art deco) in Midtown by the Needle, SAPLING (sky gardens) on the marina's bank, HALO (twisted glass) on Wall Street
+  { kind: "zkorchard", x0: 90, x1: 115, z0: -149, z1: -124 },
+  { kind: "zksapling", x0: 198, x1: 221, z0: 77, z1: 100 },
+  { kind: "zkhalo", x0: 198, x1: 221, z0: -39.4, z1: -5.4 },
+  // the Binhai Library on the south bank, facing the heart across the river and its footbridges
+  { kind: "binhai", x0: -50, x1: 50, z0: 77, z1: 131 },
 ];
 
 /** Central Park: its lake, the fountain terrace, the bandstand, and the paths (polylines, x/z). */
@@ -234,12 +238,15 @@ export const AREAS = [
   { key: "midtown", name: "Midtown", blurb: "Supertalls and the ZEC Needle", color: "#3ef0ff", x: 120, z: -120, zoom: 0.4 },
   { key: "marina", name: "Marina Bay", blurb: "The sky park, the supertrees", color: "#1baf7a", x: 170, z: 100, zoom: 0.5 },
   { key: "port", name: "Proof Factory District", blurb: "The mining hall, the docks, the trucks", color: "#eda100", x: -175, z: 104, zoom: 0.5 },
+  { key: "binhai", name: "Binhai Library", blurb: "The Eye, the shelves, the sphere", color: "#ffd28a", x: 0, z: 104, zoom: 0.75 },
+  { key: "flyer", name: "ZEC Flyer & Blimp", blurb: "The observation wheel, the blimp's mast", color: "#f4b728", x: -70, z: 88, zoom: 0.9 },
   { key: "giza", name: "Giza", blurb: "The Great Pyramid and its labyrinth", color: "#ffd28a", x: -160, z: -193, zoom: 0.55 },
   { key: "paris", name: "Paris", blurb: "The Eiffel Tower", color: "#b07bff", x: -86, z: -205, zoom: 0.6 },
   { key: "rome", name: "Rome", blurb: "The Colosseum, the Proof Games", color: "#eb6834", x: 86, z: -193, zoom: 0.55 },
   { key: "shibuya", name: "Shibuya", blurb: "The scramble crossing", color: "#ff3e8a", x: -60, z: -162, zoom: 0.8 },
   { key: "palm", name: "The Palm", blurb: "Villas on the palm, the sail hotel", color: "#1baf7a", x: -195, z: 190, zoom: 0.45 },
   { key: "bay", name: "The Bay", blurb: "Liberty island, the rock, the bridge", color: "#3987e5", x: 20, z: 190, zoom: 0.35 },
+  { key: "woods", name: "Shielded Woods", blurb: "Redwoods, Sprout Falls, the campfire", color: "#3f9a4a", x: 192, z: 212, zoom: 0.6 },
 ];
 
 export type Archetype =
@@ -259,7 +266,7 @@ export type Archetype =
   | "cardshop"
   | "bank"
   | "zsa"
-  | "library"
+  | "bookshop"
   | "landmark";
 
 export interface BuildingJob {
@@ -413,8 +420,8 @@ export function planCity() {
   row(
     [
       ["shophouse", 401, { shop: "cafe", sign: "喫茶", signColor: "#ffd28a", floors: 3, wall: "cream", garden: true }, 36],
-      // the LIBRARY faces the fountain: ZIPs, the press room, network upgrades
-      ["library", 406, { venue: "library" }, 108],
+      // the bookshop-café and newsstand faces the fountain (the library moved to the south bank)
+      ["bookshop", 406, {}, 108],
       ["shophouse", 405, { shop: "cafe", sign: "OPEN", signColor: "#ffffff", floors: 3, wall: "warm", garden: true }, 36],
     ],
     -15,
@@ -789,9 +796,9 @@ export function planCity() {
 
   // ---- the landmarks, each on its lot (or out on the water) ----
   /** Which way each lot's front faces (towards the street that matters). */
-  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e" };
+  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e", zkorchard: "s", zksapling: "n", zkhalo: "s", binhai: "n" };
   /** The landmarks you can walk into, and the place each one opens. */
-  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben" };
+  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben", gardens: "gardens", zkorchard: "tower-orchard", zksapling: "tower-sapling", zkhalo: "tower-halo", binhai: "library" };
   const landmarkJob = (kind: string, x0: number, x1: number, z0: number, z1: number, face: BuildingJob["face"], venue?: string, dy?: number) => {
     const ns = face === "s" || face === "n";
     const w = ns ? x1 - x0 : z1 - z0,
@@ -806,13 +813,11 @@ export function planCity() {
     landmarkJob("statue", L.x - 9, L.x + 9, L.z - 9, L.z + 9, "s", "statue");
     const B = BAY.bridge;
     landmarkJob("bridge", B.x - 7, B.x + 7, ST.ringS + 5, BAY.headland.z0 + 4, "n");
-    // the Opera House on its own pier in the bay, facing the city; the Redeemer on the headland
+    // the Opera House on its own pier in the bay, facing the city (the headland is a forest: scene/forest)
     const O = BAY.opera;
     landmarkJob("opera", O.x0, O.x1, O.z0, O.z1, "n", "opera");
-    const R = BAY.christ;
-    landmarkJob("christ", R.x0, R.x1, R.z0, R.z1, "n", undefined, 1.8);
     const PL = BAY.palm;
-    landmarkJob("palm", PL.x0, PL.x1, PL.z0, PL.z1, "n", undefined, 1.8);
+    landmarkJob("palm", PL.x0, PL.x1, PL.z0, PL.z1, "n", "palm", 1.8);
     const A = BAY.arab;
     landmarkJob("burjalarab", A.x0, A.x1, A.z0, A.z1, "n", "arab", 1.8);
   }

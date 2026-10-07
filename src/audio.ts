@@ -1,6 +1,7 @@
 import { type Bufs, makeBufs, Scene } from "./audio/lib";
 import { LEVEL, PRESETS, presetFor } from "./audio/scenes";
 import { Districts, type StreetEar } from "./audio/street";
+import { loopInto, type Playing, shotInto } from "./audio/samples";
 
 /** Where the ear is: a place's key and floor (its name picks the floor's soundscape), or the street. */
 export interface SceneOpts {
@@ -14,14 +15,19 @@ export interface SceneOpts {
 }
 
 /**
- * The city's soundscape, synthesised with Web Audio (no files to download).
- * On the street: rain on the pavement, a distant city hum, a slow lo-fi synth pad with a soft
- * arpeggio, the little sounds of the street (the konbini door chime, the bus pulling in), and a
- * layer for the district you are in (src/audio/street.ts). Inside a place: that place's own
- * soundscape, by floor (src/audio/scenes.ts), cross-faded in as you walk in or change floor.
+ * The city's soundscape, made of real field recordings (public/audio, fetched the first time they
+ * are needed) and a few synthesised one-shots (horns, chimes, the crossing signal, thunder).
+ * On the street: a city street recorded in Tokyo (by day) or a city at night, louder where the
+ * people and the traffic are, rain on the pavement, a soft lo-fi pad, the little sounds of the
+ * street (the konbini door chime, the bus pulling in), and a layer for the district you are in
+ * (src/audio/street.ts). Inside a place: that place's own soundscape, by floor
+ * (src/audio/scenes.ts), cross-faded in as you walk in or change floor.
  * Browsers only allow sound after a click, so it starts from the HUD's sound button; nothing is
  * built or played before.
  */
+/** The lo-fi pad's level on the street. */
+const MUSIC = 0.2;
+
 export class Soundscape {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -31,8 +37,10 @@ export class Soundscape {
   private sfxGain!: GainNode;
   private streetBus!: GainNode;
   private rainOn = true;
-  private crowdGain: GainNode | null = null;
-  private trafficGain: GainNode | null = null;
+  /** The city's bed: day and night recordings, cross-faded with the theme. */
+  private cityDay: Playing | null = null;
+  private cityNight: Playing | null = null;
+  private cityLevel = 0.7;
   private lastPiyo = 0;
   private timer: ReturnType<typeof setInterval> | undefined;
   private ticker: ReturnType<typeof setInterval> | undefined;
@@ -109,6 +117,7 @@ export class Soundscape {
       const dt = Math.min(1, now - this.lastEar);
       this.lastEar = now;
       this.districts.update(this.ear, dt);
+      this.cityMix();
     }
   }
 
@@ -136,7 +145,7 @@ export class Soundscape {
       floor: this.floor,
       floorName: this.placeName,
       scene: this.preset,
-      layers: this.preset === "street" ? ["rain", "city-hum", "lofi-pad", "street-voices", "traffic"] : (this.scene?.layers ?? []),
+      layers: this.preset === "street" ? ["rain", this.ear.night ? "city-night" : "city-day", "lofi-pad"] : (this.scene?.layers ?? []),
       events: Object.keys(this.scene?.on ?? {}),
       districts: this.preset === "street" ? { ...(this.districts?.weights ?? {}) } : {},
       districtLayers: this.preset === "street" ? (this.districts?.layers() ?? {}) : {},
@@ -164,7 +173,7 @@ export class Soundscape {
     const p = id === "street" ? null : PRESETS[id];
     if (id === "street") {
       this.fade(this.streetBus, 1, xf);
-      this.fade(this.musicGain, 0.32, xf);
+      this.fade(this.musicGain, MUSIC, xf);
       this.rainIn = 1;
     } else {
       this.districts?.closeAll(xf);
@@ -286,22 +295,8 @@ export class Soundscape {
     if (this.place === "stadium") return this.event("goal", up);
     if (this.indoors) return;
     this.districts?.event("goal", up);
-    const ctx = this.ctx;
-    const t = ctx.currentTime + 0.1;
-    const n = ctx.createBufferSource();
-    n.buffer = this.noise(2.2);
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.Q.value = 1.4;
-    bp.frequency.setValueAtTime(up ? 900 : 520, t);
-    bp.frequency.linearRampToValueAtTime(up ? 1500 : 330, t + 1.2);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.09, t + 0.35);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 2);
-    n.connect(bp).connect(g).connect(this.sfxGain);
-    n.start(t);
-    if (up) [1046.5, 1318.5].forEach((f, i) => this.bell(f, t + 0.2 + i * 0.12, 0.4, 0.03));
+    // the city cheers a rise from afar (a real crowd, muffled)
+    if (up) shotInto(this.ctx, this.sfxGain, "goal", this.ctx.currentTime + 0.1, 0.12, { lp: 900 });
   }
 
   private build() {
@@ -337,60 +332,32 @@ export class Soundscape {
     this.rainLP.frequency.value = 16000;
     this.rainGain.connect(this.rainLP).connect(this.master);
     this.musicGain = ctx.createGain();
-    this.musicGain.gain.value = 0.32;
+    this.musicGain.gain.value = MUSIC;
     this.sfxGain = ctx.createGain();
     this.sfxGain.gain.value = 0.8;
     for (const g of [this.musicGain, this.sfxGain]) g.connect(this.master);
     this.musicGain.connect(verb);
     this.sfxGain.connect(verb);
     this.rain();
-    this.hum();
     this.music();
     this.street();
   }
 
-  /**
-   * The street around the camera: a murmur of voices (louder with more people near) and the
-   * rumble of passing traffic. Levels come from `ambience`, a few times a second.
-   */
+  /** The street around the camera: the city, recorded (a Tokyo street by day, a city at night). */
   private street() {
     const ctx = this.ctx!;
-    // voices: band-passed noise whose loudness wobbles like several conversations at once
-    const v = ctx.createBufferSource();
-    v.buffer = this.noise(6);
-    v.loop = true;
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.value = 620;
-    bp.Q.value = 0.9;
-    const wobble = ctx.createGain();
-    wobble.gain.value = 0.6;
-    for (const [f, d] of [
-      [0.7, 0.25],
-      [1.9, 0.15],
-    ]) {
-      const lfo = ctx.createOscillator();
-      lfo.frequency.value = f;
-      const depth = ctx.createGain();
-      depth.gain.value = d;
-      lfo.connect(depth).connect(wobble.gain);
-      lfo.start();
-    }
-    this.crowdGain = ctx.createGain();
-    this.crowdGain.gain.value = 0;
-    v.connect(bp).connect(wobble).connect(this.crowdGain).connect(this.streetBus);
-    v.start();
-    // traffic: a low rumble with a little tyre hiss on top
-    const t = ctx.createBufferSource();
-    t.buffer = this.noise(5, true);
-    t.loop = true;
-    const lp = ctx.createBiquadFilter();
-    lp.type = "lowpass";
-    lp.frequency.value = 420;
-    this.trafficGain = ctx.createGain();
-    this.trafficGain.gain.value = 0;
-    t.connect(lp).connect(this.trafficGain).connect(this.streetBus);
-    t.start();
+    this.cityDay = loopInto(ctx, this.streetBus, "city-day", 0);
+    this.cityNight = loopInto(ctx, this.streetBus, "city-night", 0);
+    this.cityMix();
+  }
+
+  private cityMix() {
+    if (!this.ctx || !this.cityDay || !this.cityNight) return;
+    const t = this.ctx.currentTime;
+    // the wide map hears a hint of the city; on foot, all of it
+    const lvl = this.cityLevel * (0.3 + 0.7 * this.ear.near);
+    this.cityDay.gain.gain.setTargetAtTime(this.ear.night ? 0 : lvl, t, 0.8);
+    this.cityNight.gain.gain.setTargetAtTime(this.ear.night ? lvl * 1.1 : 0, t, 0.8);
   }
 
   /**
@@ -398,10 +365,10 @@ export class Soundscape {
    * signal (null when nobody is crossing or it is too far), panned left or right (-1..1).
    */
   ambience(crowd: number, traffic: number, crossing: { level: number; pan: number } | null) {
-    if (!this.ctx || !this.on || !this.crowdGain || !this.trafficGain || this.indoors) return;
+    if (!this.ctx || !this.on || this.indoors) return;
     const t = this.ctx.currentTime;
-    this.crowdGain.gain.setTargetAtTime(crowd * 0.09, t, 0.6);
-    this.trafficGain.gain.setTargetAtTime(traffic * 0.22, t, 0.4);
+    // the city's bed swells where the people and the cars are
+    this.cityLevel = 0.7 + 0.3 * Math.max(crowd, traffic);
     if (crossing && crossing.level > 0.05 && t - this.lastPiyo > 0.62) {
       this.lastPiyo = t;
       this.piyo(crossing.level, crossing.pan);
@@ -530,66 +497,9 @@ export class Soundscape {
     });
   }
 
-  /** Rain: two layers of filtered noise (the hiss of the shower, the patter on the ground) plus drips. */
+  /** Rain on the pavement, recorded. */
   private rain() {
-    const ctx = this.ctx!;
-    const layer = (type: BiquadFilterType, freq: number, q: number, gain: number) => {
-      const src = ctx.createBufferSource();
-      src.buffer = this.noise(4, true);
-      src.loop = true;
-      const f = ctx.createBiquadFilter();
-      f.type = type;
-      f.frequency.value = freq;
-      f.Q.value = q;
-      const g = ctx.createGain();
-      g.gain.value = gain;
-      src.connect(f).connect(g).connect(this.rainGain);
-      src.start();
-      // slow gusts
-      const lfo = ctx.createOscillator();
-      lfo.frequency.value = 0.07 + Math.random() * 0.05;
-      const depth = ctx.createGain();
-      depth.gain.value = gain * 0.35;
-      lfo.connect(depth).connect(g.gain);
-      lfo.start();
-    };
-    layer("highpass", 3200, 0.5, 0.35);
-    layer("bandpass", 900, 0.6, 0.55);
-    layer("lowpass", 300, 0.7, 0.4);
-    // drips from awnings and gutters
-    setInterval(() => {
-      if (!this.on || !this.rainOn || this.rainIn < 0.5) return;
-      const t = ctx.currentTime;
-      for (let i = 0; i < 3; i++) {
-        if (Math.random() > 0.5) continue;
-        const o = ctx.createOscillator();
-        o.type = "sine";
-        const f0 = 1800 + Math.random() * 2400;
-        o.frequency.setValueAtTime(f0, t + i * 0.09);
-        o.frequency.exponentialRampToValueAtTime(f0 * 0.5, t + i * 0.09 + 0.05);
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.025, t + i * 0.09);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.09 + 0.06);
-        o.connect(g).connect(this.rainGain);
-        o.start(t + i * 0.09);
-        o.stop(t + i * 0.09 + 0.08);
-      }
-    }, 280);
-  }
-
-  /** The city far away: a low, breathing drone. */
-  private hum() {
-    const ctx = this.ctx!;
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise(4, true);
-    src.loop = true;
-    const f = ctx.createBiquadFilter();
-    f.type = "lowpass";
-    f.frequency.value = 140;
-    const g = ctx.createGain();
-    g.gain.value = 0.25;
-    src.connect(f).connect(g).connect(this.streetBus);
-    src.start();
+    loopInto(this.ctx!, this.rainGain, "rain", 1, { fadeIn: 2 });
   }
 
   /**
