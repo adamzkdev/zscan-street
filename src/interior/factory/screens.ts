@@ -352,8 +352,8 @@ export function drawMonitor(g: CanvasRenderingContext2D, kind: MonitorKind, t: n
     const items: [string, string, string][] = [
       ["PRESS", flash ? "STAMPING" : "READY", flash ? GOLD : "#3ddc97"],
       ["CONVEYOR", "RUNNING", "#3ddc97"],
-      ["PORTER", st.porter, "#4ad0ff"],
-      ["DISPATCH", "TO THE BUS", GOLD],
+      ["ROBOT · AGV", st.porter, "#4ad0ff"],
+      ["DISPATCH", "DOCKS D1–D4", GOLD],
       ["STAMPED", `${st.stamped} this shift`, "#e8e0c8"],
     ];
     items.forEach(([k, v, c], i) => {

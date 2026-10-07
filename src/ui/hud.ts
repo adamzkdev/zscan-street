@@ -142,6 +142,20 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   zsa: { icon: "crane", color: "#3ef0ff" },
   library: { icon: "book", color: "#ffd28a" },
   tower: { icon: "tower", color: "#3ef0ff" },
+  museum: { icon: "cards", color: "#ff3e8a" },
+  stadium: { icon: "zec", color: "#f4b728" },
+  prison: { icon: "vault", color: "#e8e4dc" },
+  mall: { icon: "parcel", color: "#3ef0ff" },
+  hotel: { icon: "tower", color: "#1baf7a" },
+  needle: { icon: "tower", color: "#3ef0ff" },
+  pyramid: { icon: "vault", color: "#ffd28a" },
+  eiffel: { icon: "tower", color: "#b07bff" },
+  colosseum: { icon: "bank", color: "#eb6834" },
+  reserve: { icon: "vault", color: "#f4b728" },
+  opera: { icon: "book", color: "#e8e4dc" },
+  bigben: { icon: "tower", color: "#ffd28a" },
+  statue: { icon: "tower", color: "#5cff9a" },
+  arab: { icon: "tower", color: "#f4b728" },
 };
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
@@ -664,17 +678,25 @@ export class Hud {
     };
     const [fname, fsub] = split(f.name);
     const many = i.floors.length > 1;
+    // the next floor up and down by height (floor indexes need not be in height order)
+    const order = i.floors.map((x, k) => ({ y: x.y, k })).sort((a, b) => a.y - b.y || a.k - b.k);
+    const at = order.findIndex((o) => o.k === floor);
+    const up = order[at + 1]?.k ?? null,
+      down = order[at - 1]?.k ?? null;
     this.$(".indoor").innerHTML = `
       <div class="ihead hud" style="--c:${st.color}"><span class="logo">${pix(st.icon)}</span><span class="it"><b>${esc(i.title)}</b><span>${many ? `<em>${esc(f.label)}</em>` : ""}${esc(fname)}${fsub ? ` · ${esc(fsub)}` : ""}</span></span></div>
       ${
         many
           ? `<nav class="lift hud${i.floors.length > 4 ? " tall" : ""}" style="--c:${st.color}" aria-label="Elevator">
               <div class="lh"><span class="mh">Elevator</span><span class="ud">
-                <button data-floor="${floor + 1}" ${floor >= i.floors.length - 1 ? "disabled" : ""} title="Up (Page Up)">${icon("up")}</button>
-                <button data-floor="${floor - 1}" ${floor <= 0 ? "disabled" : ""} title="Down (Page Down)" class="dn">${icon("up")}</button>
+                <button data-floor="${up ?? ""}" ${up === null ? "disabled" : ""} title="Up (Page Up)">${icon("up")}</button>
+                <button data-floor="${down ?? ""}" ${down === null ? "disabled" : ""} title="Down (Page Down)" class="dn">${icon("up")}</button>
               </span></div>
               ${i.floors
-                .map((x, k) => {
+                .map((x, k) => ({ x, k }))
+                // highest at the top (basements, whatever their index, at the bottom)
+                .sort((a, b) => a.x.y - b.x.y || a.k - b.k)
+                .map(({ x, k }) => {
                   const [n, sub] = split(x.name);
                   return `<button class="fl ${k === floor ? "on" : ""}" data-floor="${k}" aria-current="${k === floor}"><b>${esc(x.label)}</b><span><strong>${esc(n)}</strong>${sub ? `<small>${esc(sub)}</small>` : ""}</span></button>`;
                 })
@@ -1018,8 +1040,20 @@ export class Hud {
     this.blockTimer = setTimeout(() => card.classList.add("hidden"), 7000);
   }
 
+  /** A ride that isn't a block's (the ZEC Flyer): the header says so. */
+  private ride: string | null = null;
+  setRide(name: string | null) {
+    this.ride = name;
+    this.renderFollow();
+  }
+
   private renderFollow() {
     const s = this.followed;
+    if (this.ride) {
+      this.$(".followhead").innerHTML = `<span class="rec"></span><span>RIDING</span><b>${this.ride}</b>`;
+      this.$(".shots").innerHTML = `<button data-act="exit">Exit <kbd>Esc</kbd></button>`;
+      return;
+    }
     const subject = this.mode === "inspect" ? this.place : s ? `zkSNARK #${num(s.id)}` : this.busBlock ? `block ${num(this.busBlock.height)}` : "the next block";
     const shotName: Record<Shot, string> = { "three-quarter": "¾ view", street: "street level", high: "from above", inside: "inside the bus", "bus-side": "alongside the bus", boarding: "at the stop", shop: "inside" };
     const done = this.flowDone && this.flowDone.s === s ? `<small class="up">confirmed in ${num(this.flowDone.height)}</small>` : "";

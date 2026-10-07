@@ -1,0 +1,10 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 300000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"] });
+const p = await b.newPage();
+p.on("console", (m) => console.log("console:", m.type(), m.text().slice(0, 200)));
+p.on("pageerror", (e) => console.log("ERR", e.message));
+p.on("requestfailed", (r) => console.log("FAIL", r.url()));
+await p.goto("http://localhost:3008/?debug");
+await new Promise((r) => setTimeout(r, 20000));
+console.log(await p.evaluate(() => typeof window.street));
+await b.close();

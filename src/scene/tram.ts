@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { CITY, CURB, GRID } from "./city/plan";
+import { CITY, CURB, ST } from "./city/plan";
 import { busSign, canvasTexture } from "./textures";
 import { toObject } from "./voxel/mesher";
 import { C, E, G, VOX, VoxelModel } from "./voxel/model";
@@ -22,8 +22,8 @@ export interface TramLine {
   band: string;
 }
 export const TRAM_LINES: TramLine[] = [
-  { name: "TRAM A · 路面電車", z: GRID.zs[2] + 1.9, stops: [GRID.xs[0], 0, GRID.xs[3]], body: "#2e8a5a", band: "#ece4cc" },
-  { name: "TRAM B · 北線", z: GRID.zs[0] + 1.9, stops: [GRID.xs[0], GRID.xs[1], 0, GRID.xs[2], GRID.xs[3]], body: "#d8602a", band: "#f4e8c8" },
+  { name: "TRAM A · 路面電車", z: ST.south + 1.9, stops: [ST.blvdW, ST.shotengai, 0, ST.east1, ST.blvdE], body: "#2e8a5a", band: "#ece4cc" },
+  { name: "TRAM B · 北線", z: ST.parkN + 1.9, stops: [-190, ST.shotengai, ST.heartW, 0, ST.heartE, ST.east1, 190], body: "#d8602a", band: "#f4e8c8" },
 ];
 const CARW = 42;
 const SPEED = 9;

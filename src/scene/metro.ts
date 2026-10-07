@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Block, Tx } from "../data/types";
-import { CITY, CURB, GRID } from "./city/plan";
+import { CITY, CURB, GRID, RIVER, ST } from "./city/plan";
 import type { Nav } from "./nav";
 import { KIND_COLOR } from "./snark";
 import { busSign, canvasTexture, updateCanvasTexture } from "./textures";
@@ -21,12 +21,14 @@ const CAR_LEN = CAR.w * VOX;
 const GAP = 0.35;
 /** Window slots per car side (each a transaction when lit). */
 const SLOTS = 7;
-const SPEED = 15;
+const SPEED = 28;
 
-const XW = GRID.xs[1],
-  XE = GRID.xs[2],
-  ZN = GRID.zs[1],
-  ZS = GRID.zs[2];
+/** The ring road the line runs over, and the crosstown street through the heart (by the square). */
+const XW = ST.ringW,
+  XE = ST.ringE,
+  ZN = ST.ringN,
+  ZR = ST.ringS,
+  ZS = ST.south;
 /** Where trains come out of (and go back into) the portal at the board's east edge. */
 const PORTAL_X = CITY.maxX - 1;
 
@@ -46,34 +48,43 @@ export interface LineDef {
   every?: number;
 }
 
-/** The ZEC line: the loop round the heart, a train per block. */
+/**
+ * The ZEC line: in from the east portal along the crosstown street past the square, round the
+ * whole city on the ring road, and back across to the portal. A train per block.
+ */
 export const ZEC_LINE = (): LineDef => ({
   name: "ZEC LINE",
   deck: CURB + 9,
   points: routePoints(),
   stations: [
-    // over the Orchard (low wooden houses), where the line shows from the street
-    ["PARK", "公園", -38, ZN],
     ["SQUARE", "広場", 0, ZS],
-    ["MIDTOWN", "中心", XE, 16],
+    ["HAWKER", "屋台", -172, ZS],
+    ["STADIUM", "競技場", XW, -82],
+    ["GIZA", "ギザ", -160, ZN],
+    ["EIFFEL", "エッフェル", -80, ZN],
+    ["ROMA", "ローマ", 40, ZN],
+    ["NEEDLE", "塔", XE, -110],
+    ["MARINA", "湾", 168, ZR],
+    ["LIBERTY", "自由", 40, ZR],
+    ["PORT", "港", -175, ZR],
   ],
   stripe: "#f4b728",
   neon: new THREE.Color(0.4, 1.6, 2.2),
-  portal: { x: PORTAL_X, z: ZN },
+  portal: { x: PORTAL_X, z: ZS },
   hideX: PORTAL_X,
 });
 
 /** The NU7 line: higher, straight north–south along the east avenue, a shuttle with people aboard. */
 export const NU7_LINE = (): LineDef => {
-  const x = GRID.xs[3];
+  const x = ST.blvdE;
   const P = (z: number) => new THREE.Vector3(x, 0, z);
   return {
     name: "NU7 LINE",
     deck: CURB + 14,
-    points: [P(CITY.minZ + 3), P(CITY.maxZ - 5), P(CITY.minZ + 3)],
+    points: [P(ZN + 10), P(ZR - 10), P(ZN + 10)],
     stations: [
-      ["TOWERS", "摩天楼", x, -80],
-      ["RIVER", "川", x, 46],
+      ["TOWERS", "摩天楼", x, -90],
+      ["RIVER", "川", x, 104],
     ],
     stripe: "#b07bff",
     neon: new THREE.Color(1.4, 0.6, 2.4),
@@ -98,8 +109,9 @@ export interface Station {
 
 /** The route as a polyline with rounded corners: in from the portal, round the loop, back out. */
 function routePoints() {
-  const r = 7;
+  const r = 9;
   const P = (x: number, z: number) => new THREE.Vector3(x, 0, z);
+  /** A quarter turn round the centre (cx, cz) from angle a0 to a1. */
   const corner = (cx: number, cz: number, a0: number, a1: number) => {
     const pts: THREE.Vector3[] = [];
     for (let k = 0; k <= 8; k++) {
@@ -108,21 +120,48 @@ function routePoints() {
     }
     return pts;
   };
-  // west along the north side, south down the west side, east along the south side, north up the
-  // east side, then east again along the north side to the portal
+  // west along the crosstown, north up the west ring, east along the north ring, south down the
+  // east ring (over the crosstown), west along the south ring, north up the west ring to the
+  // crosstown, and east again along it to the portal
   return [
-    P(PORTAL_X + 30, ZN),
-    P(XE + r, ZN),
-    P(XW + r, ZN),
-    ...corner(XW + r, ZN + r, -Math.PI / 2, -Math.PI),
-    P(XW, ZS - r),
-    ...corner(XW + r, ZS - r, Math.PI, Math.PI / 2),
-    P(XE - r, ZS),
-    ...corner(XE - r, ZS - r, Math.PI / 2, 0),
-    P(XE, ZN + r),
-    ...corner(XE + r, ZN + r, Math.PI, Math.PI * 1.5),
-    P(PORTAL_X + 30, ZN),
+    P(PORTAL_X + 30, ZS),
+    P(XW + r, ZS),
+    ...corner(XW + r, ZS - r, Math.PI / 2, Math.PI),
+    P(XW, ZN + r),
+    ...corner(XW + r, ZN + r, Math.PI, Math.PI * 1.5),
+    P(XE - r, ZN),
+    ...corner(XE - r, ZN + r, -Math.PI / 2, 0),
+    P(XE, ZR - r),
+    ...corner(XE - r, ZR - r, 0, Math.PI / 2),
+    P(XW + r, ZR),
+    ...corner(XW + r, ZR - r, Math.PI / 2, Math.PI),
+    P(XW, ZS + r),
+    ...corner(XW + r, ZS + r, Math.PI, Math.PI * 1.5),
+    P(PORTAL_X + 30, ZS),
   ];
+}
+
+/** The boxes of a group that share a material, baked into one mesh each (textured planes stay). */
+function mergeByMaterial(g: THREE.Group) {
+  const by = new Map<THREE.Material, THREE.Mesh[]>();
+  for (const o of g.children) {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || Array.isArray(m.material) || (m.material as THREE.MeshBasicMaterial).map) continue;
+    const list = by.get(m.material);
+    if (list) list.push(m);
+    else by.set(m.material, [m]);
+  }
+  for (const [mat, list] of by) {
+    if (list.length < 2) continue;
+    const geos = list.map((m) => {
+      m.updateMatrix();
+      return m.geometry.clone().applyMatrix4(m.matrix).toNonIndexed();
+    });
+    for (const m of list) g.remove(m);
+    const merged = new THREE.Mesh(mergeGeometries(geos, false), mat);
+    merged.castShadow = merged.receiveShadow = true;
+    g.add(merged);
+  }
 }
 
 /** Arc-length parametrised polyline. */
@@ -425,6 +464,11 @@ export class Metro {
       const p = this.route.at(s);
       if (Math.abs(p.x) > CITY.maxX - 2) continue;
       if (p.z > CITY.road.z0 - 1.5 && p.z < CITY.road.z1 + 1.5) continue;
+      if (p.z > RIVER.z0 - 1 && p.z < RIVER.z1 + 1) continue;
+      // never in the middle of a crossing
+      const inX = GRID.xs.some((x, i) => Math.abs(p.x - x) < GRID.xw[i] / 2 + 1);
+      const inZ = GRID.zs.some((z, i) => Math.abs(p.z - z) < GRID.zw[i] / 2 + 1);
+      if (inX && inZ) continue;
       const key = `${Math.round(p.x / 6)},${Math.round(p.z / 6)}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -516,6 +560,7 @@ export class Metro {
         b.rotation.y = side > 0 ? 0 : Math.PI;
         g.add(b);
       }
+      mergeByMaterial(g);
       this.group.add(g);
       const pos = new THREE.Vector3(x, this.deck, z);
       const first = this.route.nearest(x, z);
@@ -584,7 +629,8 @@ export class Metro {
   /** A block was mined: its train sets off from the portal. */
   block(b: Block): Train {
     this.lastHeight = b.height;
-    const stops = this.stations.flatMap((s) => s.at).sort((a, c) => a - c);
+    // each station once, on the train's first pass
+    const stops = this.stations.map((s) => s.at[0]).sort((a, c) => a - c);
     const t = new Train(b.height, b.txs, stops, this.line);
     this.trains.push(t);
     this.group.add(t.group);
@@ -620,7 +666,10 @@ export class Metro {
         // brake for the next stop, pull away after it
         const next = t.stops.find((s) => s > t.s + 0.05);
         const toStop = next === undefined ? Infinity : next - t.s;
-        const vmax = Math.min(SPEED, Math.sqrt(Math.max(0.04, 2 * 1.6 * toStop)) + 0.3);
+        // and keep well behind the train ahead on the same track
+        let gap = Infinity;
+        for (const o of this.trains) if (o !== t && o.s > t.s) gap = Math.min(gap, o.s - o.length - t.s - 30);
+        const vmax = Math.min(SPEED, Math.sqrt(Math.max(0.04, 2 * 1.6 * Math.min(toStop, Math.max(0, gap)))) + 0.3);
         t.v = Math.min(vmax, t.v + 2.2 * dt);
         t.s += t.v * dt;
         if (next !== undefined && next - t.s < 0.08) {

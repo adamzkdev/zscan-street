@@ -42,6 +42,11 @@ export interface Built {
   body: [number, number, number, number];
   /** Points that deserve a real light (shop interiors), model voxels. */
   lights: [number, number, number, string][];
+  /**
+   * Size of one voxel in units of VOX (1: a sixth of a metre). Landmarks too big to model at full
+   * resolution use 2 (a third of a metre) or more; every coordinate above stays in model voxels.
+   */
+  scale?: number;
 }
 
 export const WALLS = {

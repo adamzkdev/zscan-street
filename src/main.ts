@@ -9,7 +9,7 @@ import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
 import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
-import { GRID, RIVER } from "./scene/city/plan";
+import { RIVER, ST } from "./scene/city/plan";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
 import { buildDecor } from "./scene/decor";
@@ -17,6 +17,28 @@ import { Soundscape } from "./audio";
 import { LampLights, tiltShift } from "./scene/post";
 import { applyTheme, setRainWanted, type Theme } from "./scene/theme";
 import type { Snark } from "./scene/snark";
+import { Overlays } from "./ui/overlays";
+import { buildMuseum } from "./interior/museum";
+import { buildStadium } from "./interior/stadium";
+import { buildPrison } from "./interior/prison";
+import { buildMall } from "./interior/mall";
+import { buildHotel } from "./interior/hotel";
+import { buildNeedle } from "./interior/needle";
+import { buildPyramid } from "./interior/pyramid";
+import { buildEiffel } from "./interior/eiffel";
+import { buildColosseum } from "./interior/colosseum";
+import { buildReserve } from "./interior/reserve";
+import { buildOpera } from "./interior/opera";
+import { buildBigBen } from "./interior/bigben";
+import { buildStatue } from "./interior/statue";
+import { buildArab } from "./interior/arab";
+import { StadiumLive } from "./scene/stadium";
+import { Sky } from "./scene/sky";
+import { Shibuya } from "./scene/shibuya";
+import { GoldenGate } from "./scene/goldengate";
+import { Chatter } from "./scene/chatter";
+import { setBubbleScale } from "./scene/speech";
+import { PLACE_LORE } from "./data/lore";
 import { Hud } from "./ui/hud";
 import { Venues } from "./ui/venues";
 import { BlockShelf } from "./scene/shelf";
@@ -148,7 +170,13 @@ function setTheme(t: Theme) {
   applyTheme({ renderer, scene, hemi, sun: moon, bloom, lamps: lampLights, decor, city: city.group }, t);
   hud?.setNight(t === "night");
   weather(true);
+  // the place you are in follows (its windows, its light); the others catch up when entered
+  themeHook?.(t);
+  shibuyaNight?.(t === "night");
 }
+let shibuyaNight: ((night: boolean) => void) | null = null;
+/** Set once the walk-in places exist (they are built further down). */
+let themeHook: ((t: Theme) => void) | null = null;
 function setThemePref(p: ThemePref) {
   themePref = p;
   try {
@@ -215,10 +243,12 @@ window.addEventListener("resize", resize);
 let selected: Snark | null = null;
 let lastSummary: BlockSummary | null = null;
 let rideNextBus = false;
+let mempoolCount = 0;
 
 const director = new Director(scene, city, {
   stats: (s) => {
     lastSummary = s.lastBlock;
+    mempoolCount = s.mempool;
     hud.setStats(s);
     if (s.lastBlock) hall?.setLast(s.lastBlock.height, s.lastBlock.miner_pool, Date.parse(s.lastBlock.time));
     decor.setLive({ height: s.lastBlock?.height ?? null, mempool: s.mempool });
@@ -230,6 +260,7 @@ const director = new Director(scene, city, {
     hud.bus(phase, b, carried, district?.name ?? null);
     if (phase === "arriving") {
       pulse.block(b);
+      stadium.block(b);
       hall?.found(b.height, b.pool);
       for (const fn of blockListeners) fn(b.height, b.pool);
     }
@@ -275,7 +306,12 @@ director.metro = metro;
 // the tram, along the street under the metro
 const tram = new Tram(scene, city.nav);
 // traffic lights at the junctions, cars and a police car on the other streets
-const cityTraffic = new CityTraffic(scene, director.traffic, [16, 14, 10, 7, 5][quality.level], city.nav);
+const cityTraffic = new CityTraffic(scene, director.traffic, [44, 36, 26, 16, 10][quality.level], city.nav);
+// Shibuya: the scramble crossing, its crowd and its screens
+const shibuya = new Shibuya(scene, city, cityTraffic, { count: [300, 260, 200, 140, 90][quality.level], director });
+rainListeners.push((on) => shibuya.setRain(on));
+shibuyaNight = (n) => shibuya.setNight(n);
+shibuya.setNight(theme === "night");
 // the second elevated line: the NU7 line, a shuttle north–south along the east avenue
 const metro2 = new Metro(scene, city.nav, NU7_LINE());
 // horns: you (on foot) or a jaywalker in front of a vehicle; trains and trams sound off too
@@ -301,8 +337,23 @@ tram.onBell = (p) => {
   const w = soundAt(p);
   sound.tramBell(w.level, w.pan);
 };
-// the prison, past the north-west corner; annoy the police enough and you end up in it
+// the prison, on its rock in the bay; annoy the police enough and you end up in it
 const prison = new Prison(scene, city.nav, director);
+// the rock is a walk-in place too: the cell house, from the city's side (click the island)
+{
+  const box = new THREE.Box3(new THREE.Vector3(PRISON.x0, 0, PRISON.z0), new THREE.Vector3(PRISON.x1, 22, PRISON.z1));
+  const door = new THREE.Vector3((PRISON.x0 + PRISON.x1) / 2, PRISON.floor, PRISON.z0 - 1);
+  city.venues.push({
+    kind: "prison",
+    name: "the ZEC STATE PENITENTIARY",
+    door,
+    occluder: { full: prison.group, cut: new THREE.Group(), extras: new THREE.Group(), box, level: 1, height: 22, open: false, fixed: true },
+    keeper: door.clone(),
+    camPos: door.clone().add(new THREE.Vector3(0, 12, -24)),
+    camLook: door.clone(),
+    walls: [],
+  });
+}
 const jailBanner = document.createElement("div");
 jailBanner.className = "jail";
 document.getElementById("ui")!.append(jailBanner);
@@ -381,15 +432,15 @@ async function arrest() {
   hud.cut();
   jailBanner.classList.remove("on");
   jailed = false;
-  if (walking) onFoot.place(prison.release.clone(), -Math.PI / 2);
+  if (walking) onFoot.place(prison.release.clone(), Math.PI);
   horns.pardoned();
 }
 // life in every district: anglers, boats, balconies, the park, the shōtengai
 const life = new Life(scene, city, director, [1, 0.9, 0.6, 0.4, 0.25][quality.level]);
 // two police officers at the avenue's junctions, watching the traffic
 for (const [x, z, id] of [
-  [GRID.xs[2] + 5.4, CITY.south.z0 + 0.7, 4911],
-  [GRID.xs[1] - 5.4, CITY.north.z1 - 0.7, 1977],
+  [ST.heartE + 5.4, CITY.south.z0 + 0.7, 4911],
+  [ST.heartW - 5.4, CITY.north.z1 - 0.7, 1977],
 ] as const)
   void director.newSnark(id).then((s) => {
     director.adopt(s);
@@ -401,6 +452,40 @@ for (const [x, z, id] of [
   });
 // the city reacts to each real event: block, empty block, heavy shielded tx, price move
 const pulse = new CityPulse(city, decor, sound, residents, nu7);
+// Block Stadium: Shielded against Transparent, a match per block
+const stadium = new StadiumLive(scene, city, (up) => sound.crowd(up));
+// the ZEC Flyer turning by the river, the ZEC blimp over the city
+const sky = new Sky(city);
+let flyerRide = false;
+// the Golden Gate: traffic over it, and its deck to walk on
+const goldenGate = new GoldenGate(scene, city);
+// people talk to each other wherever the camera looks
+const chatter = new Chatter(director, city, scene, [3, 3, 2, 2, 1][quality.level]);
+// a goal inside the stadium: the crowd's roar (or groan)
+window.addEventListener("zstreet:stadium-goal", (e) => sound.crowd(!!(e as CustomEvent<{ shielded: boolean }>).detail?.shielded));
+
+/** The line under each place's name in its hover tag. */
+const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
+  cards: "the whole collection",
+  bank: "read a shielded wallet",
+  library: "news · ZIPs",
+  tower: "apartments · arcade",
+  zsa: "shielded assets · coming soon",
+  museum: "the Louvre of zkSNARKs",
+  stadium: "watch the match · or play it",
+  prison: "Alcatraz of crypto",
+  mall: "shops · rain vortex · canal",
+  hotel: "rooms · sky park pool",
+  needle: "observation deck",
+  pyramid: "the labyrinth",
+  eiffel: "up to the summit",
+  colosseum: "the arena",
+  reserve: "trading floor · gold vault",
+  opera: "tonight's concert",
+  bigben: "up to the bell",
+  statue: "climb to the crown",
+  arab: "seven-star hotel · helipad",
+};
 
 /** What each walk-in place is, for the people who work there. */
 const PLACE_ABOUT: Record<string, string> = {
@@ -411,6 +496,15 @@ const PLACE_ABOUT: Record<string, string> = {
   zsa: "The ZSA Exchange is a building site for Zcash Shielded Assets (ZIPs 226, 227, 228): custom tokens inside the shielded pool, coming in a future upgrade.",
   library: "The Library keeps the Zcash news and every ZIP (Zcash Improvement Proposal) on its shelves.",
   tower: "ZK TOWER is a condo tower with flats, an arcade, a bowling alley, a gym, a pool and a rooftop.",
+  museum: "The zkSNARK Museum is the city's Louvre: the Hall under the glass pyramid, the Grande Galerie of zkSNARK portraits, and zkSNARK #1, the collection's original, behind glass.",
+  stadium: "Block Stadium plays Shielded against Transparent: each block is a match, its shielded transactions against its transparent ones.",
+  prison: "The ZEC State Penitentiary is the city's Alcatraz, on its rock in the bay; its cells hold the most famous falls in crypto.",
+  mall: "The ZK Mall: five levels of shops round an indoor waterfall, a canal with boats, a food court and the ZK Cinema.",
+  hotel: "The Marina ZEC Hotel: three towers joined by the SkyPark and its infinity pool, a casino, suites with a view of the city.",
+  needle: "The ZEC Needle is the tallest tower in the city, with observation decks over the whole megalopolis.",
+  pyramid: "The Great Pyramid hides a labyrinth; the King's Chamber keeps the genesis block's treasure.",
+  eiffel: "The Tour Eiffel: the esplanade, the glass floor of the first platform, the second floor and the summit.",
+  colosseum: "The Colosseum hosts the Proof Games: a Shielded gladiator against a Transparent one, a bout per block.",
 };
 
 // conversations with the characters (zkSNARKs on the street, people inside places); created
@@ -486,6 +580,18 @@ hud = new Hud(
   director,
   themePref,
 );
+// SimCity-style data views over the city (after the HUD, which rewrites #ui)
+const overlays = new Overlays(scene, document.getElementById("ui")!, {
+  *cars() {
+    for (const m of cityTraffic.movers) yield m.group.position;
+    for (const v of director.traffic.vehicles) yield v.mover.group.position;
+  },
+  *carriers() {
+    for (const s of director.snarks) if (s.txs.length && s.root.parent === scene) yield { pos: s.root.position, n: s.txs.length };
+  },
+  mempool: () => mempoolCount,
+  buildings: city.facades.map((f) => (f.face === "s" || f.face === "n" ? { x0: f.x0, x1: f.x1, z: f.z + (f.face === "s" ? -3 : 3), height: f.height } : { x0: f.x0 + (f.face === "e" ? -3 : 3), x1: f.x0 + (f.face === "e" ? -3 : 3), z: f.z, height: f.height })),
+});
 hud.setNight(theme === "night");
 
 // sound stays as it was left; browsers only let it start on the first touch or click
@@ -499,12 +605,36 @@ try {
 setTimeout(() => hud.ready(), 15000);
 
 // ---- walk-in places ----------------------------------------------------------------------------
-const PLACES: Record<Interior["key"], string> = { mempool: "MEMPOOL", cards: "zkCARDS", bank: "VIEW KEY BANK", factory: "PROOF FACTORY", zsa: "ZSA EXCHANGE", library: "LIBRARY", tower: "ZK TOWER" };
+const PLACES: Record<Interior["key"], string> = {
+  mempool: "MEMPOOL",
+  cards: "zkCARDS",
+  bank: "VIEW KEY BANK",
+  factory: "PROOF FACTORY",
+  zsa: "ZSA EXCHANGE",
+  library: "LIBRARY",
+  tower: "ZK TOWER",
+  museum: "zkSNARK MUSEUM",
+  stadium: "BLOCK STADIUM",
+  prison: "ZEC PENITENTIARY",
+  mall: "ZK MALL",
+  hotel: "MARINA ZEC HOTEL",
+  needle: "ZEC NEEDLE",
+  pyramid: "GREAT PYRAMID",
+  eiffel: "TOUR EIFFEL",
+  colosseum: "COLOSSEUM",
+  reserve: "ZEC RESERVE",
+  opera: "OPERA HOUSE",
+  bigben: "BIG BEN",
+  statue: "zkSNARK OF LIBERTY",
+  arab: "BURJ AL ZEC",
+};
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
 const views = new Map<string, { rt: THREE.WebGLCubeRenderTarget; at: number }>();
 function cityView(place: string, up: number, back = 3): THREE.Texture | null {
-  const v = city.venues.find((x) => x.kind === place);
+  // the Proof Factory isn't a venue (it has its own site): look out from its door
+  const f = city.factory;
+  const v = place === "factory" && f?.door ? { door: f.door, occluder: f.occluder } : city.venues.find((x) => x.kind === place);
   if (!v) return null;
   const key = `${place}:${up}`;
   let e = views.get(key);
@@ -518,11 +648,28 @@ function cityView(place: string, up: number, back = 3): THREE.Texture | null {
   const o = v.occluder;
   const was = [o.full.visible, o.cut.visible, o.extras.visible];
   o.full.visible = o.cut.visible = o.extras.visible = false;
+  // seen from up there: the haze much further out, and the city's detail round this place
+  const fog = scene.fog instanceof THREE.Fog ? [scene.fog.near, scene.fog.far] : null;
+  if (scene.fog instanceof THREE.Fog) {
+    scene.fog.near = 260 + up * 2;
+    scene.fog.far = 700 + up * 4;
+  }
+  city.lod(cam.position, 80, 220);
+  // the stadium's own live screens and crowd belong to the building hidden above
+  const live = place === "stadium" ? stadium.group.visible : null;
+  if (live !== null) stadium.group.visible = false;
   cam.update(renderer, scene);
+  if (live !== null) stadium.group.visible = live;
+  if (fog && scene.fog instanceof THREE.Fog) [scene.fog.near, scene.fog.far] = fog;
+  city.lod(rig.focus, 40, 95);
   [o.full.visible, o.cut.visible, o.extras.visible] = was;
   return e.rt.texture;
 }
 const ictx: InteriorContext = { renderer, director, theme, onBlock: (fn) => blockListeners.push(fn), cityView };
+themeHook = (t) => {
+  ictx.theme = t;
+  interiors.active?.setTheme?.(t);
+};
 const interiors = new InteriorManager(
   canvas,
   {
@@ -533,9 +680,24 @@ const interiors = new InteriorManager(
     zsa: () => buildZsa(ictx),
     library: () => buildLibrary(ictx),
     tower: () => buildTower(ictx),
+    museum: () => buildMuseum(ictx),
+    stadium: () => buildStadium(ictx),
+    prison: () => buildPrison(ictx),
+    mall: () => buildMall(ictx),
+    hotel: () => buildHotel(ictx),
+    needle: () => buildNeedle(ictx),
+    pyramid: () => buildPyramid(ictx),
+    eiffel: () => buildEiffel(ictx),
+    colosseum: () => buildColosseum(ictx),
+    reserve: () => buildReserve(ictx),
+    opera: () => buildOpera(ictx),
+    bigben: () => buildBigBen(ictx),
+    statue: () => buildStatue(ictx),
+    arab: () => buildArab(ictx),
   },
   {
     entered: (i, f) => {
+      i.setTheme?.(theme);
       rig.controls.enabled = false;
       venues.close();
       hud.enterInterior(i, f);
@@ -565,6 +727,10 @@ onFoot.resize(window.innerWidth, window.innerHeight);
 const BOARD = { x0: CITY.minX + 0.6, x1: CITY.maxX - 0.6, z0: CITY.minZ + 0.6, z1: CITY.maxZ - 0.6 };
 /** Floor heights on foot off the street level: station platforms and stairs, the footbridges. */
 function groundAt(x: number, z: number): number | null {
+  const pg = prison.groundAt(x, z);
+  if (pg !== null) return pg;
+  const gg = goldenGate.groundAt(x, z);
+  if (gg !== null) return gg;
   const m = metro.heightAt(x, z) ?? metro2.heightAt(x, z);
   if (m !== null) return m;
   const R = RIVER;
@@ -606,6 +772,10 @@ onFoot.collide = (x, z) => {
   const there = groundAt(x, z) ?? CURB;
   // no walking off a platform, no walking into the side of a staircase
   if (Math.abs(there - here) > 0.75) return true;
+  // on the rock: the prison's own walls and bars
+  if (inPrison) return !prison.free(x, z, 0.28);
+  // on the Golden Gate: between its railings
+  if (goldenGate.onDeck(x, z)) return false;
   // up there, the street's obstacles are below you
   if (there > 1.2) return false;
   return !city.nav.free(x, z, 0.28) || dynamicHit(x, z);
@@ -617,7 +787,7 @@ let cameIn: Interior["key"] | null = null;
 const doors: { key: Interior["key"]; at: THREE.Vector3 }[] = [
   ...(city.shops[0] ? [{ key: "mempool" as const, at: city.shops[0].door }] : []),
   ...city.venues.map((v) => ({ key: v.kind, at: v.door })),
-  ...(city.factory && city.shops[0] ? [{ key: "factory" as const, at: new THREE.Vector3(city.factory.hall.x, CURB, city.shops[0].door.z) }] : []),
+  ...(city.factory?.door ? [{ key: "factory" as const, at: city.factory.door }] : []),
 ];
 /** The camera the viewer is looking through on the street. */
 function viewCam() {
@@ -737,29 +907,72 @@ hud.setPlaces([
   ...city.venues.map((v) => ({
     key: v.kind,
     label: PLACES[v.kind],
-    sub: v.kind === "cards" ? "the whole collection" : v.kind === "bank" ? "read a shielded wallet" : v.kind === "library" ? "news · ZIPs" : v.kind === "tower" ? "apartments · arcade" : "shielded assets · coming soon",
+    sub: PLACE_SUB[v.kind] ?? "",
     at: v.door.clone().setY(v.kind === "bank" ? 7.4 : v.kind === "library" ? 7.8 : 5.6),
   })),
-  ...(city.factory ? [{ key: "factory", label: "PROOF FACTORY", sub: "shielded tx proved here", at: city.factory.hall.clone().setY(7.2) }] : []),
+  ...(city.factory ? [{ key: "factory", label: "PROOF FACTORY", sub: "shielded tx proved here", at: (city.factory.roof ?? city.factory.hall).clone().add(new THREE.Vector3(0, 3, 0)) }] : []),
 ]);
 
-function enterPlace(key: string) {
+/** The stadium asks first: a seat in the stands, or boots on the pitch. */
+let closeChoice: (() => void) | null = null;
+function stadiumChoice(): Promise<number | null> {
+  closeChoice?.();
+  return new Promise((resolve) => {
+    const el = document.createElement("div");
+    el.className = "choice hud";
+    el.innerHTML = `<div class="mh">ブロック競技場 · BLOCK STADIUM</div>
+      <button data-f="0"><b>Watch the match</b><span>a seat in the stands, with the crowd</span></button>
+      <button data-f="1"><b>Play on the pitch</b><span>run after the ball, score for Shielded</span></button>
+      <button data-f="x" class="x">Not now</button>`;
+    const done = (v: number | null) => {
+      closeChoice = null;
+      el.remove();
+      window.removeEventListener("keydown", esc);
+      resolve(v);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && done(null);
+    el.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-f]");
+      if (b) done(b.dataset.f === "x" ? null : Number(b.dataset.f));
+    });
+    window.addEventListener("keydown", esc);
+    closeChoice = () => done(null);
+    document.getElementById("ui")!.appendChild(el);
+  });
+}
+
+function enterPlace(key: string, floor?: number) {
   select(null);
+  if (!(key === "stadium" && floor === undefined)) closeChoice?.();
   if (!(key in PLACES)) return;
+  if (key === "stadium" && floor === undefined) {
+    if (walking) onFoot.enabled = false;
+    void stadiumChoice().then((f) => {
+      if (f === null) {
+        if (walking) onFoot.enabled = true;
+        return;
+      }
+      enterPlace(key, f);
+    });
+    return;
+  }
   // on foot, you come back out of the same door
   if (walking) {
     cameIn = key as Interior["key"];
     onFoot.enabled = false;
   }
-  interiors.enter(key as Interior["key"]);
+  interiors.enter(key as Interior["key"], floor ?? 0);
 }
 
 window.addEventListener("keydown", (e) => {
   // the elevator from the keyboard
   if ((e.key === "PageUp" || e.key === "PageDown") && interiors.active && interiors.active.floors.length > 1) {
     e.preventDefault();
-    const n = interiors.floor + (e.key === "PageUp" ? 1 : -1);
-    if (n < 0 || n >= interiors.active.floors.length) return;
+    // by height, not by index (a basement may come after the roof in the list)
+    const order = interiors.active.floors.map((x, k) => ({ y: x.y, k })).sort((a, b) => a.y - b.y || a.k - b.k);
+    const at = order.findIndex((o) => o.k === interiors.floor);
+    const n = order[at + (e.key === "PageUp" ? 1 : -1)]?.k ?? -1;
+    if (n < 0) return;
     interiors.goTo(n);
     hud.cut();
     hud.renderIndoor(interiors.floor);
@@ -844,7 +1057,7 @@ canvas.addEventListener("pointerup", (e) => {
           `${npc.name}, the ${job.toLowerCase()} at the ${place.title} in ZStreet`,
           ZScan.zkSnarkImage(npc.id),
           `Welcome to the ${place.title}! I'm the ${job.toLowerCase()} here. What can I tell you?`,
-          () => `You work at the ${place.title} (${floor.name}). ${PLACE_ABOUT[place.key] ?? ""}${npc.txs.length ? ` You hold transaction ${npc.txs[0].txid} (${npc.txs[0].kind}).` : ""}`,
+          () => `You work at the ${place.title} (${floor.name}). ${PLACE_LORE[place.key] ?? PLACE_ABOUT[place.key] ?? ""}${npc.txs.length ? ` You hold transaction ${npc.txs[0].txid} (${npc.txs[0].kind}).` : ""}`,
           director,
         ),
       );
@@ -896,6 +1109,15 @@ canvas.addEventListener("pointerup", (e) => {
     // a shop of the shōtengai: its counter, live
     const st = storeAt(e.clientX, e.clientY);
     if (st) return void openStore(st.id);
+    // the ZEC Flyer: board a capsule and go round once, the city below
+    ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+    ray.setFromCamera(ndc, viewCam());
+    if (!walking && sky.hit(ray)) {
+      rig.rideTrain(sky.board());
+      flyerRide = true;
+      hud.setRide("the ZEC Flyer");
+      return;
+    }
     // a walk-in place: in you go
     const place = placeAt(e.clientX, e.clientY);
     if (place) return enterPlace(place);
@@ -1124,7 +1346,7 @@ connectFeed({
     if (first) {
       first = false;
       const q = new URLSearchParams(location.search).get("interior");
-      if (q) setTimeout(() => enterPlace(q), 800);
+      if (q) setTimeout(() => enterPlace(q, Number(new URLSearchParams(location.search).get("floor") ?? 0)), 800);
       setTimeout(() => hud.ready(), 700);
       setTimeout(() => tracker.fromUrl(), 1200);
     }
@@ -1143,6 +1365,17 @@ if (new URLSearchParams(location.search).has("debug")) {
     street: {
       director,
       renderer,
+      overlays,
+      shibuya,
+      stadium,
+      sky,
+      goldenGate,
+      chatter,
+      rideFlyer: () => {
+        rig.rideTrain(sky.board());
+        flyerRide = true;
+        hud.setRide("the ZEC Flyer");
+      },
       metro,
       tram,
       cityTraffic,
@@ -1221,6 +1454,7 @@ function wallsDown(dt: number, allUp = false) {
   const toCam = camPos.clone().sub(focus).normalize();
   const close = rig.shot !== null || rig.iso.zoom > 1.6;
   for (const o of city.occluders) {
+    if (o.fixed) continue;
     let cover = false;
     if (allUp || rig.mode === "overview") cover = false;
     // a walk-in place opens up only when you are close and looking right into it
@@ -1362,6 +1596,8 @@ function listen(focus: THREE.Vector3) {
   if (!sound.on) return;
   // close views hear the street; the wide map only a hint of it
   const close = walking || rig.shot ? 1 : rig.mode === "overview" ? 0.15 : THREE.MathUtils.clamp(0.25 + rig.iso.zoom * 0.25, 0.3, 0.9);
+  // the district you are in (Shibuya, the bay, the park…) adds its own layer
+  sound.setScene("street", 0, { x: focus.x, z: focus.z, near: close, night: theme === "night" });
   let people = 0;
   for (const s of director.snarks) {
     if (!s.root.visible || s.root.parent !== scene) continue;
@@ -1410,8 +1646,8 @@ function frame(stepDt?: number) {
       aimCapture(interiors.walk.camera, capShot);
     }
     runDirector(sim, t, interiors.walk.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(interiors.walk.camera.quaternion));
-    // indoors the street goes quiet
-    sound.ambience(0, 0, null);
+    // indoors the street goes quiet and the place's own soundscape plays (by floor)
+    sound.setScene(interiors.active.key, interiors.floor, { name: interiors.active.floors[interiors.floor]?.name ?? "", night: theme === "night" });
     joystick.sync(interiors.walk);
     renderPass.scene = interiors.active.scene;
     renderPass.camera = interiors.walk.camera;
@@ -1477,6 +1713,26 @@ function frame(stepDt?: number) {
   metro.update(sim);
   tram.update(sim);
   cityTraffic.update(sim);
+  shibuya.update(sim, t, focus);
+  overlays.update(dt);
+  stadium.setMempool(mempoolCount);
+  sky.setHeight(lastSummary?.height ?? null);
+  sky.update(t, sim);
+  goldenGate.update(sim);
+  // the ride is over (or the camera went elsewhere): back to the map
+  if (flyerRide && (!sky.riding || rig.mode !== "follow")) {
+    flyerRide = false;
+    hud.setRide(null);
+    if (sky.riding) sky.stopRide();
+    else rig.setMode("live");
+  }
+  chatter.setLive(lastSummary?.height ?? null, mempoolCount);
+  // speech bubbles keep a readable size on screen over the map (about 3% of its height)
+  setBubbleScale(1);
+  // conversations only where you can read them: on foot, in a close shot, or zoomed in on the map
+  const closeUp = walking || !!rig.shot || (rig.iso.top - rig.iso.bottom) / rig.iso.zoom < 70;
+  if (!interiors.active && closeUp) chatter.update(sim, walking ? onFoot.camera.position : rig.focus);
+  stadium.update(sim, !interiors.active);
   metro2.update(sim);
   horns.update(sim);
   prison.update(sim);
@@ -1493,6 +1749,7 @@ function frame(stepDt?: number) {
   // close-ups keep full detail further out; the whole-city view is mostly simplified
   if (wide) city.lod(focus, 0, 50);
   else city.lod(focus, rig.shot ? 60 : 40, rig.shot ? 140 : 95);
+  prison.lod(focus, wide ? 50 : rig.shot ? 140 : 95);
   city.update(t, dt);
   hall?.update(t, dt);
   press?.update(t, dt);

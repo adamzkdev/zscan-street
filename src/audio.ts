@@ -1,50 +1,207 @@
+import { type Bufs, makeBufs, Scene } from "./audio/lib";
+import { LEVEL, PRESETS, presetFor } from "./audio/scenes";
+import { Districts, type StreetEar } from "./audio/street";
+
+/** Where the ear is: a place's key and floor (its name picks the floor's soundscape), or the street. */
+export interface SceneOpts {
+  /** The floor's name ("Casino · tables, slots"…). */
+  name?: string;
+  /** On the street: where the ear is (x, z), how close the view is (0 wide map … 1 on foot). */
+  x?: number;
+  z?: number;
+  near?: number;
+  night?: boolean;
+}
+
 /**
- * The street's soundscape, synthesised with Web Audio (no files to download):
- * rain on the pavement, a distant city hum, a slow lo-fi synth pad with a soft arpeggio, and
- * the little sounds of the street (the konbini door chime, the bus pulling in).
- * Browsers only allow sound after a click, so it starts from the HUD's sound button.
+ * The city's soundscape, synthesised with Web Audio (no files to download).
+ * On the street: rain on the pavement, a distant city hum, a slow lo-fi synth pad with a soft
+ * arpeggio, the little sounds of the street (the konbini door chime, the bus pulling in), and a
+ * layer for the district you are in (src/audio/street.ts). Inside a place: that place's own
+ * soundscape, by floor (src/audio/scenes.ts), cross-faded in as you walk in or change floor.
+ * Browsers only allow sound after a click, so it starts from the HUD's sound button; nothing is
+ * built or played before.
  */
 export class Soundscape {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
   private rainGain!: GainNode;
+  private rainLP!: BiquadFilterNode;
   private musicGain!: GainNode;
   private sfxGain!: GainNode;
+  private streetBus!: GainNode;
   private rainOn = true;
   private crowdGain: GainNode | null = null;
   private trafficGain: GainNode | null = null;
   private lastPiyo = 0;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private ticker: ReturnType<typeof setInterval> | undefined;
+  private bufs!: Bufs;
+  private analyser: AnalyserNode | null = null;
+  /** The place you are in ("street" outside), its floor, and the soundscape playing. */
+  private place = "street";
+  private floor = 0;
+  private placeName = "";
+  private preset = "street";
+  private scene: Scene | null = null;
+  private districts: Districts | null = null;
+  private ear: StreetEar = { x: 0, z: 0, near: 1, night: true };
+  private lastEar = 0;
+  /** How much of the street's rain reaches you (1 outside). */
+  private rainIn = 1;
   on = false;
+
+  constructor() {
+    if (typeof window === "undefined") return;
+    // the places tell us what happens in them
+    window.addEventListener("zstreet:colosseum", (e) => {
+      const d = (e as CustomEvent<{ type: string; winner?: number }>).detail;
+      if (d?.type) this.event(d.type, d);
+    });
+    window.addEventListener("zstreet:sound", (e) => {
+      const d = (e as CustomEvent<{ name: string; arg?: unknown }>).detail;
+      if (d?.name) this.event(d.name, d.arg);
+    });
+    if (import.meta.env?.DEV || location.search.includes("debug")) (window as unknown as Record<string, unknown>).__sound = this;
+  }
 
   async start() {
     if (!this.ctx) this.build();
     await this.ctx!.resume();
     this.on = true;
     this.fade(this.master, 0.9, 1.5);
+    this.apply(true);
   }
 
   stop() {
     if (!this.ctx) return;
     this.on = false;
     this.fade(this.master, 0, 0.6);
+    // let the machine rest once it is silent
+    const ctx = this.ctx;
+    setTimeout(() => {
+      if (!this.on && ctx.state === "running") void ctx.suspend();
+    }, 900);
   }
 
   setRain(on: boolean) {
     this.rainOn = on;
-    if (this.ctx) this.fade(this.rainGain, on ? 0.55 : 0, 1.2);
+    if (this.ctx) this.fade(this.rainGain, on ? 0.55 * this.rainIn : 0, 1.2);
+  }
+
+  /**
+   * Where the ear is. `key` is a place's key (its floor and floor name choose the soundscape) or
+   * "street" (then x/z/near/night choose the district layers). Cheap to call every frame: nothing
+   * changes unless the place, the floor or the floor's soundscape does.
+   */
+  setScene(key: string, floor = 0, opts: SceneOpts = {}) {
+    const moved = key !== this.place || floor !== this.floor;
+    this.place = key;
+    this.floor = floor;
+    if (opts.name !== undefined) this.placeName = opts.name;
+    if (key === "street") {
+      this.ear = { x: opts.x ?? this.ear.x, z: opts.z ?? this.ear.z, near: opts.near ?? this.ear.near, night: opts.night ?? this.ear.night };
+    }
+    if (!this.ctx || !this.on) return;
+    if (moved || this.preset !== this.presetId()) this.apply(false);
+    if (key === "street" && this.districts) {
+      const now = this.ctx.currentTime;
+      const dt = Math.min(1, now - this.lastEar);
+      this.lastEar = now;
+      this.districts.update(this.ear, dt);
+    }
+  }
+
+  /** A one-shot in the place you are in: "goal", "hit", "rise", "result", "block", "whistle"… */
+  event(name: string, arg?: unknown) {
+    if (!this.on || !this.ctx) return;
+    const t = this.ctx.currentTime + 0.05;
+    if (this.place === "street") this.districts?.event(name, arg);
+    else this.scene?.on[name]?.(t, arg);
+  }
+
+  /** What is playing, for tests: the scene, its layers, the street districts' weights and layers. */
+  get debug() {
+    let rms = 0;
+    if (this.analyser) {
+      const d = new Float32Array(this.analyser.fftSize);
+      this.analyser.getFloatTimeDomainData(d);
+      for (const v of d) rms += v * v;
+      rms = Math.sqrt(rms / d.length);
+    }
+    return {
+      on: this.on,
+      state: this.ctx?.state ?? "none",
+      place: this.place,
+      floor: this.floor,
+      floorName: this.placeName,
+      scene: this.preset,
+      layers: this.preset === "street" ? ["rain", "city-hum", "lofi-pad", "street-voices", "traffic"] : (this.scene?.layers ?? []),
+      events: Object.keys(this.scene?.on ?? {}),
+      districts: this.preset === "street" ? { ...(this.districts?.weights ?? {}) } : {},
+      districtLayers: this.preset === "street" ? (this.districts?.layers() ?? {}) : {},
+      rain: this.rainIn,
+      rms: Math.round(rms * 10000) / 10000,
+    };
+  }
+
+  private presetId() {
+    return this.place === "street" ? "street" : presetFor(this.place, this.floor, this.placeName);
+  }
+
+  /** Cross-fade to the soundscape of where the ear is now. */
+  private apply(instant: boolean) {
+    if (!this.ctx) return;
+    const id = this.presetId();
+    if (id === this.preset && !instant) return;
+    const changed = id !== this.preset;
+    this.preset = id;
+    const xf = instant ? 0.6 : 1.4;
+    if (changed || id === "street") {
+      this.scene?.close(xf);
+      this.scene = null;
+    }
+    const p = id === "street" ? null : PRESETS[id];
+    if (id === "street") {
+      this.fade(this.streetBus, 1, xf);
+      this.fade(this.musicGain, 0.32, xf);
+      this.rainIn = 1;
+    } else {
+      this.districts?.closeAll(xf);
+      this.fade(this.streetBus, 0, xf);
+      this.fade(this.musicGain, 0, xf);
+      this.rainIn = p?.rain ?? 0.1;
+      if (p && (changed || !this.scene)) {
+        const s = new Scene(this.ctx, this.bufs, this.master, id, p.room);
+        try {
+          p.build(s, { night: this.ear.night, floor: this.floor, name: this.placeName });
+        } catch (e) {
+          console.warn("sound: scene", id, e);
+        }
+        s.fade(LEVEL[id] ?? 1, xf);
+        this.scene = s;
+      }
+    }
+    // the rain through walls: quieter and duller indoors
+    const t = this.ctx.currentTime;
+    this.rainLP.frequency.setTargetAtTime(this.rainIn >= 1 ? 16000 : 400 + 3000 * this.rainIn, t, 0.4);
+    this.fade(this.rainGain, this.rainOn ? 0.55 * this.rainIn : 0, xf);
+  }
+
+  private get indoors() {
+    return this.place !== "street";
   }
 
   /** The two-note konbini door chime. */
   chime() {
-    if (!this.on || !this.ctx) return;
+    if (!this.on || !this.ctx || this.indoors) return;
     const t = this.ctx.currentTime;
     [1318.5, 1046.5].forEach((f, i) => this.bell(f, t + i * 0.22, 0.6, 0.07));
   }
 
   /** Air brakes and a low rumble as the bus stops. */
   busArrives() {
-    if (!this.on || !this.ctx) return;
+    if (!this.on || !this.ctx || this.indoors) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const n = ctx.createBufferSource();
@@ -65,6 +222,8 @@ export class Soundscape {
   /** A new block: a short departure melody, as Japanese stations play before the doors close. */
   blockMelody(big = false) {
     if (!this.on || !this.ctx) return;
+    // inside, each place marks a block its own way (the opening bell on the trading floor…)
+    if (this.indoors) return this.event("block", big);
     const t = this.ctx.currentTime + 0.05;
     const notes = big ? [784, 988, 1175, 1568, 1175, 1319, 1568, 1976] : [659.3, 784, 987.8, 880, 1046.5, 987.8];
     notes.forEach((f, i) => this.bell(f, t + i * 0.13, 0.55, 0.045));
@@ -72,7 +231,7 @@ export class Soundscape {
 
   /** An empty block: the bus drives through with nobody aboard, two low falling honks. */
   emptyHorn() {
-    if (!this.on || !this.ctx) return;
+    if (!this.on || !this.ctx || this.indoors) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.05;
     [
@@ -102,16 +261,19 @@ export class Soundscape {
     if (!this.on || !this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.35;
+    // through walls only the low roll gets in
+    const k = this.indoors ? 0.15 + this.rainIn * 0.85 : 1;
+    if (k < 0.2) return;
     const n = ctx.createBufferSource();
     n.buffer = this.noise(3.5, true);
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.setValueAtTime(1800, t);
+    lp.frequency.setValueAtTime(1800 * k, t);
     lp.frequency.exponentialRampToValueAtTime(120, t + 2.5);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.32, t + 0.04);
-    g.gain.exponentialRampToValueAtTime(0.12, t + 0.5);
+    g.gain.linearRampToValueAtTime(0.32 * k, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.12 * k, t + 0.5);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 3.4);
     n.connect(lp).connect(g).connect(this.sfxGain);
     n.start(t);
@@ -120,6 +282,10 @@ export class Soundscape {
   /** The crowd reacts: a short swell of voices (cheer when `up`, a groan otherwise). */
   crowd(up: boolean) {
     if (!this.on || !this.ctx) return;
+    // in the stadium: the whole bowl erupts; outside, the district hears it from afar
+    if (this.place === "stadium") return this.event("goal", up);
+    if (this.indoors) return;
+    this.districts?.event("goal", up);
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.1;
     const n = ctx.createBufferSource();
@@ -141,8 +307,22 @@ export class Soundscape {
   private build() {
     const ctx = new AudioContext();
     this.ctx = ctx;
+    this.bufs = makeBufs(ctx);
     this.master = ctx.createGain();
     this.master.gain.value = 0;
+    this.streetBus = ctx.createGain();
+    this.streetBus.gain.value = 1;
+    this.streetBus.connect(this.master);
+    this.analyser = ctx.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.master.connect(this.analyser);
+    this.districts = new Districts(ctx, this.bufs, this.streetBus);
+    // one clock for every scene's one-shots and music
+    this.ticker = setInterval(() => {
+      if (!this.on) return;
+      this.scene?.tick();
+      if (this.place === "street") this.districts?.tick();
+    }, 200);
     // a touch of space on everything
     const verb = ctx.createConvolver();
     verb.buffer = this.impulse(2.8);
@@ -152,11 +332,15 @@ export class Soundscape {
     verb.connect(wet).connect(this.master);
     this.rainGain = ctx.createGain();
     this.rainGain.gain.value = this.rainOn ? 0.55 : 0;
+    this.rainLP = ctx.createBiquadFilter();
+    this.rainLP.type = "lowpass";
+    this.rainLP.frequency.value = 16000;
+    this.rainGain.connect(this.rainLP).connect(this.master);
     this.musicGain = ctx.createGain();
     this.musicGain.gain.value = 0.32;
     this.sfxGain = ctx.createGain();
     this.sfxGain.gain.value = 0.8;
-    for (const g of [this.rainGain, this.musicGain, this.sfxGain]) g.connect(this.master);
+    for (const g of [this.musicGain, this.sfxGain]) g.connect(this.master);
     this.musicGain.connect(verb);
     this.sfxGain.connect(verb);
     this.rain();
@@ -194,7 +378,7 @@ export class Soundscape {
     }
     this.crowdGain = ctx.createGain();
     this.crowdGain.gain.value = 0;
-    v.connect(bp).connect(wobble).connect(this.crowdGain).connect(this.master);
+    v.connect(bp).connect(wobble).connect(this.crowdGain).connect(this.streetBus);
     v.start();
     // traffic: a low rumble with a little tyre hiss on top
     const t = ctx.createBufferSource();
@@ -205,7 +389,7 @@ export class Soundscape {
     lp.frequency.value = 420;
     this.trafficGain = ctx.createGain();
     this.trafficGain.gain.value = 0;
-    t.connect(lp).connect(this.trafficGain).connect(this.master);
+    t.connect(lp).connect(this.trafficGain).connect(this.streetBus);
     t.start();
   }
 
@@ -214,7 +398,7 @@ export class Soundscape {
    * signal (null when nobody is crossing or it is too far), panned left or right (-1..1).
    */
   ambience(crowd: number, traffic: number, crossing: { level: number; pan: number } | null) {
-    if (!this.ctx || !this.on || !this.crowdGain || !this.trafficGain) return;
+    if (!this.ctx || !this.on || !this.crowdGain || !this.trafficGain || this.indoors) return;
     const t = this.ctx.currentTime;
     this.crowdGain.gain.setTargetAtTime(crowd * 0.09, t, 0.6);
     this.trafficGain.gain.setTargetAtTime(traffic * 0.22, t, 0.4);
@@ -230,7 +414,7 @@ export class Soundscape {
    * chord. `level` 0..1 with the distance, `pan` −1..1, `long` holds it down.
    */
   horn(kind: string, level: number, pan: number, long = false) {
-    if (!this.on || !this.ctx || level < 0.03) return;
+    if (!this.on || !this.ctx || level < 0.03 || this.indoors) return;
     const ctx = this.ctx;
     const out = ctx.createStereoPanner();
     out.pan.value = Math.max(-1, Math.min(1, pan));
@@ -291,7 +475,7 @@ export class Soundscape {
 
   /** The tram's bell: two dings. */
   tramBell(level: number, pan: number) {
-    if (!this.on || !this.ctx || level < 0.03) return;
+    if (!this.on || !this.ctx || level < 0.03 || this.indoors) return;
     const t = this.ctx.currentTime + 0.02;
     this.bell(1568, t, 0.5, 0.05 * level);
     this.bell(1568, t + 0.28, 0.6, 0.05 * level);
@@ -300,7 +484,7 @@ export class Soundscape {
 
   /** An angry driver: a low "hmph!" and a mutter, through a voice-like filter. */
   grumble(level: number) {
-    if (!this.on || !this.ctx || level < 0.03) return;
+    if (!this.on || !this.ctx || level < 0.03 || this.indoors) return;
     const ctx = this.ctx;
     const t0 = ctx.currentTime + 0.02;
     for (let i = 0; i < 5; i++) {
@@ -374,7 +558,7 @@ export class Soundscape {
     layer("lowpass", 300, 0.7, 0.4);
     // drips from awnings and gutters
     setInterval(() => {
-      if (!this.on || !this.rainOn) return;
+      if (!this.on || !this.rainOn || this.rainIn < 0.5) return;
       const t = ctx.currentTime;
       for (let i = 0; i < 3; i++) {
         if (Math.random() > 0.5) continue;
@@ -404,7 +588,7 @@ export class Soundscape {
     f.frequency.value = 140;
     const g = ctx.createGain();
     g.gain.value = 0.25;
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.streetBus);
     src.start();
   }
 
@@ -439,6 +623,14 @@ export class Soundscape {
     let next = ctx.currentTime + 0.2;
     let k = 0;
     const schedule = () => {
+      // inside (or muted) the pad keeps time without making a sound
+      if (!this.on || this.indoors) {
+        while (next < ctx.currentTime + 4) {
+          next += bar * 2;
+          k++;
+        }
+        return;
+      }
       while (next < ctx.currentTime + 4) {
         const chord = chords[k % chords.length];
         const dur = bar * 2;
@@ -560,6 +752,9 @@ export class Soundscape {
 
   dispose() {
     clearInterval(this.timer);
+    clearInterval(this.ticker);
+    this.scene?.close(0.1);
+    this.districts?.closeAll(0.1);
     void this.ctx?.close();
   }
 }

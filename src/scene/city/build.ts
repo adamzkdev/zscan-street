@@ -1,6 +1,7 @@
 import { apartment, house, izakaya, office, pavilion, shophouse, warehouse, type Built } from "../voxel/buildings";
 import { bank, cardShop, construction, depot, factory, library, machiya, mempoolShop, shrine, zsaShop } from "../voxel/buildings2";
 import * as Props from "../voxel/props";
+import { landmark } from "../voxel/landmarks";
 import type { BuildingJob } from "./plan";
 
 /**
@@ -45,6 +46,8 @@ export function buildJob(j: BuildingJob): Built {
       return library(j.seed, o);
     case "pavilion":
       return pavilion(j.seed, o);
+    case "landmark":
+      return landmark(j.seed, o);
   }
 }
 

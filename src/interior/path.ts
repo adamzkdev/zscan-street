@@ -16,6 +16,8 @@ export class Router {
   private blocked: Uint8Array;
 
   constructor(rects: Rect[], radius = 0.32) {
+    // a floor with nothing on it (an open roof) still gets a small grid
+    if (!rects.length) rects = [[-1, -1, 1, 1]];
     const xs = rects.flatMap((r) => [r[0], r[2]]),
       zs = rects.flatMap((r) => [r[1], r[3]]);
     this.x0 = Math.min(...xs) - 1;
@@ -65,15 +67,56 @@ export class Router {
       key = (i: number, j: number) => j * W + i;
     const cost = new Float32Array(W * this.h).fill(Infinity);
     const prev = new Int32Array(W * this.h).fill(-1);
-    const open: [number, number, number][] = [[0, s[0], s[1]]];
+    // a binary heap of (estimate, cell); stale entries are skipped when popped
+    const heapF: number[] = [],
+      heapK: number[] = [];
+    const push = (f: number, k: number) => {
+      let n = heapF.length;
+      heapF.push(f);
+      heapK.push(k);
+      while (n > 0) {
+        const p = (n - 1) >> 1;
+        if (heapF[p] <= heapF[n]) break;
+        [heapF[p], heapF[n]] = [heapF[n], heapF[p]];
+        [heapK[p], heapK[n]] = [heapK[n], heapK[p]];
+        n = p;
+      }
+    };
+    const pop = () => {
+      const k = heapK[0];
+      const lf = heapF.pop()!,
+        lk = heapK.pop()!;
+      if (heapF.length) {
+        heapF[0] = lf;
+        heapK[0] = lk;
+        let n = 0;
+        for (;;) {
+          const l = n * 2 + 1,
+            r = l + 1;
+          let m = n;
+          if (l < heapF.length && heapF[l] < heapF[m]) m = l;
+          if (r < heapF.length && heapF[r] < heapF[m]) m = r;
+          if (m === n) break;
+          [heapF[m], heapF[n]] = [heapF[n], heapF[m]];
+          [heapK[m], heapK[n]] = [heapK[n], heapK[m]];
+          n = m;
+        }
+      }
+      return k;
+    };
+    const done = new Uint8Array(W * this.h);
     cost[key(...s)] = 0;
+    push(0, key(...s));
     const hstar = (i: number, j: number) => Math.hypot(i - g[0], j - g[1]);
     let found = false;
-    while (open.length) {
-      // a small binary heap would be faster; rooms are a few thousand cells, this is plenty
-      let best = 0;
-      for (let k = 1; k < open.length; k++) if (open[k][0] < open[best][0]) best = k;
-      const [, i, j] = open.splice(best, 1)[0];
+    // big places: give up after a while rather than search the whole floor (they walk straight)
+    let budget = 60000;
+    while (heapF.length && budget-- > 0) {
+      const cur = pop();
+      if (done[cur]) continue;
+      done[cur] = 1;
+      const i = cur % W,
+        j = (cur - i) / W;
       if (i === g[0] && j === g[1]) {
         found = true;
         break;
@@ -85,11 +128,11 @@ export class Router {
             b = j + dj;
           // no cutting corners between two blocked cells
           if (!this.free(a, b) || (di && dj && (!this.free(i + di, j) || !this.free(i, j + dj)))) continue;
-          const c = cost[key(i, j)] + (di && dj ? Math.SQRT2 : 1);
+          const c = cost[cur] + (di && dj ? Math.SQRT2 : 1);
           if (c < cost[key(a, b)]) {
             cost[key(a, b)] = c;
-            prev[key(a, b)] = key(i, j);
-            open.push([c + hstar(a, b), a, b]);
+            prev[key(a, b)] = cur;
+            push(c + hstar(a, b), key(a, b));
           }
         }
     }

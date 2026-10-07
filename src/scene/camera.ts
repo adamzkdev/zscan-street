@@ -14,7 +14,7 @@ const AZ = THREE.MathUtils.degToRad(34);
 const EL = THREE.MathUtils.degToRad(34);
 /** Far enough above the city that the supertalls (≈ 95 m) never cut through the view. */
 const DIST = 320;
-const VIEW = { live: 30, overview: 170, free: 30, district: 30, follow: 30, inspect: 30 };
+const VIEW = { live: 30, overview: 330, free: 30, district: 30, follow: 30, inspect: 30 };
 /** Live view opens on downtown: the MEMPOOL shop, the zebra and the bus stop. */
 const HOME = new THREE.Vector3(DISTRICTS[0].crossX + 2, 1, -0.5);
 /** Follow shots rotate on their own unless the viewer picks one. */
@@ -78,7 +78,7 @@ export class CameraRig {
     this.controls.target.copy(HOME);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.minZoom = 0.12;
+    this.controls.minZoom = 0.08;
     this.controls.maxZoom = 9;
     this.controls.screenSpacePanning = false;
     // a map, not a model viewer: drag to move around, right-drag to turn, wheel zooms where you point
@@ -153,7 +153,7 @@ export class CameraRig {
     this.limits();
     this.resize(window.innerWidth, window.innerHeight);
     this.setShot(null);
-    if (m !== "free") this.flyTo(m === "overview" ? new THREE.Vector3(0, 1, -4) : HOME, 1);
+    if (m !== "free") this.flyTo(m === "overview" ? new THREE.Vector3(0, 1, 24) : HOME, 1);
     this.ev.shot(this.shot, this.mode);
   }
 
@@ -312,7 +312,7 @@ export class CameraRig {
   /** Keep the view over the city. */
   private clampTarget() {
     const t = this.controls.target;
-    const cx = THREE.MathUtils.clamp(t.x, CITY.minX - 70, CITY.maxX + 30),
+    const cx = THREE.MathUtils.clamp(t.x, CITY.minX - 10, CITY.maxX + 10),
       cz = THREE.MathUtils.clamp(t.z, CITY.minZ + 4, CITY.maxZ - 2);
     if (cx !== t.x || cz !== t.z) {
       const d = new THREE.Vector3(cx - t.x, 0, cz - t.z);

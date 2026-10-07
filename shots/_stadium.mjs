@@ -1,0 +1,17 @@
+import puppeteer from "puppeteer-core";
+const theme = process.argv[2] ?? "day";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 300000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1500, height: 900 } });
+const p = await b.newPage();
+p.on("pageerror", (e) => console.log("ERR", e.message));
+await p.goto(`http://localhost:3007/?debug&theme=${theme}`);
+await p.waitForFunction(() => window.street, { timeout: 120000 });
+await new Promise((r) => setTimeout(r, 4000));
+await p.evaluate(() => { street.rig.setMode("free"); street.rig.flyTo(new street.rig.focus.constructor(-175, 1, -82), 0.8); });
+await new Promise((r) => setTimeout(r, 4000));
+await p.screenshot({ path: `shots/st-${theme}-0.png` });
+await p.evaluate(async () => { const { ZScan } = await import("/src/data/zscan.ts"); const lb = await ZScan.latestBlock(); const blk = await ZScan.block(lb.height); street.stadium.block(blk); });
+await new Promise((r) => setTimeout(r, 1500));
+await p.screenshot({ path: `shots/st-${theme}-1.png` });
+await new Promise((r) => setTimeout(r, 5000));
+await p.screenshot({ path: `shots/st-${theme}-2.png` });
+await b.close();

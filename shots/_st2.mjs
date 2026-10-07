@@ -1,0 +1,16 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 300000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1500, height: 900 } });
+const p = await b.newPage();
+p.on("pageerror", (e) => console.log("ERR", e.message));
+await p.goto(`http://localhost:3007/?debug&capture&theme=${process.argv[2] ?? "night"}`);
+await p.waitForFunction(() => window.capture && window.street, { timeout: 120000 });
+for (let i = 0; i < 60; i++) await p.evaluate(() => capture.step(1 / 30));
+console.log(await p.evaluate(() => { const l = street.city.landmarks.get("stadium"); return JSON.stringify({ A: l.points.screenA, B: l.points.screenB, pmin: l.points.pitchMin, pmax: l.points.pitchMax, players: street.stadium.players.length, seats: street.stadium.seats.length }); }));
+await p.evaluate(async () => { const { ZScan } = await import("/src/data/zscan.ts"); const lb = await ZScan.latestBlock(); const blk = await ZScan.block(lb.height); street.stadium.block(blk); });
+for (let i = 0; i < 20; i++) await p.evaluate(() => capture.step(1 / 30));
+await p.evaluate(() => { const l = street.city.landmarks.get("stadium"); const A = l.points.screenA; capture.shot({ pos: [A.x + 30, A.y + 6, A.z + 14], look: [A.x, A.y, A.z], fov: 45 }); capture.step(1 / 30); });
+await p.screenshot({ path: "shots/st2-screen.png" });
+for (let i = 0; i < 90; i++) await p.evaluate(() => capture.step(1 / 30));
+await p.evaluate(() => { const l = street.city.landmarks.get("stadium"); const a = l.points.pitchMin, c = l.points.pitchMax; const x = (a.x + c.x) / 2, z = (a.z + c.z) / 2; capture.shot({ pos: [x + 5, 38, z + 30], look: [x, 0, z], fov: 50 }); capture.step(1 / 30); });
+await p.screenshot({ path: "shots/st2-pitch.png" });
+await b.close();

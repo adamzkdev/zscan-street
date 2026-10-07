@@ -36,6 +36,73 @@ export class Life {
     void this.park(n(4), n(5));
     void this.shotengai(n(7));
     void this.conversations(n(5));
+    void this.landmarks(budget);
+  }
+
+  // ---- the landmarks: cooks and diners at the hawker centre, the museum's queue, fans, the sky park
+
+  private async landmarks(budget: number) {
+    const n = (k: number) => Math.max(1, Math.round(k * budget));
+    const lm = this.city.landmarks;
+    const pts = (kind: string, re: RegExp) => Object.entries(lm.get(kind)?.points ?? {}).filter(([k]) => re.test(k)).map(([, p]) => p);
+    // the hawker centre: a cook behind most counters, diners on the stools
+    const stalls = pts("foodhall", /^stall\d+$/);
+    for (const p of stalls.sort(() => Math.random() - 0.5).slice(0, n(10))) {
+      const s = await this.person("Hawker cook");
+      s.root.position.set(p.x, CURB, p.z);
+      s.faceDir = v(-(p.x - (lm.get("foodhall")!.door.x)), 0, -(p.z - lm.get("foodhall")!.door.z)).setY(0).normalize();
+      this.chatter(s, ["note", "zec", "!", "heart"], 9000);
+    }
+    const seats = pts("foodhall", /^seat\d+$/);
+    for (const p of seats.sort(() => Math.random() - 0.5).slice(0, n(18))) {
+      const s = await this.person("Diner", pick([null, "can", "coffee", "phone"] as (LifeItem | null)[]));
+      s.root.position.set(p.x, CURB, p.z);
+      s.perch(Math.max(0.3, p.y - CURB));
+      s.faceDir = v(rand(-1, 1), 0, rand(-1, 1)).normalize();
+      this.chatter(s, ["heart", "note", "zzz", "star", "dots"], 11000);
+    }
+    // the museum: a queue at the ticket kiosk, visitors on the steps
+    const mu = lm.get("museum");
+    if (mu) {
+      const kiosk = mu.points.kiosk ?? mu.door;
+      const out = v(0, 0, 1).applyAxisAngle(v(0, 1, 0), mu.yaw);
+      const side = v(out.z, 0, -out.x);
+      for (let i = 0; i < n(6); i++) {
+        const s = await this.person("Museum visitor", pick([null, "book", "phone", "bag"] as (LifeItem | null)[]));
+        s.root.position.copy(kiosk).addScaledVector(out, 1.2).addScaledVector(side, 0.9 * (i + 1)).setY(CURB);
+        s.faceDir = side.clone().negate();
+        this.chatter(s, ["dots", "?", "star"], 15000);
+      }
+    }
+    // match day: fans in the plaza, wandering between the gate and the coin
+    const st = lm.get("stadium");
+    if (st?.points.gate && st.points.statue) {
+      const a = st.points.gate.clone().setY(CURB),
+        b = st.points.statue.clone().setY(CURB);
+      for (let i = 0; i < n(8); i++) {
+        const s = await this.person("Football fan", pick([null, "can", "bag", "phone"] as (LifeItem | null)[]));
+        s.root.position.lerpVectors(a, b, Math.random()).add(v(rand(-3, 3), 0, rand(-2, 2)));
+        this.chatter(s, ["zec", "note", "star", "!"], 8000);
+        void (async () => {
+          while (this.director.snarks.has(s)) {
+            await sleep(rand(4000, 12000));
+            const to = (Math.random() < 0.5 ? a : b).clone().add(v(rand(-4, 4), 0, rand(-2.5, 2.5)));
+            await s.walk([to], 1.2);
+          }
+        })();
+      }
+    }
+    // the sky park: a few guests by the infinity pool
+    const ma = lm.get("marina");
+    if (ma?.points.deck0 && ma.points.deck1) {
+      for (let i = 0; i < n(4); i++) {
+        const s = await this.person("Hotel guest", pick([null, "coffee", "phone", "can"] as (LifeItem | null)[]));
+        s.noClip = true;
+        s.root.position.lerpVectors(ma.points.deck0, ma.points.deck1, 0.15 + Math.random() * 0.7);
+        s.faceDir = v(0, 0, 1).applyAxisAngle(v(0, 1, 0), ma.yaw);
+        this.chatter(s, ["heart", "star", "note"], 12000);
+      }
+    }
   }
 
   // ---- conversations -------------------------------------------------------------------------------
@@ -89,7 +156,7 @@ export class Life {
           await sleep(3400);
           second.say(r, 3);
           if (Math.random() < 0.4) first.emote(pick(["heart", "!", "note", "zec"] as Emote[]), 2);
-          await sleep(rand(6000, 14000));
+          await sleep(rand(25000, 50000));
         }
       })();
     }

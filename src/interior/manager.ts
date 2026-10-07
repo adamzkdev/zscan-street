@@ -60,6 +60,8 @@ export class InteriorManager {
     const f = i.floors[this.floor];
     i.setFloor?.(this.floor);
     this.walk.place(f.spawn, f.yaw, f.y);
+    const n = this.floor;
+    this.walk.ground = i.groundAt ? (x, z) => i.groundAt!(n, x, z) : undefined;
     this.walk.colliders = i.colliders(this.floor);
     // every place is entered from the street side (+z) on its ground floor
     this.walk.door = this.floor === 0 ? doorOf(f, this.walk.colliders) : null;

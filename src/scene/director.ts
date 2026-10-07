@@ -4,7 +4,7 @@ import { ZScan } from "../data/zscan";
 import { BlockBus } from "./bus";
 import { Car, Scooter, Truck, type CarKind } from "./car";
 import { CITY, DISTRICTS, type City, type DistrictKey, type ShopSite } from "./city";
-import { CORE, GRID, nz, TUNNEL } from "./city/plan";
+import { CORE, nz, ST, TUNNEL } from "./city/plan";
 import type { DistrictPlan } from "./city/plan";
 import { KIND_COLOR, Snark, loadArt } from "./snark";
 import { Traffic, Vehicle } from "./traffic";
@@ -576,6 +576,8 @@ export class Director {
     const load = this.pending[source].splice(0);
     const shop = [...this.shops.values()][0];
     const dock = this.city.docks.find((k) => k.kind === source);
+    // the docks are out in the Proof Factory district: the long run through the city
+    if (dock?.at && dock.out && dock.path?.length) return this.districtRun(source, load, shop, { at: dock.at, out: dock.out, path: dock.path });
     const truck = new Truck(source);
     this.trucks.add(truck);
     const front = CITY.frontNorth;
@@ -641,10 +643,160 @@ export class Director {
     await veh.stopAt(cx + CITY.crossHalf + truck.length / 2 + 0.5);
     this.traffic.remove(veh);
     // up to the ring street round the heart, then west along it and off the board
-    const ring = GRID.zs[1] + 1.6;
+    const ring = ST.north + 1.6;
     await this.drivePath(truck, [v(cx + 1.6, CITY.laneWest, 0), v(cx + 1.1, CITY.laneWest - 3, 0), v(cx + 1.1, ring + 2, 0), v(cx - 3, ring, 0), v(CITY.minX - 10, ring, 0)], 7);
     this.scene.remove(truck.group);
     this.trucks.delete(truck);
+  }
+
+  /** A truck backed onto each district dock, waiting for its next load. */
+  private parked: Record<"proof" | "depot", Truck | null> = { proof: null, depot: null };
+  /** A truck is standing at (or loading at) the dock. */
+  private atDock = { proof: false, depot: false };
+
+  /**
+   * One delivery from the Proof Factory district (shielded parcels from the PROOF FACTORY's dock,
+   * transparent ones from the DEPOT's): factory hands load the truck at the dock, it crosses the
+   * court and leaves by the gate on the west boulevard, drives north over the river bridge, east
+   * along the street behind the heart and down the cross street onto the avenue, pulls up at the
+   * MEMPOOL shop where the driver carries every parcel in, then drives back round to the district
+   * and reverses onto its dock again.
+   */
+  private async districtRun(source: "proof" | "depot", load: Tx[], shop: Shop, dock: { at: THREE.Vector3; out: THREE.Vector3; path: THREE.Vector3[] }) {
+    const { at, out, path } = dock;
+    const side = new THREE.Vector3(-out.z, 0, out.x);
+    const yaw = Math.atan2(-out.z, out.x);
+    let truck = this.parked[source];
+    this.parked[source] = null;
+    if (!truck) {
+      truck = new Truck(source);
+      this.trucks.add(truck);
+      truck.group.position.copy(at).addScaledVector(out, truck.length / 2 + 0.15).setY(0);
+      truck.group.rotation.y = yaw;
+      this.scene.add(truck.group);
+    }
+    this.atDock[source] = true;
+    truck.open();
+    const worker = await this.porter(9000 + (this.porterSeq++ % 900));
+    if (worker) {
+      const bay = at.clone().addScaledVector(out, -1.1).addScaledVector(side, 0.4).setY(CITY.curb);
+      const edge = at.clone().addScaledVector(out, 0.25).addScaledVector(side, 0.7).setY(CITY.curb);
+      worker.root.position.copy(bay);
+      for (const tx of load) {
+        worker.setTxs([tx]);
+        worker.showParcels(true);
+        await worker.walk([edge], 2.4);
+        worker.showParcels(false);
+        await this.flyCrate(worker.root.position.clone().setY(1.0), [truck.tail()], tx);
+        await worker.walk([bay], 2.4);
+      }
+      this.remove(worker);
+    }
+    truck.close();
+    await sleep(400);
+    // across the court and out of the gate
+    await this.drivePath(truck, path, 5);
+    this.atDock[source] = false;
+    const gate = path[path.length - 1];
+    const [cw, ce] = CITY.cross;
+    const north = ST.north;
+    const up = ST.blvdW + 2.5,
+      down = ST.blvdW - 2.5;
+    // left onto the boulevard, north over the bridge, right along the street behind the heart
+    await this.drivePath(truck, [v(gate.x + 3, gate.z, 0), v(up, gate.z - 4, 0), v(up, north + 12, 0)], 12);
+    await this.drivePath(truck, [v(up, north + 5, 0), v(up + 5, north + 1.6, 0), v(ce - 7, north + 1.6, 0)], 12);
+    // right down the cross street, right again into the kerb lane
+    const sx = ce - 1.1;
+    await this.drivePath(truck, [v(sx - 0.6, north + 2.6, 0), v(sx, north + 7, 0), v(sx, CITY.north.z0 - 1, 0)], 8);
+    const mergeX = sx - 4;
+    for (let i = 0; i < 80 && !this.traffic.clearAt("west", mergeX - 1, truck.length + 2); i++) await sleep(300);
+    await this.drivePath(truck, [v(sx - 0.4, CITY.laneWest - 0.8, 0), v(mergeX, CITY.laneWest, 0)], 4.5);
+    const veh = this.traffic.add(new Vehicle(truck, "west", mergeX, 9));
+    // (never wait forever on the avenue: past the time, the driver walks from where the truck is)
+    await withTimeout(veh.stopAt(Math.min(shop.site.door.x + 0.9 + truck.length / 2, DISTRICTS[0].crossX - 1.3 - 0.8 - truck.length / 2)), 90_000);
+    await this.unload(truck, load, shop, source);
+    this.enRoute[source] = false;
+    if (this.pending[source].length) void this.dispatch(source);
+    // on to the west junction, up the cross street, west behind the heart, south down the boulevard
+    const turnX = cw + CITY.crossHalf + truck.length / 2 + 0.5;
+    let left = false;
+    await withTimeout(veh.stopAt(turnX).then(() => (left = true)), 60_000);
+    this.traffic.remove(veh);
+    if (!left) await this.drivePath(truck, [v(turnX, CITY.laneWest, 0)], 6);
+    const ux = cw + 1.1;
+    await this.drivePath(truck, [v(cw + 1.6, CITY.laneWest, 0), v(ux, CITY.laneWest - 3, 0), v(ux, north + 5, 0)], 8);
+    await this.drivePath(truck, [v(ux - 2, north - 1.6, 0), v(down + 6, north - 1.6, 0)], 12);
+    await this.drivePath(truck, [v(down + 1, north - 0.6, 0), v(down, north + 5, 0), v(down, gate.z - 5, 0)], 12);
+    // in through the gate, along the court past the dock, and back onto it
+    const back = [...path].reverse().slice(1, -1);
+    await this.drivePath(truck, [v(gate.x - 1, gate.z - 1.5, 0), gate.clone().setY(0), ...back], 5);
+    if (this.atDock[source] || this.parked[source]) {
+      // the dock is taken: round the back of the sheds
+      this.scene.remove(truck.group);
+      this.trucks.delete(truck);
+      return;
+    }
+    const lane = path[1].clone().setY(0),
+      dir = path[1].clone().sub(path[2]).setY(0).normalize();
+    const along = lane.clone().addScaledVector(dir, at.clone().sub(lane).dot(dir));
+    await this.drivePath(truck, [along.clone().addScaledVector(dir, 3)], 3);
+    await this.reverseTo(truck, at.clone().addScaledVector(out, truck.length / 2 + 0.15).setY(0), yaw, 4.5);
+    if (this.atDock[source] || this.parked[source]) {
+      this.scene.remove(truck.group);
+      this.trucks.delete(truck);
+    } else this.parked[source] = truck;
+  }
+
+  /** Back a vehicle onto a spot, swinging round to `yaw` on the way. */
+  private reverseTo(mover: { group: THREE.Object3D; spin(d: number): void }, to: THREE.Vector3, yaw: number, secs: number) {
+    const from = mover.group.position.clone();
+    const y0 = mover.group.rotation.y;
+    let dy = yaw - y0;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    return new Promise<void>((resolve) => {
+      const t0 = performance.now();
+      const step = () => {
+        const k = Math.min(1, (performance.now() - t0) / (secs * 1000));
+        const e = k * k * (3 - 2 * k);
+        const p = from.clone().lerp(to, e);
+        mover.spin(-p.distanceTo(mover.group.position));
+        mover.group.position.copy(p);
+        mover.group.rotation.y = y0 + dy * Math.min(1, e * 1.4);
+        if (k >= 1) return resolve();
+        requestAnimationFrame(step);
+      };
+      step();
+    });
+  }
+
+  /** The driver climbs down and carries every parcel into the MEMPOOL shop. */
+  private async unload(truck: Truck, load: Tx[], shop: Shop, source: "proof" | "depot") {
+    const driver = await this.porter(8000 + (this.porterSeq++ % 900));
+    if (!driver) {
+      for (const tx of load) this.addCrate(shop, tx);
+      return;
+    }
+    driver.role = source === "proof" ? "Proof Factory driver" : "Depot driver";
+    driver.root.position.copy(truck.cabSide().setY(CITY.curb));
+    truck.open();
+    for (const tx of load) {
+      if (!this.mempool.has(tx.txid) && !tx.height) continue;
+      await driver.walk([truck.behind().setY(CITY.curb)], 1.9);
+      driver.setTxs([tx]);
+      driver.showParcels(true);
+      this.visit({ kind: "delivery", id: driver.id, tx, role: driver.role ?? "Driver" });
+      await driver.walk([shop.site.door], 1.7);
+      this.ev.door?.();
+      await driver.walk([shop.site.inside, shop.site.counter], 1.7);
+      driver.showParcels(false);
+      this.addCrate(shop, tx);
+      await sleep(250);
+      await driver.walk([shop.site.inside, shop.site.door], 1.9);
+    }
+    truck.close();
+    driver.setTxs([]);
+    await driver.walk([truck.cabSide().setY(CITY.curb)], 1.9);
+    this.remove(driver);
   }
 
   /** A zkSNARK who works for the factories (not a carrier). */

@@ -169,10 +169,11 @@ export class Nu7 {
   /** The NSM sign on the Proof Factory's roof (lit once NU7 is live). */
   private lightSign() {
     if (this.sign || !this.city.factory) return;
-    const hall = this.city.factory.hall;
+    const roof = this.city.factory.roof;
+    const hall = roof ?? this.city.factory.hall;
     const occ = this.city.occluders.find((o) => o.box.containsPoint(new THREE.Vector3(hall.x, CURB + 1, hall.z)));
-    const top = occ ? occ.box.max.y : CURB + 10;
-    const front = occ ? occ.box.max.z : hall.z + 4;
+    const top = roof ? roof.y : occ ? occ.box.max.y : CURB + 10;
+    const front = roof ? roof.z : occ ? occ.box.max.z : hall.z + 4;
     const c = document.createElement("canvas");
     c.width = 1024;
     c.height = 256;

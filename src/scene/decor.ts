@@ -83,12 +83,12 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
 
 // ---- ad screens -----------------------------------------------------------------------------------
 
-type Ad = (ctx: CanvasRenderingContext2D, w: number, h: number, t: number, live: LiveData) => void;
+export type Ad = (ctx: CanvasRenderingContext2D, w: number, h: number, t: number, live: LiveData) => void;
 
 const FONT = '"Hiragino Sans", "Noto Sans JP", Inter, sans-serif';
 const MONO = '"JetBrains Mono", Menlo, monospace';
 
-function zLogo(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, color: string) {
+export function zLogo(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, color: string) {
   ctx.save();
   ctx.strokeStyle = color;
   ctx.lineWidth = s * 0.12;
@@ -136,7 +136,7 @@ function sparkline(ctx: CanvasRenderingContext2D, pts: [number, number][], x: nu
 }
 
 /** Live market boards: price with its 24 h move, market cap, supply. */
-const MARKET_ADS: Ad[] = [
+export const MARKET_ADS: Ad[] = [
   // ZEC / USD, the move over 24 h, two weeks of closes
   (ctx, w, h, t, live) => {
     const p = live.market?.price;
@@ -286,7 +286,7 @@ const NU7_AD: Ad = (ctx, w, h, t, live) => {
   ctx.fillRect(0, h - h * 0.03, w * ((t * 0.25) % 1), h * 0.03);
 };
 
-const ADS: Ad[] = [
+export const ADS: Ad[] = [
   // SHIELD EVERYTHING, gold on black, logo pulsing
   (ctx, w, h, t) => {
     ctx.fillStyle = "#07060c";
@@ -411,6 +411,41 @@ const ADS: Ad[] = [
   },
 ];
 
+/** The ZEC Reserve's stock ticker: price, move, cap, supply, shielded share, the last block, scrolling. */
+export const TICKER: Ad = (ctx, w, h, t, live) => {
+  ctx.fillStyle = "#050507";
+  ctx.fillRect(0, 0, w, h);
+  const m = live.market;
+  const p = m?.price;
+  const items: [string, string][] = [
+    ["ZEC", p ? usd(p.usd) : "—"],
+    [p && p.usd_24h_change >= 0 ? "▲" : "▼", p ? `${Math.abs(p.usd_24h_change).toFixed(2)}%` : "—"],
+    ["CAP", p ? `$${(p.market_cap_usd / 1e9).toFixed(2)}B` : "—"],
+    ["SUPPLY", m?.supply ? `${(m.supply.supply / 1e14).toFixed(3)}M` : "—"],
+    ["SHIELDED", m?.pools ? `${(m.pools.shielded_ratio * 100).toFixed(1)}%` : "—"],
+    ["BLOCK", live.height ? `#${live.height.toLocaleString("en-US")}` : "—"],
+    ["MEMPOOL", `${live.mempool} TX`],
+  ];
+  ctx.font = `700 ${h * 0.62}px ${MONO}`;
+  ctx.textBaseline = "middle";
+  const parts = items.map(([k, v]) => ({ k, v, w: ctx.measureText(`${k} ${v}`).width + h * 1.4 }));
+  const total = parts.reduce((a, q) => a + q.w, 0);
+  let x = -((t * h * 2.2) % total);
+  while (x < w) {
+    for (const q of parts) {
+      if (x > w) break;
+      if (x + q.w > 0) {
+        ctx.fillStyle = q.k === "▲" ? "#2fbf9c" : q.k === "▼" ? "#f06b76" : "#f4b728";
+        ctx.fillText(q.k, x, h / 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(q.v, x + ctx.measureText(`${q.k} `).width, h / 2);
+      }
+      x += q.w;
+    }
+  }
+  ctx.textBaseline = "alphabetic";
+};
+
 /** LED screens on the tall buildings, a giant one on the tower, flicker and scan lines on all. */
 function ads(city: City, ticks: Tick[], live: LiveData) {
   const screens: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; ads: Ad[]; at: number; w: number; h: number }[] = [];
@@ -472,6 +507,22 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
   make(yardBoard, 6, 2.6, new THREE.Vector3(-0.08, 0, 0), -Math.PI / 2, [ADS[2], ADS[6], ADS[1]]);
   yardBoard.position.set(49.6, CURB + 9, 18);
   city.group.add(yardBoard);
+
+  // the landmarks' screens: the ZK Mall's two giant LED walls, the ZEC Reserve's stock ticker
+  const lm = city.landmarks;
+  const front = (yaw: number, d: number) => new THREE.Vector3(0, 0, d).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const mall = lm.get("mall");
+  if (mall)
+    for (const k of ["screenA", "screenB"]) {
+      const p = mall.points[k];
+      if (p) make(city.group, (56 * 2) / 6, (49 * 2) / 6, p.clone().add(front(mall.yaw, 0.14)), mall.yaw, k === "screenA" ? [MARKET_ADS[0], ADS[0], ADS[3], MARKET_ADS[1]] : [ADS[2], MARKET_ADS[2], ADS[5], ADS[1]]);
+    }
+  const reserve = lm.get("reserve");
+  if (reserve?.points.tickerA && reserve.points.tickerB) {
+    const a = reserve.points.tickerA,
+      b = reserve.points.tickerB;
+    make(city.group, a.distanceTo(b), (8 * 2) / 6, a.clone().lerp(b, 0.5).add(front(reserve.yaw, 0.1)), reserve.yaw, [TICKER]);
+  }
 
   let last = 0;
   let now = 0;
@@ -668,10 +719,12 @@ function neonTrim(city: City, ticks: Tick[]) {
  * material).
  */
 function lightning(scene: THREE.Scene, city: City, ticks: Tick[]) {
-  const hall = city.factory?.hall;
+  // onto the roof (the factory district has its own roof point: its box holds the cranes too)
+  const roof = city.factory?.roof;
+  const hall = roof ?? city.factory?.hall;
   if (!hall) return () => {};
   const occ = city.occluders.find((o) => o.box.containsPoint(new THREE.Vector3(hall.x, CURB + 1, hall.z)));
-  const top = occ ? occ.box.max.y : CURB + 10;
+  const top = roof ? roof.y : occ ? occ.box.max.y : CURB + 10;
   const mat = new THREE.LineBasicMaterial({ color: new THREE.Color(2.2, 2.6, 3.2), toneMapped: false, transparent: true });
   const bolt = new THREE.LineSegments(new THREE.BufferGeometry(), mat);
   bolt.frustumCulled = false;

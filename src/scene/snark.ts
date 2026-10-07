@@ -3,7 +3,7 @@ import type { NftItem, Tx, TxKind } from "../data/types";
 import { ZScan } from "../data/zscan";
 import { blobTexture } from "./textures";
 import { sayAt } from "./speech";
-import { GRID, bubbleSprite, handSprite, itemSprite, legSprite, policeCapSprite, umbrellaSprite, type Emote, type ItemKind } from "./sprites";
+import { GRID, POSE, bubbleSprite, legSprite, policeCapSprite, poseSprites, type Emote, type ItemKind, type PoseSpec } from "./sprites";
 
 /** Parcel colours per transaction kind: restrained, readable at a glance. */
 export const KIND_COLOR: Record<TxKind, string> = {
@@ -20,6 +20,8 @@ interface Art {
   texture: THREE.Texture;
   /** Clothing colour at the bottom of the bust (sRGB hex): trousers a shade darker, sleeves as is. */
   cloth: string;
+  /** The face's colour (sRGB hex), for the hands. */
+  skin: string;
 }
 
 const artCache = new Map<number, Promise<Art>>();
@@ -49,7 +51,8 @@ export function loadArt(id: number): Promise<Art> {
       texture.magFilter = THREE.NearestFilter;
       texture.minFilter = THREE.LinearMipmapLinearFilter;
       texture.generateMipmaps = true;
-      return { texture, cloth: clothOf(img) };
+      const cloth = clothOf(img);
+      return { texture, cloth, skin: skinOf(img, cloth) };
     })();
     artCache.set(id, p);
     p.catch(() => artCache.delete(id));
@@ -77,6 +80,18 @@ function keyOutBackground(img: ImageData) {
     if (y > 0) stack.push(p - w);
     if (y < h - 1) stack.push(p + w);
   }
+}
+
+/** The lower cheek, where every portrait shows its face; void faces fall back on the sleeve. */
+function skinOf(img: ImageData, cloth: string) {
+  const { width: w, data } = img;
+  const cell = w / GRID;
+  const i = (Math.floor(17.5 * cell) * w + Math.floor(17.5 * cell)) * 4;
+  if (data[i + 3] === 0) return cloth;
+  const c = new THREE.Color().setRGB(data[i] / 255, data[i + 1] / 255, data[i + 2] / 255, THREE.SRGBColorSpace);
+  const hsl = c.getHSL({ h: 0, s: 0, l: 0 });
+  if (hsl.l < 0.07) return `#${new THREE.Color(cloth).multiplyScalar(1.25).getHexString()}`;
+  return `#${[0, 1, 2].map((k) => data[i + k].toString(16).padStart(2, "0")).join("")}`;
 }
 
 function clothOf(img: ImageData) {
@@ -115,6 +130,8 @@ function pixelPlane(t: { texture: THREE.Texture; w: number; h: number }, z: numb
   return m;
 }
 const snap = (v: number) => Math.round(v / PX) * PX;
+/** The arms' plane, laid on the portrait's grid (POSE in portrait cells; row 32 is the ground). */
+const POSE_GEO = new THREE.PlaneGeometry(POSE.w * PX, POSE.h * PX).translate((POSE.x0 + POSE.w / 2 - GRID / 2) * PX, (32 - POSE.y0 - POSE.h / 2) * PX, 0);
 const tmpQ = new THREE.Quaternion();
 
 /** Silhouette glow drawn behind the selected sprite: the art's alpha, filled with one colour. */
@@ -153,9 +170,17 @@ export class Snark {
   /** Slot in the waiting crowd. */
   slot = -1;
   private legs: THREE.Mesh[] = [];
-  /** What it carries, held in both hands in front of the bust. */
+  /** Arms, fists and what they hold: a layer behind the bust and one over it (sprites.ts POSE). */
   private hold = new THREE.Group();
+  private armBack: THREE.Mesh;
+  private armFront: THREE.Mesh;
+  private poseKey = "";
+  private itemsShown = true;
+  private umbrellaColor: string | null = null;
+  private swing: -1 | 0 | 1 = 0;
+  private strapOn = false;
   private cloth: string;
+  private skin: string;
   /** Overrides the carried item (briefcases for big visible amounts). */
   carry: ItemKind | null = null;
   /** The car a VIP travels in. */
@@ -205,17 +230,25 @@ export class Snark {
     this.glow.scale.setScalar(1.09);
     this.glow.visible = false;
     this.cloth = art.cloth;
+    this.skin = art.skin ?? art.cloth;
     const trouser = new THREE.Color(art.cloth).multiplyScalar(0.62);
     const leg = legSprite(`#${trouser.getHexString()}`);
     for (const dx of [BUST_X - 3 * PX, BUST_X + 3 * PX]) {
       const l = pixelPlane(leg, -0.01);
-      l.position.set(snap(dx), 4 * PX, -0.01);
+      // on the portrait's own pixel columns (10–14 and 16–20)
+      l.position.set(dx, 4 * PX, -0.01);
       l.userData.x = l.position.x;
       this.legs.push(l);
       this.visual.add(l);
     }
-    this.hold.position.set(snap(BUST_X), LEG_H + 4 * PX, 0.03);
+    this.armBack = new THREE.Mesh(POSE_GEO, new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.5 }));
+    this.armFront = new THREE.Mesh(POSE_GEO, new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.5 }));
+    // the far arm behind the legs and the bust, the near one over everything
+    this.armBack.position.z = -0.015;
+    this.armFront.position.z = 0.035;
+    this.hold.add(this.armBack, this.armFront);
     this.visual.add(this.glow, this.body, this.hold);
+    this.refreshPose();
     this.root.add(this.visual);
 
     this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.55), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
@@ -252,27 +285,31 @@ export class Snark {
     this.redrawHold();
   }
 
-  /** Item in both hands; a second one peeks out behind when it carries more than one. */
+  /** Redraw what the hands hold (after `carry` or the transactions change). */
   redrawHold() {
-    this.hold.clear();
-    if (!this.txs.length && !this.carry) return;
-    const kinds: ItemKind[] = this.carry ? [this.carry] : this.txs.slice(0, 2).map((t) => t.kind);
-    kinds.forEach((k, i) => {
-      const it = pixelPlane(itemSprite(k), -i * 0.005);
-      it.position.set(i ? -2 * PX : 0, i ? 4 * PX : 0, -i * 0.01);
-      this.hold.add(it);
-    });
-    const hand = handSprite(this.cloth);
-    for (const side of [-1, 1]) {
-      const h = pixelPlane(hand, 0.01);
-      h.position.set(side * 6 * PX, -1 * PX, 0.01);
-      this.hold.add(h);
-    }
+    this.refreshPose();
   }
 
-  /** Items stay hidden until they are picked up at the shop. */
+  /** Items stay hidden until they are picked up at the shop (the hands swing free meanwhile). */
   showParcels(on: boolean) {
-    this.hold.visible = on;
+    this.itemsShown = on;
+    this.refreshPose();
+  }
+
+  /** Arms and hands for what it holds now: the parcel against the belly, a cup at the chest, the umbrella over the head… */
+  private refreshPose() {
+    const items: ItemKind[] = !this.itemsShown ? [] : this.carry ? [this.carry] : this.txs.slice(0, 2).map((t) => t.kind);
+    const strap = !!this.bus && this.state === "riding" && !this.seated;
+    this.strapOn = strap;
+    const spec: PoseSpec = { sleeve: this.cloth, skin: this.skin, items, umbrella: this.umbrellaColor, swing: this.swing, strap };
+    const key = `${items.join("+")}|${spec.umbrella}|${spec.swing}|${strap}`;
+    if (key === this.poseKey) return;
+    this.poseKey = key;
+    const s = poseSprites(spec);
+    (this.armFront.material as THREE.MeshBasicMaterial).map = s.front.texture;
+    (this.armBack.material as THREE.MeshBasicMaterial).map = s.back.texture;
+    (this.armFront.material as THREE.MeshBasicMaterial).needsUpdate = true;
+    (this.armBack.material as THREE.MeshBasicMaterial).needsUpdate = true;
   }
 
   setSelected(on: boolean) {
@@ -292,17 +329,10 @@ export class Snark {
     return this.visual;
   }
 
-  private umbrella: THREE.Mesh | null = null;
-  /** Open an umbrella over the head (rain), or fold it away. */
+  /** Open an umbrella over the head (rain), or fold it away: the near hand grips its shaft. */
   setUmbrella(color: string | null) {
-    if (this.umbrella) this.visual.remove(this.umbrella);
-    this.umbrella = null;
-    if (!color) return;
-    const u = pixelPlane(umbrellaSprite(color), 0.04);
-    // the stick ends in the hands, the canopy clears the head
-    u.position.set(snap(BUST_X + PX), LEG_H + BODY + 2 * PX, 0.04);
-    this.umbrella = u;
-    this.visual.add(u);
+    this.umbrellaColor = color;
+    this.refreshPose();
   }
 
   /** A police cap on the head. */
@@ -349,6 +379,7 @@ export class Snark {
   /** Sit down on a bus seat (legs tucked away) or stand in the aisle holding a strap. */
   sit(seated: boolean) {
     this.seated = seated;
+    this.refreshPose();
     this.legs.forEach((l) => (l.visible = !seated));
     this.visual.position.y = seated ? -LEG_H * 0.75 : 0;
   }
@@ -449,8 +480,14 @@ export class Snark {
     }
     this.glow.position.y = this.body.position.y;
     this.glow.rotation.z = this.body.rotation.z;
-    this.hold.position.y = LEG_H + 4 * PX + (this.body.position.y - base);
-    this.hold.rotation.z = this.body.rotation.z * 0.6;
+    // arms swing in step with the legs: the near arm forward with the far leg
+    const sw: -1 | 0 | 1 = moving ? (Math.sin(p) > 0.35 ? 1 : Math.sin(p) < -0.35 ? -1 : 0) : 0;
+    if (sw !== this.swing || this.strapOn !== (!!this.bus && this.state === "riding" && !this.seated)) {
+      this.swing = sw;
+      this.refreshPose();
+    }
+    this.hold.position.y = this.body.position.y - base;
+    this.hold.rotation.z = this.body.rotation.z * 0.5;
     this.visual.scale.set(this.facing * this.scaleK, this.scaleK, this.scaleK);
     this.ring.rotation.z += dt;
   }

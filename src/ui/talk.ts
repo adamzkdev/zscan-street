@@ -1,5 +1,6 @@
 import { KIND_HELP, KIND_LABEL } from "../data/types";
 import { Market } from "../data/market";
+import { VOICE } from "../data/lore";
 import { API, ZScan } from "../data/zscan";
 import type { Director } from "../scene/director";
 import type { Snark } from "../scene/snark";
@@ -34,6 +35,8 @@ function cityFacts(director: Director) {
   if (m.pools) lines.push(`Shielded supply: ${Math.round(m.pools.shielded_ratio * 100)}% of all ZEC; Orchard ${zec(m.pools.pools.orchard, 0)}, Ironwood ${zec(m.pools.pools.ironwood, 0)}, Sapling ${zec(m.pools.pools.sapling, 0)}.`);
   if (m.network) lines.push(`Last 24h: ${num(m.network.txs_24h)} transactions, ${Math.round(m.network.shielded_tx_ratio_24h * 100)}% shielded, blocks every ~${Math.round(m.network.avg_block_time)} s.`);
   lines.push("NU7 (25-second blocks, the Network Sustainability Mechanism sending 60% of fees to a reserve) is planned for mainnet around 2026-11-05.");
+  lines.push("ZStreet's landmarks: the Louvre-style zkSNARK Museum, Block Stadium, the Colosseum's Proof Games, the Eiffel Tower, the Great Pyramid's labyrinth, the ZEC Needle, the Marina ZEC Hotel, the ZK Mall, the ZEC Reserve on Wall Street, Big Ben, the Opera House, the zkSNARK of Liberty and the Alcatraz-style prison in the bay, the Golden Gate bridge, the ZEC Flyer wheel.");
+  lines.push(VOICE);
   return lines.join("\n");
 }
 

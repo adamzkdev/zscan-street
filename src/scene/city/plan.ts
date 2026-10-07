@@ -3,7 +3,7 @@
  *
  * One block of a Japanese city at night, around one avenue (the bus route) and two side streets:
  *
- *          Orchard  │   Downtown (MEMPOOL shop)    │  Ironwood (depot, Proof Factory)
+ *          Orchard  │   Downtown (MEMPOOL shop)    │  Ironwood (bars, karaoke, offices)
  *   ────────────────┼──────── avenue / bus ─────────┼──────────────────────────────────
  *    Orchard park   │  bus stop · Transparent sq.   │  container yard
  */
@@ -22,29 +22,110 @@ export const nz = (z: number) => (z < -1.9 ? z - SHIFT : z);
  * The avenue runs off both ends of the board along a short causeway into a tunnel. Vehicles are
  * born and vanish inside it (`inside`, metres from the centre) instead of popping up at the edge.
  */
-export const TUNNEL = { mouth: 152, depth: 12, inside: 160, hideBeyond: 157 };
+export const TUNNEL = { mouth: 270, depth: 12, inside: 278, hideBeyond: 275 };
 
 /** The original board, the hand-made heart of the city, now in the middle of a bigger one. */
 export const CORE = { minX: -50, maxX: 50, minZ: -36 - SHIFT, maxZ: 32 };
 
 /**
- * The bigger city around it: a grid of 8 m streets (centres below; the avenue carries on across),
- * Central Park north of the heart, and blocks built up along every street they face.
+ * The megalopolis round it: a grid of streets (centres and widths below; the avenue carries on
+ * across), a ring road along the edge (the metro runs over it), two boulevards each way, Central
+ * Park north of the heart, the river, and the bay south of the ring with its islands.
  */
 export const GRID = {
   street: 8,
-  xs: [-86, -54, 54, 86],
-  zs: [-120, CORE.minZ - 4, CORE.maxZ + 4, 68],
-  /** Width of each east–west line: the last one is the river. */
-  zw: [8, 8, 8, 18],
+  xs: [-226, -194, -158, -122, -86, -54, 54, 86, 122, 158, 194, 226],
+  xw: [10, 8, 8, 14, 8, 8, 8, 8, 14, 8, 8, 10],
+  zs: [-228, -192, -156, -120, CORE.minZ - 4, CORE.maxZ + 4, 68, 104, 136],
+  /** Width of each east–west line: the river is the wide one. */
+  zw: [10, 8, 14, 8, 8, 8, 18, 8, 10],
   park: { x0: -50, x1: 50, z0: -116, z1: CORE.minZ - 8 },
 };
 
+/** Streets by name (centre lines). */
+export const ST = {
+  ringW: -226,
+  ringE: 226,
+  ringN: -228,
+  ringS: 136,
+  blvdW: -122,
+  blvdE: 122,
+  blvdN: -156,
+  shotengai: -86,
+  heartW: -54,
+  heartE: 54,
+  east1: 86,
+  parkN: -120,
+  /** The street round the heart's north side, and the one south of the square. */
+  north: CORE.minZ - 4,
+  south: CORE.maxZ + 4,
+  river: 68,
+  bank: 104,
+};
+
 /** The river across the south of the city: its banks (z), water level, and the bridges' x. */
-export const RIVER = { z0: 59, z1: 77, water: -1.1, bed: -2.2, bridges: [-86, -54, 54, 86], foot: [0, -24, 24] };
+export const RIVER = { z0: 59, z1: 77, water: -1.1, bed: -2.2, bridges: [-226, -194, -122, -54, 54, 122, 194, 226], foot: [0, -24, 24] };
+
+/** The bay south of the ring road: open water, two islands, the headland across it and its bridge. */
+export const BAY = {
+  z0: 146,
+  water: -1.6,
+  bed: -3.2,
+  /** Liberty island: the zkSNARK statue. */
+  liberty: { x: 46, z: 190, r: 15 },
+  /** The prison island. */
+  rock: { x0: -150, x1: -92, z0: 178, z1: 208 },
+  /** The headland on the far shore, east of x0, and the suspension bridge over to it at x. */
+  headland: { x0: 96, z0: 222 },
+  bridge: { x: 158, towers: [164, 204] },
+  /** Bennelong point: the Opera House's pier, joined to the quay by a walkway. */
+  opera: { x0: -66, x1: -22, z0: 162, z1: 200 },
+  /** The Palm (Jumeirah): a palm-shaped island of villas, west of the rock, its trunk joined to the quay. */
+  palm: { x0: -234, x1: -178, z0: 150, z1: 234 },
+  /** The sail-shaped hotel on its own little island, off the palm. */
+  arab: { x0: -172, x1: -152, z0: 152, z1: 176 },
+  /** Corcovado on the headland: the Redeemer's mountain. */
+  christ: { x0: 184, x1: 228, z0: 210, z1: 236 },
+};
 
 /** The covered shopping street: the street at x = -86 along the heart, under a canopy. */
-export const SHOTENGAI = { x: -86, z0: -39.4 + 1, z1: 32 - 1, half: 4 + 2.6 };
+export const SHOTENGAI = { x: ST.shotengai, z0: -39.4 + 1, z1: 32 - 1, half: 4 + 2.6 };
+
+/**
+ * The landmarks' lots: whole blocks (merged across the small streets inside them) kept for a
+ * building of their own, placed like a city planner would.
+ */
+export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya";
+export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: number }[] = [
+  // the Block Stadium, out west on the park's latitude
+  { kind: "stadium", x0: -221, x1: -129, z0: -116, z1: CORE.minZ - 8 },
+  // the zkSNARK Museum faces Central Park from the west, like the Met
+  { kind: "museum", x0: -115, x1: -58, z0: -116, z1: CORE.minZ - 8 },
+  // the hawker centre, two blocks west of the shōtengai, on the avenue
+  { kind: "foodhall", x0: -154, x1: -129, z0: 2.6, z1: 32 },
+  // Wall Street: the ZEC Reserve on the avenue east of the heart, the mall further on
+  { kind: "reserve", x0: 90, x1: 115, z0: 2.6, z1: 32 },
+  { kind: "mall", x0: 129, x1: 190, z0: -39.4, z1: -5.4 },
+  // the needle, alone on its plaza in Midtown
+  { kind: "needle", x0: 129, x1: 154, z0: -149, z1: -124 },
+  // Marina Bay on the south bank: the hotel and its sky park, the gardens behind
+  { kind: "marina", x0: 129, x1: 190, z0: 77, z1: 100 },
+  { kind: "gardens", x0: 129, x1: 221, z0: 108, z1: 131 },
+  // the port and the power station, west on the south bank
+  { kind: "port", x0: -221, x1: -129, z0: 77, z1: 131 },
+  // the world's wonders up north: Giza in the north-west, Paris north of the museum, Rome north-east
+  { kind: "pyramid", x0: -190, x1: -129, z0: -223, z1: -163 },
+  { kind: "eiffel", x0: -115, x1: -58, z0: -223, z1: -196 },
+  { kind: "colosseum", x0: 58, x1: 115, z0: -223, z1: -163 },
+  // pocket parks
+  // Westminster on the river: the Houses of Parliament and Big Ben, facing the water
+  { kind: "parliament", x0: 58, x1: 115, z0: 40, z1: 59 },
+  // Shibuya: the scramble crossing at the boulevard and the street west of the park, QFRONT on its corner
+  { kind: "shibuya", x0: -82, x1: -58, z0: -188, z1: -163 },
+  // the ZEC Flyer (scene/sky.ts) in the riverside park
+  { kind: "flyer", x0: -82, x1: -58, z0: 77, z1: 100 },
+  { kind: "green", x0: 129, x1: 154, z0: -223, z1: -196 },
+];
 
 /** Central Park: its lake, the fountain terrace, the bandstand, and the paths (polylines, x/z). */
 export const PARK = {
@@ -100,10 +181,11 @@ export const PARK = {
 };
 
 export const CITY = {
-  minX: -118,
-  maxX: 118,
-  minZ: -136,
-  maxZ: 92,
+  minX: -236,
+  maxX: 236,
+  minZ: -238,
+  /** The far shore of the bay. */
+  maxZ: 236,
   curb: CURB,
   road: { z0: -2 - SHIFT, z1: 2.6 },
   north: { z0: -6 - SHIFT, z1: -2 - SHIFT },
@@ -142,8 +224,22 @@ export const DISTRICTS: DistrictPlan[] = [{ key: "downtown", name: "Downtown", x
 export const AREAS = [
   { key: "downtown", name: "Downtown", blurb: "The MEMPOOL shop, the bus stop, neon", color: "#ff9f2e", x: 1.5, z: -0.5, zoom: 1 },
   { key: "orchard", name: "Orchard", blurb: "Wooden houses, the greenhouse, the orchard park", color: "#5cff9a", x: -37, z: 2, zoom: 1.1 },
-  { key: "ironwood", name: "Ironwood", blurb: "The Proof Factory, the depot, the container yard", color: "#b07bff", x: 37, z: 0, zoom: 1.1 },
+  { key: "ironwood", name: "Ironwood", blurb: "Izakayas, karaoke, the NU7 tower", color: "#b07bff", x: 37, z: 0, zoom: 1.1 },
   { key: "transparent", name: "Transparent Square", blurb: "Open market, nothing hidden", color: "#ffd28a", x: 0, z: 18, zoom: 1.2 },
+  { key: "park", name: "Central Park", blurb: "The lake, the bandstand, the woods", color: "#5cff9a", x: 0, z: -82, zoom: 0.55 },
+  { key: "museum", name: "zkSNARK Museum", blurb: "The 10,000 zkSNARKs", color: "#ff3e8a", x: -86, z: -82, zoom: 0.6 },
+  { key: "stadium", name: "Block Stadium", blurb: "Shielded vs Transparent, live", color: "#f4b728", x: -175, z: -82, zoom: 0.5 },
+  { key: "shotengai", name: "Shōtengai & Hawker", blurb: "Covered shops, the food hall", color: "#ff6a3a", x: -112, z: 10, zoom: 0.65 },
+  { key: "wallst", name: "Wall Street", blurb: "The ZEC Reserve, the towers, the mall", color: "#3a7bff", x: 130, z: 0, zoom: 0.5 },
+  { key: "midtown", name: "Midtown", blurb: "Supertalls and the ZEC Needle", color: "#3ef0ff", x: 120, z: -120, zoom: 0.4 },
+  { key: "marina", name: "Marina Bay", blurb: "The sky park, the supertrees", color: "#1baf7a", x: 170, z: 100, zoom: 0.5 },
+  { key: "port", name: "Proof Factory District", blurb: "The mining hall, the docks, the trucks", color: "#eda100", x: -175, z: 104, zoom: 0.5 },
+  { key: "giza", name: "Giza", blurb: "The Great Pyramid and its labyrinth", color: "#ffd28a", x: -160, z: -193, zoom: 0.55 },
+  { key: "paris", name: "Paris", blurb: "The Eiffel Tower", color: "#b07bff", x: -86, z: -205, zoom: 0.6 },
+  { key: "rome", name: "Rome", blurb: "The Colosseum, the Proof Games", color: "#eb6834", x: 86, z: -193, zoom: 0.55 },
+  { key: "shibuya", name: "Shibuya", blurb: "The scramble crossing", color: "#ff3e8a", x: -60, z: -162, zoom: 0.8 },
+  { key: "palm", name: "The Palm", blurb: "Villas on the palm, the sail hotel", color: "#1baf7a", x: -195, z: 190, zoom: 0.45 },
+  { key: "bay", name: "The Bay", blurb: "Liberty island, the rock, the bridge", color: "#3987e5", x: 20, z: 190, zoom: 0.35 },
 ];
 
 export type Archetype =
@@ -163,7 +259,8 @@ export type Archetype =
   | "cardshop"
   | "bank"
   | "zsa"
-  | "library";
+  | "library"
+  | "landmark";
 
 export interface BuildingJob {
   id: number;
@@ -257,7 +354,7 @@ export function planCity() {
     "s",
     false,
   );
-  // ---- Orchard houses, Ironwood sheds (the depot and the Proof Factory), the big hall behind ----
+  // ---- Orchard houses, Ironwood's bars and towers (the Proof Factory is out in the port district) ----
   row(
     [
       ["house", 201, {}, 34],
@@ -268,17 +365,50 @@ export function planCity() {
     fz,
     "s",
   );
+  // east of the junction: a night-life corner (the Proof Factory moved out to the port district)
   row(
     [
-      // the Proof Factory on the left, the depot on the right
-      ["factory", 302, {}, 62],
-      ["depot", 301, {}, 56],
+      ["izakaya", 302, {}, 32],
+      ["shophouse", 301, { shop: "karaoke", floors: 5, vsign: "カラオケ" }, 46],
+      ["shophouse", 304, { shop: "cafe", floors: 3, vsign: "暗号", signColor: "#3ef0ff", wall: "warm" }, 36],
     ],
     28.4,
     fz,
     "s",
   );
-  row([["warehouse", 303, { sign: "NU7" }, 104]], 29, -17.5, "s", false);
+  row(
+    [
+      ["office", 303, { floors: 14, wall: "violet", billboard: "NU7", billboardColor: "#3ee08f" }, 50],
+      ["apartment", 306, { floors: 9, wall: "tile" }, 54],
+    ],
+    29,
+    -17.5,
+    "s",
+    false,
+  );
+  // south of the avenue, facing it: low-rise bars and a ramen shop, walk-ups behind
+  row(
+    [
+      ["machiya", 311, { shop: "ramen" }, 26],
+      ["shophouse", 312, { shop: "shutter", floors: 3, vsign: "夜市" }, 40],
+      ["izakaya", 313, {}, 32],
+    ],
+    28.6,
+    7.4,
+    "n",
+    false,
+  );
+  row(
+    [
+      ["apartment", 314, { floors: 4, wall: "warm" }, 44],
+      ["house", 315, {}, 34],
+      ["shophouse", 316, { shop: "cafe", floors: 3, vsign: "喫茶", signColor: "#ffd28a" }, 36],
+    ],
+    27.6,
+    20.5,
+    "n",
+    false,
+  );
   // ---- Transparent square: shops on the south edge, facing the square ----
   row(
     [
@@ -414,37 +544,20 @@ export function planCity() {
     add("bench", [], x, z, r);
   for (let x = -48; x <= -30; x += 4.4) add("tree", ["blossom", 5 + (Math.abs(Math.round(x)) % 3)], x, -2.9, x);
   add("gate", [30], -27.6, 4.2, Math.PI / 2);
-  // Ironwood: chimneys, the container yard, the crane, a fence
-  for (const [x, h] of [
-    [31, 110],
-    [36, 140],
-    [45, 100],
-  ])
-    add("chimney", [h], x, -33);
-  const colors = ["#6a3a8a", "#3a3a5a", "#8a4a2a", "#2a5a6a", "#5a2a6a", "#4a4a4a"];
-  k = 0;
-  for (let r = 0; r < 3; r++)
-    for (let col = 0; col < 4; col++) {
-      const stack = 1 + ((r * 7 + col * 3) % 3);
-      for (let s = 0; s < stack; s++) {
-        add("container", [colors[k % colors.length], k % colors.length], 31.4 + col * 3.2, 13.5 + r * 6.8, 0, CURB + s * 2.7);
-        k++;
-      }
-      rects.push([30.1 + col * 3.2, 10.5 + r * 6.8, 32.7 + col * 3.2, 16.5 + r * 6.8]);
-    }
-  add("gantry", [108, 120], 38, 20.5);
+  // Ironwood's back alley between the two rows south of the avenue: lanterns, bikes, a tree or two
   for (const [x, z] of [
-    [29.3, 10.8],
-    [46.7, 10.8],
-    [29.3, 30.2],
-    [46.7, 30.2],
+    [30.5, 17.6],
+    [45.5, 17.6],
   ])
-    circles.push([x, z, 0.5]);
-  add("fence", [126], 38.3, 8.4);
-  rects.push([27.8, 8.3, 48.8, 8.5]);
+    add("tree", ["round", 2 + (x & 1)], x, z);
+  add("bicycle", ["#3ac07a"], 37.5, 17.4, Math.PI / 2);
+  add("trashBags", [2], 41.6, 17.8);
   add("crates", [12], 27.2, -5.2);
   add("barrel", ["#5a3a8a"], 47.6, -5.4);
   add("barrel", ["#3a5a8a"], 47.1, -4.8);
+  // everything from here on is in absolute coordinates (the heart's are shifted by nz())
+  const heartRects = rects.length,
+    heartCircles = circles.length;
   // ---- the bigger city: blocks round the heart and the park, built up along their streets ----
   const P = GRID.park;
   const S2 = GRID.street;
@@ -460,7 +573,8 @@ export function planCity() {
    * variants each, so the workers mesh each one once and the copies share it).
    */
   type V = [Archetype, Record<string, unknown>, number];
-  const PALETTES: Record<string, V[]> = {
+  const PALETTES: Record<Zone, V[]> = {
+    // Manhattan by the park: glass and stone towers
     midtown: [
       ["office", { floors: 22, wall: "blue" }, 42],
       ["office", { floors: 18 }, 46],
@@ -468,6 +582,7 @@ export function planCity() {
       ["office", { floors: 16 }, 40],
       ["apartment", { floors: 12 }, 44],
       ["office", { floors: 19, billboard: "証明", billboardColor: "#3ef0ff" }, 46],
+      ["office", { floors: 24, wall: "dark", crown: "#3ef0ff" }, 44],
     ],
     parkside: [
       ["apartment", { floors: 12 }, 44],
@@ -475,6 +590,15 @@ export function planCity() {
       ["office", { floors: 16 }, 46],
       ["apartment", { floors: 14 }, 42],
       ["office", { floors: 18, wall: "blue" }, 40],
+    ],
+    // brownstones and walk-ups up north
+    uptown: [
+      ["apartment", { floors: 6, wall: "brick" }, 44],
+      ["apartment", { floors: 7, wall: "warm" }, 40],
+      ["shophouse", { floors: 4, shop: "cafe", vsign: "珈琲" }, 36],
+      ["apartment", { floors: 8, wall: "brick", garden: true }, 46],
+      ["shophouse", { floors: 5, shop: "shutter", vsign: "書店" }, 40],
+      ["izakaya", {}, 32],
     ],
     west: [
       ["shophouse", { floors: 3, shop: "cafe" }, 36],
@@ -485,6 +609,29 @@ export function planCity() {
       ["apartment", { floors: 5 }, 44],
       ["shophouse", { floors: 4, shop: "cafe", vsign: "暗号" }, 36],
     ],
+    westres: [
+      ["apartment", { floors: 9, wall: "tile" }, 46],
+      ["apartment", { floors: 11 }, 44],
+      ["apartment", { floors: 7, wall: "cream", garden: true }, 40],
+      ["shophouse", { floors: 4, shop: "cafe", vsign: "食堂" }, 36],
+      ["izakaya", {}, 32],
+    ],
+    // Wall Street: banks, trading floors, the exchanges' tickers
+    finance: [
+      ["office", { floors: 26, wall: "concrete", billboard: "ZEC/USD", billboardColor: "#5cff9a" }, 46],
+      ["office", { floors: 22, wall: "dark" }, 44],
+      ["office", { floors: 28, wall: "blue", crown: "#f4b728" }, 48],
+      ["office", { floors: 20, wall: "cream" }, 42],
+      ["office", { floors: 24, wall: "violet", billboard: "SHIELDED", billboardColor: "#f4b728" }, 46],
+    ],
+    // shops and hotels along the avenue east
+    eastcom: [
+      ["office", { floors: 11, wall: "cream", billboard: "HOTEL ZEC", billboardColor: "#ff9f2e" }, 46],
+      ["shophouse", { floors: 5, shop: "karaoke", vsign: "カラオケ" }, 40],
+      ["office", { floors: 12, wall: "blue", billboard: "HOTEL 盾", billboardColor: "#3ef0ff" }, 44],
+      ["shophouse", { floors: 4, shop: "cafe", vsign: "喫茶" }, 36],
+      ["apartment", { floors: 8, wall: "tile" }, 44],
+    ],
     // south of the avenue the camera looks over the roofs: low-rise only
     south: [
       ["shophouse", { floors: 3, shop: "cafe" }, 36],
@@ -494,11 +641,18 @@ export function planCity() {
       ["izakaya", {}, 32],
       ["machiya", { shop: "tea" }, 26],
     ],
-    eastlow: [
-      ["apartment", { floors: 5 }, 44],
-      ["shophouse", { floors: 4, shop: "cafe", vsign: "証明" }, 46],
+    southbank: [
+      ["apartment", { floors: 6, wall: "cream", garden: true }, 44],
+      ["shophouse", { floors: 4, shop: "cafe", vsign: "川" }, 36],
+      ["house", {}, 34],
+      ["apartment", { floors: 5, wall: "warm" }, 40],
       ["izakaya", {}, 32],
-      ["shophouse", { floors: 3, shop: "shutter" }, 36],
+    ],
+    // Singapore by the water: tall white residential towers with sky gardens
+    marina: [
+      ["apartment", { floors: 18, wall: "cream", garden: true }, 44],
+      ["office", { floors: 20, wall: "blue", crown: "#5cff9a" }, 42],
+      ["apartment", { floors: 16, wall: "tile", garden: true }, 46],
     ],
     port: [
       ["warehouse", {}, 56],
@@ -531,32 +685,29 @@ export function planCity() {
     ["office", { floors: 36, wall: "concrete", crown: "#b07bff", spire: 48, billboard: "零知識", billboardColor: "#b07bff" }, 52],
   ];
   const pick = (cx: number, cz: number, k: number): V => {
-    const southOfAvenue = cz > CITY.road.z1;
-    // next to the metro's loop everything stays low, so the line and its trains show; Midtown's
-    // towers start a block further east
-    const byMetro = cx > GRID.xs[2] && cx < GRID.xs[3];
-    const list = cz > 60 ? PALETTES.port : southOfAvenue ? (cx > 54 ? PALETTES.eastlow : cx < -54 ? PALETTES.west : PALETTES.south) : byMetro ? PALETTES.eastlow : cx > 54 ? PALETTES.midtown : cz < P.z0 ? PALETTES.parkside : cx < -54 ? PALETTES.west : PALETTES.parkside;
+    const list = PALETTES[zoneAt(cx, cz)];
     return list[Math.floor(rnd(k) * list.length)];
   };
-  const lampColor = (x: number) => (x < -54 ? "#ffd9a0" : x > 54 ? "#c9a0ff" : "#ffb46b");
+  const lampColor = (x: number) => (x < ST.heartW ? "#ffd9a0" : x > ST.heartE ? "#c9a0ff" : "#ffb46b");
   const lampAbs = (x: number, z: number, rot: number) => props.push({ type: "lamp", args: [lampColor(x)], x, z, rot, district: "downtown" });
   for (const { x0, x1, z0, z1, kind } of gridCells()) {
       if (kind !== "block") continue;
       const cx = (x0 + x1) / 2,
         cz = (z0 + z1) / 2;
-      const south = z1 < CITY.maxZ,
-        north = z0 > CITY.minZ,
-        east = x1 < CITY.maxX,
-        west = x0 > CITY.minX;
+      // every block is ringed by streets (the ring road runs round the outside)
+      const south = true,
+        north = true,
+        east = true,
+        west = true;
       // facing the park from the east and from the north: the supertalls
-      const parkEast = x0 > GRID.xs[3] && x0 < GRID.xs[3] + 12 && z1 <= P.z1 + 0.1 && z0 >= P.z0 - 0.1;
+      const parkEast = x0 > ST.east1 && x0 < ST.east1 + 12 && z1 <= P.z1 + 0.1 && z0 >= P.z0 - 0.1;
       const parkNorth = z1 <= P.z0 - S2 && z1 > P.z0 - 14 && x0 >= P.x0 - 0.1 && x1 <= P.x1 + 0.1;
       let tall = 0,
         slot = 0;
       // the two rows facing the shōtengai street, along the heart
       const along = z0 >= CORE.minZ - 0.1 && z1 <= CORE.maxZ + 0.1;
       // the block west of the street fronts it with its east face, the block east with its west one
-      const shotengaiFace = !along ? null : Math.abs(x1 - (GRID.xs[0] - S2 / 2)) < 0.1 ? "e" : Math.abs(x0 - (GRID.xs[0] + S2 / 2)) < 0.1 ? "w" : null;
+      const shotengaiFace = !along ? null : Math.abs(x1 - (ST.shotengai - S2 / 2)) < 0.1 ? "e" : Math.abs(x0 - (ST.shotengai + S2 / 2)) < 0.1 ? "w" : null;
       const fill = (face: BuildingJob["face"], a: number, b: number, front: number, main: boolean) => {
         let at = a;
         for (;;) {
@@ -576,7 +727,7 @@ export function planCity() {
           const w = width * VOX;
           if (at + w > b) break;
           // a small pool of seeds: identical variants are built once and shared
-          jobs.push({ id: id++, type, seed: 6000 + (seq++ % 3), opts, along: at + w / 2, front, face, district: "downtown", frontRow: main, width, ext: true });
+          jobs.push({ id: id++, type, seed: 6000 + (seq++ % 2), opts, along: at + w / 2, front, face, district: "downtown", frontRow: main, width, ext: true });
           at += w + (rnd(seq + 0.7) < 0.12 ? 1.4 : 0.05);
         }
       };
@@ -606,6 +757,105 @@ export function planCity() {
   // the park's own lamps along the kerb round it
   for (let x = P.x0 + 4; x < P.x1 - 2; x += 12) lampAbs(x, P.z1 - 0.35, 0), lampAbs(x, P.z0 + 0.35, Math.PI);
   for (let z = P.z0 + 6; z < P.z1 - 3; z += 12) lampAbs(P.x0 + 0.35, z, -Math.PI / 2), lampAbs(P.x1 - 0.35, z, Math.PI / 2);
+
+  // ---- street trees along the boulevards and the ring road (both pavements) ----
+  {
+    const crossX = GRID.xs.map((x, i) => [x, GRID.xw[i] / 2] as const),
+      crossZ = GRID.zs.map((z, i) => [z, GRID.zw[i] / 2] as const);
+    const nearCross = (v: number, list: readonly (readonly [number, number])[]) => list.some(([c, h]) => Math.abs(v - c) < h + 5);
+    const avenue = (z: number) => z > CITY.road.z0 - 4 && z < CITY.road.z1 + 4;
+    const kinds: [string, number][] = [
+      ["round", 3],
+      ["maple", 17],
+      ["round", 1],
+      ["blossom", 9],
+    ];
+    let t = 0;
+    for (const st of streetSegments()) {
+      if (st.width < 10) continue;
+      for (let a = st.from + 6; a < st.to - 4; a += 9) {
+        if (st.axis === "x" ? nearCross(a, crossX) : nearCross(a, crossZ) || avenue(a) || (a > RIVER.z0 - 2 && a < RIVER.z1 + 2)) continue;
+        for (const side of [-1, 1]) {
+          const off = st.at + side * (st.width / 2 + 1.1);
+          const [x, z] = st.axis === "x" ? [a, off] : [off, a];
+          if (LOTS.some((l) => x > l.x0 && x < l.x1 && z > l.z0 && z < l.z1)) continue;
+          const [kind, seed] = kinds[t++ % kinds.length];
+          props.push({ type: "tree", args: [kind, seed], x, z, rot: t, y: CURB, district: "downtown" });
+          circles.push([x, z, 0.45]);
+        }
+      }
+    }
+  }
+
+  // ---- the landmarks, each on its lot (or out on the water) ----
+  /** Which way each lot's front faces (towards the street that matters). */
+  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e" };
+  /** The landmarks you can walk into, and the place each one opens. */
+  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben" };
+  const landmarkJob = (kind: string, x0: number, x1: number, z0: number, z1: number, face: BuildingJob["face"], venue?: string, dy?: number) => {
+    const ns = face === "s" || face === "n";
+    const w = ns ? x1 - x0 : z1 - z0,
+      d = ns ? z1 - z0 : x1 - x0;
+    const front = face === "s" ? z1 : face === "n" ? z0 : face === "e" ? x1 : x0;
+    const along = ns ? (x0 + x1) / 2 : (z0 + z1) / 2;
+    jobs.push({ id: id++, type: "landmark", seed: 9000 + id, opts: { kind, w, d, ...(venue ? { venue } : {}), ...(dy ? { dy } : {}) }, along, front, face, district: "downtown", frontRow: false, width: Math.round(w * 6) });
+  };
+  for (const l of LOTS) if (LOT_FACE[l.kind]) landmarkJob(l.kind, l.x0, l.x1, l.z0, l.z1, LOT_FACE[l.kind]!, VENUE[l.kind]);
+  {
+    const L = BAY.liberty;
+    landmarkJob("statue", L.x - 9, L.x + 9, L.z - 9, L.z + 9, "s", "statue");
+    const B = BAY.bridge;
+    landmarkJob("bridge", B.x - 7, B.x + 7, ST.ringS + 5, BAY.headland.z0 + 4, "n");
+    // the Opera House on its own pier in the bay, facing the city; the Redeemer on the headland
+    const O = BAY.opera;
+    landmarkJob("opera", O.x0, O.x1, O.z0, O.z1, "n", "opera");
+    const R = BAY.christ;
+    landmarkJob("christ", R.x0, R.x1, R.z0, R.z1, "n", undefined, 1.8);
+    const PL = BAY.palm;
+    landmarkJob("palm", PL.x0, PL.x1, PL.z0, PL.z1, "n", undefined, 1.8);
+    const A = BAY.arab;
+    landmarkJob("burjalarab", A.x0, A.x1, A.z0, A.z1, "n", "arab", 1.8);
+  }
+
+  // ---- green: trees along the strips outside the ring road, the pocket parks ----
+  const greenKinds: [string, number][] = [
+    ["round", 2],
+    ["maple", 11],
+    ["blossom", 6],
+    ["round", 4],
+    ["pine", 9],
+    ["maple", 23],
+  ];
+  let gk = 0;
+  for (const c of gridCells()) {
+    if (c.kind === "edge") {
+      // a row of trees down the middle of the strip
+      const long = c.x1 - c.x0 > c.z1 - c.z0;
+      const len = long ? c.x1 - c.x0 : c.z1 - c.z0;
+      for (let t = 3; t < len - 2; t += 7.5) {
+        const [x, z] = long ? [c.x0 + t, (c.z0 + c.z1) / 2] : [(c.x0 + c.x1) / 2, c.z0 + t];
+        const [kind, seed] = greenKinds[gk++ % greenKinds.length];
+        props.push({ type: "tree", args: [kind, seed], x, z, rot: gk, y: CURB, district: "downtown" });
+        circles.push([x, z, 0.5]);
+      }
+    } else if (c.kind === "lot" && c.lot === "green") {
+      // a square: a lawn, a ring of trees, benches round a fountain
+      const cx = (c.x0 + c.x1) / 2,
+        cz = (c.z0 + c.z1) / 2;
+      props.push({ type: "tieredFountain", args: [], x: cx, z: cz, rot: 0, y: CURB + 0.06, district: "downtown" });
+      circles.push([cx, cz, 3.6]);
+      for (let a = 0; a < 8; a++) {
+        const ang = (a / 8) * Math.PI * 2;
+        props.push({ type: "bench", args: [], x: cx + Math.cos(ang) * 5.6, z: cz + Math.sin(ang) * 5.6, rot: -ang - Math.PI / 2, y: CURB, district: "downtown" });
+      }
+      for (let x = c.x0 + 2.5; x < c.x1 - 1; x += 4.2)
+        for (let z = c.z0 + 2.5; z < c.z1 - 1; z += 4.2) {
+          if (Math.hypot(x - cx, z - cz) < 8.5) continue;
+          const [kind, seed] = greenKinds[gk++ % greenKinds.length];
+          props.push({ type: "tree", args: [kind, seed], x: x + (rnd(gk) - 0.5) * 1.4, z: z + (rnd(gk + 3) - 0.5) * 1.4, rot: gk, y: CURB, district: "downtown" });
+        }
+    }
+  }
 
   // ---- Central Park ----
   const addAbs = (type: string, args: unknown[], x: number, z: number, rot = 0, y?: number) => props.push({ type, args, x, z, rot, y, district: "downtown" });
@@ -674,16 +924,32 @@ export function planCity() {
   return {
     jobs,
     props,
-    rects: rects.map(([x0, z0, x1, z1]) => [x0, nz(z0), x1, nz(z1)] as [number, number, number, number]),
-    circles: circles.map(([x, z, r]) => [x, nz(z), r] as [number, number, number]),
+    rects: rects.map(([x0, z0, x1, z1], i) => (i < heartRects ? [x0, nz(z0), x1, nz(z1)] : [x0, z0, x1, z1]) as [number, number, number, number]),
+    circles: circles.map(([x, z, r], i) => (i < heartCircles ? [x, nz(z), r] : [x, z, r]) as [number, number, number]),
   };
 }
 
-/** The bigger city's blocks between its streets: the heart (the original board), the park, the rest. */
-export function gridCells() {
-  const S = GRID.street / 2;
-  const xb = [CITY.minX, ...GRID.xs.flatMap((x) => [x - S, x + S]), CITY.maxX];
-  const zb = [CITY.minZ, ...GRID.zs.flatMap((z, i) => [z - GRID.zw[i] / 2, z + GRID.zw[i] / 2]), CITY.maxZ];
+export type CellKind = "core" | "park" | "block" | "lot" | "edge";
+export interface Cell {
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+  kind: CellKind;
+  lot?: LotKind;
+}
+
+type Rect = { x0: number; x1: number; z0: number; z1: number };
+const inside = (c: Rect, r: Rect) => c.x0 >= r.x0 - 0.1 && c.x1 <= r.x1 + 0.1 && c.z0 >= r.z0 - 0.1 && c.z1 <= r.z1 + 0.1;
+const HEART: Rect = { x0: CORE.minX, x1: CORE.maxX, z0: CORE.minZ, z1: CORE.maxZ };
+
+/**
+ * The city's blocks between its streets: the heart (the original board), the park, the landmarks'
+ * lots (one cell each), the thin strips outside the ring road, and the ordinary blocks.
+ */
+export function gridCells(): Cell[] {
+  const xb = [CITY.minX, ...GRID.xs.flatMap((x, i) => [x - GRID.xw[i] / 2, x + GRID.xw[i] / 2]), CITY.maxX];
+  const zb = [CITY.minZ, ...GRID.zs.flatMap((z, i) => [z - GRID.zw[i] / 2, z + GRID.zw[i] / 2]), BAY.z0];
   const xi: [number, number][] = [];
   const zi: [number, number][] = [];
   for (let k = 0; k < xb.length; k += 2) xi.push([xb[k], xb[k + 1]]);
@@ -692,15 +958,67 @@ export function gridCells() {
     if (zb[k] === CORE.minZ) zi.push([CORE.minZ, CITY.road.z0], [CITY.road.z1, CORE.maxZ]);
     else zi.push([zb[k], zb[k + 1]]);
   }
-  const P = GRID.park;
-  const out: { x0: number; x1: number; z0: number; z1: number; kind: "core" | "park" | "block" }[] = [];
+  const out: Cell[] = [];
   for (const [x0, x1] of xi)
     for (const [z0, z1] of zi) {
-      const inCore = x0 >= CORE.minX - 0.1 && x1 <= CORE.maxX + 0.1 && z0 >= CORE.minZ - 0.1 && z1 <= CORE.maxZ + 0.1;
-      const inPark = x0 >= P.x0 - 0.1 && x1 <= P.x1 + 0.1 && z0 >= P.z0 - 0.1 && z1 <= P.z1 + 0.1;
-      out.push({ x0, x1, z0, z1, kind: inCore ? "core" : inPark ? "park" : "block" });
+      const c = { x0, x1, z0, z1 };
+      if (LOTS.some((l) => inside(c, l))) continue;
+      const kind: CellKind = inside(c, HEART) ? "core" : inside(c, GRID.park) ? "park" : x1 - x0 < 7 || z1 - z0 < 7 ? "edge" : "block";
+      out.push({ ...c, kind });
     }
+  for (const l of LOTS) out.push({ x0: l.x0, x1: l.x1, z0: l.z0, z1: l.z1, kind: "lot", lot: l.kind });
   return out;
+}
+
+/**
+ * Every stretch of street to pave: the ring, the boulevards and the grid, broken where a lot
+ * swallows a street, where the river runs (bridges excepted) and inside the heart.
+ */
+export function streetSegments() {
+  const out: { axis: "x" | "z"; at: number; from: number; to: number; width: number }[] = [];
+  const xEnd = GRID.xs[GRID.xs.length - 1] + GRID.xw[GRID.xw.length - 1] / 2;
+  const zTop = GRID.zs[0] - GRID.zw[0] / 2;
+  const zEnd = GRID.zs[GRID.zs.length - 1] + GRID.zw[GRID.zw.length - 1] / 2;
+  /** Cut [from, to] by the intervals in `holes`. */
+  const cut = (from: number, to: number, holes: [number, number][]) => {
+    const parts: [number, number][] = [];
+    let a = from;
+    for (const [h0, h1] of holes.filter(([h0, h1]) => h1 > from && h0 < to).sort((p, q) => p[0] - q[0])) {
+      if (h0 > a) parts.push([a, h0]);
+      a = Math.max(a, h1);
+    }
+    if (a < to) parts.push([a, to]);
+    return parts;
+  };
+  GRID.zs.forEach((z, i) => {
+    if (z === ST.river) return;
+    const w = GRID.zw[i];
+    const holes = LOTS.filter((l) => z > l.z0 && z < l.z1).map((l) => [l.x0, l.x1] as [number, number]);
+    for (const [a, b] of cut(-xEnd, xEnd, holes)) out.push({ axis: "x", at: z, from: a, to: b, width: w });
+  });
+  GRID.xs.forEach((x, i) => {
+    const w = GRID.xw[i];
+    const holes = LOTS.filter((l) => x > l.x0 && x < l.x1).map((l) => [l.z0, l.z1] as [number, number]);
+    if (!RIVER.bridges.includes(x)) holes.push([RIVER.z0, RIVER.z1]);
+    // the heart's own side streets take over between its north and south streets
+    if (x > CORE.minX && x < CORE.maxX) holes.push([CORE.minZ, CORE.maxZ]);
+    for (const [a, b] of cut(zTop, zEnd, holes)) out.push({ axis: "z", at: x, from: a, to: b, width: w });
+  });
+  return out;
+}
+
+/** What a block is zoned for, by where it is (SimCity style). */
+export type Zone = "midtown" | "parkside" | "uptown" | "west" | "westres" | "finance" | "eastcom" | "south" | "southbank" | "marina" | "port";
+export function zoneAt(cx: number, cz: number): Zone {
+  if (cz > RIVER.z1) return cx < ST.blvdW ? "port" : cx > ST.blvdE ? "marina" : "southbank";
+  // round the heart everything stays mid-rise, so the default view sees over it; Wall Street's
+  // towers stand past the east boulevard
+  // (the block south of the ZK Mall stays low, so the camera sees the mall's front over it)
+  if (cz > CITY.road.z1) return cx > ST.blvdE && cx < 194 ? "south" : cx > ST.blvdE ? "finance" : cx > ST.heartE ? "eastcom" : cx < ST.blvdW ? "westres" : cx < ST.heartW ? "west" : "south";
+  if (cz > CORE.minZ - 0.1) return cx > ST.blvdE ? "finance" : cx > ST.heartE ? "eastcom" : cx < ST.blvdW ? "westres" : "west";
+  if (cz < ST.blvdN) return cx > ST.blvdE ? "midtown" : "uptown";
+  if (cx > ST.heartE) return "midtown";
+  return cx < ST.blvdW ? "westres" : "parkside";
 }
 
 /** Utility poles along the north pavement (the wires between them are drawn on the main thread). */

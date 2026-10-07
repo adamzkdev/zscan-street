@@ -9,3 +9,4 @@ shots/*.jpg
 captures/
 design*.png
 Diorama*.png
+shots/*/

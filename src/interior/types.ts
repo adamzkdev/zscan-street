@@ -64,7 +64,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "cards" | "bank" | "factory" | "zsa" | "library" | "tower";
+  readonly key: "mempool" | "cards" | "bank" | "factory" | "zsa" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab";
   /** Shown top-left while inside ("zkCARDS"). */
   readonly title: string;
   readonly scene: THREE.Scene;
@@ -80,6 +80,11 @@ export interface Interior {
   update(dt: number, t: number, camera: THREE.PerspectiveCamera): void;
   /** The walker arrived on this floor (tall places only draw and light the floor you are on). */
   setFloor?(floor: number): void;
+  /**
+   * Floor height under (x, z) on this floor where it is not flat (stairs, ramps, a raised dais),
+   * or null for the floor's own height. The walker climbs a step of up to 0.75 m.
+   */
+  groundAt?(floor: number, x: number, z: number): number | null;
   /** Day or night outside: interiors may change their windows / light. */
   setTheme?(theme: Theme): void;
 }
