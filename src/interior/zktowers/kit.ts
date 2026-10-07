@@ -1,8 +1,9 @@
 import * as THREE from "three";
+import { sharedAtlasTexture } from "../../data/atlas";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Market } from "../../data/market";
 import type { BlockSummary } from "../../data/types";
-import { API, get, ZScan } from "../../data/zscan";
+import { get, ZScan } from "../../data/zscan";
 import { loadArt, Snark } from "../../scene/snark";
 import type { Tone } from "../../scene/speech";
 import { meshModel, MATERIALS } from "../../scene/voxel/mesher";
@@ -176,12 +177,8 @@ class Voxels {
 let atlas: THREE.Texture | null = null;
 function atlasTexture() {
   if (atlas) return atlas;
-  const loader = new THREE.TextureLoader();
-  loader.setCrossOrigin("anonymous");
-  atlas = loader.load(`${API}/v1/collections/zksnarks/map/image`);
-  atlas.colorSpace = THREE.SRGBColorSpace;
-  atlas.magFilter = THREE.NearestFilter;
-  atlas.minFilter = THREE.LinearMipmapLinearFilter;
+  // one download, one GPU texture for the whole app
+  atlas = sharedAtlasTexture();
   return atlas;
 }
 const CROWD_VERT = /* glsl */ `

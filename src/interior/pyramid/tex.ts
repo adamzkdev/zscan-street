@@ -10,7 +10,7 @@ function canvas(w: number, h: number) {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  return { c, g: c.getContext("2d")! };
+  return { c, g: c.getContext("2d", { willReadFrequently: true })! };
 }
 
 function tex(c: HTMLCanvasElement, repeat = true) {

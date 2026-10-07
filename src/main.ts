@@ -49,15 +49,12 @@ import { Hud } from "./ui/hud";
 import { Venues } from "./ui/venues";
 import { BlockShelf } from "./scene/shelf";
 import { MiningHall } from "./scene/mining";
-import { CardWall } from "./scene/cardwall";
+import { MempoolLive } from "./scene/mempoolhq";
 import { InteriorManager } from "./interior/manager";
 import { WalkControls } from "./interior/walk";
 import type { Interior, InteriorContext } from "./interior/types";
-import { buildGallery } from "./interior/gallery";
-import { buildBank } from "./interior/bank";
 import { buildFactory } from "./interior/factory";
 import { buildMempool } from "./interior/mempool";
-import { buildZsa } from "./interior/zsa";
 import { buildLibrary } from "./interior/library";
 import { buildTower } from "./interior/tower/index";
 import { Arcade } from "./ui/arcade";
@@ -89,6 +86,16 @@ import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 
 // ---- renderer ----------------------------------------------------------------------------------
+// The API down or rate-limiting (a portrait, a block that won't load): whoever asked just goes
+// without; one quiet line in the console instead of an "Uncaught (in promise)" per request.
+let netFailures = 0;
+window.addEventListener("unhandledrejection", (e) => {
+  const r = e.reason as Error | undefined;
+  const msg = String(r?.message ?? r);
+  if (!(r instanceof TypeError && /fetch|network/i.test(msg)) && !/^zkSNARK #\d+: HTTP|HTTP \d{3}|Load failed|NetworkError/.test(msg)) return;
+  e.preventDefault();
+  if (netFailures++ % 50 === 0) console.warn(`network: ${msg} (${netFailures} request${netFailures > 1 ? "s" : ""} failed so far, the city carries on)`);
+});
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -292,6 +299,8 @@ const director = new Director(scene, city, {
       }, 3500);
     }
     if (selected === s) select(null);
+    // gone for good: free its meshes and let its portrait go (a long visit sees thousands)
+    setTimeout(() => s.dispose(), 4000);
   },
 });
 
@@ -490,11 +499,8 @@ window.addEventListener("zstreet:stadium-goal", (e) => sound.crowd(!!(e as Custo
 
 /** The line under each place's name in its hover tag. */
 const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
-  cards: "the whole collection",
-  bank: "read a shielded wallet",
   library: "news · ZIPs",
   tower: "apartments · arcade",
-  zsa: "shielded assets · coming soon",
   museum: "the Louvre of zkSNARKs",
   stadium: "watch the match · or play it",
   prison: "Alcatraz of crypto",
@@ -518,11 +524,8 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
 
 /** What each walk-in place is, for the people who work there. */
 const PLACE_ABOUT: Record<string, string> = {
-  mempool: "The MEMPOOL shop holds every pending Zcash transaction as a parcel on the pickup table; truck drivers bring them in, zkSNARKs pick them up and wait at the bus stop for a block. Upstairs (1F) is the Block Archive, where any block since genesis can be rebuilt.",
+  mempool: "The MEMPOOL HQ holds every pending Zcash transaction as a parcel on the pickup table; trucks from the Proof Factory unload at its loading dock, zkSNARKs pick them up and wait at the bus stop for a block. Upstairs (1F) is the Block Archive, where any block since genesis can be rebuilt.",
   factory: "The Proof Factory is the mining hall: rows of miners per mining pool press each new block, which rolls down a conveyor. Shielded parcels leave from its dock.",
-  cards: "zkCARDS is the museum of the zkSNARKs collection: all 10,000 characters on eight floors, ranked by rarity.",
-  bank: "The View Key Bank: visitors paste a viewing key and the vault shows their shielded balance, computed in their own browser; the key never leaves it.",
-  zsa: "The ZSA Exchange is a building site for Zcash Shielded Assets (ZIPs 226, 227, 228): custom tokens inside the shielded pool, coming in a future upgrade.",
   library: "The Library keeps the Zcash news and every ZIP (Zcash Improvement Proposal) on its shelves.",
   tower: "ZK TOWER is a condo tower with flats, an arcade, a bowling alley, a gym, a pool and a rooftop.",
   museum: "The zkSNARK Museum is the city's Louvre: the Hall under the glass pyramid, the Grande Galerie of zkSNARK portraits, and zkSNARK #1, the collection's original, behind glass.",
@@ -638,11 +641,8 @@ setTimeout(() => hud.ready(), 15000);
 
 // ---- walk-in places ----------------------------------------------------------------------------
 const PLACES: Record<Interior["key"], string> = {
-  mempool: "MEMPOOL",
-  cards: "zkCARDS",
-  bank: "VIEW KEY BANK",
+  mempool: "MEMPOOL HQ",
   factory: "PROOF FACTORY",
-  zsa: "ZSA EXCHANGE",
   library: "BINHAI LIBRARY",
   tower: "ZK TOWER",
   museum: "zkSNARK MUSEUM",
@@ -667,18 +667,65 @@ const PLACES: Record<Interior["key"], string> = {
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
-const views = new Map<string, { rt: THREE.WebGLCubeRenderTarget; at: number }>();
+// A pool, not one per height: each 1024 px half-float cube is ~70 MB of GPU memory and a tour of
+// every place asked for 50+ of them. At most VIEW_POOL cubes exist; a new height re-renders into
+// the least recently used one (never the one the place you are in is showing). A place whose
+// panorama was taken over gets it re-rendered when it is entered again (refreshView).
+const views = new Map<string, { rt: THREE.WebGLCubeRenderTarget; at: number; used: number; theme?: Theme }>();
+const VIEW_POOL = quality.level >= 3 ? 3 : 6;
+/** What each place showed last (place → its cityView arguments and texture). */
+const shownView = new Map<string, { up: number; back: number; tex: THREE.Texture }>();
+// The GPU was reset (driver update, sleep, too many tabs): three.js re-uploads geometry and
+// textures by itself, but rendered panoramas come back empty, so they are all taken again (the one
+// on screen right away, the others when their place asks).
+canvas.addEventListener("webglcontextrestored", () => {
+  for (const e of views.values()) e.at = -Infinity;
+  const i = interiors?.active;
+  const s = i && shownView.get(i.key);
+  if (i && s && i.scene.background === s.tex) {
+    const tex = cityView(i.key, s.up, s.back);
+    if (tex) i.scene.background = tex;
+  }
+});
+function refreshView(i: Interior) {
+  const s = shownView.get(i.key);
+  if (!s || views.has(`${i.key}:${s.up}`) || i.scene.background !== s.tex) return;
+  const tex = cityView(i.key, s.up, s.back);
+  if (tex) i.scene.background = tex;
+}
 function cityView(place: string, up: number, back = 3): THREE.Texture | null {
-  // the Proof Factory isn't a venue (it has its own site): look out from its door
+  // the Proof Factory and the MEMPOOL HQ aren't venues (they have their own sites): look out from their doors
   const f = city.factory;
-  const v = place === "factory" && f?.door ? { door: f.door, occluder: f.occluder } : city.venues.find((x) => x.kind === place);
+  const hq = city.shops[0];
+  const v = place === "factory" && f?.door ? { door: f.door, occluder: f.occluder } : place === "mempool" && hq ? { door: hq.door, occluder: hq.occluder } : city.venues.find((x) => x.kind === place);
   if (!v) return null;
   const key = `${place}:${up}`;
   let e = views.get(key);
-  if (e && performance.now() - e.at < 60_000) return e.rt.texture;
-  e ??= { rt: new THREE.WebGLCubeRenderTarget(1024, { type: THREE.HalfFloatType }), at: 0 };
-  e.at = performance.now();
+  const now = performance.now();
+  // a panorama is a 6-face render of the whole city (~9,000 draw calls, a visible hitch): kept
+  // ten minutes for the same day/night, only a minute if it was taken while the city still loaded
+  if (e && e.theme === theme && (now - e.at < 60_000 || (e.at > 45_000 && now - e.at < 600_000))) {
+    e.used = now;
+    shownView.set(place, { up, back, tex: e.rt.texture });
+    return e.rt.texture;
+  }
+  if (!e) {
+    if (views.size >= VIEW_POOL) {
+      // take over the least recently used panorama that nobody is looking at
+      const busy = interiors?.active ? shownView.get(interiors.active.key)?.tex : null;
+      let lru: string | null = null;
+      for (const [k, x] of views) if (x.rt.texture !== busy && (lru === null || x.used < views.get(lru)!.used)) lru = k;
+      if (lru !== null) {
+        e = views.get(lru)!;
+        views.delete(lru);
+      }
+    }
+    e ??= { rt: new THREE.WebGLCubeRenderTarget(quality.level >= 3 ? 512 : 1024, { type: THREE.HalfFloatType }), at: 0, used: 0 };
+  }
+  e.at = e.used = now;
+  e.theme = theme;
   views.set(key, e);
+  shownView.set(place, { up, back, tex: e.rt.texture });
   const cam = new THREE.CubeCamera(0.5, 600, e.rt);
   cam.position.copy(v.door).add(new THREE.Vector3(0, up, -back));
   // the place itself must not block its own view
@@ -711,10 +758,7 @@ const interiors = new InteriorManager(
   canvas,
   {
     mempool: () => buildMempool(ictx),
-    cards: () => buildGallery(ictx),
-    bank: () => buildBank(ictx),
     factory: () => buildFactory(ictx),
-    zsa: () => buildZsa(ictx),
     library: () => buildLibrary(ictx),
     tower: () => buildTower(ictx),
     museum: () => buildMuseum(ictx),
@@ -740,6 +784,8 @@ const interiors = new InteriorManager(
   {
     entered: (i, f) => {
       i.setTheme?.(theme);
+      // its panorama may have been lent to another place meanwhile
+      refreshView(i);
       rig.controls.enabled = false;
       venues.close();
       hud.enterInterior(i, f);
@@ -755,6 +801,8 @@ const interiors = new InteriorManager(
     fade: () => hud.cut(),
   },
 );
+// phones and modest machines keep fewer walk-in places on the GPU at once
+interiors.keep = quality.level >= 2 ? 3 : 8;
 interiors.walk.resize(window.innerWidth, window.innerHeight);
 window.addEventListener("resize", () => {
   interiors.walk.resize(window.innerWidth, window.innerHeight);
@@ -778,7 +826,9 @@ function groundAt(x: number, z: number): number | null {
   const sg = sky.groundAt(x, z);
   if (sg !== null) return sg;
   const m = metro.heightAt(x, z) ?? metro2.heightAt(x, z);
-  if (m !== null) return m;
+  // a platform 9 m up is a roof to whoever walks the street under it (the ZEC Line's station in
+  // front of the Golden Gate walled the bridge off): it is the floor only once you are up there
+  if (m !== null && m - onFoot.floor < 1.6) return m;
   const R = RIVER;
   for (const fx of R.foot)
     if (Math.abs(x - fx) < 1.3 && z > R.z0 - 0.5 && z < R.z1 + 0.5) {
@@ -923,10 +973,8 @@ tv = new TvMode(rig, director, (on) => hud.setTv(on));
 if (new URLSearchParams(location.search).has("tv")) setTimeout(() => tv?.start(), 4000);
 
 if (city.factory) director.spawnMiners(city.factory.patrol);
-// the card shop's walls, and a clerk in each shop
-const cardShop = city.venues.find((v) => v.kind === "cards");
-const cardWall = cardShop ? new CardWall(scene, cardShop) : null;
-if (cardShop) void director.spawnKeeper(cardShop.keeper, 7143, "Card dealer");
+// the MEMPOOL chain live: the HQ's board and dock hands, the branches' counters and customers
+const mempoolLive = new MempoolLive(city, director);
 
 const venues = new Venues(document.getElementById("ui")!, {
   onStreet: () => [...director.snarks].filter((s) => s.state !== "resident" && s.root.visible).map((s) => s.id),
@@ -948,15 +996,14 @@ reader.onClose = () => {
 const arcade = new Arcade(document.getElementById("ui")!);
 arcade.onClose = reader.onClose;
 
-/** Walk into the card shop or the bank: the inside camera, and its counter on the left. */
 // the places you can walk into, tagged over their doors
 hud.setPlaces([
-  ...(city.shops[0] ? [{ key: "mempool", label: "MEMPOOL", sub: "pending tx · pickup", at: city.shops[0].door.clone().setY(4.6) }] : []),
+  ...(city.shops[0] ? [{ key: "mempool", label: "MEMPOOL HQ", sub: "pending tx · pickup · loading dock", at: city.shops[0].door.clone().setY(4.6) }] : []),
   ...city.venues.map((v) => ({
     key: v.kind,
     label: PLACES[v.kind],
     sub: PLACE_SUB[v.kind] ?? "",
-    at: v.door.clone().setY(v.kind === "bank" ? 7.4 : v.kind === "library" ? 7.8 : 5.6),
+    at: v.door.clone().setY(v.kind === "library" ? 7.8 : 5.6),
   })),
   ...(city.factory ? [{ key: "factory", label: "PROOF FACTORY", sub: "shielded tx proved here", at: (city.factory.roof ?? city.factory.hall).clone().add(new THREE.Vector3(0, 3, 0)) }] : []),
 ]);
@@ -1465,7 +1512,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       shelf,
       venues,
       hall,
-      cardWall,
+      mempoolLive,
       interiors,
       enter: (k: string) => enterPlace(k),
       hud,
@@ -1782,6 +1829,7 @@ function frameBody(stepDt?: number) {
   runDirector(sim, t, camQuat, camRight);
   visitors.update(dt, t, camQuat, camRight);
   critters.update(dt, cam);
+  mempoolLive.update(sim, focus, wide);
   metro.update(sim);
   tram.update(sim);
   cityTraffic.update(sim);

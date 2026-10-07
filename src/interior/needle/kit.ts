@@ -434,7 +434,8 @@ export class NeedleKit {
     cab.from = from;
     cab.t = 0;
     const dh = Math.abs(LEVELS[f].y - LEVELS[from].y);
-    cab.dur = 1.6 + dh / 30;
+    // (short: the doors stay shut while it rides, and a long ride felt like being stuck)
+    cab.dur = 1.4 + dh / 60;
     cab.open = 0;
     if (!this.rects[f].includes(cab.doorRect)) this.rects[f].push(cab.doorRect);
     this.drawCabin(cab, 0);

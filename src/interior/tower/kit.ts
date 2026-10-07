@@ -177,7 +177,7 @@ export class TowerKit {
     art.position.z = 0.05;
     g.add(art);
     this.groups[f].add(g);
-    this.pick(f, art, `<b>zkSNARK #${id}</b><span>a portrait</span>`, () => ({ eyebrow: "Painting", title: `zkSNARK #${id}`, image: ZScan.zkSnarkImage(id), body: "<p>One of the 10,000. The whole collection hangs in zkCARDS, next door to the MEMPOOL.</p>" }));
+    this.pick(f, art, `<b>zkSNARK #${id}</b><span>a portrait</span>`, () => ({ eyebrow: "Painting", title: `zkSNARK #${id}`, image: ZScan.zkSnarkImage(id), body: "<p>One of the 10,000. The whole collection hangs in the zkSNARK Museum.</p>" }));
   }
 
   /** A row of wall sconces along a wall (facing `rot`). */

@@ -1,10 +1,10 @@
 import * as THREE from "three";
+import { sharedAtlasTexture } from "../../data/atlas";
 import type { Collection } from "./data";
 import { boxGeo, FACE, type MuseumKit } from "./kit";
 import { goldMosaic, limestone, skylight, versailles } from "./look";
 import { lifts, SERIF } from "./parts";
 import { banquette, stanchions, wingedVictory } from "./voxels";
-import { API } from "../../data/zscan";
 import { ZScan } from "../../data/zscan";
 
 /**
@@ -296,8 +296,8 @@ export function etats(k: MuseumKit, data: Collection) {
   // ---- facing it: all 10,000, the largest canvas in the house -----------------------------------
   const MS = 6.8,
     MZ = -13.4;
-  const mosaicTex = k.texture(`${API}/v1/collections/zksnarks/map/image`, f);
-  mosaicTex.minFilter = THREE.LinearMipmapLinearFilter;
+  // the app's one shared atlas texture (not a second 3200 px download and GPU copy)
+  const mosaicTex = sharedAtlasTexture();
   const mosaic = new THREE.Mesh(new THREE.PlaneGeometry(MS, MS), new THREE.MeshBasicMaterial({ map: mosaicTex, color: "#ece6dc" }));
   mosaic.position.set(X1 - 0.34, 1.6 + MS / 2, MZ);
   mosaic.rotation.y = FACE.nx;

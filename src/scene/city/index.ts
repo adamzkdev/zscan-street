@@ -60,6 +60,18 @@ export interface ShopSite extends Interior {
   /** Block shelves, front run first: left end, right end, and the height between two boards. */
   shelves: { a: THREE.Vector3; b: THREE.Vector3; step: number }[];
   occluder: Occluder;
+  /** The MEMPOOL HQ's loading dock: the kerb, where drivers set parcels down, the pallets, the pass to the hall. */
+  dock?: { kerb: THREE.Vector3; bay: THREE.Vector3; pallet: THREE.Vector3; pass: THREE.Vector3 };
+  /** A live board on the facade: centre of its face, size (m), which way it faces. */
+  screen?: LiveBoard;
+}
+
+/** A live board on a facade (the MEMPOOL HQ's, each branch's roof sign). */
+export interface LiveBoard {
+  at: THREE.Vector3;
+  w: number;
+  h: number;
+  yaw: number;
 }
 
 /** The mining hall inside the Proof Factory, in world coordinates. */
@@ -127,7 +139,7 @@ export interface City {
   /** The landmarks by kind: their named points (world), door, building, and which way the front faces. */
   landmarks: Map<string, { points: Record<string, THREE.Vector3>; door: THREE.Vector3; occluder: Occluder; yaw: number; raw: Record<string, number[]>; toWorld: (x: number, y: number, z: number) => THREE.Vector3 }>;
   /** The shōtengai's shops: what each one is, its sign, the building (to hover and click). */
-  stores: { id: string; name: string; occluder: Occluder; door: THREE.Vector3 }[];
+  stores: { id: string; name: string; occluder: Occluder; door: THREE.Vector3; screen?: LiveBoard }[];
   /** The bigger city's buildings: full detail within `near` metres of `focus`, half within `mid`, a quarter beyond. */
   lod(focus: THREE.Vector3, near: number, mid: number): void;
   update(t: number, dt: number): void;
@@ -163,6 +175,14 @@ type Meta = {
   points?: Record<string, [number, number, number]>;
 };
 
+/** A half-float attribute over the worker's own array (Float16BufferAttribute would copy it). */
+function half(a: Uint16Array) {
+  const at = new THREE.BufferAttribute(a, 3);
+  Object.setPrototypeOf(at, THREE.Float16BufferAttribute.prototype);
+  (at as unknown as { isFloat16BufferAttribute: boolean }).isFloat16BufferAttribute = true;
+  return at;
+}
+
 /** Buildings that are the same variant share their geometry. */
 const geoCache = new WeakMap<object, THREE.BufferGeometry>();
 function geometry(d: NonNullable<Geos[Kind]>) {
@@ -171,8 +191,9 @@ function geometry(d: NonNullable<Geos[Kind]>) {
   const g = new THREE.BufferGeometry();
   geoCache.set(d, g);
   g.setAttribute("position", new THREE.BufferAttribute(d.pos, 3));
-  g.setAttribute("normal", new THREE.BufferAttribute(d.nor, 3));
-  g.setAttribute("color", new THREE.BufferAttribute(d.col, 3));
+  // compact arrays from the worker (see GeoData): byte normals, half-float colours
+  g.setAttribute("normal", new THREE.BufferAttribute(d.nor, 3, true));
+  g.setAttribute("color", half(d.col));
   g.setIndex(new THREE.BufferAttribute(d.idx, 1));
   g.computeBoundingSphere();
   return g;
@@ -287,7 +308,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     const box = new THREE.Box3().setFromObject(full);
     const lmLod = landmarkLods.find((l) => l.full === full);
     if (lmLod) box.getCenter(lmLod.at);
-    const occ: Occluder = { full, cut, extras, box, level: 1, height: box.max.y, open: ["mempool", "factory", "cardshop"].includes(j.type), fixed: j.type === "landmark" };
+    const occ: Occluder = { full, cut, extras, box, level: 1, height: box.max.y, open: ["mempool", "factory"].includes(j.type), fixed: j.type === "landmark" };
     occluders.push(occ);
     const fa = toWorld(bx0, 0, bz1),
       fb = toWorld(bx1, 0, bz1);
@@ -302,7 +323,13 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     for (const [lx, ly, lz, color] of m.lights) lamps.push({ pos: toWorld(lx, ly, lz), color, intensity: j.type === "mempool" ? 3 : 6 });
     const door = toWorld(m.door[0], 0, m.door[1]).setY(CURB);
     const store = (j.opts as { store?: string; sign?: string }).store;
-    if (store) stores.push({ id: store, name: (j.opts as { sign?: string }).sign ?? store, occluder: occ, door });
+    /** A live board from the model's `screen` and `screenSize` points. */
+    const board = (): LiveBoard | undefined => {
+      const at = m.points?.screen,
+        size = m.points?.screenSize;
+      return at && size ? { at: toWorld(at[0], at[1], at[2]), w: size[0] * VOX, h: size[1] * VOX, yaw: ROT[j.face] } : undefined;
+    };
+    if (store) stores.push({ id: store, name: (j.opts as { sign?: string }).sign ?? store, occluder: occ, door, screen: board() });
     if (j.type === "landmark") {
       const kind = (j.opts as { kind: string }).kind;
       const points: Record<string, THREE.Vector3> = {};
@@ -352,7 +379,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       const NAMES: Record<string, string> = { museum: "the zkSNARK MUSEUM", stadium: "BLOCK STADIUM", mall: "the ZK MALL", hotel: "the MARINA ZEC HOTEL", needle: "the ZEC NEEDLE", pyramid: "the GREAT PYRAMID", eiffel: "the TOUR EIFFEL", colosseum: "the COLOSSEUM", arab: "the BURJ AL ZEC", gardens: "GARDENS BY THE BAY", palm: "THE PALM", reserve: "the ZEC RESERVE", opera: "the OPERA HOUSE", bigben: "BIG BEN", statue: "the zkSNARK OF LIBERTY", "tower-orchard": "ZK TOWER ORCHARD", "tower-sapling": "ZK TOWER SAPLING", "tower-halo": "ZK TOWER HALO", library: "the BINHAI LIBRARY" };
       venues.push({
         kind: venue,
-        name: j.type === "landmark" ? (NAMES[venue] ?? "the ZEC RESERVE") : venue === "cards" ? "zkCARDS" : venue === "bank" ? "the VIEW KEY BANK" : venue === "library" ? "the LIBRARY" : venue === "tower" ? "the ZK TOWER" : "the ZSA EXCHANGE",
+        name: j.type === "landmark" ? (NAMES[venue] ?? "the ZEC RESERVE") : venue === "library" ? "the LIBRARY" : "the ZK TOWER",
         door,
         occluder: occ,
         keeper: w("keeper").setY(CURB + VOX),
@@ -374,7 +401,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
         return v;
       };
       const shelves = [0, 1, 2].map((i) => ({ a: p(`shelf${i}a`), b: p(`shelf${i}b`), step: 3 * VOX }));
-      shops.push({ name: "the MEMPOOL shop", district: j.district, door, inside: p("inside", CURB + VOX), counter: p("counter", CURB + VOX), keeper: p("keeper", CURB + VOX), rack: p("rack"), camPos: p("camPos"), camLook: p("camLook"), shelves, occluder: occ });
+      shops.push({ name: "the MEMPOOL HQ", district: j.district, door, inside: p("inside", CURB + VOX), counter: p("counter", CURB + VOX), keeper: p("keeper", CURB + VOX), rack: p("rack"), camPos: p("camPos"), camLook: p("camLook"), shelves, occluder: occ, dock: m.points.dock ? { kerb: p("dock", CURB), bay: p("bay", CURB + VOX), pallet: p("pallet", CURB + VOX), pass: p("pass", CURB + VOX) } : undefined, screen: board() });
     } else if ((j.type === "depot" || j.type === "factory") && m.points?.dock) {
       docks.push({ kind: j.type === "factory" ? "proof" : "depot", x: toWorld(...m.points.dock).x });
       const pt = m.points;
@@ -471,7 +498,12 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     for (const list of sectors.values()) placeInstanced(list, r);
     done++;
   };
-  for (const r of cached.values()) placeResult(r);
+  for (const r of cached.values())
+    try {
+      placeResult(r);
+    } catch (err) {
+      console.error("city: a cached building could not be placed", err);
+    }
   progress(done / total);
 
   await Promise.all([
@@ -482,11 +514,21 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
             const fresh: [string, unknown][] = [];
             for (const r of e.data.results) {
               timings.push([r.ms, byId.get(r.id)!.type, i]);
-              placeResult(r);
+              try {
+                placeResult(r);
+              } catch (err) {
+                console.error(`city: placing ${byId.get(r.id)!.type} #${r.id} failed`, err);
+                continue;
+              }
               fresh.push([variantKey(byId.get(r.id)!), r]);
             }
             void cache.put(fresh);
             progress(done / total);
+            resolve();
+          };
+          // a worker that dies (out of memory, a script error) leaves gaps, not a city that never opens
+          w.onerror = (err) => {
+            console.error("city worker failed", err.message);
             resolve();
           };
           w.postMessage({ kind: "buildings", jobs: queues[i] });
@@ -510,6 +552,10 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
         done++;
         progress(done / total);
         w.terminate();
+        resolve();
+      };
+      w.onerror = (err) => {
+        console.error("city props worker failed", err.message);
         resolve();
       };
       w.postMessage({ kind: "props", props });

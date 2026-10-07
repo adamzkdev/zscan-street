@@ -1,4 +1,4 @@
-import { get, EXPLORER } from "../data/zscan";
+import { get, EXPLORER, ZScan } from "../data/zscan";
 import { Market, type MarketState } from "../data/market";
 import type { Tx } from "../data/types";
 import type { PickInfo } from "../interior/types";
@@ -7,7 +7,8 @@ import type { Game } from "./arcade";
 /**
  * What each shop of the shōtengai shows at its counter: live chain data, nothing else.
  * Konbini = the mempool, exchange = the price, café = the last block, ramen = the miners,
- * newsstand = the news, florist = the shielded pools, tea house = NU7, arcade = a game.
+ * newsstand = the news, florist = the shielded pools, tea house = NU7, arcade = a game,
+ * gacha = a random zkSNARK, a MEMPOOL branch (`mempool-<district>`) = the mempool.
  */
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -38,9 +39,50 @@ export interface StoreData {
   nu7: () => { height: number | null; date: string | null; activated: boolean; tip: number | null };
 }
 
+/** The live mempool at a MEMPOOL counter (the HQ's board and every branch show the same). */
+export function mempoolStats(txs: Tx[]) {
+  const shielded = txs.filter((t) => t.kind === "shielded" || t.kind === "shielding" || t.kind === "migration").length;
+  return {
+    count: txs.length,
+    shieldedPct: txs.length ? Math.round((shielded / txs.length) * 100) : null,
+    bytes: txs.reduce((a, t) => a + t.size, 0),
+    fees: txs.reduce((a, t) => a + (t.fee ?? 0), 0),
+    oldest: txs.length ? Math.min(...txs.map((t) => t.seenAt)) : null,
+  };
+}
+
 /** The panel for a shop, or a game to start (the arcade). */
 export async function storeInfo(id: string, d: StoreData): Promise<PickInfo | { game: Game }> {
+  if (id.startsWith("mempool-")) {
+    const txs = d.mempool();
+    const s = mempoolStats(txs);
+    return {
+      eyebrow: `MEMPOOL · ${id.slice(8).toUpperCase()} BRANCH`,
+      title: `${s.count} pending`,
+      mono: true,
+      stats: [
+        ["Size", `${(s.bytes / 1000).toFixed(1)} kB`],
+        ["Shielded", s.shieldedPct === null ? "—" : `${s.shieldedPct}%`],
+        ["Fees", `${(s.fees / 1e8).toFixed(5)} ZEC`],
+        ["Oldest", s.oldest ? ago(s.oldest) : "—"],
+      ],
+      body: rows(txs.slice(-6).reverse().map((t) => [`${t.kind}`, `${t.txid.slice(0, 8)}… · ${t.size} B · ${ago(t.seenAt)}`])),
+      link: { href: `${EXPLORER}/mempool`, label: "Mempool on ZScan" },
+    };
+  }
   switch (id) {
+    case "gacha": {
+      const n = 1 + Math.floor(Math.random() * 10000);
+      const item = await ZScan.zkSnark(n).catch(() => null);
+      return {
+        eyebrow: "ガチャ · GACHA",
+        title: item?.name ?? `zkSNARK #${n}`,
+        image: ZScan.zkSnarkImage(n),
+        tag: item?.rank ? [`Rank ${item.rank.toLocaleString("en-US")}`, item.rank <= 500 ? "ok" : "info"] : undefined,
+        stats: (item?.traits ?? []).slice(0, 4).map((t) => [t.trait_type, t.value] as [string, string]),
+        link: item?.url ? { href: item.url, label: "On ZScan" } : undefined,
+      };
+    }
     case "konbini": {
       const txs = d.mempool();
       const shielded = txs.filter((t) => t.kind === "shielded" || t.kind === "shielding" || t.kind === "migration").length;

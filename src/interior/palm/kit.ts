@@ -31,9 +31,10 @@ export const LEVELS: Level[] = [
   { label: "B", name: "Frond beach · villas, lagoon, beach bar", y: 0, spawn: [0, 10], yaw: 0, view: 2.2 },
   { label: "V", name: "Villa Shielded · living room, pool terrace", y: 30, spawn: [0, 9], yaw: 0, view: 5, rot: 0.85 },
   { label: "C", name: "Crescent boardwalk · sunset, Atlantis", y: 60, spawn: [0, 40], yaw: 0 },
-  { label: "M", name: "Marina · yachts", y: 90, spawn: [0, 12], yaw: 0, view: 2.4 },
 ];
-export const F = { beach: 0, villa: 1, crescent: 2, marina: 3 } as const;
+// (the marina level was listed but never built: an empty void you could walk off into, so it is
+// not offered by the lift until it exists)
+export const F = { beach: 0, villa: 1, crescent: 2 } as const;
 export const LIGHTS_PER_FLOOR = 6;
 /** Metres from the street door (the trunk's quay end) into the island: where the panoramas are taken. */
 export const BACK = -34;

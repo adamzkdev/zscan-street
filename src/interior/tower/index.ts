@@ -11,7 +11,7 @@ import { rooftop } from "./rooftop";
 import { gym, pool } from "./wellness";
 
 /**
- * The ZK TOWER (秘密マンション): a condo tower between the MEMPOOL shop and zkCARDS. Eight levels of
+ * The ZK TOWER (秘密マンション): a condo tower between the MEMPOOL HQ and the flower shop. Eight levels of
  * 24 × 18 m, furnished in voxels like the city, glass all round onto the real street (a panorama
  * rendered from the tower at each floor's height). One module per floor; only the floor you are on
  * is drawn, lit and animated.

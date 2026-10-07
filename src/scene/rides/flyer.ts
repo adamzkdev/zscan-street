@@ -6,6 +6,12 @@ import { zLogo } from "../decor";
 import type { Snark } from "../snark";
 import { Banter, canvasTex, clean, FONT, person, portraitSheet, sign, tube, v3 } from "./common";
 
+// per-frame scratch objects (no garbage in the frame loop)
+const TMP_M = new THREE.Matrix4();
+const TMP_C = new THREE.Vector3();
+const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
+const TMP_COL = new THREE.Color();
+
 /**
  * The ZEC FLYER: a 52 m observation wheel on the south bank (London Eye / Singapore Flyer), its
  * rim a lit truss on cable spokes, 30 glass capsules kept level as it turns (one lap in 90 s),
@@ -654,9 +660,9 @@ export class Flyer {
       this.frames[5].visible = night;
     }
     // the capsules, level whatever the wheel's angle; the ridden one is the modelled cabin
-    const m = new THREE.Matrix4(),
-      c = new THREE.Vector3(),
-      zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    const m = TMP_M,
+      c = TMP_C,
+      zero = ZERO_M;
     for (let i = 0; i < FLY.n; i++) {
       this.podCentre(i, c);
       const mm = this.ride?.pod === i ? zero : m.makeTranslation(c.x, c.y, c.z);
@@ -701,7 +707,7 @@ export class Flyer {
     P.needsUpdate = true;
     // rim lights at night: the colours of a slow rainbow, a bright pulse chasing round
     if (night) {
-      const col = new THREE.Color();
+      const col = TMP_COL;
       let li = 0;
       for (let ring = 0; ring < 2; ring++)
         for (let i = 0; i < this.ledN; i++) {

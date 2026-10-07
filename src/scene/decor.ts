@@ -448,7 +448,7 @@ export const TICKER: Ad = (ctx, w, h, t, live) => {
 
 /** LED screens on the tall buildings, a giant one on the tower, flicker and scan lines on all. */
 function ads(city: City, ticks: Tick[], live: LiveData) {
-  const screens: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; ads: Ad[]; at: number; w: number; h: number }[] = [];
+  const screens: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; ads: Ad[]; at: number; w: number; h: number; mesh: THREE.Mesh; where: THREE.Vector3 | null }[] = [];
   const make = (parent: THREE.Object3D, w: number, h: number, pos: THREE.Vector3, yaw: number, list: Ad[]) => {
     const W = 384,
       H = Math.round((384 * h) / w);
@@ -465,7 +465,7 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
     bezel.position.copy(pos).add(new THREE.Vector3(0, 0, -0.07).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw));
     bezel.rotation.y = yaw;
     parent.add(bezel, screen);
-    screens.push({ ctx: c.getContext("2d")!, tex, ads: list, at: Math.random() * 10, w: W, h: H });
+    screens.push({ ctx: c.getContext("2d")!, tex, ads: list, at: Math.random() * 10, w: W, h: H, mesh: screen, where: null });
   };
   const rand = r(77);
   // out in the bigger city, only a few towers carry screens (each one redraws its canvas)
@@ -527,12 +527,20 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
   let last = 0;
   let now = 0;
   let alert: { a: Alert; from: number; until: number } | null = null;
-  ticks.push((t) => {
+  // Only the screens near what you look at are redrawn (dozens of canvases re-uploaded 15 times a
+  // second all over the city cost more than the rest of the decor); the far ones keep their frame.
+  const shown = (o: THREE.Object3D) => {
+    for (let x: THREE.Object3D | null = o; x; x = x.parent) if (!x.visible) return false;
+    return true;
+  };
+  ticks.push((t, _dt, focus) => {
     now = t;
     if (t - last < 1 / 15) return;
     last = t;
     if (alert && t > alert.until) alert = null;
     for (const s of screens) {
+      s.where ??= s.mesh.getWorldPosition(new THREE.Vector3());
+      if (s.where.distanceToSquared(focus) > 95 * 95 || !shown(s.mesh)) continue;
       if (alert) {
         alertAd(s.ctx, s.w, s.h, t - alert.from, alert.a);
         s.ctx.fillStyle = "rgba(0,0,0,0.18)";

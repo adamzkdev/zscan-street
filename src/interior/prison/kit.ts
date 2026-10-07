@@ -382,7 +382,7 @@ export class PrisonKit {
     const W = o.px ?? 512,
       H = Math.round((W * h) / w);
     const t = canvasTex(W, H, (g) => draw(g, W, H), false);
-    const mat = o.glow ? new THREE.MeshBasicMaterial({ map: t, toneMapped: false, transparent: o.transparent }) : new THREE.MeshStandardMaterial({ map: t, roughness: 0.85, transparent: o.transparent });
+    const mat = o.glow ? new THREE.MeshBasicMaterial({ map: t, toneMapped: false, transparent: !!o.transparent }) : new THREE.MeshStandardMaterial({ map: t, roughness: 0.85, transparent: !!o.transparent });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
     m.position.set(x, y, z);
     m.rotation.y = rot;

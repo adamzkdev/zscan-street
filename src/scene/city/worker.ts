@@ -12,25 +12,37 @@ import type { BuildingJob, PropJob } from "./plan";
  * sends back plain arrays. Each building comes with a cut-down copy for the walls-down view.
  */
 
+/**
+ * Compact on purpose: the city is ~28 million vertices, and in plain Float32 its arrays took
+ * ~830 MB of memory (and as much again on the GPU). Normals are axis-aligned (bytes: -127/0/127,
+ * normalised), colours are half floats (they go above 1 for the lit windows and neon), indices are
+ * 16-bit whenever a mesh has fewer than 65,536 vertices. Same look, about 40 % of the memory.
+ */
 export interface GeoData {
   pos: Float32Array;
-  nor: Float32Array;
-  col: Float32Array;
-  idx: Uint32Array;
+  nor: Int8Array;
+  /** Half floats (IEEE 754 binary16). */
+  col: Uint16Array;
+  idx: Uint32Array | Uint16Array;
 }
 export type Geos = Partial<Record<Kind, GeoData>>;
 
 export const CUT_VOX = 16;
 
+const toHalf = THREE.DataUtils.toHalfFloat;
 function pack(geos: Partial<Record<Kind, THREE.BufferGeometry>>, out: Transferable[]): Geos {
   const r: Geos = {};
   for (const [k, g] of Object.entries(geos) as [Kind, THREE.BufferGeometry][]) {
-    const d: GeoData = {
-      pos: g.getAttribute("position").array as Float32Array,
-      nor: g.getAttribute("normal").array as Float32Array,
-      col: g.getAttribute("color").array as Float32Array,
-      idx: Uint32Array.from(g.getIndex()!.array),
-    };
+    const pos = g.getAttribute("position").array as Float32Array;
+    const n = g.getAttribute("normal").array;
+    const c = g.getAttribute("color").array;
+    const nor = new Int8Array(n.length);
+    for (let i = 0; i < n.length; i++) nor[i] = Math.round(n[i] * 127);
+    const col = new Uint16Array(c.length);
+    for (let i = 0; i < c.length; i++) col[i] = toHalf(c[i]);
+    const src = g.getIndex()!.array;
+    const idx = pos.length / 3 <= 65535 ? Uint16Array.from(src) : Uint32Array.from(src);
+    const d: GeoData = { pos, nor, col, idx };
     out.push(d.pos.buffer, d.nor.buffer, d.col.buffer, d.idx.buffer);
     r[k] = d;
   }
@@ -64,10 +76,16 @@ self.onmessage = (e: MessageEvent) => {
   const msg = e.data as { kind: "buildings"; jobs: BuildingJob[] } | { kind: "props"; props: PropJob[] };
   const transfer: Transferable[] = [];
   if (msg.kind === "buildings") {
-    const results = msg.jobs.map((j) => {
+    // one broken building (a builder throwing) must not take the whole queue, or the city, with it
+    const results = msg.jobs.flatMap((j) => {
       const t0 = performance.now();
-      const res = buildOne(j);
-      return { ...res, ms: Math.round(performance.now() - t0) };
+      try {
+        const res = buildOne(j);
+        return [{ ...res, ms: Math.round(performance.now() - t0) }];
+      } catch (err) {
+        console.error(`city worker: ${j.type} #${j.id} failed`, err);
+        return [];
+      }
     });
     (self as unknown as Worker).postMessage({ kind: "buildings", results }, transfer);
     return;

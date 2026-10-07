@@ -1,7 +1,7 @@
 import * as THREE from "three";
+import { atlasBitmap } from "../data/atlas";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Market } from "../data/market";
-import { API } from "../data/zscan";
 import type { City } from "./city";
 import { CURB, GRID } from "./city/plan";
 import { SCRAMBLE, type CityTraffic } from "./citytraffic";
@@ -714,12 +714,12 @@ export class Shibuya {
     const [c, g] = canvas(ACOLS * 32, rows * 32);
     const colours: THREE.Color[] = [];
     try {
-      const res = await fetch(`${API}/v1/collections/zksnarks/map/image`);
-      if (!res.ok) throw new Error(`atlas HTTP ${res.status}`);
-      const bmp = await createImageBitmap(await res.blob());
+      // one shared download for the whole app (retried on API trouble)
+      const bmp = await atlasBitmap();
       const cell = bmp.width / 100;
       g.imageSmoothingEnabled = false;
       ids.forEach((id, i) => g.drawImage(bmp, ((id - 1) % 100) * cell, Math.floor((id - 1) / 100) * cell, cell, cell, (i % ACOLS) * 32, Math.floor(i / ACOLS) * 32, 32, 32));
+      bmp.close();
       const img = g.getImageData(0, 0, c.width, c.height);
       const d = img.data,
         W = c.width;

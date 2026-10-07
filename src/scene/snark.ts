@@ -35,14 +35,26 @@ export function loadArt(id: number): Promise<Art> {
   let p = artCache.get(id);
   if (!p) {
     p = (async () => {
-      const res = await fetch(ZScan.zkSnarkImage(id));
-      if (!res.ok) throw new Error(`zkSNARK #${id}: HTTP ${res.status}`);
+      // the image API rate-limits bursts (a 429 shows up as a CORS failure): a couple of retries
+      // with a growing pause, so a busy moment doesn't leave people missing for the whole visit
+      let res: Response | null = null;
+      for (let k = 0; ; k++) {
+        try {
+          res = await fetch(ZScan.zkSnarkImage(id));
+          if (res.ok || res.status === 404 || k >= 2) break;
+        } catch (e) {
+          if (k >= 2) throw e;
+        }
+        await new Promise((r) => setTimeout(r, 1500 * (k + 1) + Math.random() * 1000));
+      }
+      if (!res?.ok) throw new Error(`zkSNARK #${id}: HTTP ${res?.status}`);
       const bmp = await createImageBitmap(await res.blob());
       const c = document.createElement("canvas");
       c.width = bmp.width;
       c.height = bmp.height;
       const ctx = c.getContext("2d", { willReadFrequently: true })!;
       ctx.drawImage(bmp, 0, 0);
+      bmp.close();
       const img = ctx.getImageData(0, 0, c.width, c.height);
       keyOutBackground(img);
       ctx.putImageData(img, 0, 0);
@@ -56,8 +68,36 @@ export function loadArt(id: number): Promise<Art> {
     })();
     artCache.set(id, p);
     p.catch(() => artCache.delete(id));
+    void p.then((a) => artIds.set(a, id), () => {});
   }
   return p;
+}
+
+// Every transaction brings a new zkSNARK to the street, so over a long visit thousands of portraits
+// were loaded and none ever let go (1 MB canvas + 1.4 MB of GPU texture each). Portraits are counted
+// by the characters wearing them; the unused ones are kept for a while (people come back), then the
+// oldest are released.
+const artIds = new Map<Art, number>();
+const artUsers = new Map<Art, number>();
+const idleArt = new Set<Art>();
+const IDLE_MAX = 160;
+function holdArt(a: Art) {
+  artUsers.set(a, (artUsers.get(a) ?? 0) + 1);
+  idleArt.delete(a);
+}
+function releaseArt(a: Art) {
+  const n = (artUsers.get(a) ?? 1) - 1;
+  if (n > 0) return void artUsers.set(a, n);
+  artUsers.delete(a);
+  idleArt.add(a);
+  for (const old of idleArt) {
+    if (idleArt.size <= IDLE_MAX) break;
+    idleArt.delete(old);
+    const id = artIds.get(old);
+    artIds.delete(old);
+    if (id !== undefined) artCache.delete(id);
+    old.texture.dispose();
+  }
 }
 
 function keyOutBackground(img: ImageData) {
@@ -128,6 +168,12 @@ function pixelPlane(t: { texture: THREE.Texture; w: number; h: number }, z: numb
   const m = new THREE.Mesh(new THREE.PlaneGeometry(t.w * PX, t.h * PX), new THREE.MeshBasicMaterial({ map: t.texture, transparent: true, alphaTest: 0.5 }));
   m.position.z = z;
   return m;
+}
+/** Free a pixel plane's own geometry and material (its sprite texture is shared and kept). */
+function dropPlane(m: THREE.Mesh) {
+  m.parent?.remove(m);
+  m.geometry.dispose();
+  (m.material as THREE.Material).dispose();
 }
 const snap = (v: number) => Math.round(v / PX) * PX;
 /** The arms' plane, laid on the portrait's grid (POSE in portrait cells; row 32 is the ground). */
@@ -219,6 +265,8 @@ export class Snark {
     readonly id: number,
     art: Art,
   ) {
+    this.art = art;
+    holdArt(art);
     const mat = new THREE.MeshBasicMaterial({ map: art.texture, transparent: true, alphaTest: 0.5 });
     this.body = new THREE.Mesh(new THREE.PlaneGeometry(BODY, BODY), mat);
     this.body.position.y = LEG_H + BODY / 2;
@@ -261,6 +309,35 @@ export class Snark {
     this.ring.position.set(0.15, 0.02, 0);
     this.ring.visible = false;
     this.root.add(this.ring);
+  }
+
+  private readonly art: Art;
+  private disposed = false;
+  /**
+   * Gone for good (left the street): free its own geometries and materials and let its portrait
+   * go back to the pool. Safe to call twice; shared things (arm planes, shadow, sprites) are kept.
+   */
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.root.parent?.remove(this.root);
+    if (this.said) {
+      this.said.parent?.remove(this.said);
+      this.said = null;
+    }
+    const free = (o: THREE.Object3D) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      if (m.geometry !== POSE_GEO) m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+    };
+    this.root.traverse(free);
+    // the visual may sit in a bus seat rather than under the root
+    if (this.visual.parent !== this.root) {
+      this.visual.traverse(free);
+      this.visual.parent?.remove(this.visual);
+    }
+    releaseArt(this.art);
   }
 
   get isWalking() {
@@ -354,7 +431,7 @@ export class Snark {
   private bubbleAge = 0;
   /** A pixel speech bubble over the head for a few seconds: a reaction, never words. */
   emote(e: Emote, seconds = 2.6) {
-    if (this.bubble) this.visual.remove(this.bubble);
+    if (this.bubble) dropPlane(this.bubble);
     const b = pixelPlane(bubbleSprite(e), 0.06);
     b.position.set(snap(BUST_X + 9 * PX), LEG_H + BODY + 3 * PX, 0.06);
     b.scale.setScalar(0.01);
@@ -474,7 +551,7 @@ export class Snark {
       this.bubble.scale.setScalar(Math.max(0.01, Math.min(1, this.bubbleAge * 7, this.bubbleFor * 6)));
       this.bubble.position.y = LEG_H + BODY + 3 * PX + snap(Math.max(0, Math.sin(t * 5)) * PX);
       if (this.bubbleFor <= 0) {
-        this.visual.remove(this.bubble);
+        dropPlane(this.bubble);
         this.bubble = null;
       }
     }

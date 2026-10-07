@@ -4,6 +4,10 @@ import { toObject } from "../voxel/mesher";
 import { C, E, G, VOX, VoxelModel, type Paint } from "../voxel/model";
 import type { AliveCtx, AliveFrame, AlivePart } from "./types";
 
+// per-frame scratch objects (no garbage in the frame loop)
+const CABLE_DIR = new THREE.Vector3();
+const DOWN = new THREE.Vector3(0, -1, 0);
+
 /**
  * Building sites and window cleaners:
  *  - two tower cranes over half-built towers rising out of block courtyards (west of the heart and
@@ -516,10 +520,10 @@ class Site {
     this.hook.position.set(hx, this.y, hz);
     this.hook.rotation.y = this.a;
     const topY = this.jibY + 9 * VOX;
-    const dir = new THREE.Vector3(hx - tx, hookTop - topY, hz - tz);
+    const dir = CABLE_DIR.set(hx - tx, hookTop - topY, hz - tz);
     const len = dir.length();
     this.cable.position.set(tx, topY, tz);
-    this.cable.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir.normalize());
+    this.cable.quaternion.setFromUnitVectors(DOWN, dir.normalize());
     this.cable.scale.set(1, len, 1);
     this.cable.rotateY(this.a);
     for (const [i, o] of this.loads.entries()) {

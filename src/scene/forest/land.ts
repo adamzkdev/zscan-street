@@ -371,7 +371,9 @@ export class Land {
   walkAt(x: number, z: number) {
     for (const w of this.walks) {
       const r = lineDist(x, z, w.pts);
-      if (r.d <= w.half) return w.y[r.seg] + (w.y[r.seg + 1] - w.y[r.seg]) * r.t;
+      // (never under the ground: where a boardwalk runs into a bank, past its end, you stand on
+      // the bank, or the walker meets a 1 m wall of earth and the cove loop dead-ends there)
+      if (r.d <= w.half) return Math.max(w.y[r.seg] + (w.y[r.seg + 1] - w.y[r.seg]) * r.t, this.raw(x, z));
     }
     return null;
   }

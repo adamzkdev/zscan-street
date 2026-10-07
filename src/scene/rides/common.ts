@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { API } from "../../data/zscan";
+import { atlasBitmap } from "../../data/atlas";
 import { loadArt, Snark } from "../snark";
 import { sayAt } from "../speech";
 
@@ -66,12 +66,12 @@ export function portraitSheet(ids: number[], cols = 8) {
   };
   void (async () => {
     try {
-      const res = await fetch(`${API}/v1/collections/zksnarks/map/image`);
-      if (!res.ok) throw new Error(String(res.status));
-      const bmp = await createImageBitmap(await res.blob());
+      // one shared download for the whole app (retried on API trouble)
+      const bmp = await atlasBitmap();
       const cell = bmp.width / 100;
       g.imageSmoothingEnabled = false;
       ids.forEach((id, i) => g.drawImage(bmp, ((id - 1) % 100) * cell, Math.floor((id - 1) / 100) * cell, cell, cell, (i % cols) * 32, Math.floor(i / cols) * 32, 32, 32));
+      bmp.close();
       const img = g.getImageData(0, 0, c.width, c.height);
       const d = img.data,
         W = c.width;

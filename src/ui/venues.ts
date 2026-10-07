@@ -179,7 +179,7 @@ export class Venues {
       ["price", "Cheapest"],
       ["last", "Last sale"],
     ];
-    return `${this.head("SHOP · zkCARDS", "zkSNARKs", "10,000 pixel portraits · the people of this city")}
+    return `${this.head("zkSNARK MUSEUM", "zkSNARKs", "10,000 pixel portraits · the people of this city")}
       <dl class="stats">
         <div><dt>Floor</dt><dd>${m?.floor ? zec(m.floor, 3) : "—"}</dd></div>
         <div><dt>Listed</dt><dd>${m ? num(m.listings) : "—"}</dd></div>

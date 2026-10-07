@@ -192,7 +192,7 @@ export function chamber(k: PyramidKit, game: Game) {
 
   // coins spilled round the dais, stacked bars at its corners
   const coinGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.025, 18);
-  const coins = new THREE.InstancedMesh(coinGeo, k.gold, 150);
+  const coins = new THREE.InstancedMesh(coinGeo, k.gold, 150 + 40); // the spill plus the heap (count > capacity drew nothing)
   const m = new THREE.Matrix4(),
     qq = new THREE.Quaternion(),
     e = new THREE.Euler();

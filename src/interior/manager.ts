@@ -37,6 +37,15 @@ export class InteriorManager {
     this.ray.far = 30;
   }
 
+  /**
+   * How many places stay on the GPU. Every place stays built (its people, timers and listeners
+   * live on), but the least recently visited beyond `keep` have their GPU copies freed: all 26
+   * together held ~13,000 geometries and ~3,500 textures. Entering a parked place uploads it again
+   * (three.js does it by itself on the first frame, behind the entry fade).
+   */
+  keep = 8;
+  private parked = new Set<Interior>();
+
   /** Walk into a place, on its ground floor (or `floor`). */
   enter(key: Key, floor = 0) {
     let i = this.cache.get(key);
@@ -44,12 +53,30 @@ export class InteriorManager {
       i = this.build[key]();
       this.cache.set(key, i);
       exitSign(i);
+    } else {
+      // most recently visited last
+      this.cache.delete(key);
+      this.cache.set(key, i);
+      this.parked.delete(i);
     }
+    this.park(i);
     this.ev.fade();
     this.active = i;
     this.walk.enabled = true;
     this.goTo(floor);
     this.ev.entered(i, this.floor);
+  }
+
+  /** Free the GPU copies of the least recently visited places beyond `keep`. */
+  private park(entering: Interior) {
+    let n = this.cache.size;
+    for (const old of this.cache.values()) {
+      if (n <= this.keep) break;
+      n--;
+      if (old === entering || old === this.active || this.parked.has(old)) continue;
+      this.parked.add(old);
+      freeGpu(old.scene);
+    }
   }
 
   /** Take the elevator. */
@@ -179,4 +206,28 @@ function doorOf(f: { spawn: THREE.Vector3 }, rects: [number, number, number, num
       z = z0;
     }
   return { x: f.spawn.x, z };
+}
+
+/**
+ * Free a scene's GPU copies without touching the scene: geometries, materials and textures stay
+ * as they are and three.js uploads them again the next time they are drawn (shared ones, like a
+ * kit's common materials or the portrait atlas, simply get uploaded again by whoever draws them).
+ * Rendered panoramas (render-target textures) belong to the pool in main and are left alone.
+ */
+function freeGpu(scene: THREE.Scene) {
+  const textures = new Set<THREE.Texture>();
+  const materials = new Set<THREE.Material>();
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh;
+    m.geometry?.dispose();
+    const ms = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
+    for (const mat of ms) materials.add(mat);
+  });
+  for (const mat of materials) {
+    for (const v of Object.values(mat)) if ((v as THREE.Texture)?.isTexture) textures.add(v as THREE.Texture);
+    const u = (mat as THREE.ShaderMaterial).uniforms;
+    if (u) for (const x of Object.values(u)) if ((x?.value as THREE.Texture)?.isTexture) textures.add(x.value as THREE.Texture);
+    mat.dispose();
+  }
+  for (const t of textures) if (!(t as THREE.Texture & { isRenderTargetTexture?: boolean }).isRenderTargetTexture && t.version > 0) t.dispose();
 }

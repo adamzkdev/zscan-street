@@ -286,6 +286,8 @@ export function atrium(k: MallKit): Atrium {
   k.box(k.paint, wallC, 0.3, ROOF, Z1 - Z0, X0 - 0.15, 0, (Z0 + Z1) / 2);
   k.box(k.paint, wallC, 0.3, ROOF, Z1 - Z0, X1 + 0.15, 0, (Z0 + Z1) / 2);
   k.box(k.paint, wallC, X1 - X0, ROOF - 6, 0.3, 0, 6, Z1 + 0.15);
+  // ...and solid, on every level: between the shop fronts the east and west walls had gaps out into the void
+  for (const rs of k.rects) rs.push([X0 - 0.3, Z0 - 0.3, X0, Z1], [X1, Z0 - 0.3, X1 + 0.3, Z1], [X0 - 0.3, Z0 - 0.3, X1 + 0.3, Z0]);
   const R = 14.14;
   {
     const s = new THREE.Shape();

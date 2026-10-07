@@ -610,7 +610,7 @@ export class Director {
     const veh = this.traffic.add(new Vehicle(truck, "west", dock ? dock.x - 5 : EDGE, 9));
     // heading west, the tail is the east end: stop with it just past the shop door
     // tail just short of the zebra, so the driver has a short walk and the crossing stays free
-    await veh.stopAt(Math.min(shop.site.door.x + 0.9 + truck.length / 2, DISTRICTS[0].crossX - 1.3 - 0.8 - truck.length / 2));
+    await veh.stopAt(Math.min((shop.site.dock ? shop.site.dock.kerb.x + 0.3 : shop.site.door.x + 0.9) + truck.length / 2, DISTRICTS[0].crossX - 1.3 - 0.8 - truck.length / 2));
     // the driver climbs down and carries every parcel into the shop
     const driver = await this.porter(8000 + (this.porterSeq++ % 900));
     if (driver) {
@@ -713,7 +713,7 @@ export class Director {
     await this.drivePath(truck, [v(sx - 0.4, CITY.laneWest - 0.8, 0), v(mergeX, CITY.laneWest, 0)], 4.5);
     const veh = this.traffic.add(new Vehicle(truck, "west", mergeX, 9));
     // (never wait forever on the avenue: past the time, the driver walks from where the truck is)
-    await withTimeout(veh.stopAt(Math.min(shop.site.door.x + 0.9 + truck.length / 2, DISTRICTS[0].crossX - 1.3 - 0.8 - truck.length / 2)), 90_000);
+    await withTimeout(veh.stopAt(Math.min((shop.site.dock ? shop.site.dock.kerb.x + 0.3 : shop.site.door.x + 0.9) + truck.length / 2, DISTRICTS[0].crossX - 1.3 - 0.8 - truck.length / 2)), 90_000);
     await this.unload(truck, load, shop, source);
     this.enRoute[source] = false;
     if (this.pending[source].length) void this.dispatch(source);
@@ -785,13 +785,18 @@ export class Director {
       driver.setTxs([tx]);
       driver.showParcels(true);
       this.visit({ kind: "delivery", id: driver.id, tx, role: driver.role ?? "Driver" });
-      await driver.walk([shop.site.door], 1.7);
-      this.ev.door?.();
-      await driver.walk([shop.site.inside, shop.site.counter], 1.7);
+      // the HQ: in through the loading dock, the parcel set down by the conveyor for the hands
+      const dock = shop.site.dock;
+      if (dock) await driver.walk([dock.kerb, dock.bay], 1.7);
+      else {
+        await driver.walk([shop.site.door], 1.7);
+        this.ev.door?.();
+        await driver.walk([shop.site.inside, shop.site.counter], 1.7);
+      }
       driver.showParcels(false);
       this.addCrate(shop, tx);
       await sleep(250);
-      await driver.walk([shop.site.inside, shop.site.door], 1.9);
+      await driver.walk(dock ? [dock.kerb] : [shop.site.inside, shop.site.door], 1.9);
     }
     truck.close();
     driver.setTxs([]);

@@ -1,4 +1,4 @@
-// node shots/_walkcheck.mjs [keys,comma,separated] [--port 3021]
+// node shots/_walkcheck.mjs [keys,comma,separated|street] [--port 3021]   (MAP=mall:1 prints that floor's grid)
 // Walk-in sanity check, every place × every floor (run on a frozen prod preview, ?debug):
 //  - spawn not inside a collider, colliders well-formed (x0<x1, z0<z1), not covering the floor
 //  - the walker really moves: W/A/S/D for 1.5 s each from the spawn (walker.update stepped by hand)
@@ -20,7 +20,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 await p.goto(`http://localhost:${port}/?debug&theme=day`);
 await p.waitForFunction(() => window.street?.interiors, { timeout: 180000 });
 await wait(5000);
-const KEYS = only ? only.split(",") : await p.evaluate(() => Object.keys(street.interiors.build));
+if (process.env.MAP) await p.evaluate((m) => (window.__walkMap = m), process.env.MAP);
+const ALL = await p.evaluate(() => Object.keys(street.interiors.build));
+const KEYS = only ? only.split(",").filter((k) => ALL.includes(k)) : ALL;
 
 // ---- everything below runs in the page ----
 async function checkFloor(n) {
@@ -123,7 +125,13 @@ async function measure(n) {
       const k = q[h], i = k % gw, j = (k - i) / gw;
       const gk = gcell(k);
       if (!Number.isFinite(gk)) nanG++;
-      if (i === 0 || j === 0 || i === gw - 1 || j === gh - 1) leak = true;
+      if (!leak && (i === 0 || j === 0 || i === gw - 1 || j === gh - 1)) {
+        // walk the BFS tree back to the last cell inside the colliders' bbox: where the gap is
+        let g2 = k;
+        const inBox = (kk) => { const x = cx(kk % gw), z = cz((kk / gw) | 0); return x > gx0 + 3 && x < gx0 + gw * CELL - 3 && z > gz0 + 3 && z < gz0 + gh * CELL - 3; };
+        while (prev[g2] >= 0 && !inBox(g2)) g2 = prev[g2];
+        leak = [+cx(g2 % gw).toFixed(1), +cz((g2 / gw) | 0).toFixed(1)];
+      }
       if (dist[k] > dist[far]) far = k;
       for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const a = i + di, c = j + dj;
@@ -137,9 +145,25 @@ async function measure(n) {
       }
     }
     const area = q.length * CELL * CELL;
+    // MAP=key:floor prints the floor's grid (# collider, . reachable, blank unreachable, S spawn, L leak)
+    let map = null;
+    if (window.__walkMap === `${place.key}:${n}`) {
+      map = [];
+      for (let j = 0; j < gh; j += 2) {
+        let r = "";
+        for (let i = 0; i < gw; i += 2) {
+          const kk = j * gw + i;
+          const near = (x, z) => Math.abs(cx(i) - x) < CELL * 1.5 && Math.abs(cz(j) - z) < CELL * 1.5;
+          r += near(sp.x, sp.z) ? "S" : leak && near(leak[0], leak[1]) ? "L" : blocked[kk] ? "#" : dist[kk] >= 0 ? "." : " ";
+        }
+        map.push(`${cz(j).toFixed(1).padStart(7)} ${r}`);
+      }
+      map.unshift(`x0=${gx0.toFixed(1)} step=${2 * CELL} m`);
+    }
     if (q.length < 40) issues.push(`reachable area only ${area.toFixed(1)} m²; rects near spawn: ${rects.filter(([x0, z0, x1, z1]) => x1 > sp.x - 2.5 && x0 < sp.x + 2.5 && z1 > sp.z - 2.5 && z0 < sp.z + 2.5).map((r) => "[" + r.map((v) => +v.toFixed(2)) + "]").join(" ")}`);
     else if (area < 40) warn.push(`small reachable area ${area.toFixed(1)} m² (penned in?)`);
-    if (leak) warn.push("BFS reaches the edge of the collider bbox (open side)");
+    // on the ground floor the way out (behind the spawn, +z) is meant to be open
+    if (leak && !(n === 0 && leak[1] > sp.z && Math.abs(leak[0] - sp.x) < 3)) warn.push(`open side: walkable out of the colliders near (${leak})`);
     if (nanG) issues.push(`groundAt NaN on ${nanG} cells`);
     if (cliff) warn.push(`${cliff} ground jumps > 0.75 m between neighbour cells`);
     // ---- steer the walker to the farthest reachable cell and back
@@ -189,7 +213,7 @@ async function measure(n) {
     // ---- restore
     W.onExit = exitFn;
     W.place(new V(sp.x, f.y, sp.z), f.yaw, f.y);
-    return { n, label: f.label, name: f.name, y: f.y, spawn: [+sp.x.toFixed(2), +sp.z.toFixed(2)], rects: rects.length, disp, area: Math.round(area), far: [+farX.toFixed(1), +farZ.toFixed(1), Math.round(dist[far] * CELL)], issues, warn };
+    return { map, n, label: f.label, name: f.name, y: f.y, spawn: [+sp.x.toFixed(2), +sp.z.toFixed(2)], rects: rects.length, disp, area: Math.round(area), far: [+farX.toFixed(1), +farZ.toFixed(1), Math.round(dist[far] * CELL)], issues, warn };
   }, n);
 }
 
@@ -206,6 +230,7 @@ for (const k of KEYS) {
       r.key = k;
       rows.push(r);
       const st = r.issues.length ? "FAIL" : r.warn.length ? "warn" : "ok";
+      if (r.map) console.log(r.map.join("\n"));
       console.log(`${st.padEnd(4)} ${k.padEnd(14)} #${n} ${String(r.label).padEnd(8)} ${String(r.name).slice(0, 24).padEnd(24)} y=${r.y} spawn=${r.spawn} rects=${r.rects} move=${JSON.stringify(r.disp)} area=${r.area}m² far=${r.far}  ${r.issues.join("; ")} ${r.warn.length ? "[" + r.warn.join("; ") + "]" : ""}`);
     }
     await p.evaluate(() => street.interiors.exit());
@@ -296,23 +321,31 @@ const streetRes = only && !only.includes("street") ? [] : await p.evaluate((rout
     return disp;
   };
   const route = (name, pts) => {
-    const d = dense(pts);
+    let d = dense(pts);
+    // trails that end at the campfire ring or the cabin: walk to their edge, not into them
+    W.place(new V(d[0][0], 0.2, d[0][1]), 0, W.ground?.(d[0][0], d[0][1]) ?? 0.2);
+    while (d.length > 2 && W.collide(d[0][0], d[0][1])) d.shift();
+    const e = d[d.length - 1];
+    W.place(new V(e[0], 0.2, e[1]), 0, W.ground?.(e[0], e[1]) ?? 0.2);
+    while (d.length > 2 && W.collide(d[d.length - 1][0], d[d.length - 1][1])) d.pop();
     settle(d[0][0], d[0][1]);
     const startBlocked = W.collide(d[0][0], d[0][1]);
     const there = follow(d);
     const back = follow(d.slice().reverse());
-    out.push({ name, from: pts[0], startBlocked, there, back, disp: moveTest(pts[0][0], pts[0][1]) });
+    out.push({ name, from: d[0].map((v) => +v.toFixed(1)), startBlocked, there, back, disp: moveTest(d[0][0], d[0][1]) });
   };
   for (const r of routes) route(r.name, r.pts);
   // the Golden Gate deck, end to end
   const gg = S.goldenGate;
-  if (gg?.ok) route("golden gate deck", [[gg.x, gg.z0 + 1], [gg.x, (gg.z0 + gg.z1) / 2], [gg.x, gg.z1 - 1]]);
+  // from the street south of it (under the ZEC Line's station), over the bridge, to the headland
+  if (gg?.ok) route("golden gate deck", [[gg.x - 2, 126], [gg.x - 2, gg.z0 - 2], [gg.x, gg.z0 + 1], [gg.x, (gg.z0 + gg.z1) / 2], [gg.x, gg.z1 - 1]]);
   // off the bridge's north end into the trailhead plaza (forest SITES.plaza)
-  if (gg?.ok) route("bridge to trailhead", [[gg.x, gg.z1 - 6], [gg.x, gg.z1 + 1], [gg.x + 5, 224.5], [168, 225]]);
+  if (gg?.ok) route("bridge to trailhead", [[gg.x, gg.z1 - 6], [gg.x, gg.z1 + 0.6], [gg.x + 5, gg.z1 + 0.6], [168, 225]]);
   // the Flyer: up the west stairs, along the deck, down the east stairs (and back)
   route("flyer stairs+deck", [[-78, 97.5], [-78, 93], [-78, 89.6], [-70, 89.6], [-62, 89.6], [-62, 93], [-62, 97.5]]);
   const ex = S.sky?.flyer?.exit;
-  if (ex) out.push({ name: "flyer exit spot", from: [ex.pos.x, ex.pos.z], startBlocked: W.collide(ex.pos.x, ex.pos.z), there: { miss: 0 }, back: { miss: 0 }, disp: moveTest(ex.pos.x, ex.pos.z) });
+  if (ex) settle(ex.pos.x, ex.pos.z);
+  if (ex) out.push({ name: "flyer exit spot", from: [+ex.pos.x.toFixed(1), +ex.pos.z.toFixed(1)], startBlocked: W.collide(ex.pos.x, ex.pos.z), there: { miss: 0 }, back: { miss: 0 }, disp: moveTest(ex.pos.x, ex.pos.z) });
   S.walk(false);
   return out;
 }, routes);

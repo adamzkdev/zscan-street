@@ -31,6 +31,24 @@ export function sprite(w: number, h: number, draw: (px: Px) => void) {
   return { texture: t, w, h };
 }
 
+/**
+ * Keep a sprite cache bounded: every new zkSNARK brings its own cloth colour, so over a long visit
+ * these grew by thousands of little canvases. The least recently used are let go (a character
+ * still wearing one keeps its texture; three.js simply uploads it again if it was freed).
+ */
+function boundCache<V>(cache: Map<string, V>, max: number, free: (v: V) => void) {
+  while (cache.size > max) {
+    const [k, v] = cache.entries().next().value!;
+    cache.delete(k);
+    free(v);
+  }
+}
+function touch<V>(cache: Map<string, V>, key: string, v: V) {
+  cache.delete(key);
+  cache.set(key, v);
+  return v;
+}
+
 function shade(hex: string, k: number) {
   const c = new THREE.Color(hex);
   c.multiplyScalar(k);
@@ -41,7 +59,8 @@ const legCache = new Map<string, ReturnType<typeof sprite>>();
 /** One stubby leg: trouser, cuff, shoe with a toe and a highlight. */
 export function legSprite(trouser: string) {
   let s = legCache.get(trouser);
-  if (!s) {
+  if (s) return touch(legCache, trouser, s);
+  {
     s = sprite(5, 8, (px) => {
       px(0, 0, 5, 5, trouser);
       px(0, 0, 1, 5, shade(trouser, 0.7));
@@ -52,6 +71,7 @@ export function legSprite(trouser: string) {
       px(0, 7, 5, 1, "#0e0d12");
     });
     legCache.set(trouser, s);
+    boundCache(legCache, 500, (x) => x.texture.dispose());
   }
   return s;
 }
@@ -595,12 +615,13 @@ export function poseSprites(spec: PoseSpec) {
     skin = q5(liftDark(spec.skin, 0.5));
   const key = `${sleeve}|${skin}|${spec.items.join("+")}|${spec.umbrella ?? ""}|${spec.swing}|${spec.strap ? 1 : 0}`;
   let s = poseCache.get(key);
-  if (s) return s;
+  if (s) return touch(poseCache, key, s);
   const F = new Cells(),
     B = new Cells();
   paintPose(F, B, { ...spec, sleeve, skin });
   s = { front: sprite(POSE.w, POSE.h, (px) => F.draw(px)), back: sprite(POSE.w, POSE.h, (px) => B.draw(px)) };
   poseCache.set(key, s);
+  boundCache(poseCache, 800, (x) => (x.front.texture.dispose(), x.back.texture.dispose()));
   return s;
 }
 

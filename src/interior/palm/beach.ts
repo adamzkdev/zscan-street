@@ -71,6 +71,12 @@ export function beach(k: PalmKit) {
     }
     for (const c of PLOTS.slice(1).map((c) => c + 15).concat([PLOTS[0] + 15]))
       for (let x = -58; x < WX - 0.5; x += 1) k.box(f, 1, 1.7 + k.rnd(x, c) * 0.15, 0.9, x + 0.5, 0, c, k.rnd(x, c, 2) > 0.5 ? "#3f7a34" : "#4a8a3c");
+    // the gardens' bounds: the hedges are solid, and nobody walks past the lawn's far edge (x −60)
+    // or its south end into the lagoon (the walker used to wander off the board there)
+    for (const c of PLOTS.map((c) => c + 15)) k.solid(f, -58, c - 0.45, WX - 0.5, c + 0.45);
+    k.solid(f, -60.6, TIP + 5.7, -59.8, 13.5);
+    k.solid(f, -60.6, TIP + 5.7, WX, TIP + 6.3);
+    k.solid(f, WX - 0.3, TIP - 1.6, WX + 0.3, TIP + 6.3);
   }
   // the frond road's gate behind you (the way out) and the hedge along the north end
   {
@@ -350,6 +356,9 @@ function jetty(k: PalmKit) {
   k.solid(f, x0 + L, z - 3.7, x0 + L + 6.2, z - 3.4);
   k.solid(f, x0 + L, z + 3.4, x0 + L + 6.2, z + 3.7);
   k.solid(f, x0 + L + 5.9, z - 3.7, x0 + L + 6.2, z + 3.7);
+  // the pontoon's landward side, either side of the jetty (it was open onto the lagoon)
+  k.solid(f, x0 + L - 0.15, z - 3.7, x0 + L + 0.15, z - 1.2);
+  k.solid(f, x0 + L - 0.15, z + 1.2, x0 + L + 0.15, z + 3.7);
   // the rental kiosk and its sign
   const kx = x0 + L + 4.2;
   k.box(f, 1.6, 2.2, 2, kx, 0.2, z - 2.2, "#f4f0e6");

@@ -212,21 +212,6 @@ const ACTS = {
     await act("a06-mempool-walk", 3.5, (t, k) => walkCam(0, [0, -1.6], [-0.6, -4.6], [0, 1.2, -15], [1.4, 1.0, -9], k), 0.3);
     await liftTo("a07-archive", 1, 3, (k) => walkCam(6, [0, -2], [0, -11], [0, 7.6, -30], [0.5, 7.3, -30], k));
   },
-  async "a08-cards"() {
-    await p.evaluate(() => window.street.interiors.exit());
-    await enterFromCity("a08-enter-cards", 2, "cards", [6.8, -6, 2.4, 6.8, 2.6, -11.5]);
-    await act("a09-cards-lobby", 2.5, (t, k) => walkCam(0, [0, -2.6], [0, -9], [0, 2.6, -24], [0, 2.9, -24], k), 0.3);
-    await liftTo("a10-cards-epic", 2, 2.5, (k) => walkCam(19, [0, -2.2], [0, -8], [-4, 20.4, -12], [4, 20.4, -14], k));
-    await liftTo("a11-cards-core", 7, 3.5, (k) => walkCam(54, [0, -3], [0, -10], [-5, 55.6, -14], [-6, 55.5, -12], k));
-    // close to the wall: the cards one by one
-    await act("a12-cards-click", 2, (t, k) => walkCam(54, [-1.2, -10], [-1.2, -12.5], [-6, 55.4, -11], [-6, 55.4, -14.5], k), 0);
-  },
-  async "a13-bank"() {
-    await p.evaluate(() => window.street.interiors.exit());
-    await enterFromCity("a13-enter-bank", 2, "bank", [14.2, -5, 2.2, 14.2, 3.5, -11]);
-    await act("a14-bank-hall", 4, (t, k) => walkCam(0, [0, -2.6], [0, -8], [0, 3, -22], [0, 2.0, -16], k), 0.3);
-    await liftTo("a15-bank-vault", 1, 3, (k) => walkCam(-6, [0, -1.6], [0, -7], [0, -4.8, -16], [0, -5, -16], k));
-  },
   async "a16-factory"() {
     await p.evaluate(() => window.street.interiors.exit());
     await enterFromCity("a16-enter-factory", 2, "factory", [40, -8, 1.6, 42.9, 3.5, -12]);

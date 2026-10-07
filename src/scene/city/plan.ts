@@ -263,9 +263,8 @@ export type Archetype =
   | "shrine"
   | "construction"
   | "pavilion"
-  | "cardshop"
-  | "bank"
-  | "zsa"
+  | "streetshop"
+  | "kiosk"
   | "bookshop"
   | "landmark";
 
@@ -322,14 +321,16 @@ export function planCity() {
   // ---- Downtown: the front row on the avenue, then the skyline behind ----
   row(
     [
-      // the Zcash Shielded Assets exchange, still a building site (ZIPs 226, 227, 228)
-      ["zsa", 101, { venue: "zsa" }, 40],
-      ["mempool", 102, {}, 48],
+      // a ramen counter on the corner, then the MEMPOOL HQ: the pickup hall and the loading dock
+      // where the trucks from the Proof Factory unload (the dock is at its east end, by the zebra)
+      ["streetshop", 101, { kind: "ramen", store: "ramen", sign: "ラーメン · RAMEN" }, 26],
+      ["mempool", 102, {}, 72],
       // the ZK TOWER: apartments, an arcade floor, residents (walk-in)
       ["office", 103, { floors: 10, billboard: "完全な匿名", billboardColor: "#3ef0ff", venue: "tower" }, 40],
-      // the card shop (the zkSNARK collection) and the viewing-key bank, next to the MEMPOOL shop
-      ["cardshop", 104, { venue: "cards" }, 40],
-      ["bank", 105, { venue: "bank" }, 48],
+      // little shops facing the bus stop (each one's counter is clickable: ui/stores.ts)
+      ["streetshop", 104, { kind: "florist", store: "florist", sign: "花屋 · FLOWERS" }, 26],
+      ["streetshop", 105, { kind: "gacha", store: "gacha", sign: "ガチャ · GACHA" }, 26],
+      ["streetshop", 106, { kind: "tea", store: "tea", sign: "茶屋 · TEA HOUSE" }, 26],
     ],
     -18,
     fz,
@@ -457,9 +458,9 @@ export function planCity() {
     if (!(x > -2 && x < 17)) add("bollard", [], x + 1.1, CITY.south.z0 + 0.2);
   }
   // downtown clutter: vending machines, bikes, bags, a hydrant
-  add("vending", ["red"], -3.05, fz + 0.45);
-  add("vending", ["blue"], -1.9, fz + 0.45);
-  // (the bank's steps run to the corner: no vending machines there)
+  // (the MEMPOOL HQ's loading dock keeps its pavement clear: the vending machines stand by the tower)
+  add("vending", ["red"], 1.5, fz + 0.45);
+  add("vending", ["blue"], 2.65, fz + 0.45);
   add("bicycle", ["#c03a3a"], -17.6, -5.0, Math.PI / 2.2);
   add("bicycle", ["#3a6ac0"], -16.7, -5.0, Math.PI / 2.2);
   add("bicycle", ["#d8d4cc"], 4.4, -5.1, Math.PI / 2.3);
@@ -697,6 +698,26 @@ export function planCity() {
   };
   const lampColor = (x: number) => (x < ST.heartW ? "#ffd9a0" : x > ST.heartE ? "#c9a0ff" : "#ffb46b");
   const lampAbs = (x: number, z: number, rot: number) => props.push({ type: "lamp", args: [lampColor(x)], x, z, rot, district: "downtown" });
+  /**
+   * MEMPOOL branches out in the city (the HQ is in the heart): the block nearest each district
+   * opens its south row with one, a pickup kiosk with a live counter on its roof.
+   */
+  const BRANCHES: [number, number, string, string][] = [
+    [130, 0, "wallst", "Wall Street"],
+    [-60, -162, "shibuya", "Shibuya"],
+    [0, 104, "binhai", "Binhai"],
+    [170, 100, "marina", "Marina Bay"],
+  ];
+  const branchAt = new Map<string, [string, string]>();
+  for (const [bx, bz, key, name] of BRANCHES) {
+    let best = "",
+      bd = Infinity;
+    for (const c of gridCells()) {
+      const d = c.kind === "block" && c.x1 - c.x0 > 14 ? Math.hypot((c.x0 + c.x1) / 2 - bx, (c.z0 + c.z1) / 2 - bz) : Infinity;
+      if (d < bd && !branchAt.has(`${c.x0},${c.z0}`)) (bd = d), (best = `${c.x0},${c.z0}`);
+    }
+    if (best) branchAt.set(best, [key, name]);
+  }
   for (const { x0, x1, z0, z1, kind } of gridCells()) {
       if (kind !== "block") continue;
       const cx = (x0 + x1) / 2,
@@ -717,6 +738,12 @@ export function planCity() {
       const shotengaiFace = !along ? null : Math.abs(x1 - (ST.shotengai - S2 / 2)) < 0.1 ? "e" : Math.abs(x0 - (ST.shotengai + S2 / 2)) < 0.1 ? "w" : null;
       const fill = (face: BuildingJob["face"], a: number, b: number, front: number, main: boolean) => {
         let at = a;
+        const branch = face === "s" ? branchAt.get(`${x0},${z0}`) : undefined;
+        if (branch && at + 30 * VOX <= b) {
+          branchAt.delete(`${x0},${z0}`);
+          jobs.push({ id: id++, type: "kiosk", seed: 7200, opts: { store: `mempool-${branch[0]}`, sign: `MEMPOOL · ${branch[1]}` }, along: at + (30 * VOX) / 2, front, face, district: "downtown", frontRow: true, width: 30 });
+          at += 30 * VOX + 0.05;
+        }
         for (;;) {
           // every other one round the park is a supertall, the rest the usual towers
           const supertall = ((parkEast && face === "w") || (parkNorth && face === "s")) && slot++ % 2 === 0;

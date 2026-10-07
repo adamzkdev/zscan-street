@@ -8,7 +8,7 @@ p.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
 await p.goto(`http://localhost:3007/?debug&theme=${theme}`);
 await new Promise((r) => setTimeout(r, 10000));
 await p.screenshot({ path: `shots/places-${theme}-0.png` });
-for (const k of ["cards", "bank", "factory"]) {
+for (const k of ["factory"]) {
   await p.evaluate((k) => (k === "factory" ? street.rig.lookIn(street.city.factory) : street.enter(k)), k);
   await new Promise((r) => setTimeout(r, 4000));
   await p.screenshot({ path: `shots/places-${theme}-${k}.png` });

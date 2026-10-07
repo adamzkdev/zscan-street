@@ -118,10 +118,10 @@ export function buildAuditorium(lv: Level): Auditorium {
     for (let i = 0; i < n; i++) {
       const a = Math.PI * (0.18 + (0.64 * (i + 0.5)) / n);
       // the arc opens towards the stage at −z; the aisle down the middle
-      // (rows with an even count lose their two middle seats, so the aisle runs straight through)
-      if (Math.abs(i - (n - 1) / 2) < 1) continue;
       const x = cx + Math.cos(a) * rr * 1.25,
         z = cz - 4.2 + Math.sin(a) * rr * 1.6;
+      // (an aisle 1.3 m clear in every row, odd or even: the walker needs 0.6 m between seats)
+      if (Math.abs(x - cx) < 0.95) continue;
       if (Math.hypot(x - cx, z - cz) > fr - 0.8) continue;
       const yaw = Math.atan2(cx - x, cz - 4.2 - z);
       const g = new THREE.BoxGeometry(0.5, 0.42, 0.5);
@@ -134,7 +134,8 @@ export function buildAuditorium(lv: Level): Auditorium {
       b.translate(x, Y + 0.6, z);
       m.add(seatMat, b);
       spots.push(new THREE.Vector3(x, Y + 0.42, z));
-      lv.rects.push([x - 0.3, z - 0.3, x + 0.3, z + 0.3]);
+      // (the seat itself, 0.5 m: a fatter box closed the legroom and penned you in the aisle)
+      lv.rects.push([x - 0.24, z - 0.24, x + 0.24, z + 0.24]);
     }
   }
   const crowd = buildCrowd(spots.filter((_, i) => i % 4 !== 1), 4141, 0.66);

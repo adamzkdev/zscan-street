@@ -7,6 +7,9 @@ import { zLogo } from "../decor";
 import type { Snark } from "../snark";
 import { Banter, canvasTex, clean, FONT, person, v3 } from "./common";
 
+// per-frame scratch (no garbage in the frame loop)
+const STEER = new THREE.Vector3();
+
 /**
  * The ZEC BLIMP: a 44 m airship with an LED band on its flanks (live block height and price). It
  * loops slowly round the city; board it and it takes you on a tour of the landmarks, low over the
@@ -439,7 +442,7 @@ export class Blimp {
     }
     // steer toward the next stop (or round the city's loop), turning gently, rolling into turns
     const p = this.group.position;
-    const target = new THREE.Vector3();
+    const target = STEER.set(0, 0, 0);
     const stop = this.tour?.[0];
     if (stop) target.copy(stop.p);
     else this.loopTarget(target);

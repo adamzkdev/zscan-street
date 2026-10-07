@@ -3,47 +3,12 @@ import * as THREE from "three";
 /** Surfaces and signs of the gallery: parquet, wall paint, pools of light, painted panels. */
 
 export const MONO = '"JetBrains Mono", Menlo, monospace';
-export const SANS = "Roboto, ui-sans-serif, system-ui, sans-serif";
 
 function canvas(w: number, h: number) {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
   return [c, c.getContext("2d")!] as const;
-}
-
-let parquet: THREE.CanvasTexture | null = null;
-/** Dark herringbone-ish parquet in big pixels (one texel = 2 cm, tile = 1 m). */
-export function floorTexture(repeatX: number, repeatY: number) {
-  if (!parquet) {
-    const [c, g] = canvas(64, 64);
-    const tones = ["#1c1714", "#211a16", "#18130f", "#251d18", "#1e1813"];
-    for (let by = 0; by < 4; by++)
-      for (let bx = 0; bx < 4; bx++) {
-        const vertical = (bx + by) % 2 === 0;
-        for (let k = 0; k < 4; k++) {
-          g.fillStyle = tones[(bx * 7 + by * 3 + k * 5) % tones.length];
-          if (vertical) g.fillRect(bx * 16 + k * 4, by * 16, 4, 16);
-          else g.fillRect(bx * 16, by * 16 + k * 4, 16, 4);
-        }
-        g.fillStyle = "rgba(0,0,0,0.35)";
-        g.fillRect(bx * 16, by * 16, 16, 1);
-        g.fillRect(bx * 16, by * 16, 1, 16);
-      }
-    parquet = new THREE.CanvasTexture(c);
-    parquet.colorSpace = THREE.SRGBColorSpace;
-    parquet.magFilter = THREE.NearestFilter;
-    parquet.wrapS = parquet.wrapT = THREE.RepeatWrapping;
-    parquet.anisotropy = 8;
-  }
-  const t = parquet.clone();
-  t.repeat.set(repeatX, repeatY);
-  t.needsUpdate = true;
-  return t;
-}
-
-export function floorMaterial(w: number, d: number) {
-  return new THREE.MeshStandardMaterial({ map: floorTexture(w, d), roughness: 0.72, metalness: 0, envMapIntensity: 0.35 });
 }
 
 let pool: THREE.CanvasTexture | null = null;
@@ -108,43 +73,6 @@ export class Panel {
   }
 }
 
-/** Neon text: a bright core over a wide coloured glow. */
-export function neonText(g: CanvasRenderingContext2D, text: string, x: number, y: number, font: string, color: string, blur = 24) {
-  g.font = font;
-  g.shadowColor = color;
-  g.shadowBlur = blur;
-  g.fillStyle = color;
-  g.fillText(text, x, y);
-  g.shadowBlur = blur / 2;
-  g.fillText(text, x, y);
-  g.shadowBlur = 0;
-  g.fillStyle = "rgba(255,255,255,0.75)";
-  g.globalAlpha = 0.55;
-  g.fillText(text, x, y);
-  g.globalAlpha = 1;
-}
-
-/** A vertical neon sign of stacked glyphs (katakana reads top to bottom). */
-export function verticalNeon(text: string, color: string, heightM: number) {
-  const chars = [...text];
-  const cell = 112;
-  const p = new Panel(160, cell * chars.length + 48, (heightM * 160) / (cell * chars.length + 48), { glow: true });
-  p.draw((g, w) => {
-    g.fillStyle = "rgba(8,6,10,0.92)";
-    g.fillRect(8, 0, w - 16, cell * chars.length + 48);
-    g.strokeStyle = color;
-    g.lineWidth = 4;
-    g.shadowColor = color;
-    g.shadowBlur = 16;
-    g.strokeRect(14, 6, w - 28, cell * chars.length + 36);
-    g.shadowBlur = 0;
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    chars.forEach((ch, i) => neonText(g, ch, w / 2, 24 + cell * i + cell / 2, `700 92px "Hiragino Sans", "Noto Sans JP", ${SANS}`, color, 20));
-  });
-  return p.mesh;
-}
-
 /** Wall label in museum style: a dark plate with a ruled title and small caption. */
 export function label(title: string, caption: string, accent: string, widthM = 1.6) {
   const p = new Panel(640, 200, widthM);
@@ -165,8 +93,3 @@ export function label(title: string, caption: string, accent: string, widthM = 1
   });
   return p.mesh;
 }
-
-/** "1 234" style thousands for wall text. */
-export const num = (n: number) => n.toLocaleString("en-US");
-/** Zatoshis to a short ZEC figure. */
-export const zec = (zat: number | null | undefined, digits = 2) => (zat == null ? "—" : `${(zat / 1e8).toFixed(zat < 1e8 ? Math.max(digits, 3) : digits)} ZEC`);

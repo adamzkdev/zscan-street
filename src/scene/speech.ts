@@ -8,6 +8,7 @@ import * as THREE from "three";
 export type Tone = "talk" | "shout" | "honk";
 
 const cache = new Map<string, { tex: THREE.CanvasTexture; aspect: number }>();
+const CACHE_MAX = 120;
 
 /** Break a line into a few short lines, at spaces. */
 function wrap(text: string, max = 22) {
@@ -26,7 +27,18 @@ function wrap(text: string, max = 22) {
 function texture(text: string, tone: Tone) {
   const key = `${tone}|${text}`;
   let t = cache.get(key);
-  if (t) return t;
+  if (t) {
+    // most recently used last: the oldest lines are the ones let go
+    cache.delete(key);
+    cache.set(key, t);
+    return t;
+  }
+  // lines carry live numbers (heights, amounts): without a cap the canvases piled up all day
+  while (cache.size >= CACHE_MAX) {
+    const [k0, old] = cache.entries().next().value!;
+    cache.delete(k0);
+    old.tex.dispose();
+  }
   const c = document.createElement("canvas");
   const g = c.getContext("2d")!;
   const font = `${tone === "talk" ? 600 : 900} 40px "DotGothic16", "JetBrains Mono", monospace`;
@@ -109,7 +121,10 @@ export function sayAt(parent: THREE.Object3D, text: string, tone: Tone, y: numbe
     const k = Math.max(0.01, Math.min(1, age * 7, (seconds - age) * 6)) * zoomK;
     s.scale.set(full.x * k, full.y * k, 1);
     if (age < seconds) requestAnimationFrame(tick);
-    else parent.remove(s);
+    else {
+      parent.remove(s);
+      s.material.dispose();
+    }
   };
   requestAnimationFrame(tick);
   return s;

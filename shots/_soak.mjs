@@ -51,7 +51,7 @@ if (BLOCK) {
   p.on("request", (r) => (/api\.zscan\.cash|wss?:\/\//.test(r.url()) && !r.url().includes("localhost") ? r.abort() : r.continue()));
 }
 await p.evaluateOnNewDocument(() => {
-  window.addEventListener("unhandledrejection", (e) => console.error("UNHANDLED", String(e.reason?.stack ?? e.reason).slice(0, 600)));
+  window.addEventListener("unhandledrejection", (e) => setTimeout(() => !e.defaultPrevented && console.error("UNHANDLED", String(e.reason?.stack ?? e.reason).slice(0, 600))));
 });
 const t0 = Date.now();
 const url = `http://localhost:${port}/?debug&theme=night${Q !== undefined ? `&quality=${Q}` : ""}`;
@@ -214,6 +214,13 @@ while (Date.now() - t0 < minutes * 60000) {
     }
     if (cycle === 1) await walkKeys(1800);
     const row = await sample(phase, { build: r.build, floors: r.floors });
+    // instanced meshes drawing more instances than they hold (a GL error, nothing drawn)
+    const bad = await p.evaluate(() => {
+      const out = [];
+      street.interiors.active?.scene.traverse((o) => o.isInstancedMesh && o.count > o.instanceMatrix.count && out.push(`${o.name || "?"} ${o.count}>${o.instanceMatrix.count}`));
+      return out;
+    }).catch(() => []);
+    if (bad.length) errors.push(`[${phase}] instanced overflow ${bad.join(", ")}`);
     await ev(() => street.interiors.exit());
     await wait(500);
   }

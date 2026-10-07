@@ -403,6 +403,12 @@ function terrace(k: PalmKit) {
     k.box(f, 0.06, 0.05, T0 - T1, x, 1.05, (T0 + T1) / 2, "#c8ccd4", "metal");
     k.solid(f, x - 0.1, T1, x + 0.1, T0);
   }
+  // the balustrade turns in to meet the house (the terrace is wider than the house: you walked off its corners)
+  for (const [a, b] of [[-14, X0], [X1, 16]]) {
+    k.box(f, b - a, 1.05, 0.04, (a + b) / 2, 0, T0, "#cfe8f0", "glass");
+    k.box(f, b - a, 0.05, 0.06, (a + b) / 2, 1.05, T0, "#c8ccd4", "metal");
+    k.solid(f, a, T0 - 0.1, b, T0 + 0.1);
+  }
   k.solid(f, -14, PZ1 - 0.4, 16, PZ1 - 0.2);
   // the daybeds and loungers along the pool, a cabana-style umbrella
   for (let i = 0; i < 5; i++) lounger(k, f, -7 + i * 2.4, -21.6, 0, "#f6f2ea", i === 2 ? "#f4b728" : null);

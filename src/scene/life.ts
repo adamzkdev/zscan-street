@@ -237,7 +237,7 @@ export class Life {
     ];
     for (let i = 0; i < n; i++) {
       const onFerry = i < Math.min(4, n - 1);
-      const boat = onFerry ? boats[0] : boats[1 + ((i - 4) % (boats.length - 1))];
+      const boat = onFerry ? boats[0] : boats[1 + (Math.max(0, i - 4) % (boats.length - 1))]; // low tiers have n < 5: i - 4 went negative (a crash)
       const s = await this.person(onFerry ? "Passenger" : "Boater", pick([null, "phone", "coffee", null] as (LifeItem | null)[]));
       boat.add(s.root);
       const [x, z] = onFerry ? deck[i] : [rand(-3, 3), rand(-0.4, 0.4)];

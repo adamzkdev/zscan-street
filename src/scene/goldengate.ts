@@ -49,16 +49,24 @@ export class GoldenGate {
     this.h = new Float32Array(n);
     const target = lm.occluder.full;
     target.updateMatrixWorld(true);
+    // (the highest surface no more than a ramp's climb above the last metre: a gantry or a portal
+    // beam over the road is not the deck, and walking into it would wall the walker in)
+    let prev = CURB;
     for (let i = 0; i < n; i++) {
       let best = CURB;
       for (const lx of [-2.2, 2.2]) {
         ray.set(new THREE.Vector3(this.x + lx, 40, this.z0 + i), new THREE.Vector3(0, -1, 0));
-        for (const hit of ray.intersectObject(target, true)) if (hit.point.y < 13 && hit.point.y > best) best = hit.point.y;
+        for (const hit of ray.intersectObject(target, true)) if (hit.point.y < 13 && hit.point.y > best && hit.point.y < prev + 1.6) best = hit.point.y;
       }
-      this.h[i] = best;
+      this.h[i] = prev = best;
     }
-    // smooth out the voxel steps of the ramps
-    for (let pass = 0; pass < 3; pass++) for (let i = 1; i < n - 1; i++) this.h[i] = (this.h[i - 1] + this.h[i] * 2 + this.h[i + 1]) / 4;
+    // smooth out the voxel steps of the ramps, until no metre climbs more than the walker can step
+    for (let pass = 0; pass < 40; pass++) {
+      for (let i = 1; i < n - 1; i++) this.h[i] = (this.h[i - 1] + this.h[i] * 2 + this.h[i + 1]) / 4;
+      let steep = false;
+      for (let i = 1; i < n; i++) if (Math.abs(this.h[i] - this.h[i - 1]) > 0.5) steep = true;
+      if (pass >= 2 && !steep) break;
+    }
     // the headland tunnel the road disappears into
     const portal = new THREE.Group();
     const dark = new THREE.Mesh(new THREE.BoxGeometry(12, 6, 0.5), new THREE.MeshBasicMaterial({ color: "#050508" }));
@@ -75,9 +83,13 @@ export class GoldenGate {
 
   /** Deck height at z (null off the deck's length). */
   deckAt(z: number) {
-    if (z < this.z0 || z > this.z1) return CURB;
-    const i = Math.min(this.h.length - 1, Math.max(0, Math.round(z - this.z0)));
-    return this.h[i];
+    if (z > this.z1 || z < this.z0 - 1 || !this.h.length) return CURB;
+    // the last metre before the deck eases up onto it (no kerb to trip on), metres in between blend
+    if (z < this.z0) return CURB + (this.h[0] - CURB) * (z - this.z0 + 1);
+    const u = Math.min(this.h.length - 1, z - this.z0);
+    const i = Math.floor(u);
+    const j = Math.min(this.h.length - 1, i + 1);
+    return this.h[i] + (this.h[j] - this.h[i]) * (u - i);
   }
 
   /** Is (x, z) on the deck (between the railings)? */

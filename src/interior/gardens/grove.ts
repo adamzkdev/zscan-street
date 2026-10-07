@@ -371,6 +371,26 @@ function skyway(k: GardensKit, flora: Flora, radius: ((h: number) => number)[]) 
       railing(k, p0, p1);
       k.line(sky, p0.x, p0.z, p1.x, p1.z, 0.3);
     }
+    // where a walk leaves the landing: close the railing from the walk's own rails to the ring
+    // (the ring opens a whole bay wider than the walk; without this you stepped off into the air)
+    for (const j of joins[s]) {
+      const nrm = v(-Math.cos(j), 0, Math.sin(j));
+      for (const side of [-1, 1]) {
+        // the first ring post still standing on this side (the ring's bays are i / n of a turn)
+        const i0 = Math.round((j / (Math.PI * 2)) * n);
+        let a = (i0 / n) * Math.PI * 2;
+        for (let m = 0; m < n && open(a); m++) a = ((i0 + side * (m + 1)) / n) * Math.PI * 2;
+        const ring = v(t.x + Math.sin(a) * R, Y, t.z + Math.cos(a) * R);
+        const start = v(t.x + Math.sin(j) * (R - 0.3), Y, t.z + Math.cos(j) * (R - 0.3)).addScaledVector(nrm, -side * HW);
+        // (whichever rail of the walk is on this side of the join)
+        const alt = start.clone().addScaledVector(nrm, 2 * side * HW);
+        const from = alt.distanceTo(ring) < start.distanceTo(ring) ? alt : start;
+        if (from.distanceTo(ring) > 0.15) {
+          railing(k, from, ring);
+          k.line(sky, from.x, from.z, ring.x, ring.z, 0.3);
+        }
+      }
+    }
     // the underside: struts back to the trunk
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;

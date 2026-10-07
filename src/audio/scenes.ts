@@ -692,12 +692,7 @@ export function presetFor(key: string, floor: number, name: string): string {
     case "factory":
       return has("control") ? "control-room" : "factory";
     case "mempool":
-    case "cards":
       return "shop";
-    case "bank":
-      return has("vault") ? "vault" : "reserve-hall";
-    case "zsa":
-      return "construction";
     case "palm":
       if (has("villa")) return "villa";
       if (has("marina")) return "marina";

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { API } from "../../data/zscan";
+import { atlasBitmap } from "../../data/atlas";
 
 /**
  * Thousands of zkSNARKs in one draw call (and one for their blob shadows). Every walker is a real
@@ -265,12 +265,12 @@ function loadAtlas() {
     const g = c.getContext("2d", { willReadFrequently: true })!;
     const cloth: THREE.Color[] = [];
     try {
-      const res = await fetch(`${API}/v1/collections/zksnarks/map/image`);
-      if (!res.ok) throw new Error(`atlas HTTP ${res.status}`);
-      const bmp = await createImageBitmap(await res.blob());
+      // one shared download for the whole app (retried on API trouble)
+      const bmp = await atlasBitmap();
       const cs = bmp.width / 100;
       g.imageSmoothingEnabled = false;
       ids.forEach((id, i) => g.drawImage(bmp, ((id - 1) % 100) * cs, Math.floor((id - 1) / 100) * cs, cs, cs, (i % ACOLS) * 32, Math.floor(i / ACOLS) * 32, 32, 32));
+      bmp.close();
       const img = g.getImageData(0, 0, c.width, c.height);
       const d = img.data,
         W = c.width;

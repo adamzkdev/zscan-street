@@ -24,7 +24,6 @@ export const PLACE_LORE: Record<string, string> = {
     "Inspired by Singapore: Jewel Changi Airport's Rain Vortex (the world's tallest indoor waterfall, about 40 m, opened 2019) and the canal with sampan boats at The Shoppes at Marina Bay Sands. The ZK Mall has five levels: luxury shops on the canal, fashion, tech and toys, a hawker centre, and the ZK Cinema with an arcade.",
   reserve:
     "The ZEC Reserve is ZStreet's central bank on Wall Street, a granite temple in front of a glass tower, like the New York Stock Exchange and the Federal Reserve Bank of New York (whose vault, 24 m below Manhattan, holds one of the world's biggest gold stores). Its vault holds the value pools, counted to the zatoshi; the bronze statue outside is a charging zebra (Zcash's mascot), not a bull.",
-  bank: "The View Key Bank is a small downtown branch: visitors paste a viewing key and the vault shows their shielded balance, computed in their own browser; the key never leaves it.",
   opera:
     "Real history: the Sydney Opera House, designed by Danish architect Jørn Utzon, opened in 1973 on Bennelong Point; its roof 'sails' are covered with over a million cream and white tiles; Utzon left the project in 1966 before it was finished. The Concert Hall has a huge pipe organ. ZStreet twist: the orchestra plays the chain, a crescendo on every block.",
   bigben:
@@ -35,9 +34,8 @@ export const PLACE_LORE: Record<string, string> = {
   gardens:
     "Real history: Gardens by the Bay in Singapore opened in 2012 on reclaimed land next to Marina Bay Sands. Its Supertree Grove has 18 Supertrees, 25 to 50 m tall: concrete cores in steel frames planted with more than 162,000 plants (ferns, bromeliads, orchids, vines); some collect rainwater or carry solar panels. The OCBC Skyway, a 128 m walkway 22 m up, links two of them. Every night the Garden Rhapsody light and sound show plays at 7:45 and 8:45 pm. The two cooled conservatories: the Flower Dome (the world's largest glass greenhouse in the Guinness World Records, Mediterranean plants, olive trees over 1,000 years old, baobabs, a seasonal flower field) and the Cloud Forest (a 35 m 'mountain' covered in plants with one of the tallest indoor waterfalls, cool and misty, with the Cloud Walk round it). ZStreet twist: Garden Rhapsody plays on every new Zcash block, and the Cloud Forest's misting comes on with it.",
   arab: "Inspired by the Burj Al Arab in Dubai: a 321 m sail-shaped hotel on its own artificial island, opened in 1999, famous for its gold-leaf atrium (one of the tallest in the world), its duplex suites, the helipad where Roger Federer and Andre Agassi played tennis in 2005, and its underwater-themed restaurant. Often called the world's only 'seven-star' hotel (a marketing nickname). Next to it, the Palm Jumeirah is an artificial palm-shaped island of villas on its fronds. ZStreet twist: the Burj Al ZEC's guests pay in shielded ZEC, the concierge never asks who you are.",
-  mempool: "The MEMPOOL shop holds every pending Zcash transaction as a parcel; trucks bring them in, zkSNARKs pick them up and take them to the bus or metro of their block.",
+  mempool: "The MEMPOOL HQ holds every pending Zcash transaction as a parcel: trucks from the Proof Factory unload at its loading dock, dock hands carry the parcels in, zkSNARKs pick them up at the counter and take them to the bus or metro of their block. Branches in Wall Street, Shibuya, Binhai and Marina Bay show the same mempool live.",
   factory: "The Proof Factory is the mining hall: rows of miners press each new block, which rolls down the conveyor.",
-  cards: "zkCARDS is the shop of the zkSNARKs collection.",
   library: "The Library keeps the Zcash news and every ZIP (Zcash Improvement Proposal).",
   tower: "ZK TOWER is a condo tower with flats, an arcade, a bowling alley, a gym, a pool and a rooftop.",
   "tower-orchard":
@@ -46,7 +44,6 @@ export const PLACE_LORE: Record<string, string> = {
     "Inspired by Singapore's green skyscrapers: Oasia Hotel Downtown (2016, wrapped in creepers, sky gardens every few floors), CapitaSpring (2021, the Green Oasis spiralling up its middle) and the rooftop infinity pools of Marina Bay. ZStreet twist: ZK TOWER SAPLING is named after the Sapling shielded pool (2018 upgrade, which made shielded transactions fast enough for phones); every sky garden is a shielded pool of its own.",
   "tower-halo":
     "Inspired by twisted glass supertalls: the Shanghai Tower (2015, 632 m, turning 120 degrees as it rises, the world's fastest lifts at the time), Dubai's Cayan Tower (2013, a 90-degree twist) and the helipads of the Gulf. ZStreet twist: ZK TOWER HALO is named after Halo 2, the recursive proof system behind Orchard that needs no trusted setup; its trading floor watches ZEC live, the VIP lounge only takes shielded payments, and the helicopter on the roof flies with no public flight plan.",
-  zsa: "The ZSA Exchange is a building site for Zcash Shielded Assets (ZIPs 226, 227, 228), coming in a future upgrade.",
 };
 
 /** How every character speaks. */
