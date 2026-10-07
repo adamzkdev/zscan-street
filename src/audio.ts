@@ -2,6 +2,7 @@ import { type Bufs, makeBufs, Scene } from "./audio/lib";
 import { LEVEL, PRESETS, presetFor } from "./audio/scenes";
 import { Districts, type StreetEar } from "./audio/street";
 import { loopInto, type Playing, shotInto } from "./audio/samples";
+import { type Ear, LiveMix } from "./audio/livemix";
 
 /** Where the ear is: a place's key and floor (its name picks the floor's soundscape), or the street. */
 export interface SceneOpts {
@@ -12,6 +13,8 @@ export interface SceneOpts {
   z?: number;
   near?: number;
   night?: boolean;
+  /** Inside: the walking camera, for the live music's positional sound (src/audio/live.ts). */
+  ear?: Ear;
 }
 
 /**
@@ -52,6 +55,9 @@ export class Soundscape {
   private placeName = "";
   private preset = "street";
   private scene: Scene | null = null;
+  /** The place's live musicians, mixed into its scene (src/audio/livemix.ts). */
+  private liveMix: LiveMix | null = null;
+  private liveEar: Ear | null = null;
   private districts: Districts | null = null;
   private ear: StreetEar = { x: 0, z: 0, near: 1, night: true };
   private lastEar = 0;
@@ -107,11 +113,13 @@ export class Soundscape {
     this.place = key;
     this.floor = floor;
     if (opts.name !== undefined) this.placeName = opts.name;
+    if (opts.ear) this.liveEar = opts.ear;
     if (key === "street") {
       this.ear = { x: opts.x ?? this.ear.x, z: opts.z ?? this.ear.z, near: opts.near ?? this.ear.near, night: opts.night ?? this.ear.night };
     }
     if (!this.ctx || !this.on) return;
-    if (moved || this.preset !== this.presetId()) this.apply(false);
+    if (moved || this.preset !== this.presetId()) this.apply(false, moved);
+    if (key !== "street") this.liveMix?.update(this.liveEar);
     if (key === "street" && this.districts) {
       const now = this.ctx.currentTime;
       const dt = Math.min(1, now - this.lastEar);
@@ -150,6 +158,7 @@ export class Soundscape {
       districts: this.preset === "street" ? { ...(this.districts?.weights ?? {}) } : {},
       districtLayers: this.preset === "street" ? (this.districts?.layers() ?? {}) : {},
       rain: this.rainIn,
+      live: this.liveMix?.debug ?? [],
       rms: Math.round(rms * 10000) / 10000,
     };
   }
@@ -159,9 +168,15 @@ export class Soundscape {
   }
 
   /** Cross-fade to the soundscape of where the ear is now. */
-  private apply(instant: boolean) {
+  private apply(instant: boolean, moved = false) {
     if (!this.ctx) return;
     const id = this.presetId();
+    // same soundscape on another floor: only the live music changes (its players are per floor)
+    if (id === this.preset && !instant && moved && this.scene) {
+      this.liveMix?.close();
+      this.liveMix = new LiveMix(this.scene, this.place, this.floor);
+      return;
+    }
     if (id === this.preset && !instant) return;
     const changed = id !== this.preset;
     this.preset = id;
@@ -169,6 +184,8 @@ export class Soundscape {
     if (changed || id === "street") {
       this.scene?.close(xf);
       this.scene = null;
+      this.liveMix?.close();
+      this.liveMix = null;
     }
     const p = id === "street" ? null : PRESETS[id];
     if (id === "street") {
@@ -190,6 +207,8 @@ export class Soundscape {
         s.fade(LEVEL[id] ?? 1, xf);
         this.scene = s;
       }
+      // the musicians of this floor (and the ones heard from the floor next door)
+      if (this.scene && !this.liveMix) this.liveMix = new LiveMix(this.scene, this.place, this.floor);
     }
     // the rain through walls: quieter and duller indoors
     const t = this.ctx.currentTime;
@@ -206,6 +225,13 @@ export class Soundscape {
     if (!this.on || !this.ctx || this.indoors) return;
     const t = this.ctx.currentTime;
     [1318.5, 1046.5].forEach((f, i) => this.bell(f, t + i * 0.22, 0.6, 0.07));
+  }
+
+  /** A lift arriving: the two-tone ding (indoors too). */
+  liftDing() {
+    if (!this.on || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    [1174.7, 880].forEach((f, i) => this.bell(f, t + i * 0.32, 0.9, 0.06));
   }
 
   /** Air brakes and a low rumble as the bus stops. */

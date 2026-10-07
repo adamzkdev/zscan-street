@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { get, links } from "../../data/zscan";
 import type { PickInfo } from "../types";
-import { PAPERS, UPGRADES, YEAR_NOTES, ZIP_GROUPS, heightAt, type Upgrade, type Zip } from "./data";
+import { PAPERS, UPGRADES, YEAR_NOTES, ZIP_GROUPS, heightAt, loadZips, type Upgrade } from "./data";
 import { LIP, RECESS } from "./atrium";
 import { LEN, TIERS, canvasTex, esc, fmt, frontAt, glow, type Level, type Tier } from "./kit";
 
@@ -488,15 +488,4 @@ export function buildShelves(t1: Level, t2: Level, tip: () => number) {
       if (hi.visible && performance.now() - hiAt > 200) hi.visible = false;
     },
   };
-}
-
-async function loadZips(): Promise<Zip[]> {
-  const live = await get<Zip[]>("/v1/zips");
-  if (live?.length) return live;
-  try {
-    const r = await fetch(`${import.meta.env.BASE_URL}zips.json`);
-    return r.ok ? ((await r.json()) as Zip[]) : [];
-  } catch {
-    return [];
-  }
 }

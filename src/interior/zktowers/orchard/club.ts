@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { backBar, barCounter, grandPiano, pianoBench, plant, stool } from "../../furniture";
 import { roundTable, velvetChair } from "../../hotel/furniture";
 import { textPlane } from "../../kit";
+import { ensemble, pianoSeat } from "../../music/acts";
 import { drawTicker, GOLD, num, usd, type SkyKit } from "../kit";
 import { clubCarpet, DECO, panelling, stageBackdrop } from "./art";
 import { F, LIFT } from "./levels";
@@ -70,21 +71,20 @@ export function club(k: SkyKit) {
   k.grounds[f].push((x, z) => (x > SX0 && x < SX1 && z > SZ0 && z < SZ1 ? 0.45 : null));
   k.vox(f, "orch-piano", () => grandPiano(), 7.4, -18.2, -Math.PI / 2, { dy: 0.45 });
   k.vox(f, "orch-pbench", () => pianoBench(), 8.6, -17.9, -Math.PI / 2, { dy: 0.45, solid: false });
-  // the double bass on its stand
-  k.geo(f, new THREE.SphereGeometry(0.34, 12, 10).scale(1, 1.35, 0.45).translate(0.9, 0.45 + 0.75, -17.6), "#7a3a14", "polish");
-  k.box(f, 0.05, 1.0, 0.05, 0.9, 1.4, -17.6, "#1a0e08", "polish");
-  k.box(f, 0.1, 0.15, 0.08, 0.9, 2.35, -17.6, "#1a0e08", "polish");
-  // drums: kick, snare, cymbals
-  k.cyl(f, 0.32, 0.32, 0.5, 4.2, 0.45, -19.0, "#e8e2d4", "polish", 18);
-  k.geo(f, new THREE.CylinderGeometry(0.3, 0.3, 0.45, 18).rotateX(Math.PI / 2).translate(4.2, 0.45 + 0.3, -18.9), "#8a1424", "polish");
-  k.cyl(f, 0.2, 0.2, 0.14, 3.5, 0.45 + 0.6, -18.6, "#c8ccd4", "metal", 14);
-  for (const [x, z, h] of [
-    [3.2, -19.2, 1.2],
-    [5.1, -19.0, 1.35],
-  ] as const) {
-    k.box(f, 0.03, h, 0.03, x, 0.45, z, "#c8ccd4", "metal");
-    k.cyl(f, 0.32, 0.02, 0.03, x, 0.45 + h, z, "#d9b25a", "metal", 18);
-  }
+  // the band plays a real recording (Dixieland, the Coast Guard Band): the pianist at the piano, the
+  // double bass, the drum kit and a trumpet, each with its instrument in hand (src/interior/music)
+  const sy = y0 + 0.45;
+  ensemble(
+    g,
+    [
+      { kind: "piano", id: 1958, ...pianoSeat({ x: 7.4, y: sy, z: -18.2, rot: -Math.PI / 2 }), role: "Pianist" },
+      { kind: "bass", id: 1959, x: 1.1, y: sy, z: -17.6, yaw: 0.25, role: "Bassist" },
+      { kind: "drums", id: 1960, x: 4.2, y: sy + 0.44, z: -19.2, yaw: 0, role: "Drummer" },
+      { kind: "trumpet", id: 1962, x: 5.9, y: sy, z: -17.2, yaw: -0.2, role: "Trumpet" },
+    ],
+    [4, sy + 1.4, -17.8],
+    { place: "tower-orchard", floor: f, track: "jazz-dixie", level: 0.95, ref: 4 },
+  );
   // the microphone and the music stands
   k.box(f, 0.03, 1.5, 0.03, 2.6, 0.45, -16.6, "#c8ccd4", "metal");
   k.cyl(f, 0.04, 0.04, 0.1, 2.6, 0.45 + 1.5, -16.6, "#2a2830", "metal", 8);
@@ -208,9 +208,6 @@ export function club(k: SkyKit) {
 
   // ---- people ---------------------------------------------------------------------------------
   k.onCast(f, () => {
-    void k.person(f, 1958, [8.7, -17.9], "Pianist", { face: [-1, 0], sit: true, dy: 0.45 });
-    void k.person(f, 1959, [1.3, -17.3], "Bassist", { face: [0.2, 1], dy: 0.45 });
-    void k.person(f, 1960, [4.9, -17.9], "Drummer", { face: [0, 1], sit: true, dy: 0.45 });
     void k.person(f, 1961, [2.6, -16.3], "Singer", {
       face: [0, 1],
       dy: 0.45,

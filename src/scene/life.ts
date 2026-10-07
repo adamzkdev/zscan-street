@@ -49,6 +49,7 @@ export class Life {
     const stalls = pts("foodhall", /^stall\d+$/);
     for (const p of stalls.sort(() => Math.random() - 0.5).slice(0, n(10))) {
       const s = await this.person("Hawker cook");
+      s.wear({ hat: "chef" });
       s.root.position.set(p.x, CURB, p.z);
       s.faceDir = v(-(p.x - (lm.get("foodhall")!.door.x)), 0, -(p.z - lm.get("foodhall")!.door.z)).setY(0).normalize();
       this.chatter(s, ["note", "zec", "!", "heart"], 9000);
@@ -291,7 +292,7 @@ export class Life {
       const a = (i / picnic) * Math.PI * 2;
       const s = await this.person("Picnicker", i === 0 ? "basket" : pick(["can", "coffee", null, "book"] as (LifeItem | null)[]));
       s.root.position.set(M.x + Math.cos(a) * 1.3, CURB, M.z + Math.sin(a) * 1.3);
-      s.sit(true);
+      s.sit(true, 0);
       s.faceDir = v(-Math.cos(a), 0, -Math.sin(a));
       this.chatter(s, ["heart", "note", "dots", "star"], 9000);
     }

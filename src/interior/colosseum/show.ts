@@ -365,7 +365,7 @@ export function buildShow(ctx: InteriorContext): Show {
   void cast(round);
 
   // the referee, the emperor, his guards, the musicians
-  const extra = async (id: number, pos: THREE.Vector3, role: string, face: THREE.Vector3, o: { sit?: boolean } = {}) => {
+  const extra = async (id: number, pos: THREE.Vector3, role: string, face: THREE.Vector3, o: { sit?: number } = {}) => {
     try {
       const s = new Snark(id, await loadArt(id));
       s.noClip = true;
@@ -373,7 +373,7 @@ export function buildShow(ctx: InteriorContext): Show {
       s.role = role;
       s.root.position.copy(pos);
       s.faceDir = face;
-      if (o.sit) s.sit(true);
+      if (o.sit) s.sit(true, o.sit);
       group.add(s.root);
       people.push(s);
       return s;
@@ -389,12 +389,11 @@ export function buildShow(ctx: InteriorContext): Show {
   thumbG.scale.setScalar(0.01);
   thumbG.visible = false;
   let thumbT = -1;
-  void extra(1, new THREE.Vector3(-(AX + 2.75), POD + 0.62, 0), "Emperor", new THREE.Vector3(1, 0, 0), { sit: true }).then((s) => {
+  void extra(1, new THREE.Vector3(-(AX + 2.75), POD + 0.62, 0), "Emperor", new THREE.Vector3(1, 0, 0), { sit: 0.62 }).then((s) => {
     emperor = s;
     if (!s) return;
-    const laurel = pix(9, 3, ["g.g.g.g.g", "ggggggggg", ".ggggggg."], { g: "#5a8a3a" });
-    laurel.position.set(0.17, 2.18, 0.03);
-    s.visual.add(laurel);
+    // the laurel painted round his own head (it used to float a hand above it)
+    s.wear({ hat: "laurel" });
     const toga = pix(14, 4, ["pppppppppppppp", "pppppppppppppp", ".pppppppppppp.", "..pppppppppp.."], { p: "#5a1e6e" });
     toga.position.set(0.17, 0.62, 0.04);
     s.visual.add(toga);

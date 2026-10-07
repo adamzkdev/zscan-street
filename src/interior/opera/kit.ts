@@ -136,7 +136,7 @@ export class Level {
    * A zkSNARK: says its lines in a bubble when the walker comes near; `plain` makes it a clickable
    * (no chat), with `info` for the panel.
    */
-  async person(id: number, x: number, y: number, z: number, role: string, o: { lines?: string[]; sit?: boolean; scale?: number; face?: THREE.Vector3; near?: number; plain?: () => PickInfo; wander?: [number, number][] } = {}) {
+  async person(id: number, x: number, y: number, z: number, role: string, o: { lines?: string[]; sit?: boolean; seat?: number; scale?: number; face?: THREE.Vector3; near?: number; plain?: () => PickInfo; wander?: [number, number][] } = {}) {
     try {
       const s = new Snark(id, await loadArt(id));
       s.noClip = true;
@@ -144,7 +144,8 @@ export class Level {
       s.role = role;
       s.root.position.set(x, y, z);
       s.faceDir = o.face ?? new THREE.Vector3(0, 0, 1);
-      if (o.sit) s.sit(true);
+      // root on the chair: `seat` is its height over the floor
+      if (o.sit) s.sit(true, o.seat ?? 0.45);
       if (o.scale) s.setScale(o.scale);
       this.group.add(s.root);
       this.people.push(s);

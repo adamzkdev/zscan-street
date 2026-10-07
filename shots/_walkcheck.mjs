@@ -6,6 +6,9 @@
 //  - camera settles above the ground and outside every collider
 //  - BFS on the collider grid (0.25 m, walker radius): reachable area, leaks to the void,
 //    then the walker is steered along the path to the farthest reachable point and back (lift/exit)
+//  - lifts & stairs (interior/lift.ts): every floor reachable from floor 0 using only lifts, flights
+//    (stairs, escalators) and shared spaces; every lift ridden to its next floor and walked out of;
+//    every flight walked up and back down; each lift door / flight landing reachable on its floor
 //  - page errors
 // Street on foot (forest trails off the Golden Gate, the Flyer deck): see STREET below.
 import puppeteer from "puppeteer-core";
@@ -44,19 +47,23 @@ async function measure(n) {
       place = I.active;
     const f = place.floors[n];
     const V = W.camera.position.constructor;
-    const rects = I.walk.colliders.slice();
+    const rects = I.walk.colliders.concat(I.walk.extra ?? []);
     const R = 0.3,
       EYE = 1.6,
       CELL = 0.25;
     const issues = [];
     const warn = [];
     const inRect = (x, z, pad) => rects.findIndex(([x0, z0, x1, z1]) => x > x0 - pad && x < x1 + pad && z > z0 - pad && z < z1 + pad);
-    const g = (x, z) => (place.groundAt ? place.groundAt(n, x, z) : null);
+    const g = (x, z) => (W.ground ? W.ground(x, z) : place.groundAt ? place.groundAt(n, x, z) : null);
     const G = (x, z) => g(x, z) ?? f.y;
     // ---- colliders
     const bad = rects.filter((r) => !(r.every(Number.isFinite) && r[0] < r[2] && r[1] < r[3]));
     if (bad.length) issues.push(`${bad.length} malformed rects e.g. [${bad[0].map((v) => +(+v).toFixed(2))}]`);
-    const sp = f.spawn;
+    // where the walker really lands: in the lift car above the ground floor
+    const s0 = I.spawnOf ? I.spawnOf(n) : { x: f.spawn.x, z: f.spawn.z, yaw: f.yaw };
+    const sp = { x: s0.x, z: s0.z };
+    const spY = I.walk.floor;
+    const spYaw = s0.yaw;
     const hit = inRect(sp.x, sp.z, R);
     if (hit >= 0) issues.push(`spawn (${sp.x.toFixed(1)},${sp.z.toFixed(1)}) inside rect #${hit} [${rects[hit].map((v) => +v.toFixed(2))}]`);
     // ---- groundAt at spawn
@@ -75,7 +82,7 @@ async function measure(n) {
       keys.clear();
     };
     for (const d of ["w", "a", "s", "d"]) {
-      W.place(new V(sp.x, f.y, sp.z), f.yaw, f.y);
+      W.place(new V(sp.x, spY, sp.z), spYaw, spY);
       for (let i = 0; i < 20; i++) W.update(1 / 60);
       const a = W.camera.position.clone();
       step([d], 1.5);
@@ -84,7 +91,7 @@ async function measure(n) {
     const maxD = Math.max(...Object.values(disp));
     if (maxD < 1) issues.push(`STUCK at spawn: max move ${maxD} m`);
     // ---- camera settled above ground
-    W.place(new V(sp.x, f.y, sp.z), f.yaw, f.y);
+    W.place(new V(sp.x, spY, sp.z), spYaw, spY);
     for (let i = 0; i < 60; i++) W.update(1 / 60);
     const cy = W.camera.position.y;
     if (!Number.isFinite(cy) || cy < G(sp.x, sp.z) + 1.0) issues.push(`camera y ${cy.toFixed(2)} below ground ${G(sp.x, sp.z).toFixed(2)}`);
@@ -145,6 +152,58 @@ async function measure(n) {
       }
     }
     const area = q.length * CELL * CELL;
+    // ---- the lifts' doors and the flights' ends on this floor are reachable from the spawn
+    const C = I.circ;
+    if (C) {
+      // a fine BFS (0.1 m, the walker's own collision test) for narrow landings the coarse grid misses
+      let fine = null;
+      const fineGrid = () => {
+        const FC = 0.1, fx0 = gx0, fz0 = gz0, fw = Math.ceil((gw * CELL) / FC), fh = Math.ceil((gh * CELL) / FC);
+        const seen = new Uint8Array(fw * fh);
+        const blk = new Uint8Array(fw * fh);
+        for (let j = 0; j < fh; j++) for (let i = 0; i < fw; i++) blk[j * fw + i] = W.blocked(fx0 + (i + 0.5) * FC, fz0 + (j + 0.5) * FC) ? 1 : 0;
+        let si2 = Math.floor((sp.x - fx0) / FC), sj2 = Math.floor((sp.z - fz0) / FC);
+        const qq = [sj2 * fw + si2];
+        seen[qq[0]] = 1;
+        for (let h = 0; h < qq.length; h++) {
+          const k = qq[h], i = k % fw, j = (k - i) / fw;
+          for (const [a, c] of [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]]) {
+            if (a < 0 || c < 0 || a >= fw || c >= fh) continue;
+            const kk = c * fw + a;
+            if (seen[kk] || blk[kk]) continue;
+            seen[kk] = 1;
+            qq.push(kk);
+          }
+        }
+        return { seen, fw, fh, fx0, fz0, FC };
+      };
+      const reachable = (x, z) => {
+        const i = Math.floor((x - gx0) / CELL), j = Math.floor((z - gz0) / CELL);
+        for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) if (dist[(j + dj) * gw + i + di] >= 0) return true;
+        fine ??= fineGrid();
+        const fi = Math.floor((x - fine.fx0) / fine.FC), fj = Math.floor((z - fine.fz0) / fine.FC);
+        for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) if (fine.seen[(fj + dj) * fine.fw + fi + di]) return true;
+        return false;
+      };
+      const grp = C.together.find((g2) => g2.includes(n)) ?? [n];
+      for (const c of C.cars.filter((c) => c.floor === n)) {
+        // 1.9 m out from the car's centre, in front of its doors
+        const x = c.spot.x - Math.sin(c.spot.yaw) * 1.9, z = c.spot.z - Math.cos(c.spot.yaw) * 1.9;
+        if (!reachable(x, z)) issues.push(`lift ${c.shaft} door at (${x.toFixed(1)},${z.toFixed(1)}) not reachable from the spawn`);
+      }
+      for (const fl of C.flights) {
+        const d = fl.decl;
+        if (d.from !== n && d.to !== n) continue;
+        if (grp.includes(d.from) && grp.includes(d.to)) continue;
+        const [x0, z0, x1, z1] = d.zone;
+        const up = d.up ?? "+z";
+        const end = d.from === n ? 0 : 1;
+        const cx2 = (x0 + x1) / 2, cz2 = (z0 + z1) / 2;
+        const sgn = (up[0] === "+" ? 1 : -1) * (end ? 1 : -1);
+        const x = up[1] === "x" ? (sgn > 0 ? x1 : x0) + sgn * 0.35 : cx2, z = up[1] === "z" ? (sgn > 0 ? z1 : z0) + sgn * 0.35 : cz2;
+        if (!reachable(x, z)) issues.push(`${d.kind ?? "stairs"} ${d.from}→${d.to} ${end ? "head" : "foot"} at (${x.toFixed(1)},${z.toFixed(1)}) not reachable`);
+      }
+    }
     // MAP=key:floor prints the floor's grid (# collider, . reachable, blank unreachable, S spawn, L leak)
     let map = null;
     if (window.__walkMap === `${place.key}:${n}`) {
@@ -212,9 +271,126 @@ async function measure(n) {
     const farX = cx(far % gw), farZ = cz((far / gw) | 0);
     // ---- restore
     W.onExit = exitFn;
-    W.place(new V(sp.x, f.y, sp.z), f.yaw, f.y);
+    W.place(new V(sp.x, spY, sp.z), spYaw, spY);
     return { map, n, label: f.label, name: f.name, y: f.y, spawn: [+sp.x.toFixed(2), +sp.z.toFixed(2)], rects: rects.length, disp, area: Math.round(area), far: [+farX.toFixed(1), +farZ.toFixed(1), Math.round(dist[far] * CELL)], issues, warn };
   }, n);
+}
+
+// ---- lifts & stairs: reachability graph, ride every lift, walk every flight up and down
+async function checkCirc() {
+  return p.evaluate(() => {
+    const I = street.interiors, W = I.walk, C = I.circ, P = I.active, F = P.floors;
+    const V = W.camera.position.constructor;
+    const out = { issues: [], warn: [], lines: [] };
+    if (!C) return out;
+    const exitFn = W.onExit;
+    W.onExit = undefined;
+    const keys = W.keys;
+    let T = 0;
+    const tick = (n = 1) => {
+      for (let i = 0; i < n; i++) I.update(1 / 60, (T += 1 / 60));
+    };
+    const pos = W.camera.position;
+    // walk to (x, z) while still on floor f (a stair's floor switch carries the walker elsewhere)
+    const walkTo = (x, z, f, secs = 12) => {
+      let t = 0, last = pos.clone(), still = 0;
+      while (t < secs && Math.hypot(x - pos.x, z - pos.z) > 0.3 && (f === undefined || I.floor === f)) {
+        W.yaw = Math.atan2(-(x - pos.x), -(z - pos.z));
+        keys.clear();
+        keys.add("w");
+        tick();
+        t += 1 / 60;
+        if (Math.round(t * 60) % 60 === 0) {
+          still = pos.distanceTo(last) < 0.15 ? still + 1 : 0;
+          last = pos.clone();
+          if (still > 2) break;
+        }
+      }
+      keys.clear();
+      return Math.hypot(x - pos.x, z - pos.z);
+    };
+    // ---- the graph
+    const adj = F.map(() => new Set());
+    const link = (a, b) => (adj[a].add(b), adj[b].add(a));
+    for (const c of C.cars) for (const k of C.servedBy(c)) if (k !== c.floor) link(c.floor, k);
+    for (const f of C.flights) link(f.decl.from, f.decl.to);
+    for (const g of C.together) for (const k of g) link(g[0], k);
+    if (P.floorNow) for (let k = 1; k < F.length; k++) link(0, k);
+    const seen = new Set([0]), q = [0];
+    while (q.length) for (const k of adj[q.shift()]) if (!seen.has(k)) (seen.add(k), q.push(k));
+    const lost = F.map((_, k) => k).filter((k) => !seen.has(k));
+    if (lost.length) out.issues.push(`floors not reachable from floor 0 by lift or stairs: ${lost.map((k) => F[k].label).join(", ")}`);
+    out.lines.push(`graph: ${F.map((f, k) => `${f.label}→[${[...adj[k]].map((j) => F[j].label).join(",")}]`).join(" ")}`);
+    if (C.problems.length) out.issues.push(...C.problems.map((p) => "placement: " + p));
+    // ---- nothing on the ground floor too close to the way out (walking +z there leaves the place)
+    I.goTo(0);
+    const door = W.door;
+    if (door)
+      for (const c of C.cars.filter((c) => C.together.find((g) => g.includes(0))?.includes(c.floor) ?? c.floor === 0)) {
+        const x = c.spot.x - Math.sin(c.spot.yaw) * 1.9, z = c.spot.z - Math.cos(c.spot.yaw) * 1.9;
+        if (Math.hypot(x - door.x, z - door.z) < 3.5) out.issues.push(`lift ${c.shaft} on ${F[c.floor].label} is at the way out (${x.toFixed(1)},${z.toFixed(1)})`);
+      }
+    // ---- ride each car to the next floor its shaft serves (and the last one back down)
+    for (const car of C.cars) {
+      const served = C.servedBy(car);
+      const at = served.indexOf(car.floor);
+      const to = served[at + 1] ?? served[at - 1];
+      if (to === undefined) continue;
+      I.goTo(car.floor);
+      W.onExit = undefined;
+      const x = car.spot.x + Math.sin(car.spot.yaw) * 0.2, z = car.spot.z + Math.cos(car.spot.yaw) * 0.2;
+      W.place(new V(x, car.y, z), car.spot.yaw + Math.PI, car.y);
+      tick(30);
+      const name = `lift ${car.shaft} ${F[car.floor].label}→${F[to].label}`;
+      if (!C.carIn()) {
+        out.issues.push(`${name}: walker placed in the car is not "in" it`);
+        continue;
+      }
+      if (!C.call(to)) {
+        out.issues.push(`${name}: call refused`);
+        continue;
+      }
+      let k = 0;
+      while (C.ride && k++ < 60 * 15) tick();
+      const tgt = C.carOf(car.shaft, to);
+      if (C.ride) out.issues.push(`${name}: ride stuck (${C.ride.phase})`);
+      else if (I.floor !== to) out.issues.push(`${name}: arrived on ${F[I.floor].label}`);
+      else if (!tgt.inside(pos.x, pos.z)) out.issues.push(`${name}: not in the target car on arrival`);
+      else {
+        // walk out through the doors, 2.5 m
+        const ox = tgt.spot.x - Math.sin(tgt.spot.yaw) * 3.2, oz = tgt.spot.z - Math.cos(tgt.spot.yaw) * 3.2;
+        const miss = walkTo(ox, oz, to, 4);
+        if (miss > 0.8) out.issues.push(`${name}: could not walk out of the car (${miss.toFixed(1)} m short)`);
+        else out.lines.push(`ok ${name}`);
+        if (Math.abs(W.floor - (tgt.y)) > 0.3) out.warn.push(`${name}: floor height ${W.floor.toFixed(2)} vs car ${tgt.y.toFixed(2)}`);
+      }
+    }
+    // ---- walk each flight up and back down
+    for (const fl of C.flights) {
+      const d = fl.decl;
+      const name = `${d.kind ?? "stairs"} ${F[d.from].label}→${F[d.to].label} ${d.zone.map((v) => +v.toFixed(1))}`;
+      const [x0, z0, x1, z1] = d.zone;
+      const up = d.up ?? "+z";
+      const s = up[0] === "+" ? 1 : -1;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      const foot = up[1] === "x" ? { x: (s > 0 ? x0 : x1) - s * 0.35, z: cz } : { x: cx, z: (s > 0 ? z0 : z1) - s * 0.35 };
+      const head = up[1] === "x" ? { x: (s > 0 ? x1 : x0) + s * 0.35, z: cz } : { x: cx, z: (s > 0 ? z1 : z0) + s * 0.35 };
+      I.goTo(d.from);
+      W.onExit = undefined;
+      W.place(new V(foot.x, F[d.from].y, foot.z), 0, F[d.from].y);
+      tick(5);
+      walkTo(head.x, head.z, undefined, 12);
+      const upOk = I.floor === d.to && Math.hypot(head.x - pos.x, head.z - pos.z) < 0.8 && Math.abs(W.floor - F[d.to].y) < 0.3;
+      if (!upOk) out.issues.push(`${name} up: on ${F[I.floor].label} at (${pos.x.toFixed(1)},${pos.z.toFixed(1)}) floor ${W.floor.toFixed(2)}`);
+      walkTo(foot.x, foot.z, undefined, 12);
+      const downOk = I.floor === d.from && Math.hypot(foot.x - pos.x, foot.z - pos.z) < 0.8 && Math.abs(W.floor - F[d.from].y) < 0.3;
+      if (!downOk) out.issues.push(`${name} down: on ${F[I.floor].label} at (${pos.x.toFixed(1)},${pos.z.toFixed(1)}) floor ${W.floor.toFixed(2)}`);
+      if (upOk && downOk) out.lines.push(`ok ${name}`);
+    }
+    W.onExit = exitFn;
+    I.goTo(0);
+    return out;
+  });
 }
 
 const rows = [];
@@ -233,6 +409,12 @@ for (const k of KEYS) {
       if (r.map) console.log(r.map.join("\n"));
       console.log(`${st.padEnd(4)} ${k.padEnd(14)} #${n} ${String(r.label).padEnd(8)} ${String(r.name).slice(0, 24).padEnd(24)} y=${r.y} spawn=${r.spawn} rects=${r.rects} move=${JSON.stringify(r.disp)} area=${r.area}m² far=${r.far}  ${r.issues.join("; ")} ${r.warn.length ? "[" + r.warn.join("; ") + "]" : ""}`);
     }
+    const cc = await checkCirc();
+    if (process.env.VERBOSE) for (const l of cc.lines) console.log(`     ${l}`);
+    else if (cc.lines[0]) console.log(`     ${cc.lines[0]}`);
+    const st2 = cc.issues.length ? "FAIL" : cc.warn.length ? "warn" : "ok";
+    console.log(`${st2.padEnd(4)} ${k.padEnd(14)} lifts & stairs: ${cc.lines.filter((l) => l.startsWith("ok")).length} ok ${cc.issues.join("; ")} ${cc.warn.length ? "[" + cc.warn.join("; ") + "]" : ""}`);
+    rows.push({ key: k, issues: cc.issues });
     await p.evaluate(() => street.interiors.exit());
     await wait(800);
   } catch (e) {
@@ -343,6 +525,13 @@ const streetRes = only && !only.includes("street") ? [] : await p.evaluate((rout
   if (gg?.ok) route("bridge to trailhead", [[gg.x, gg.z1 - 6], [gg.x, gg.z1 + 0.6], [gg.x + 5, gg.z1 + 0.6], [168, 225]]);
   // the Flyer: up the west stairs, along the deck, down the east stairs (and back)
   route("flyer stairs+deck", [[-78, 97.5], [-78, 93], [-78, 89.6], [-70, 89.6], [-62, 89.6], [-62, 93], [-62, 97.5]]);
+  // the ZK Cemetery: in through the gate, up the main alley, along the cross alley to the crypt's door; the whole cross alley
+  if (S.cemetery?.ok) {
+    const cx = (v) => 129 + v / 6, cz = (v) => -223 + v / 6;
+    route("cemetery gate to crypt", [[cx(184), -193.5], [cx(184), cz(150)], [cx(184), cz(103)], [cx(64), cz(103)], [cx(64), cz(76)], [cx(64), cz(69)]]);
+    route("cemetery cross alley", [[cx(16), cz(103)], [cx(350), cz(103)]]);
+    route("cemetery to chapel", [[cx(183), cz(140)], [cx(183), cz(75)], [cx(260), cz(75)], [cx(261), cz(20)]]);
+  }
   const ex = S.sky?.flyer?.exit;
   if (ex) settle(ex.pos.x, ex.pos.z);
   if (ex) out.push({ name: "flyer exit spot", from: [+ex.pos.x.toFixed(1), +ex.pos.z.toFixed(1)], startBlocked: W.collide(ex.pos.x, ex.pos.z), there: { miss: 0 }, back: { miss: 0 }, disp: moveTest(ex.pos.x, ex.pos.z) });

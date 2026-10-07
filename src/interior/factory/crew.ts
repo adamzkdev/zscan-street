@@ -1,53 +1,11 @@
 import * as THREE from "three";
 import { Snark, loadArt } from "../../scene/snark";
-import { GRID, sprite } from "../../scene/sprites";
 import { hash } from "../../scene/voxel/model";
 
 /**
  * The people of the hall: zkSNARKs in hard hats. They talk (in English) when the walker comes
  * near, beep from their vehicles, cheer when a block comes in.
  */
-
-const BODY = 1.75;
-const PX = BODY / GRID;
-const LEG_H = 6 * PX;
-const BUST_X = 2.5 * PX;
-const snap = (v: number) => Math.round(v / PX) * PX;
-
-const hats = new Map<string, ReturnType<typeof sprite>>();
-/** A hard hat on the portrait's grid: dome, ridge, brim (yellow, white for supervisors, orange…). */
-function hatSprite(color: string) {
-  let s = hats.get(color);
-  if (s) return s;
-  const c = new THREE.Color(color);
-  const hex = (k: number) => `#${c.clone().multiplyScalar(k).getHexString()}`;
-  s = sprite(15, 7, (px) => {
-    px(4, 0, 7, 1, hex(0.95));
-    px(2, 1, 11, 1, hex(1));
-    px(1, 2, 13, 3, hex(1));
-    px(6, 0, 3, 5, hex(1.15));
-    px(3, 2, 2, 1, hex(1.25));
-    px(1, 4, 13, 1, hex(0.82));
-    px(0, 5, 15, 2, hex(0.7));
-    px(0, 6, 15, 1, hex(0.55));
-  });
-  hats.set(color, s);
-  return s;
-}
-
-/** A hi-vis vest over the bust: two reflective bands across the chest (orange or lime). */
-function vestSprite(color: string) {
-  const key = `v${color}`;
-  let s = hats.get(key);
-  if (s) return s;
-  s = sprite(14, 4, (px) => {
-    px(0, 0, 14, 4, color);
-    px(0, 1, 14, 1, "#e8ecf0");
-    px(0, 3, 14, 1, "#c8ccd0");
-  });
-  hats.set(key, s);
-  return s;
-}
 
 export interface Person {
   s: Snark;
@@ -63,7 +21,7 @@ export class Crew {
   private seq = 0;
 
   /** A zkSNARK in PPE at `at` (in `parent`'s frame). */
-  async person(id: number, parent: THREE.Object3D, at: THREE.Vector3, role: string, o: { hat?: string | null; vest?: string | null; lines?: string[]; sit?: boolean; scale?: number; face?: THREE.Vector3 | null; near?: number } = {}) {
+  async person(id: number, parent: THREE.Object3D, at: THREE.Vector3, role: string, o: { hat?: string | null; vest?: string | null; lines?: string[]; sit?: boolean; perch?: number; scale?: number; face?: THREE.Vector3 | null; near?: number } = {}) {
     try {
       const s = new Snark(id, await loadArt(id));
       s.noClip = true;
@@ -72,19 +30,12 @@ export class Crew {
       s.showParcels(false);
       s.root.position.copy(at);
       s.faceDir = o.face ?? null;
-      if (o.hat !== null) {
-        const hat = hatSprite(o.hat ?? "#f4c020");
-        const h = new THREE.Mesh(new THREE.PlaneGeometry(hat.w * PX, hat.h * PX), new THREE.MeshBasicMaterial({ map: hat.texture, transparent: true, alphaTest: 0.5 }));
-        h.position.set(snap(BUST_X + PX), LEG_H + BODY - 1.8 * PX, 0.06);
-        s.visual.add(h);
-      }
-      if (o.vest !== null) {
-        const v = vestSprite(o.vest ?? "#ff7a1a");
-        const vm = new THREE.Mesh(new THREE.PlaneGeometry(v.w * PX, v.h * PX), new THREE.MeshBasicMaterial({ map: v.texture, transparent: true, alphaTest: 0.5 }));
-        vm.position.set(snap(BUST_X + 0.5 * PX), LEG_H + 2.5 * PX, 0.045);
-        s.visual.add(vm);
-      }
+      // PPE painted onto the portrait itself: the helmet fitted to this head (its own hat off),
+      // the vest on the bust, both moving with it
+      s.wear({ hat: o.hat !== null ? "hard" : null, color: o.hat ?? "#f4c020", vest: o.vest !== null ? (o.vest ?? "#ff7a1a") : null });
+      // drivers sit on the seat itself; office staff stand on the floor in front of their chair
       if (o.sit) s.sit(true);
+      if (o.perch) s.perchNear();
       if (o.scale) s.setScale(o.scale);
       parent.add(s.root);
       const p: Person = { s, role, lines: o.lines ?? [], wait: 2 + hash(this.seq++, 4, 4, 4) * 6, near: o.near ?? 9 };

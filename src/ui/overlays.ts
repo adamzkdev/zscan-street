@@ -36,7 +36,7 @@ const POOLS = [
 
 function zoneOf(c: Cell): keyof typeof ZONE_COLOR {
   if (c.kind === "core") return "heart";
-  if (c.kind === "park" || c.kind === "edge" || c.lot === "green" || c.lot === "gardens") return "park";
+  if (c.kind === "park" || c.kind === "edge" || c.lot === "green" || c.lot === "gardens" || c.lot === "cemetery") return "park";
   if (c.kind === "lot") return c.lot === "port" ? "industry" : "civic";
   const z = zoneAt((c.x0 + c.x1) / 2, (c.z0 + c.z1) / 2);
   return z === "port" ? "industry" : z === "midtown" || z === "finance" ? "offices" : z === "west" || z === "eastcom" ? "commercial" : "residential";

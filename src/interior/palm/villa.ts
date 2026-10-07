@@ -520,6 +520,7 @@ function cast(k: PalmKit) {
     void k.person(f, 3500, [-2.6, -21.6], "Sunbather", { dy: 0.42, sit: true, face: [0, -1], lines: ["The view from this lounger: the Burj Al ZEC and the whole skyline."], near: 5 });
     void k.person(f, 3600, [4, -27.6], "Swimmer", { sit: true, face: [0, -1], lines: ["The edge of this pool is the edge of the world.", "I can see Atlantis from here!"], near: 8 }).then((s) => {
       if (!s) return;
+      s.wade();
       const y = k.y(f);
       k.ticks[f].push((_dt, t) => {
         s.root.position.y = y - 0.9 + Math.sin(t * 1.5) * 0.05;

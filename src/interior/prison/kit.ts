@@ -411,6 +411,8 @@ export class PrisonKit {
       s.noClip = true;
       s.state = "resident";
       s.role = role;
+      // kitchen staff in a toque (painted on, fitted to the head)
+      if (role === "Chef" || role === "Cook") s.wear({ hat: "chef" });
       s.root.position.set(at[0], at[1], at[2]);
       s.faceDir = o.face ?? new THREE.Vector3(0, 0, 1);
       if (o.cap) s.setCap();

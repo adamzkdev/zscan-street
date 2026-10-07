@@ -3,6 +3,7 @@ import { Market } from "../../../data/market";
 import { backBar, barCounter, grandPiano, pianoBench, rug, stool } from "../../furniture";
 import { clubChair, sideTable, wineWall } from "../../hotel/furniture";
 import { sideLamp } from "../../needle/props";
+import { pianist } from "../../music/acts";
 import { drawTicker, num, paint, type SkyKit, usd } from "../kit";
 import { LIFT_DARK, liveSurface, PAL } from "./shared";
 
@@ -145,7 +146,9 @@ export function lounge(k: SkyKit) {
 
   // ---- the piano by the front window ----------------------------------------------------------------
   k.vox(f, "halo-piano", grandPiano, -6.4, -4.2, Math.PI, { k: 0.55 });
-  k.vox(f, "halo-pbench", pianoBench, -6.4, -2.2, Math.PI, { solid: false });
+  k.vox(f, "halo-pbench", pianoBench, -6.4, -2.68, Math.PI, { solid: false });
+  // the pianist plays Chopin (a real recording, heard from the piano: src/interior/music)
+  pianist(k.groups[f], { x: -6.4, y: k.y(f), z: -4.2, rot: Math.PI, scale: 1.1 }, { place: "tower-halo", floor: f, track: "piano-nocturne", id: 2828, level: 0.8 });
   k.hit(f, 1.8, 1.4, 2.4, -6.4, 0, -4.2, `<b>The grand piano</b><span>tonight: jazz</span>`, () => ({ eyebrow: "ZK TOWER HALO · VIP lounge", title: "Grand piano", stats: [["Tonight", "jazz standards"], ["Requests", "tip in ZEC"]] }));
 
   // pendants over the club chairs and the bar
@@ -173,7 +176,6 @@ export function lounge(k: SkyKit) {
   const p = () => Market.state.price;
   k.onCast(f, () => {
     void k.person(f, 1717, [7.5, -24.4], "Bartender", { face: [0, 1], wander: [[5, -24.4], [7.5, -24.4], [10.6, -24.4]], lines: ["The Shielded Old Fashioned? Coming up.", "The bar takes ZEC. Shielded, of course.", () => (p() ? `ZEC at ${usd(p()!.usd)}. Drinks are the same price as yesterday.` : "What'll it be?")] });
-    void k.person(f, 2828, [-6.4, -2.2], "Pianist", { sit: true, face: [0, -1], lines: ["This one's called 'Seventy-Five Seconds'.", "Requests in ZEC, please.", "A little Monk for the trading floor."], near: 8 });
     void k.person(f, 3939, [6.6, -21.6], "Guest", { sit: true, face: [0, -1], lines: ["One more, then the helipad.", () => `Block ${num(k.height)}. Cheers to that.`] });
     const a = k.person(f, 4040, [X0 + 1.1, -23.2], "Fund manager", { sit: true, face: [1, 0] });
     const b = k.person(f, 5151, [X0 + 2.6, -23.9], "Founder", { sit: true, face: [-1, 0.4] });

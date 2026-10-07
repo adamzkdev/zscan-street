@@ -79,19 +79,14 @@ export function chamber(k: PyramidKit, game: Game) {
   walls.box(-1.4, Y, Z1 + 0.6, -0.8, Y + 2.3, 3.8, ["nx", "bottom", "top"]);
   walls.box(0.8, Y, Z1 + 0.6, 1.4, Y + 2.3, 3.8, ["px", "bottom", "top"]);
   ceil.flat(-0.8, Z1, 0.8, 3.8, Y + 2.3, false);
-  walls.box(-0.8, Y, 3.8, 0.8, Y + 2.3, 4.4, ["pz"]);
-  rects.push([-1.4, Z1, -0.8, 4.4], [0.8, Z1, 1.4, 4.4], [-0.8, 3.8, 0.8, 4.4]);
+  // (its far end opens on the top of the Grand Gallery: see ./index.ts)
+  rects.push([-1.4, Z1, -0.8, 4.4], [0.8, Z1, 1.4, 4.4]);
   for (const z of [0.4, 1.3, 2.2]) {
     walls.box(-0.8, Y + 1.95, z, 0.8, Y + 2.3, z + 0.32, ["top"]);
     for (const s of [-1, 1]) walls.box(s * 0.8 - 0.04, Y, z + 0.04, s * 0.8 + 0.04, Y + 1.95, z + 0.28, []);
   }
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.9), new THREE.MeshBasicMaterial({ color: "#050302" }));
-  back.position.set(0, Y + 0.95, 3.79);
-  back.rotation.y = Math.PI;
-  g.add(back);
-  k.pick(f, back, "<b>▼ Grand Gallery</b><span>back down</span>", () => ({ eyebrow: "Passage", title: "Grand Gallery", floor: 1 }));
   const down = textPlane("▼ GRAND GALLERY", { h: 0.2, glow: true, color: "#f4b728" });
-  down.position.set(0, Y + 2.08, 3.78);
+  down.position.set(0, Y + 2.62, Z1 - 0.02);
   down.rotation.y = Math.PI;
   g.add(down);
 
@@ -282,7 +277,7 @@ export function chamber(k: PyramidKit, game: Game) {
   k.add(f, dais, k.granite, light);
   const sill = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.04), glowMat("#ffb050", 1.2));
   sill.rotation.x = -Math.PI / 2;
-  sill.position.set(0, Y + 0.01, 3.7);
+  sill.position.set(0, Y + 0.01, Z1 - 0.1);
   g.add(sill);
   k.lightUp(f);
 }

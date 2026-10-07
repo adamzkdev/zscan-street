@@ -29,6 +29,7 @@ const TOUR: [string, string][] = [
   ["eiffel", "the Tour Eiffel"],
   ["shibuya", "the Shibuya crossing"],
   ["colosseum", "the Colosseum"],
+  ["cemetery", "the ZK Cemetery"],
   ["needle", "the ZEC Needle"],
   ["mall", "the ZK Mall"],
   ["reserve", "the ZEC Reserve"],

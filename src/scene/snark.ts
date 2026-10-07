@@ -4,7 +4,7 @@ import type { NftItem, Tx, TxKind } from "../data/types";
 import { ZScan } from "../data/zscan";
 import { blobTexture } from "./textures";
 import { sayAt } from "./speech";
-import { GRID, POSE, bubbleSprite, legSprite, policeCapSprite, poseSprites, type Emote, type ItemKind, type PoseSpec } from "./sprites";
+import { GRID, POSE, bubbleSprite, drawHat, drawVest, hatClear, lapSprite, legSprite, poseSprites, type Emote, type Hat, type HeadFit, type ItemKind, type PoseSpec, type Px } from "./sprites";
 
 /** Parcel colours per transaction kind: restrained, readable at a glance. */
 export const KIND_COLOR: Record<TxKind, string> = {
@@ -23,6 +23,10 @@ interface Art {
   cloth: string;
   /** The face's colour (sRGB hex), for the hands. */
   skin: string;
+  /** Which of the 26×26 portrait cells are drawn (row-major): where hats and vests may go. */
+  mask?: Uint8Array;
+  /** Copies of the portrait with a uniform painted on (see `dressedTexture`), by outfit. */
+  dressed?: Map<string, THREE.Texture>;
 }
 
 const artCache = new Map<number, Promise<Art>>();
@@ -65,7 +69,7 @@ export function loadArt(id: number): Promise<Art> {
       texture.minFilter = THREE.LinearMipmapLinearFilter;
       texture.generateMipmaps = true;
       const cloth = clothOf(img);
-      return { texture, cloth, skin: skinOf(img, cloth) };
+      return { texture, cloth, skin: skinOf(img, cloth), mask: cellMask(img) };
     })();
     artCache.set(id, p);
     p.catch(() => artCache.delete(id));
@@ -98,6 +102,8 @@ function releaseArt(a: Art) {
     artIds.delete(old);
     if (id !== undefined) artCache.delete(id);
     old.texture.dispose();
+    for (const t of old.dressed?.values() ?? []) t.dispose();
+    old.dressed = undefined;
   }
 }
 
@@ -122,6 +128,99 @@ function keyOutBackground(img: ImageData) {
     if (y < h - 1) stack.push(p + w);
   }
 }
+
+/** The portrait's cells that are drawn (alpha at each cell's centre). */
+function cellMask(img: ImageData) {
+  const { width: w, data } = img;
+  const cell = w / GRID;
+  const m = new Uint8Array(GRID * GRID);
+  for (let r = 0; r < GRID; r++)
+    for (let c = 0; c < GRID; c++) m[r * GRID + c] = data[(Math.floor((r + 0.5) * cell) * w + Math.floor((c + 0.5) * cell)) * 4 + 3] > 127 ? 1 : 0;
+  return m;
+}
+
+/**
+ * The forehead's span on this portrait: the run of drawn cells through the face's centre on the
+ * cheek row (16, under any glasses or mask), clamped to the shared head template.
+ */
+function headFit(a: Art): HeadFit {
+  // no mask (a portrait made in code): the shared template
+  const on = (c: number, r: number) => (a.mask ? a.mask[r * GRID + c] === 1 : c >= 9 && c <= 20);
+  const row = 16;
+  let R = 15;
+  while (R < GRID - 1 && on(R + 1, row)) R++;
+  let L = 15;
+  while (L > 0 && on(L - 1, row)) L--;
+  return { L: Math.min(11, Math.max(9, L)), R: Math.min(21, Math.max(18, R)) };
+}
+
+/** What a zkSNARK wears over its own portrait: a uniform hat (and its colour), a hi-vis vest. */
+export interface Outfit {
+  hat?: Hat | null;
+  color?: string;
+  vest?: string | null;
+}
+
+/**
+ * The portrait with a uniform painted on, cell for cell: the old headwear cleared where the hat
+ * goes, the hat drawn to this head's width (sprites.ts drawHat), a vest on the bust. Shared by
+ * everyone wearing the same portrait and outfit; freed with the portrait.
+ */
+function dressedTexture(a: Art, o: Outfit): THREE.Texture {
+  const key = `${o.hat ?? ""}|${o.color ?? ""}|${o.vest ?? ""}`;
+  a.dressed ??= new Map();
+  let t = a.dressed.get(key);
+  if (t) return t;
+  const src = a.texture.image as HTMLCanvasElement;
+  const c = document.createElement("canvas");
+  c.width = src.width;
+  c.height = src.height;
+  const g = c.getContext("2d")!;
+  g.drawImage(src, 0, 0);
+  const cell = c.width / GRID;
+  const px: Px = (x, y, w, h, col) => {
+    g.fillStyle = col;
+    g.fillRect(Math.round(x * cell), Math.round(y * cell), Math.round(w * cell), Math.round(h * cell));
+  };
+  if (o.hat) {
+    const fit = headFit(a);
+    const clr = hatClear(o.hat);
+    g.clearRect(clr.col * cell, 0, c.width - clr.col * cell, clr.rows * cell);
+    // the tip of an old cap's peak, out in front on the forehead row
+    if (clr.rows === 11) g.clearRect((fit.R + 1) * cell, 11 * cell, c.width, cell);
+    drawHat(px, o.hat, fit, o.color);
+  }
+  if (o.vest) drawVest(px, (cc, r) => (a.mask ? a.mask[r * GRID + cc] === 1 : cc >= 6 && cc <= 21 && r >= 19), o.vest);
+  t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  a.dressed.set(key, t);
+  return t;
+}
+
+/**
+ * Seated people are drawn as if a little nearer the camera than they are: depth only (same size,
+ * same place on screen), so a chair's back or a bench's rail right behind the cut-out no longer
+ * slices through it from the side. `bias` (metres) is the snark's own uniform; 0 when standing.
+ */
+const NEAR_GLSL = `
+  if (uNear > 0.0) {
+    vec4 nq = projectionMatrix * vec4(mvPosition.xy, mvPosition.z + min(uNear, -mvPosition.z * 0.5), 1.0);
+    gl_Position.z = nq.z / nq.w * gl_Position.w;
+  }`;
+function nearer(mat: THREE.Material, bias: { value: number }) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uNear = bias;
+    sh.vertexShader = "uniform float uNear;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>" + NEAR_GLSL);
+  };
+  mat.customProgramCacheKey = () => "snark-near";
+}
+/** A stand-in camera for the seat finder's raycasts (Snark.findSeat). */
+const SEAT_CAM = new THREE.PerspectiveCamera();
+/** How much nearer seated people are drawn (see NEAR_GLSL). */
+const SEAT_NEAR = 0.32;
 
 /** The lower cheek, where every portrait shows its face; void faces fall back on the sleeve. */
 function skinOf(img: ImageData, cloth: string) {
@@ -184,10 +283,10 @@ const POSE_GEO = new THREE.PlaneGeometry(POSE.w * PX, POSE.h * PX).translate((PO
 const tmpQ = new THREE.Quaternion();
 
 /** Silhouette glow drawn behind the selected sprite: the art's alpha, filled with one colour. */
-function glowMaterial(map: THREE.Texture) {
+function glowMaterial(map: THREE.Texture, near: { value: number }) {
   return new THREE.ShaderMaterial({
-    uniforms: { map: { value: map }, color: { value: new THREE.Color(0.35, 0.9, 1.6) } },
-    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    uniforms: { map: { value: map }, color: { value: new THREE.Color(0.35, 0.9, 1.6) }, uNear: near },
+    vertexShader: `uniform float uNear; varying vec2 vUv; void main(){ vUv = uv; vec4 mvPosition = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * mvPosition; ${NEAR_GLSL} }`,
     fragmentShader:
       "uniform sampler2D map; uniform vec3 color; varying vec2 vUv; void main(){ float a = texture2D(map, vUv).a; if (a < 0.5) discard; gl_FragColor = vec4(color, 1.0); }",
     toneMapped: false,
@@ -229,6 +328,10 @@ export class Snark {
   private swing: -1 | 0 | 1 = 0;
   private strapOn = false;
   private cloth: string;
+  /** Trouser colour (legs, and the lap when seated). */
+  private trouser: string;
+  /** Depth bias of every part of the cut-out (see `nearer`): set while seated. */
+  private readonly near = { value: 0 };
   private skin: string;
   /** Overrides the carried item (briefcases for big visible amounts). */
   carry: ItemKind | null = null;
@@ -271,11 +374,12 @@ export class Snark {
     this.art = art;
     holdArt(art);
     const mat = new THREE.MeshBasicMaterial({ map: art.texture, transparent: true, alphaTest: 0.5 });
+    nearer(mat, this.near);
     this.body = new THREE.Mesh(new THREE.PlaneGeometry(BODY, BODY), mat);
     this.body.position.y = LEG_H + BODY / 2;
     this.body.userData.snark = this;
     this.root.userData.snarkRef = this;
-    this.glow = new THREE.Mesh(this.body.geometry, glowMaterial(art.texture));
+    this.glow = new THREE.Mesh(this.body.geometry, glowMaterial(art.texture, this.near));
     this.glow.position.copy(this.body.position);
     this.glow.position.z = -0.02;
     this.glow.scale.setScalar(1.09);
@@ -283,7 +387,8 @@ export class Snark {
     this.cloth = art.cloth;
     this.skin = art.skin ?? art.cloth;
     const trouser = new THREE.Color(art.cloth).multiplyScalar(0.62);
-    const leg = legSprite(`#${trouser.getHexString()}`);
+    this.trouser = `#${trouser.getHexString()}`;
+    const leg = legSprite(this.trouser);
     for (const dx of [BUST_X - 3 * PX, BUST_X + 3 * PX]) {
       const l = pixelPlane(leg, -0.01);
       // on the portrait's own pixel columns (10–14 and 16–20)
@@ -294,6 +399,7 @@ export class Snark {
     }
     this.armBack = new THREE.Mesh(POSE_GEO, new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.5 }));
     this.armFront = new THREE.Mesh(POSE_GEO, new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.5 }));
+    for (const m of [this.armBack, this.armFront, ...this.legs]) nearer(m.material as THREE.Material, this.near);
     // the far arm behind the legs and the bust, the near one over everything
     this.armBack.position.z = -0.015;
     this.armFront.position.z = 0.035;
@@ -329,6 +435,7 @@ export class Snark {
   private applyDetail() {
     const near = !this.far;
     for (const l of this.legs) l.visible = near && this.legsOn;
+    if (this.lap) this.lap.visible = near && !!this.seat;
     this.shadow.visible = near;
     // an open umbrella still reads from up there (a dot of colour over the crowd)
     this.hold.visible = near || !!this.umbrellaColor;
@@ -437,11 +544,19 @@ export class Snark {
     this.applyDetail();
   }
 
-  /** A police cap on the head. */
-  setCap() {
-    const c = pixelPlane(policeCapSprite(), 0.05);
-    c.position.set(snap(BUST_X + PX), LEG_H + BODY - 1.5 * PX, 0.05);
-    this.visual.add(c);
+  /** A police cap on the head (fitted to this portrait's head, its own headwear taken off). */
+  setCap(color?: string) {
+    this.wear({ hat: "police", color });
+  }
+
+  /**
+   * Put on a uniform: a hat (police cap, hard hat, chef's toque, laurel) and/or a hi-vis vest,
+   * painted onto this zkSNARK's own portrait so it fits that head and moves with it. `{}` takes it off.
+   */
+  wear(o: Outfit) {
+    const t = o.hat || o.vest ? dressedTexture(this.art, o) : this.art.texture;
+    (this.body.material as THREE.MeshBasicMaterial).map = t;
+    (this.glow.material as THREE.ShaderMaterial).uniforms.map.value = t;
   }
 
   private said: THREE.Sprite | null = null;
@@ -466,31 +581,177 @@ export class Snark {
     this.visual.add(b);
   }
 
-  private perchY = 0;
-  /** Sit on a bench (legs dangling) at `height` above the ground under it; 0 stands back up. */
-  perch(height: number) {
-    this.perchY = height ? height - LEG_H + PX : 0;
-    this.visual.position.y = this.perchY;
+  private perchH = 0;
+  /**
+   * Sit on a bench or a chair whose seat is `height` above the ground the root stands on; 0 stands
+   * back up. `feet`: how far below the seat the feet rest (a scooter's footboard), else the ground.
+   */
+  perch(height: number, feet = height) {
+    this.perchH = height;
+    this.seatPose(height ? { lift: height, floor: feet } : null);
   }
 
   get isPerched() {
-    return this.perchY !== 0;
+    return this.perchH !== 0 || this.seekSeat > 0;
+  }
+
+  /** Frames left before looking for the seat (perchNear); 0: not looking. */
+  private seekSeat = 0;
+  /**
+   * Sit on whatever seat is under or right behind it (a bench, a sofa, a chair: found by looking
+   * down round the spot once the place is built), shifted onto it; nothing there: on the floor,
+   * legs out. For people placed by hand next to the furniture of a room, root on the floor.
+   */
+  perchNear() {
+    this.perch(0.45);
+    this.perchH = 0;
+    this.seekSeat = 3;
+  }
+
+  private findSeat() {
+    let top: THREE.Object3D = this.root;
+    while (top.parent) top = top.parent;
+    if (!(top as THREE.Scene).isScene) return false;
+    const me = this.root.getWorldPosition(new THREE.Vector3());
+    const face = this.faceDir ? this.faceDir.clone().setY(0).normalize() : new THREE.Vector3();
+    const rc = new THREE.Raycaster();
+    rc.far = 1.1;
+    // sprites (speech bubbles, labels) need a camera to be tested at all; they are skipped anyway
+    rc.camera = SEAT_CAM;
+    const down = new THREE.Vector3(0, -1, 0);
+    const from = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    let best: { x: number; z: number; h: number; score: number } | null = null;
+    // people, hidden pick boxes and glass are not seats
+    const skip = (o: THREE.Object3D) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+      if ((o as THREE.Sprite).isSprite || !m || Array.isArray(m) || !m.visible || (m.transparent && m.opacity < 0.5)) return true;
+      for (let q: THREE.Object3D | null = o; q; q = q.parent) if (q.userData.snarkRef || !q.visible) return true;
+      return false;
+    };
+    // what is round the spot at seat height: the furniture often opts out of picking
+    // (raycast = no-op), so its own geometry is tested directly, after a box check
+    const area = new THREE.Box3(new THREE.Vector3(me.x - 0.95, me.y + 0.15, me.z - 0.95), new THREE.Vector3(me.x + 0.95, me.y + 0.75, me.z + 0.95));
+    const box = new THREE.Box3();
+    const near: THREE.Mesh[] = [];
+    top.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || skip(m)) return;
+      const im = m as THREE.InstancedMesh;
+      if (im.isInstancedMesh) {
+        if (!im.boundingBox) im.computeBoundingBox();
+        box.copy(im.boundingBox!);
+      } else {
+        if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+        box.copy(m.geometry.boundingBox!);
+      }
+      if (box.applyMatrix4(m.matrixWorld).intersectsBox(area)) near.push(m);
+    });
+    if (!near.length) {
+      this.seatPose({ lift: 0, floor: 0 });
+      return true;
+    }
+    const hits: THREE.Intersection[] = [];
+    for (const r of [0, 0.22, 0.45, 0.7])
+      for (let k = 0; k < (r ? 8 : 1); k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const dx = Math.cos(a) * r,
+          dz = Math.sin(a) * r;
+        rc.set(from.set(me.x + dx, me.y + 1, me.z + dz), down);
+        hits.length = 0;
+        for (const m of near) ((m as THREE.InstancedMesh).isInstancedMesh ? THREE.InstancedMesh : THREE.Mesh).prototype.raycast.call(m, rc, hits);
+        hits.sort((a, b) => a.distance - b.distance);
+        for (const h of hits) {
+          if (!h.face) continue;
+          const y = h.point.y - me.y;
+          // the first solid thing under the probe decides: a seat-high flat top, or not
+          n.copy(h.face.normal).transformDirection(h.object.matrixWorld);
+          if (y < 0.28 || y > 0.62 || n.y < 0.8) break;
+          // seats are behind (or beside) where it looks; what is in front is more likely a table
+          const ahead = dx * face.x + dz * face.z;
+          const score = r + (ahead > 0.1 ? 0.6 : 0);
+          if (!best || score < best.score) best = { x: dx, z: dz, h: y, score };
+          break;
+        }
+      }
+    if (best) {
+      // onto the seat, in the root's own frame (the parent may be rotated)
+      const w = me.clone().add(new THREE.Vector3(best.x, 0, best.z));
+      this.root.parent!.worldToLocal(w);
+      this.root.position.x = w.x;
+      this.root.position.z = w.z;
+      this.perch(best.h);
+    } else this.seatPose({ lift: 0, floor: 0 });
+    return true;
   }
 
   private seated = false;
-  /** Sit down on a bus seat (legs tucked away) or stand in the aisle holding a strap. */
-  sit(seated: boolean) {
+  /**
+   * Sit down with the root ON the seat (a bus seat, a chair `seatH` above the floor; 0: on the
+   * floor itself, legs stretched out), or stand back up (bus riders holding a strap).
+   */
+  sit(seated: boolean, seatH = 0.42) {
     this.seated = seated;
     this.refreshPose();
-    this.legsOn = !seated;
+    this.seatPose(seated ? { lift: 0, floor: seatH } : null);
+  }
+
+  /** In water up to the chest (swimmers): no legs, the bust low on the root. */
+  wade() {
+    this.seated = true;
+    this.refreshPose();
+    this.seat = null;
+    this.legsOn = false;
+    this.near.value = 0;
+    this.placeSeat();
+    this.visual.position.y = -LEG_H * 0.75 * this.scaleK;
     this.applyDetail();
-    this.visual.position.y = seated ? -LEG_H * 0.75 : 0;
+  }
+
+  /** The seat under it: its height over the root (`lift`) and over the floor (`floor`). */
+  private seat: { lift: number; floor: number } | null = null;
+  private lap: THREE.Mesh | null = null;
+  private lapShin = -1;
+  private seatPose(p: { lift: number; floor: number } | null) {
+    this.seat = p;
+    this.legsOn = !p;
+    this.near.value = p ? SEAT_NEAR : 0;
+    this.placeSeat();
+    this.applyDetail();
+  }
+
+  /**
+   * Seated: the thighs' underside on the seat, shins down to the floor (their length in portrait
+   * pixels depends on the scale), the bust on the lap. Redone when the scale changes.
+   */
+  private placeSeat() {
+    const p = this.seat;
+    const k = this.scaleK;
+    if (!p) {
+      this.visual.position.y = 0;
+      if (this.lap) this.lap.visible = false;
+      return;
+    }
+    this.visual.position.y = p.lift - (LEG_H - 3 * PX) * k;
+    const shin = Math.max(0, Math.min(14, Math.round(p.floor / (PX * k))));
+    if (shin !== this.lapShin) {
+      this.lapShin = shin;
+      if (this.lap) dropPlane(this.lap);
+      const { s, up } = lapSprite(this.trouser, shin);
+      const m = pixelPlane(s, -0.01);
+      nearer(m.material as THREE.Material, this.near);
+      // from portrait column 13 (just behind the bust's centre) forward; top at the hips (row 26)
+      m.position.set((s.w * PX) / 2, LEG_H + up * PX - (s.h * PX) / 2, -0.01);
+      this.lap = m;
+      this.visual.add(m);
+    }
   }
 
   /** Riders are shrunk a little so they fit the cabin. */
   setScale(k: number) {
     this.visual.scale.set(this.facing * k, k, k);
     this.scaleK = k;
+    if (this.seat) this.placeSeat();
   }
   private scaleK = 1;
 
@@ -505,6 +766,7 @@ export class Snark {
 
   update(dt: number, t: number, camQuat: THREE.Quaternion, camRight: THREE.Vector3) {
     if (this.ghostFor > 0) this.ghostFor -= dt;
+    if (this.seekSeat > 0 && --this.seekSeat === 0 && !this.findSeat()) this.seekSeat = 30;
     // billboard in world space, whatever the root is parented to (the street or a bus)
     this.visual.quaternion.copy(this.root.getWorldQuaternion(tmpQ).invert().multiply(camQuat));
     let moving = false;

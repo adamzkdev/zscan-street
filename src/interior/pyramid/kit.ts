@@ -13,10 +13,16 @@ import { cobweb, coinFace, flagstones, glowDot, granite, hieroglyphs, sandstone,
  * torches with their flames and halos, and hieroglyph panels from the atlas.
  */
 
+/**
+ * The levels are one continuous building: the ascending passage climbs 4 m from the labyrinth to
+ * the Grand Gallery's foot, the gallery climbs 14 m more to the King's Chamber, the descending
+ * passage drops 5 m from the entrance gallery to the subterranean chamber (see ./index.ts).
+ */
 export const FLOORS = [
   { label: "0", name: "Labyrinth · entrance gallery", y: 0 },
-  { label: "1", name: "Grand Gallery", y: 20 },
-  { label: "2", name: "King's Chamber · the treasure", y: 45 },
+  { label: "1", name: "Grand Gallery", y: 4 },
+  { label: "2", name: "King's Chamber · the treasure", y: 18 },
+  { label: "−1", name: "Subterranean chamber · the pit", y: -5 },
 ];
 
 export type Tick = (dt: number, t: number, cam: THREE.Camera) => void;
@@ -74,6 +80,21 @@ export class PyramidKit {
 
   y(f: number) {
     return FLOORS[f].y;
+  }
+
+  /**
+   * A level built round its own origin moved into place: its group, its colliders and its lights
+   * (the bake is done by then, in the level's own coordinates; flames live in the group).
+   */
+  shift(f: number, dx: number, dz: number) {
+    this.groups[f].position.set(dx, 0, dz);
+    for (const r of this.rects[f]) {
+      r[0] += dx;
+      r[2] += dx;
+      r[1] += dz;
+      r[3] += dz;
+    }
+    for (const t of this.torches[f]) t.p = t.p.clone().add(new THREE.Vector3(dx, 0, dz));
   }
 
   pick(f: number, o: THREE.Object3D, hover: string, info: PickFn) {

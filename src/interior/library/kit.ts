@@ -28,6 +28,8 @@ export const G_Y = 0,
   T1_Y = 6,
   T2_Y = 12,
   READ_Y = 24,
+  /** The ZIP archive, the top floor over the reading room (a room of its own). */
+  ZIP_Y = 31,
   /** The auditorium floor inside the sphere (its own scene part, far below the atrium). */
   AUD_Y = -40;
 
@@ -292,7 +294,8 @@ export class Level {
       s.role = role;
       s.root.position.set(x, y, z);
       s.faceDir = o.face ?? new THREE.Vector3(0, 0, 1);
-      if (o.sit) s.sit(true);
+      // on the floor by a reading chair: onto its seat
+      if (o.sit) s.perchNear();
       this.group.add(s.root);
       this.people.push(s);
       const lines = o.lines ?? [];

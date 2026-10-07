@@ -8,6 +8,7 @@
  */
 import { bell, brass, clank, type Room, type Scene, tone, whistle } from "./lib";
 import { loop, preload, shot } from "./samples";
+import { pyramidMusic } from "./egypt";
 
 export interface SceneEnv {
   night: boolean;
@@ -371,27 +372,57 @@ const trading: Preset = {
   },
 };
 
-/** The pyramid: wind through the stone corridors, drips, a low dark air. */
+/** The pyramid: wind through the stone corridors, drips, a low dark air, its music (./egypt.ts). */
 const pyramid = (deep: boolean): Preset => ({
   room: STONE,
   rain: 0,
   build(s) {
-    loop(s, "cave", deep ? 1 : 0.9);
-    loop(s, "wind", deep ? 0.12 : 0.25, { lp: 500 });
+    loop(s, "cave", deep ? 0.8 : 0.7);
+    loop(s, "wind", deep ? 0.12 : 0.22, { lp: 500 });
+    pyramidMusic(s, deep);
   },
 });
+
+/** The ZK Cemetery's crypt: a stone cellar, the wind at the door, zombies groaning between the tombs. */
+const crypt: Preset = {
+  room: STONE,
+  rain: 0,
+  build(s) {
+    preload(s.ctx, "groan", "groan2", "groan3");
+    loop(s, "cave", 0.8);
+    loop(s, "graveyard", 0.22, { lp: 700 });
+    loop(s, "zombies", 0.1, { lp: 900 });
+    s.every("groan", 5, 12, (t) => shot(s, (["groan", "groan2", "groan3"] as const)[Math.floor(Math.random() * 3)], t, 0.35 + Math.random() * 0.2, { pan: side(), rate: 0.8 + Math.random() * 0.3, wet: 0.5 }), 3);
+  },
+};
 
 const opera = (foyer: boolean): Preset => ({
   room: foyer ? LOBBY : CATHEDRAL,
   rain: foyer ? 0.15 : 0,
   build(s) {
+    preload(s.ctx, "applause");
     if (foyer) {
       loop(s, "foyer", 0.9);
       loop(s, "harbour", 0.2, { lp: 1200 });
-      s.every("interval-bell", 45, 90, (t) => [0, 0.3, 0.6].forEach((dt) => bell(s, t + dt, 1046, 1, 0.03, 0.5)));
+      // the hall's music comes through the doors (src/audio/live.ts), its ovation too
+      s.on.applause = (t) => shot(s, "applause", t, 0.22, { lp: 900 });
+      s.on.interval = (t) => [0, 0.3, 0.6].forEach((dt) => bell(s, t + dt, 1046, 1, 0.03, 0.5));
     } else {
-      // the orchestra tuning, the hall filling (the Block Symphony plays on top)
-      loop(s, "tuning", 0.55);
+      // between pieces the orchestra tunes; during one only a hush (the piece plays from the
+      // stage, positional, src/audio/live.ts), at the end of one the hall applauds for real
+      const tuning = loop(s, "tuning", 0.0);
+      const hush = loop(s, "foyer", 0.06, { lp: 1500 });
+      s.knobs.tuning = tuning.gain;
+      s.on.applause = (t) => {
+        shot(s, "applause", t, 1.1, { wet: 0.35 });
+        swell(hush, t, 0.06, 0.2, 9);
+      };
+      s.on.interval = (t, dur) => {
+        const d = typeof dur === "number" ? dur : 6;
+        tuning.gain.cancelScheduledValues(t);
+        tuning.gain.setTargetAtTime(0.4, t, 0.6);
+        tuning.gain.setTargetAtTime(0, t + d, 0.5);
+      };
     }
   },
 });
@@ -588,6 +619,7 @@ export const PRESETS: Record<string, Preset> = {
   "reserve-hall": reserveHall,
   trading,
   pyramid: pyramid(false),
+  crypt,
   "pyramid-chamber": pyramid(true),
   "opera-foyer": opera(true),
   "opera-hall": opera(false),
@@ -709,6 +741,8 @@ export function presetFor(key: string, floor: number, name: string): string {
       if (has("sky garden")) return "sky-garden";
       if (has("greenhouse")) return "flower-dome";
       return "hotel-lobby";
+    case "cemetery":
+      return "crypt";
     case "library":
       return has("press", "news") ? "press-room" : "stacks";
     default:

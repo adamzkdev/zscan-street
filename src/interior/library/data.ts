@@ -1,3 +1,5 @@
+import { get } from "../../data/zscan";
+
 /**
  * What the library's shelves hold: the chain year by year, the network upgrades, the papers
  * behind Zcash, and the ZIPs (loaded from the API).
@@ -115,6 +117,21 @@ export interface Zip {
   live: { href: string; label: string } | null;
 }
 
+let zipsP: Promise<Zip[]> | null = null;
+/** Every ZIP from the API, or the snapshot shipped with the street while the API is away (one fetch, shared). */
+export function loadZips(): Promise<Zip[]> {
+  return (zipsP ??= (async () => {
+    const live = await get<Zip[]>("/v1/zips");
+    if (live?.length) return live;
+    try {
+      const r = await fetch(`${import.meta.env.BASE_URL}zips.json`);
+      return r.ok ? ((await r.json()) as Zip[]) : [];
+    } catch {
+      return [];
+    }
+  })());
+}
+
 export const ZIP_GROUPS = [
   { label: "FINAL", color: "#3ee08f", has: (s: string) => s === "Final" },
   { label: "ACTIVE", color: "#59e3ff", has: (s: string) => s === "Active" },
@@ -127,7 +144,7 @@ export const ZIP_GROUPS = [
 /** What readers whisper. */
 export const WHISPERS = {
   reader: ["Shh…", "Page 42 of the protocol spec. Again.", "Sapling made shielding work on phones.", "Halo 2 needs no trusted setup.", "Orchard went live with NU5.", "Equihash: 200, 9.", "Zerocash, 2014. Still a great read.", "The Ceremony had six participants.", "Blossom halved the block time.", "Unified addresses: one address, every pool.", "I'm on ZIP 317. Fees by the action.", "Shh, someone's proving."],
-  librarian: ["Welcome to the library.", "The chain's years are on the first terrace.", "Papers and ZIPs on the second terrace.", "The auditorium is inside the sphere.", "Today's papers are in the reading room.", "Please whisper."],
+  librarian: ["Welcome to the library.", "The chain's years are on the first terrace.", "Papers on the second terrace.", "Every ZIP is in the ZIP Archive, top floor: take the lift to Z.", "The auditorium is inside the sphere.", "Today's papers are in the reading room.", "Please whisper."],
   student: ["Groth16 or PLONK?", "Which pool is Orchard again?", "Exams on zero-knowledge tomorrow.", "Is the Powers of Tau in this section?", "I came for the sphere."],
   lecturer: ["Every block, a new page of the chain.", "Sprout, Sapling, Orchard: three generations of shielded money.", "A zk-SNARK proves you know, without showing what you know.", "Halo removed the trusted setup.", "NU5 brought Orchard and Halo 2."],
 };

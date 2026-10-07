@@ -64,7 +64,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo";
+  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery";
   /** Shown top-left while inside ("MEMPOOL"). */
   readonly title: string;
   readonly scene: THREE.Scene;
@@ -81,10 +81,22 @@ export interface Interior {
   /** The walker arrived on this floor (tall places only draw and light the floor you are on). */
   setFloor?(floor: number): void;
   /**
+   * Places walked from level to level (stairs and ramps, no lift): the floor the walker is on now.
+   * The manager follows it (the lift's panel, the soundscape) without moving the walker.
+   */
+  floorNow?(): number;
+  /**
    * Floor height under (x, z) on this floor where it is not flat (stairs, ramps, a raised dais),
    * or null for the floor's own height. The walker climbs a step of up to 0.75 m.
    */
   groundAt?(floor: number, x: number, z: number): number | null;
+  /**
+   * Lift cars on a floor (see lift.ts): where they stand (`at`, or found automatically), which shaft
+   * they belong to. Default: one lift on every floor (or the plan in liftplan.ts).
+   */
+  lifts?(floor: number): import("./lift").LiftDecl[];
+  /** Stairs and escalators between two floors, walked in the place's own space (see lift.ts). */
+  stairs?: import("./lift").StairDecl[];
   /** Day or night outside: interiors may change their windows / light. */
   setTheme?(theme: Theme): void;
 }

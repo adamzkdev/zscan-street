@@ -585,6 +585,7 @@ function cast(k: PalmKit) {
     swim.forEach(([x, z, id], i) =>
       void k.person(f, id, [x, z], "Swimmer", { sit: true, face: [-1, 0], lines: i === 0 ? ["The water's perfect. 29 degrees.", "Come in! The lagoon is shielded from the waves."] : ["Splash!", "Look, a jet ski!"] }).then((s) => {
         if (!s) return;
+        s.wade();
         k.ticks[f].push((_dt, t) => {
           s.root.position.y = y0 - 0.95 + Math.sin(t * 1.6 + i * 2) * 0.06;
           s.root.position.x = x + Math.sin(t * 0.2 + i) * 1.2;

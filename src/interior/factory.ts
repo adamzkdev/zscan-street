@@ -323,7 +323,7 @@ export function buildFactory(ctx: InteriorContext): Interior {
   // the control room: operators at the desks, the shift supervisor walking the tiers
   control.seats.forEach((p, i) => {
     if (i % 2 && i !== 11) return;
-    void crew.person(crewId(400 + i), hall, p, i === 11 ? "Shift lead" : "Operator", { lines: LINES.control, face: V(0, 0, -1), hat: null, vest: null, sit: true, near: 7 });
+    void crew.person(crewId(400 + i), hall, p, i === 11 ? "Shift lead" : "Operator", { lines: LINES.control, face: V(0, 0, -1), hat: null, vest: null, perch: 0.45, near: 7 });
   });
   void crew.person(crewId(420), hall, V(-10, CTRL.y, -6.6), "Shift supervisor", { lines: ["Keep the pods green, people.", "Who's on the press tonight?", "Nice block, everyone."], hat: null, vest: null }).then((p) => {
     if (!p) return;

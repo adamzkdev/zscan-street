@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { API } from "../data/zscan";
 import { CURB } from "./city";
 import { loadArt, Snark } from "./snark";
+import { bubbles } from "./speech";
 
 /** What visitors can say: an emoji, by index (the server only relays the index). */
 export const EMOJIS = ["👋", "🔥", "🚀", "🛡️", "😂", "❤️"];
@@ -137,6 +138,7 @@ export class Visitors {
     b.scale.set(0.75, 0.75, 1);
     b.position.y = 2.1;
     o.s.root.add(b);
+    bubbles.track(b);
     o.bubble = b;
     setTimeout(() => {
       if (o.bubble === b) {

@@ -5,6 +5,7 @@ import { hash } from "../../scene/voxel/model";
 import * as F from "../furniture";
 import { box, glowMat, std } from "../kit";
 import * as H from "./furniture";
+import { pianist } from "../music/acts";
 import { HotelKit, LEVELS, LIFT_Z, makeCanvas, marble, num, reward, usd, water } from "./kit";
 
 /** The piano's tune, played with the Web Audio API. */
@@ -300,12 +301,10 @@ export function lobby(k: HotelKit) {
   void k.person(f, 1113, [-5.9, -3.0], "Guest", { sit: true, dy: 0.42, face: new THREE.Vector3(-1, 0, 0) });
   k.put(f, "piano", F.grandPiano, -6.0, -10.6, Math.PI * 0.75);
   k.put(f, "pianoBench", F.pianoBench, -6.9, -9.6, Math.PI * 0.75, { solid: false });
-  void k.person(f, 4545, [-7.0, -9.45], "Pianist", { face: new THREE.Vector3(0.6, 0, -0.8), sit: true, dy: 0.5 }).then((s) => s && k.ticks[f].push((_, t) => (s.root.rotation.z = Math.sin(t * 2) * 0.03)));
-  let plays = 0;
-  k.hit(f, 1.6, 1.2, 2.0, -6.0, 0, -10.6, "<b>Grand piano</b><span>play</span>", () => {
-    playTune();
-    return { eyebrow: "Grand piano", title: `♪ “Marina” ♪`, stats: [["Played", `${++plays}×`]] };
-  }, Math.PI * 0.75);
+  // the pianist plays Chopin for the lounge (a real recording, heard from the piano: src/interior/music)
+  pianist(g, { x: -6.0, y: 0, z: -10.6, rot: Math.PI * 0.75 }, { place: "hotel", floor: f, track: "piano-nocturne", id: 4545, level: 0.8 });
+  let requests = 0;
+  k.hit(f, 1.6, 1.2, 2.0, -6.0, 0, -10.6, "<b>Grand piano</b><span>live: Chopin</span>", () => ({ eyebrow: "Grand piano · live", title: "♪ Chopin · Nocturne Op. 9 No. 2", stats: [["Pianist", "zkSNARK #4545"], ["Requests", `${++requests}`]] }), Math.PI * 0.75);
   k.put(f, "rugPiano", () => F.rug(3.6, 3.6, "#5a1a2a", "#c9a227"), -6.2, -10.4, 0.2, { solid: false });
 
   // the lobby bar, north-west

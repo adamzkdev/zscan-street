@@ -37,13 +37,15 @@ import { buildPalm } from "./interior/palm";
 import { buildOrchard } from "./interior/zktowers/orchard";
 import { buildSapling } from "./interior/zktowers/sapling";
 import { buildHalo } from "./interior/zktowers/halo";
+import { buildCemetery } from "./interior/cemetery";
 import { StadiumLive } from "./scene/stadium";
 import { type RideKind, Sky } from "./scene/sky";
 import { Shibuya } from "./scene/shibuya";
 import { GoldenGate } from "./scene/goldengate";
 import { Forest } from "./scene/forest";
+import { Cemetery } from "./scene/cemetery";
 import { Chatter } from "./scene/chatter";
-import { setBubbleScale } from "./scene/speech";
+import { bubbles } from "./scene/speech";
 import { PLACE_LORE } from "./data/lore";
 import { Hud } from "./ui/hud";
 import { Venues } from "./ui/venues";
@@ -101,6 +103,7 @@ window.addEventListener("unhandledrejection", (e) => {
 });
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+bubbles.init(renderer);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -500,6 +503,8 @@ function skyAt(x: number, y: number) {
 const goldenGate = new GoldenGate(scene, city);
 // Shielded Woods: the redwood forest on the headland across the bridge, walkable off its deck
 const forest = new Forest(scene, city, director, (z) => goldenGate.deckAt(z));
+// the ZK Cemetery: zombie zkSNARKs rising from their graves (more of them at night)
+const cemetery = new Cemetery(scene, city, director, { day: [4, 4, 3, 2, 1][quality.level], night: [10, 9, 7, 5, 3][quality.level] });
 // people talk to each other wherever the camera looks
 const chatter = new Chatter(director, city, scene, [3, 3, 2, 2, 1][quality.level]);
 // a goal inside the stadium: the crowd's roar (or groan)
@@ -528,6 +533,7 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
   "tower-orchard": "art deco · observatory",
   "tower-sapling": "sky gardens · infinity pool",
   "tower-halo": "trading floor · helipad",
+  cemetery: "the crypt · zombies inside",
 };
 
 /** What each walk-in place is, for the people who work there. */
@@ -548,6 +554,7 @@ const PLACE_ABOUT: Record<string, string> = {
   "tower-orchard": "ZK TOWER ORCHARD is the art-deco supertall of Midtown: a gold and black marble lobby, offices, a jazz club and an observatory deck with telescopes under its steel crown.",
   "tower-sapling": "ZK TOWER SAPLING is the green tower by the marina: sky gardens every few floors, flats, and an infinity pool with a rooftop bar.",
   "tower-halo": "ZK TOWER HALO is the twisted glass tower on Wall Street: a trading floor with live Zcash charts, a VIP lounge and a helipad on the roof.",
+  cemetery: "The ZK Cemetery is the Père-Lachaise of ZStreet, on the hill at the north-east edge: crooked graves with epitaphs about lost seed phrases and transparent addresses, a chapel, and the CRYPT under the mausoleum, where Zcash buries what it retired (the Sprout pool, BCTV14, the trusted setup, the Founders' Reward). Only zombie zkSNARKs live here; more of them climb out at night.",
 };
 
 // conversations with the characters (zkSNARKs on the street, people inside places); created
@@ -672,6 +679,7 @@ const PLACES: Record<Interior["key"], string> = {
   "tower-orchard": "ZK TOWER ORCHARD",
   "tower-sapling": "ZK TOWER SAPLING",
   "tower-halo": "ZK TOWER HALO",
+  cemetery: "ZK CEMETERY",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
@@ -788,6 +796,7 @@ const interiors = new InteriorManager(
     "tower-orchard": () => buildOrchard(ictx),
     "tower-sapling": () => buildSapling(ictx),
     "tower-halo": () => buildHalo(ictx),
+    cemetery: () => buildCemetery(ictx),
   },
   {
     entered: (i, f) => {
@@ -806,6 +815,8 @@ const interiors = new InteriorManager(
       cameIn = null;
       syncCamera();
     },
+    walked: (n) => hud.renderIndoor(n),
+    ding: () => sound.liftDing(),
     fade: () => {
       lastJump = performance.now();
       hud.cut();
@@ -842,6 +853,8 @@ function groundAt(x: number, z: number): number | null {
   if (pg !== null) return pg;
   const gg = goldenGate.groundAt(x, z);
   if (gg !== null) return gg;
+  const cg = cemetery.groundAt(x, z);
+  if (cg !== null) return cg;
   const fg = forest.groundAt(x, z);
   if (fg !== null) return fg;
   const sg = sky.groundAt(x, z);
@@ -871,6 +884,7 @@ function dynamicHit(x: number, z: number) {
     const along = m.line.axis === "x";
     if (Math.abs((along ? x : z) - (along ? p.x : p.z)) < 2.4 && Math.abs((along ? z : x) - (along ? p.z : p.x)) < 1.3) return true;
   }
+  if (cemetery.hit(x, z)) return true;
   for (const t of tram.sets) {
     const p = t.group.position;
     if (Math.abs(x - p.x) < 7.4 && Math.abs(z - p.z) < 1.5) return true;
@@ -1084,6 +1098,9 @@ window.addEventListener("keydown", (e) => {
   // the elevator from the keyboard
   if ((e.key === "PageUp" || e.key === "PageDown") && interiors.active && interiors.active.floors.length > 1) {
     e.preventDefault();
+    // in a lift car: the next floor up or down. Elsewhere a hidden shortcut (accessibility) jumps
+    // to the next floor's landing; the way between floors is the lifts and stairs inside.
+    if (interiors.circ?.carIn()) return void interiors.circ.step(e.key === "PageUp" ? 1 : -1);
     // by height, not by index (a basement may come after the roof in the list)
     const order = interiors.active.floors.map((x, k) => ({ y: x.y, k })).sort((a, b) => a.y - b.y || a.k - b.k);
     const at = order.findIndex((o) => o.k === interiors.floor);
@@ -1121,6 +1138,7 @@ function select(s: Snark | null) {
   selected = s;
   if (s) {
     s.setSelected(true);
+    bubbles.address(s.root);
     hud.open(s);
     // the NFT's traits and rank are fetched on demand, to stay well inside the API's rate limit
     if (!s.item)
@@ -1163,6 +1181,7 @@ canvas.addEventListener("pointerup", (e) => {
     // the people inside: talk to them
     const npc = interiors.snarkAt(e.clientX, e.clientY);
     if (npc && interiors.active) {
+      bubbles.address(npc.root);
       const place = interiors.active;
       const floor = place.floors[interiors.floor];
       const job = npc.role ?? "visitor";
@@ -1181,11 +1200,8 @@ canvas.addEventListener("pointerup", (e) => {
     const info = interiors.pickAt(e.clientX, e.clientY);
     if (info?.panel) return venues.show(info.panel);
     // the tower: its elevator doors, its arcade games
-    if (info?.floor !== undefined && interiors.active) {
-      interiors.goTo(info.floor);
-      hud.cut();
-      return void hud.renderIndoor(interiors.floor);
-    }
+    // old elevator doors, escalators: no teleport, the lift cars and the stairs are walked
+    if (info?.floor !== undefined && interiors.active) return void hud.showPick({ ...info, floor: undefined, body: `${info.body ?? ""}<p>Floors are reached on foot: walk into a lift car and press a floor, or take the stairs and escalators.</p>` });
     if (info?.game) {
       interiors.walk.enabled = false;
       return void arcade.show(info.game);
@@ -1488,6 +1504,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       sky,
       goldenGate,
       forest,
+      cemetery,
       chatter,
       rideFlyer: () => boardSky("flyer"),
       rideBlimp: () => boardSky("blimp"),
@@ -1772,18 +1789,21 @@ function frameBody(stepDt?: number) {
     if (!interiors.active) return again();
     // near the way out (ground floor): say so
     const out = interiors.walk.exitAhead();
-    prompt(out && out.facing && out.dist < 3.2 ? `<b>EXIT · 出口</b><span>▲ keep walking to go out</span>` : null);
+    // or at a lift's doors / a stairway's door: what it is
+    prompt(out && out.facing && out.dist < 3.2 ? `<b>EXIT · 出口</b><span>▲ keep walking to go out</span>` : (interiors.circ?.hint() ?? null));
     if (CAPTURE && capShot) {
       interiors.walk.enabled = false;
       aimCapture(interiors.walk.camera, capShot);
     }
     runDirector(sim, t, interiors.walk.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(interiors.walk.camera.quaternion));
     // indoors the street goes quiet and the place's own soundscape plays (by floor)
-    sound.setScene(interiors.active.key, interiors.floor, { name: interiors.active.floors[interiors.floor]?.name ?? "", night: theme === "night" });
+    sound.setScene(interiors.active.key, interiors.floor, { name: interiors.active.floors[interiors.floor]?.name ?? "", night: theme === "night", ear: interiors.walk.camera });
     joystick.sync(interiors.walk);
     renderPass.scene = interiors.active.scene;
     renderPass.camera = interiors.walk.camera;
     tilt.set(0);
+    // speech bubbles: only for speakers in sight, a steady size, kept apart and on screen
+    bubbles.update(dt, interiors.walk.camera, window.innerWidth, window.innerHeight);
     // its shaders are still compiling: hold the last frame behind the entry fade, no stall
     if (!interiors.warming) composer.render();
     if (grabbers.length) {
@@ -1874,6 +1894,7 @@ function frameBody(stepDt?: number) {
   if (!walking) sky.aim(rig.persp);
   goldenGate.update(sim);
   forest.update(sim, t, cam, focus, theme === "night", walking, wide);
+  cemetery.update(sim, t, cam, focus, theme === "night", walking, wide);
   // the ride is over (or the camera went elsewhere): back to the map
   if (flyerRide && (!sky.riding || rig.mode !== "follow")) {
     flyerRide = false;
@@ -1888,8 +1909,6 @@ function frameBody(stepDt?: number) {
     else if (rig.mode === "follow") rig.setMode("live");
   }
   chatter.setLive(lastSummary?.height ?? null, mempoolCount);
-  // speech bubbles keep a readable size on screen over the map (about 3% of its height)
-  setBubbleScale(1);
   // conversations only where you can read them: on foot, in a close shot, or zoomed in on the map
   const closeUp = walking || !!rig.shot || (rig.iso.top - rig.iso.bottom) / rig.iso.zoom < 70;
   if (!interiors.active && closeUp) chatter.update(sim, walking ? onFoot.camera.position : rig.focus);
@@ -1916,6 +1935,7 @@ function frameBody(stepDt?: number) {
   hall?.update(t, dt);
   press?.update(t, dt);
   lightBudget.update();
+  bubbles.update(dt, cam, window.innerWidth, window.innerHeight);
   composer.render();
   // a photo is read from the canvas right after the frame is drawn (the buffer isn't kept)
   if (grabbers.length) {

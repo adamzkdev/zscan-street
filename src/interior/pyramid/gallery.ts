@@ -25,6 +25,9 @@ const W = 1.05,
   STEP = 0.09,
   NC = 7;
 const TOP = WH + CH * NC;
+/** The doorways at either end: half-width and height. */
+const DW = 0.8,
+  DH = 2.4;
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
 /** Height of the ramp above the level's floor at z. */
@@ -84,19 +87,17 @@ export function gallery(k: PyramidKit) {
   ff.flat(-B, ZB - 4, B, ZB, Y + RISE);
   fwood.box(-B, Y, ZA, B, Y + 0.12, 0.8, ["bottom"]);
   fwood.box(-B, Y + RISE, ZB - 4, B, Y + RISE + 0.12, ZB, ["bottom"]);
-  // end walls with their low doorways
+  // end walls with their low doorways: the ascending passage comes in at the foot, the passage to
+  // the King's Chamber leaves from the top (both walk straight on, see ./index.ts)
   const endWall = (z: number, y: number, facing: 1 | -1) => {
     const t = 0.5 * -facing;
-    fw.box(-B, y, Math.min(z, z + t), -0.6, y + TOP + 0.4, Math.max(z, z + t), []);
-    fw.box(0.6, y, Math.min(z, z + t), B, y + TOP + 0.4, Math.max(z, z + t), []);
-    fw.box(-0.6, y + 1.9, Math.min(z, z + t), 0.6, y + TOP + 0.4, Math.max(z, z + t), []);
-    // a short dark recess behind
-    recess.box(-1.1, y, Math.min(z + t, z + t * 4), -0.6, y + 2.2, Math.max(z + t, z + t * 4), []);
-    recess.box(0.6, y, Math.min(z + t, z + t * 4), 1.1, y + 2.2, Math.max(z + t, z + t * 4), []);
-    recess.box(-0.6, y + 1.9, Math.min(z + t, z + t * 4), 0.6, y + 2.2, Math.max(z + t, z + t * 4), []);
-    recess.box(-0.6, y, Math.min(z + t * 4, z + t * 5), 0.6, y + 2.2, Math.max(z + t * 4, z + t * 5), []);
-    recess.flat(-0.6, Math.min(z, z + t * 4), 0.6, Math.max(z, z + t * 4), y + 0.01);
-    rects.push([-B, Math.min(z, z + t) - 0.05, B, Math.max(z, z + t)]);
+    const z0 = Math.min(z, z + t),
+      z1 = Math.max(z, z + t);
+    fw.box(-B, y, z0, -DW, y + TOP + 0.4, z1, []);
+    fw.box(DW, y, z0, B, y + TOP + 0.4, z1, []);
+    fw.box(-DW, y + DH, z0, DW, y + TOP + 0.4, z1, []);
+    recess.flat(-DW, z0, DW, z1, y + 0.005);
+    rects.push([-B, z0 - 0.05, -DW, z1], [DW, z0 - 0.05, B, z1]);
   };
   endWall(1.2, Y, -1);
   endWall(ZB - 4, Y + RISE, 1);
@@ -128,22 +129,23 @@ export function gallery(k: PyramidKit) {
 
   // ---- doors
   const door = (z: number, y: number, to: number, label: string, rot: number, hover: string) => {
-    const d = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.9), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
-    d.position.set(0, y + 0.95, z);
+    const d = new THREE.Mesh(new THREE.PlaneGeometry(DW * 2, DH), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+    d.position.set(0, y + DH / 2, z);
     d.rotation.y = rot;
     g.add(d);
-    k.pick(f, d, hover, () => ({ eyebrow: "Passage", title: label.replace(/^[▲▼] /, ""), floor: to }));
+    k.pick(f, d, hover, () => null);
+    void to;
     const t = textPlane(label, { h: 0.22, glow: true, color: "#f4b728" });
-    t.position.set(0, y + 2.25, z);
+    t.position.set(0, y + DH + 0.3, z);
     t.rotation.y = rot;
     g.add(t);
     const sill = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.05), glowMat("#ffb050", 1.3));
     sill.rotation.x = -Math.PI / 2;
-    sill.position.set(0, y + 0.13, z + (rot ? 0.1 : -0.1));
+    sill.position.set(0, y + (rot ? 0.012 : 0.13), z + (rot ? 0.1 : -0.1));
     g.add(sill);
   };
-  door(0.75, Y, 0, "▼ LABYRINTH", Math.PI, "<b>▼ Labyrinth</b><span>back down</span>");
-  door(ZB - 3.95, Y + RISE, 2, "▲ KING'S CHAMBER", 0, "<b>▲ King's Chamber</b><span>the treasure</span>");
+  door(1.15, Y, 0, "▼ LABYRINTH", Math.PI, "<b>▼ Labyrinth</b><span>down the ascending passage</span>");
+  door(ZB - 3.95, Y + RISE, 2, "▲ KING'S CHAMBER", 0, "<b>▲ King's Chamber</b><span>the treasure, straight on</span>");
 
   // ---- people
   const Z1 = -18;
@@ -166,11 +168,6 @@ export function gallery(k: PyramidKit) {
   k.add(f, fwood, k.wood, light);
   k.add(f, fceil, k.ceiling, light);
   k.add(f, fpanel, k.panel, light);
-  // the passages beyond the doors fall into darkness
-  const dim = new THREE.Color(0.05, 0.035, 0.025);
-  k.add(f, recess, k.stoneDark, (p, n) => {
-    const d = Math.min(Math.abs(p.z - 1.2), Math.abs(p.z - (ZB - 4)));
-    return dim.clone().addScalar(Math.max(0, 0.5 - d * 0.35));
-  });
+  k.add(f, recess, k.floor, light);
   k.lightUp(f);
 }

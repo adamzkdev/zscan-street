@@ -305,8 +305,10 @@ export function buildOrchestra(L: Level, onConductor: () => PickInfo) {
     const d: Desk = { kind, root, anim: ins.anim, ph: R() * 10, s: null };
     desks.push(d);
     const id = 1 + Math.floor(R() * 10000);
-    void L.person(id, x, YS + lift + (standing ? 0 : 0.18), z - 0.05, SECTION[kind], {
+    // seated players on the chair's cushion (0.49 over the riser), not sunk into it
+    void L.person(id, x, YS + lift + (standing ? 0 : 0.49), z - 0.05, SECTION[kind], {
       sit: !standing,
+      seat: 0.49,
       scale: 0.78,
       lines: LINES[kind],
       near: 6,

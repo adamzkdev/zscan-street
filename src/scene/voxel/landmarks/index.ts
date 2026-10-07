@@ -23,6 +23,7 @@ import { zkorchard } from "./zkorchard";
 import { zksapling } from "./zksapling";
 import { zkhalo } from "./zkhalo";
 import { binhai } from "./binhai";
+import { cemetery } from "./cemetery";
 
 /**
  * The city's landmarks, one builder each. A builder gets its lot in metres: `w` along its front,
@@ -39,10 +40,10 @@ export interface LandmarkOpts {
   venue?: string;
 }
 
-export type LandmarkKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "statue" | "prison" | "bridge" | "green" | "pyramid" | "eiffel" | "colosseum" | "parliament" | "opera" | "shibuya" | "palm" | "burjalarab" | "zkorchard" | "zksapling" | "zkhalo" | "binhai";
+export type LandmarkKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "statue" | "prison" | "bridge" | "green" | "pyramid" | "eiffel" | "colosseum" | "parliament" | "opera" | "shibuya" | "palm" | "burjalarab" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery";
 
 type Builder = (seed: number, o: LandmarkOpts) => Built;
-const BUILDERS: Partial<Record<LandmarkKind, Builder>> = { stadium, museum, foodhall, reserve, mall, needle, marina, gardens, port, statue, bridge, pyramid, eiffel, colosseum, parliament, opera, shibuya, palm, burjalarab, zkorchard, zksapling, zkhalo, binhai };
+const BUILDERS: Partial<Record<LandmarkKind, Builder>> = { stadium, museum, foodhall, reserve, mall, needle, marina, gardens, port, statue, bridge, pyramid, eiffel, colosseum, parliament, opera, shibuya, palm, burjalarab, zkorchard, zksapling, zkhalo, binhai, cemetery };
 
 export function landmark(seed: number, o: LandmarkOpts): Built {
   const b = BUILDERS[o.kind];

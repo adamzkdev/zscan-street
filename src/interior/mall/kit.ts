@@ -435,7 +435,11 @@ export class MallKit {
       s.role = role;
       s.root.position.copy(p);
       s.faceDir = o.face ?? new THREE.Vector3(0, 0, 1);
-      if (o.sit) s.sit(true);
+      // lifted onto the seat (dy = its height): sit on it; on the floor: onto the seat it is next to
+      if (o.sit) {
+        if (o.dy) s.sit(true, o.dy);
+        else s.perchNear();
+      }
       if (o.scale) s.setScale(o.scale);
       if (o.bags) o.bags.forEach((c, i) => s.visual.add(bag(c, i)));
       (o.parent ?? this.groups[f]).add(s.root);

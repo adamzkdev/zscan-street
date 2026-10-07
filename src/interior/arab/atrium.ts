@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { armchair, coffeeTable, sofa } from "../furniture";
 import { chandelier, frontDesk, palm } from "../hotel/furniture";
+import { grandPiano, pianoBench } from "../furniture";
+import { pianist, pianoSeat } from "../music/acts";
 import { F, GOLD, marbleTex, MONO, PAL, paint, SERIF, type ArabKit } from "./kit";
 
 /**
@@ -475,6 +477,15 @@ export function atrium(k: ArabKit) {
     k.add(f, ch, x, TIER0 - 0.6, z);
   }
 
+  // ---- the grand piano by the lifts: a pianist plays a Chopin waltz (src/interior/music) -------------
+  {
+    const piano = { x: -3.6, y: k.y(f), z: -29.6, rot: Math.PI * 0.8 };
+    k.vox(f, "arab-piano", grandPiano, piano.x, piano.z, piano.rot);
+    const seat = pianoSeat(piano);
+    k.vox(f, "arab-pbench", pianoBench, seat.x, seat.z, piano.rot, { solid: false });
+    pianist(g, piano, { place: "arab", floor: f, track: "piano-waltz", id: 1849, level: 0.85, ref: 4 });
+  }
+
   // ---- the panoramic lifts on the back wall, gliding up and down ------------------------------------
   const capsMat = new THREE.MeshStandardMaterial({ color: "#a8d8f0", transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.5, depthWrite: false });
   const capsFrame = new THREE.MeshStandardMaterial({ color: "#d9a92e", metalness: 0.95, roughness: 0.2 });
@@ -534,7 +545,7 @@ export function atrium(k: ArabKit) {
       [0, "Can I pay with a transparent address?"],
       [1, "Then everybody will know you paid five ZEC for a photo."],
     ]);
-    const e = k.person(f, 8123, [9.2, -4.8], "Whale", { sit: true, face: [0, 1] });
+    const e = k.person(f, 8123, [9.2, -6.9], "Whale", { sit: true, face: [0, 1] }); // on the red sofa, not the coffee table
     const h = k.person(f, 2024, [10.2, -6.6], "Accountant", { face: [-0.4, 1] });
     k.dialog(f, [e, h], [
       [1, "Sir, where did the money go?"],

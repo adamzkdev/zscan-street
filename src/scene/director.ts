@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { VOX } from "./voxel/model";
 import type { Block, BlockSummary, Tx } from "../data/types";
 import { ZScan } from "../data/zscan";
 import { BlockBus } from "./bus";
@@ -887,7 +888,7 @@ export class Director {
       rider.role = "Courier";
       rider.district = "downtown";
       rider.root.position.copy(scooter.saddle);
-      rider.perch(0.8);
+      rider.perch(0.8, 0.5);
       rider.setScale(0.9);
       rider.faceDir = new THREE.Vector3(lane === "eastFast" ? 1 : -1, 0, 0);
       scooter.group.add(rider.root);
@@ -1238,7 +1239,8 @@ export class Director {
     s.noClip = false;
     s.rush = 1;
     s.setScale(0.78);
-    s.sit(true);
+    // on the bench (train.seat puts the root on its cushion, 3 voxels over the floor)
+    s.sit(true, 3 * VOX);
     const row = train.seat(s.root);
     s.faceDir = new THREE.Vector3(0, 0, row ? -1 : 1);
   }
@@ -1274,7 +1276,7 @@ export class Director {
     for (const t of s.txs) this.byTx.delete(t.txid);
     s.state = "riding";
     s.rush = 1;
-    s.sit(seated);
+    s.sit(seated, 3 * VOX);
     s.faceDir = new THREE.Vector3(1, 0, 0);
   }
 

@@ -1,0 +1,22 @@
+// node shots/_cemov.mjs [port]: live and overview fps (after visiting the cemetery), errors
+import puppeteer from "puppeteer-core";
+const port = process.argv[2] ?? "3036";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 300000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1500, height: 900 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push(e.message));
+await p.goto(`http://localhost:${port}/?debug&theme=night`);
+await p.waitForFunction(() => window.street, { timeout: 180000 });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const fps = () => p.evaluate(() => new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res(Math.round(n / 3)); }; requestAnimationFrame(f); }));
+await wait(7000);
+console.log("live", await fps());
+await p.evaluate(() => street.rig.district(new street.rig.focus.constructor(159.5, 1, -210), 0.9));
+await wait(8000);
+console.log("cemetery map", await fps(), "out", await p.evaluate(() => street.cemetery.count));
+await p.evaluate(() => street.rig.setMode("overview"));
+await wait(5000);
+console.log("overview", await fps());
+await p.screenshot({ path: "shots/cem-overview.png" });
+console.log("errors:", errs.slice(0, 4).join(" | ") || "none");
+await b.close();

@@ -5,6 +5,7 @@ import * as F from "../furniture";
 import { box, glowMat, std } from "../kit";
 import { GOLD, LEVELS, MONO, NeedleKit, makeCanvas } from "./kit";
 import * as P from "./props";
+import { pianist, pianoSeat } from "../music/acts";
 
 /** Herringbone walnut for the restaurant floor. */
 function parquet() {
@@ -134,8 +135,12 @@ export function lounge(k: NeedleKit) {
   void k.person(f, 4550, ring[7], "Waiter", { wander: ring });
   // the piano on the east, the pianist
   const pa = 1.62;
-  k.put(f, "piano", F.grandPiano, 6.4 * Math.sin(pa), 6.4 * Math.cos(pa), pa + Math.PI);
-  void k.person(f, 4551, [5.2 * Math.sin(pa), 5.2 * Math.cos(pa) + 0.1], "Pianist", { sit: true, dy: 0.5, face: new THREE.Vector3(1, 0, 0) });
+  k.put(f, "piano", F.grandPiano, 6.4 * Math.sin(pa), 6.4 * Math.cos(pa), pa);
+  // the pianist plays Satie (a real recording from the piano: src/interior/music)
+  const piano = { x: 6.4 * Math.sin(pa), y, z: 6.4 * Math.cos(pa), rot: pa };
+  const seat = pianoSeat(piano);
+  k.put(f, "pianoBench", F.pianoBench, seat.x, seat.z, pa, { solid: false });
+  pianist(g, piano, { place: "needle", floor: f, track: "piano-gymnopedie", id: 4551, level: 0.8 });
   // champagne trolley, palms
   k.put(f, "nCart", P.champagneCart, -4.6, 4.6, 0.8);
   for (const a of [0.9, -0.9]) k.put(f, `nPalmL${a}`, () => P.palmTree(a > 0 ? 4 : 5), 5.2 * Math.sin(Math.PI + a), 5.2 * Math.cos(Math.PI + a));

@@ -308,19 +308,180 @@ export function bubbleSprite(e: Emote) {
   return s;
 }
 
-let capCache: ReturnType<typeof sprite> | null = null;
-/** A police cap: navy crown, black peak, a gold badge. */
-export function policeCapSprite() {
-  if (!capCache)
-    capCache = sprite(14, 7, (px) => {
-      px(2, 0, 10, 1, "#1a2a5a");
-      px(1, 1, 12, 3, "#22346e");
-      px(1, 1, 12, 1, "#3a4c8e");
-      px(6, 1, 2, 2, "#f4b728");
-      px(1, 4, 12, 1, "#f0f0f0");
-      px(0, 5, 14, 2, "#121218");
-    });
-  return capCache;
+// ---- what they wear on the head -----------------------------------------------------------------
+//
+// Uniform headwear is painted INTO a copy of the portrait (snark.ts dressedTexture), on its own
+// 26×26 grid, so it sits on that head, bobs and tilts with it and casts the same selection glow.
+// Every zkSNARK shares one face template: the head's crown starts on row ~6 (row 3–5 under tall
+// hats), the forehead is row 11, the eyes rows 13–14, the face spans columns ~9–20 and faces right.
+// What the portrait already wears up there (a beanie, a cap and its peak, a halo, the hood's top)
+// is cleared first (`clearHead`), then the new hat covers the same rows: nothing pokes out.
+
+export type Hat = "police" | "hard" | "chef" | "laurel";
+
+/** The head as the hat sees it: columns L..R across the forehead (portrait cells). */
+export interface HeadFit {
+  L: number;
+  R: number;
+}
+
+/** Where a hat may erase the portrait: rows above `rows` from column `col` on (the trail stays). */
+export function hatClear(hat: Hat): { rows: number; col: number } {
+  // the laurel sits on the hair: only what stands above the crown goes (a halo, a tall hat)
+  return hat === "laurel" ? { rows: 6, col: 9 } : { rows: 11, col: 9 };
+}
+
+/** Paint a hat on the portrait grid (see the note above), its band just above the eyes. */
+export function drawHat(px: Px, hat: Hat, f: HeadFit, color?: string) {
+  const { L, R } = f;
+  const C = Math.floor((L + R) / 2);
+  switch (hat) {
+    case "police": {
+      // a peaked cap in profile: a flat crown wider than the head (overhanging the brow), a dark
+      // band with a gold cord, the badge on the front, the black peak over the eyes
+      const navy = color ?? "#24366f",
+        hi = shade(navy, 1.35),
+        lo = shade(navy, 0.72),
+        band = "#121628",
+        gold = "#e8b030";
+      px(L + 2, 4, R - L, 1, hi);
+      px(L + 1, 5, R - L + 2, 1, navy);
+      px(L, 6, R - L + 3, 2, navy);
+      px(L + 1, 5, 3, 1, hi);
+      px(L, 6, 1, 2, lo);
+      px(R + 2, 5, 1, 3, lo);
+      px(L, 8, R - L + 2, 1, lo);
+      px(L, 9, R - L + 1, 2, band);
+      px(R - 7, 10, 8, 1, gold);
+      // the badge: a little gold shield on the crown's front
+      px(R - 3, 6, 3, 2, gold);
+      px(R - 3, 6, 1, 1, "#fff0a8");
+      px(R - 2, 8, 1, 1, "#a8700e");
+      // the peak, down over the brow and out in front
+      px(R - 7, 11, 11, 1, "#0a0a0e");
+      px(R - 5, 11, 4, 1, "#30303c");
+      px(R + 2, 10, 2, 1, "#0a0a0e");
+      break;
+    }
+    case "hard": {
+      // a builder's helmet: domed shell with a raised ridge, a brim all round, longer in front
+      const c = color ?? "#f4c020",
+        hi = shade(c, 1.22),
+        lo = shade(c, 0.8),
+        dk = shade(c, 0.6);
+      px(L + 3, 4, R - L - 4, 1, c);
+      px(L + 1, 5, R - L, 1, c);
+      px(L, 6, R - L + 2, 4, c);
+      px(L, 6, 1, 4, lo);
+      px(R + 1, 6, 1, 4, lo);
+      px(L, 10, R - L + 2, 1, lo);
+      // the ridge and a sheen
+      px(C - 1, 4, 2, 6, hi);
+      px(L + 2, 6, 2, 1, hi);
+      px(L - 1, 11, R - L + 5, 1, dk);
+      px(R + 1, 11, 3, 1, lo);
+      break;
+    }
+    case "chef": {
+      // a toque: a pleated puff over a tall band
+      const w = "#f8f6f0",
+        s1 = "#dedad0",
+        s2 = "#c4bfb4";
+      px(L + 2, 0, R - L - 3, 1, w);
+      px(L, 1, R - L + 2, 1, w);
+      px(L - 1, 2, R - L + 4, 4, w);
+      px(L, 6, R - L + 2, 1, s1);
+      for (const x of [L + 2, C, R - 1]) px(x, 2, 1, 4, s1);
+      px(R + 2, 2, 1, 4, s2);
+      px(L + 1, 1, 2, 1, "#ffffff");
+      px(L, 7, R - L + 1, 4, w);
+      px(L, 7, 1, 4, s1);
+      px(R, 7, 1, 4, s1);
+      px(L, 10, R - L + 1, 1, s2);
+      break;
+    }
+    case "laurel": {
+      // a gold-green wreath round the crown, leaves pointing back
+      const g = color ?? "#5a8a3a",
+        hi = shade(g, 1.35),
+        dk = shade(g, 0.7);
+      for (let x = L; x <= R + 1; x++) {
+        px(x, 7, 1, 1, (x - L) % 2 ? g : hi);
+        if ((x - L) % 2 === 0) px(x - 1, 6, 1, 1, dk);
+      }
+      px(R + 1, 8, 1, 1, g);
+      px(L, 8, 1, 1, dk);
+      break;
+    }
+  }
+}
+
+/** A hi-vis vest over the lower bust: painted only where the bust is (`solid`), two bright bands. */
+export function drawVest(px: Px, solid: (c: number, r: number) => boolean, color: string) {
+  for (let r = 20; r < 26; r++)
+    for (let c = 10; c <= 21; c++) {
+      if (!solid(c, r)) continue;
+      const band = r === 22 || r === 24;
+      px(c, r, 1, 1, band ? (r === 22 ? "#eef2f4" : "#c8ccd0") : c === 10 || !solid(c - 1, r) ? shade(color, 0.75) : color);
+    }
+}
+
+const lapCache = new Map<string, { s: ReturnType<typeof sprite>; up: number }>();
+/**
+ * Both legs of someone sitting, in profile (facing right like the portraits): thighs forward on
+ * the seat, shins down to the floor `shin` cells below, shoes on it. Seated on the floor (shin < 3),
+ * the legs stretch out instead, toes up. `up`: rows of the drawing above the thighs' top.
+ */
+export function lapSprite(trouser: string, shin: number) {
+  shin = Math.max(0, Math.min(14, Math.round(shin)));
+  const key = `${trouser}|${shin}`;
+  const hit = lapCache.get(key);
+  if (hit) return touch(lapCache, key, hit);
+  const far = shade(trouser, 0.68),
+    shoe = "#1d1b24",
+    sole = "#0e0d12",
+    shine = "#4a4656";
+  let out: { s: ReturnType<typeof sprite>; up: number };
+  if (shin < 3) {
+    // on the floor: legs out in front, the shoes standing up at the end
+    out = {
+      up: 2,
+      s: sprite(16, 5, (px) => {
+        px(0, 2, 12, 3, far);
+        px(12, 0, 2, 5, sole);
+        px(0, 2, 13, 3, trouser);
+        px(0, 2, 13, 1, shade(trouser, 1.12));
+        px(0, 4, 13, 1, shade(trouser, 0.78));
+        px(13, 0, 2, 5, shoe);
+        px(13, 0, 1, 1, shine);
+        px(15, 1, 1, 4, sole);
+      }),
+    };
+  } else {
+    const H = 3 + shin;
+    out = {
+      up: 0,
+      s: sprite(14, H, (px) => {
+        // far leg: a column behind, a shade darker
+        px(0, 0, 9, 3, far);
+        px(6, 3, 3, shin - 2, far);
+        px(6, H - 2, 5, 2, sole);
+        // near leg: thigh along the seat, knee, shin, shoe with the toe forward
+        px(0, 0, 11, 3, trouser);
+        px(0, 0, 11, 1, shade(trouser, 1.12));
+        px(10, 0, 1, 3 + shin - 2, shade(trouser, 0.8));
+        px(8, 3, 3, shin - 2, trouser);
+        px(8, 3, 1, shin - 2, shade(trouser, 0.86));
+        px(8, H - 3, 3, 1, shade(trouser, 0.6));
+        px(8, H - 2, 6, 2, shoe);
+        px(9, H - 2, 2, 1, shine);
+        px(8, H - 1, 6, 1, sole);
+      }),
+    };
+  }
+  lapCache.set(key, out);
+  boundCache(lapCache, 300, (x) => x.s.texture.dispose());
+  return out;
 }
 
 // ---- arms, hands and what they hold ------------------------------------------------------------

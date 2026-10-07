@@ -14,6 +14,8 @@ export class WalkControls {
   readonly camera = new THREE.PerspectiveCamera(62, 1, 0.05, 220);
   enabled = false;
   colliders: Rect[] = [];
+  /** More walls, kept apart from the place's own (lift cars, stair cores, flight rails). */
+  extra: Rect[] = [];
   private yaw = 0;
   private pitch = -0.08;
   private floorY = 0;
@@ -81,6 +83,36 @@ export class WalkControls {
     );
   }
 
+  /** Carried along (an escalator): world velocity in m/s, or null. */
+  drift: [number, number] | null = null;
+
+  /**
+   * Moved without a cut (riding a lift, turning a stair core's landing onto the next floor): the
+   * camera, the floor under it and the heading all shift together, so the view doesn't jump.
+   */
+  shift(dx: number, dy: number, dz: number, dyaw = 0) {
+    this.camera.position.x += dx;
+    this.camera.position.y += dy;
+    this.camera.position.z += dz;
+    this.floorY += dy;
+    this.baseFloor += dy;
+    this.yaw += dyaw;
+    this.camera.rotation.set(this.pitch, this.yaw, 0);
+  }
+
+  /** The floor height when there is no special ground under the walker. */
+  setBase(y: number) {
+    this.baseFloor = y;
+  }
+
+  /** Turn a little toward a heading (the lift turns you to face its doors). */
+  turnToward(yaw: number, k: number) {
+    let d = (yaw - this.yaw) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    this.yaw += d * Math.min(1, k);
+  }
+
   /** Just placed (entered, took the elevator): no walking straight back out for a moment. */
   arrived() {
     this.sinceArrival = 0;
@@ -142,6 +174,13 @@ export class WalkControls {
     if (this.blocked(p.x, p.z)) p.x -= move.x;
     p.z += move.z;
     if (this.blocked(p.x, p.z)) p.z -= move.z;
+    if (this.drift) {
+      const [vx, vz] = this.drift;
+      p.x += vx * dt;
+      if (this.blocked(p.x, p.z)) p.x -= vx * dt;
+      p.z += vz * dt;
+      if (this.blocked(p.x, p.z)) p.z -= vz * dt;
+    }
     // walking out through the door (the wall behind where you came in): back to the street
     const d = this.door;
     this.sinceArrival += dt;
@@ -173,6 +212,7 @@ export class WalkControls {
   private blocked(x: number, z: number) {
     if (this.collide?.(x, z)) return true;
     for (const [x0, z0, x1, z1] of this.colliders) if (x > x0 - RADIUS && x < x1 + RADIUS && z > z0 - RADIUS && z < z1 + RADIUS) return true;
+    for (const [x0, z0, x1, z1] of this.extra) if (x > x0 - RADIUS && x < x1 + RADIUS && z > z0 - RADIUS && z < z1 + RADIUS) return true;
     return false;
   }
 }

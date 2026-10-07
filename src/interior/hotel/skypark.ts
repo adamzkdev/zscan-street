@@ -4,6 +4,7 @@ import { hash } from "../../scene/voxel/model";
 import * as F from "../furniture";
 import { box, glowMat, std } from "../kit";
 import * as H from "./furniture";
+import { soloist } from "../music/acts";
 import { HotelKit, LEVELS, LIFT_Z, boards, num, usd, water } from "./kit";
 
 /** 57 — the SkyPark: the infinity pool along the edge, palms, loungers and cabanas, the bar, and the
@@ -124,6 +125,9 @@ export function skypark(k: HotelKit) {
   void k.person(f, 7880, [0, BZ - 1.5], "Bartender");
   void k.person(f, 7881, [-1.5, BZ + 0.9], "Guest", { sit: true, dy: 0.7, face: new THREE.Vector3(0, 0, -1) });
   void k.person(f, 7882, [1.5, BZ + 0.9], "Guest", { sit: true, dy: 0.7, face: new THREE.Vector3(0, 0, -1) });
+  // a saxophonist by the bar, the pool and the city behind him
+  soloist(g, "sax", { x: 4.4, y, z: -10.9, yaw: -0.3 }, { place: "hotel", floor: f, track: "sax-solo", id: 7885, role: "Saxophonist", level: 0.8 });
+  k.rects[f].push([4.0, -11.3, 4.8, -10.5]);
   const drinks = ["a Marina Sling", "a frozen Orchard", "a Shielded Spritz", "a coconut"];
   let served = 0;
   k.hit(f, 6, 1.1, 0.9, 0, 0, BZ, "<b>SkyPark bar</b><span>order</span>", () => ({ eyebrow: "SkyPark bar", title: drinks[served++ % drinks.length], stats: [["Price", Market.state.price ? `${(26 / Market.state.price.usd).toFixed(3)} ZEC` : "$26"], ["Block", k.height ? num(k.height) : "…"]] }));

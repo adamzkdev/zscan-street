@@ -93,7 +93,7 @@ export const SHOTENGAI = { x: ST.shotengai, z0: -39.4 + 1, z1: 32 - 1, half: 4 +
  * The landmarks' lots: whole blocks (merged across the small streets inside them) kept for a
  * building of their own, placed like a city planner would.
  */
-export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai";
+export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery";
 export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: number }[] = [
   // the Block Stadium, out west on the park's latitude
   { kind: "stadium", x0: -221, x1: -129, z0: -116, z1: CORE.minZ - 8 },
@@ -122,7 +122,8 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
   { kind: "shibuya", x0: -82, x1: -58, z0: -188, z1: -163 },
   // the ZEC Flyer (scene/sky.ts) in the riverside park
   { kind: "flyer", x0: -82, x1: -58, z0: 77, z1: 100 },
-  { kind: "green", x0: 129, x1: 154, z0: -223, z1: -196 },
+  // the ZK Cemetery on the hill at the north-east edge (Père-Lachaise among the supertalls): its graves open at night
+  { kind: "cemetery", x0: 129, x1: 190, z0: -223, z1: -196 },
   // the ZK towers: ORCHARD (art deco) in Midtown by the Needle, SAPLING (sky gardens) on the marina's bank, HALO (twisted glass) on Wall Street
   { kind: "zkorchard", x0: 90, x1: 115, z0: -149, z1: -124 },
   { kind: "zksapling", x0: 198, x1: 221, z0: 77, z1: 100 },
@@ -243,6 +244,7 @@ export const AREAS = [
   { key: "giza", name: "Giza", blurb: "The Great Pyramid and its labyrinth", color: "#ffd28a", x: -160, z: -193, zoom: 0.55 },
   { key: "paris", name: "Paris", blurb: "The Eiffel Tower", color: "#b07bff", x: -86, z: -205, zoom: 0.6 },
   { key: "rome", name: "Rome", blurb: "The Colosseum, the Proof Games", color: "#eb6834", x: 86, z: -193, zoom: 0.55 },
+  { key: "cemetery", name: "ZK Cemetery", blurb: "Crooked graves, the crypt, zombie zkSNARKs", color: "#7dff9a", x: 159.5, z: -209.5, zoom: 0.8 },
   { key: "shibuya", name: "Shibuya", blurb: "The scramble crossing", color: "#ff3e8a", x: -60, z: -162, zoom: 0.8 },
   { key: "palm", name: "The Palm", blurb: "Villas on the palm, the sail hotel", color: "#1baf7a", x: -195, z: 190, zoom: 0.45 },
   { key: "bay", name: "The Bay", blurb: "Liberty island, the rock, the bridge", color: "#3987e5", x: 20, z: 190, zoom: 0.35 },
@@ -823,9 +825,9 @@ export function planCity() {
 
   // ---- the landmarks, each on its lot (or out on the water) ----
   /** Which way each lot's front faces (towards the street that matters). */
-  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e", zkorchard: "s", zksapling: "n", zkhalo: "s", binhai: "n" };
+  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e", zkorchard: "s", zksapling: "n", zkhalo: "s", binhai: "n", cemetery: "s" };
   /** The landmarks you can walk into, and the place each one opens. */
-  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben", gardens: "gardens", zkorchard: "tower-orchard", zksapling: "tower-sapling", zkhalo: "tower-halo", binhai: "library" };
+  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben", gardens: "gardens", zkorchard: "tower-orchard", zksapling: "tower-sapling", zkhalo: "tower-halo", binhai: "library", cemetery: "cemetery" };
   const landmarkJob = (kind: string, x0: number, x1: number, z0: number, z1: number, face: BuildingJob["face"], venue?: string, dy?: number) => {
     const ns = face === "s" || face === "n";
     const w = ns ? x1 - x0 : z1 - z0,

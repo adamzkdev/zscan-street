@@ -9,10 +9,11 @@ import { buildAtrium } from "./atrium";
 import { buildAuditorium, AUD } from "./auditorium";
 import { buildCrowd } from "./crowd";
 import { UPGRADES, WHISPERS, type Upgrade } from "./data";
-import { AUD_Y, G_Y, LEN, Level, READ_Y, SPHERE, T1_Y, T2_Y, TIERS, frontAt, glow, gridRects, offset, pathAt, std, toPath, fmt, Quads, S0 } from "./kit";
+import { AUD_Y, G_Y, LEN, Level, READ_Y, SPHERE, T1_Y, T2_Y, TIERS, ZIP_Y, frontAt, glow, gridRects, offset, pathAt, std, toPath, fmt, Quads, S0 } from "./kit";
 import { buildReading } from "./reading";
 import { buildShelves, reserved } from "./shelves";
 import { buildSphere, porchBox } from "./sphere";
+import { buildZipArchive } from "./zips";
 
 /**
  * The LIBRARY on the river, after Tianjin Binhai's "Eye": a white atrium whose terraced shelves
@@ -21,6 +22,7 @@ import { buildSphere, porchBox } from "./sphere";
  * reading desks. 1 — the first terrace: the chain year by year, the network upgrades. 2 — the
  * second terrace: the papers behind Zcash, every ZIP (they open in the reader). 3 — the reading
  * room over the atrium: today's news. A — inside the sphere: the chain as a planetarium.
+ * Z — the ZIP archive on the top floor: every ZIP as a numbered volume, by status, and the index.
  */
 export function buildLibrary(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#e9e6df");
@@ -29,8 +31,11 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     T1 = new Level(T1_Y),
     T2 = new Level(T2_Y),
     RD = new Level(READ_Y),
-    AU = new Level(AUD_Y);
-  const levels = [G, T1, T2, RD, AU];
+    AU = new Level(AUD_Y),
+    ZA = new Level(ZIP_Y);
+  const levels = [G, T1, T2, RD, AU, ZA];
+  /** Floors that are rooms of their own: the atrium is hidden there. */
+  const solo = (n: number) => n === 4 || n === 5;
   for (const l of levels) scene.add(l.group);
 
   // ---- the shell, the sphere, the shelves ------------------------------------------------------------
@@ -226,6 +231,8 @@ export function buildLibrary(ctx: InteriorContext): Interior {
   RD.m.flush(RD.group);
   const aud = buildAuditorium(AU);
   AU.m.flush(AU.group);
+  buildZipArchive(ZA);
+  ZA.m.flush(ZA.group);
 
   // ---- lights -----------------------------------------------------------------------------------------------
   const atriumLights: THREE.PointLight[] = [];
@@ -315,6 +322,7 @@ export function buildLibrary(ctx: InteriorContext): Interior {
   const applyTheme = () => {
     const night = theme === "night";
     const inAud = floor === 4;
+    const inZips = floor === 5;
     hemi.intensity = inAud ? 0.25 : night ? 0.42 : 0.62;
     hemi.color.set(night ? "#fff1dc" : "#ffffff");
     hemi.groundColor.set(night ? "#3a3026" : "#bdb6aa");
@@ -322,15 +330,14 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     for (const l of atriumLights) l.intensity = night ? 60 : 45;
     atrium.ledMat.color.set("#ffe0b0").multiplyScalar(night ? 1.7 : 1.15);
     sphere.uniforms.uNight.value = night ? 1 : 0.35;
-    const v = inAud ? null : ctx.cityView("library", 8, 6);
-    scene.background = v ?? new THREE.Color(inAud ? "#05060c" : night ? "#0b0a14" : "#cfe2f2");
+    const v = inAud || inZips ? null : ctx.cityView("library", 8, 6);
+    scene.background = v ?? new THREE.Color(inAud ? "#05060c" : inZips ? "#2a241c" : night ? "#0b0a14" : "#cfe2f2");
   };
   const setFloor = (n: number) => {
     floor = n;
-    const inAud = n === 4;
-    atrium.group.visible = !inAud;
+    atrium.group.visible = !solo(n);
     levels.forEach((l, i) => {
-      l.group.visible = inAud ? i === 4 : i !== 4;
+      l.group.visible = solo(n) ? i === n : !solo(i);
       l.here = i === n;
     });
     applyTheme();
@@ -346,9 +353,10 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     floors: [
       { label: "G", name: "Atrium · the sphere, the reading desks", y: G_Y, spawn: new THREE.Vector3(0, G_Y, -2.2), yaw: 0 },
       { label: "1", name: "Terrace I · the chain by year, network upgrades", y: T1_Y, spawn: new THREE.Vector3(t1Spawn.x, T1_Y, t1Spawn.z), yaw: 0 },
-      { label: "2", name: "Terrace II · the papers, every ZIP", y: T2_Y, spawn: new THREE.Vector3(t2Spawn.x, T2_Y, t2Spawn.z), yaw: 0 },
-      { label: "3", name: "Reading room · today's news", y: READ_Y, spawn: new THREE.Vector3(0, READ_Y, -78), yaw: Math.PI },
+      { label: "2", name: "Terrace II · the papers, the ZIPs by status", y: T2_Y, spawn: new THREE.Vector3(t2Spawn.x, T2_Y, t2Spawn.z), yaw: 0 },
+      { label: "3", name: "Reading room · THE ZCASH TIMES, live news", y: READ_Y, spawn: new THREE.Vector3(0, READ_Y, -78), yaw: Math.PI },
       { label: "A", name: "Auditorium · inside the sphere", y: AUD_Y, spawn: new THREE.Vector3(AUD.cx, AUD_Y, AUD.cz + 5.6), yaw: 0 },
+      { label: "Z", name: "ZIP Archive · every Zcash Improvement Proposal", y: ZIP_Y, spawn: new THREE.Vector3(0, ZIP_Y, -68.2), yaw: 0 },
     ],
     colliders: (f) => levels[f].rects,
     setFloor,
@@ -384,7 +392,9 @@ export function buildLibrary(ctx: InteriorContext): Interior {
         for (const k of l.ticks) k(dt, t);
       }
       if (inAud) aud.crowd.tick(dt);
-      else {
+      else if (floor === 5) {
+        /* the archive: its readers only */
+      } else {
         sphere.tick(dt);
         crowd.tick(dt);
         shelves.tick();

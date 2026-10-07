@@ -177,7 +177,7 @@ export function buildFoyer(L: Level, program: { draw: (g: CanvasRenderingContext
     s.rotation.y = -Math.PI / 2;
     doors.add(s);
     g.add(doors);
-    L.pick(doors, "<b>Concert Hall</b><span>Block Symphony, live</span>", () => ({ eyebrow: "OPERA HOUSE", title: "Concert Hall", floor: 1 }));
+    L.pick(doors, "<b>Concert Hall</b><span>a piece per block, live</span>", () => ({ eyebrow: "OPERA HOUSE", title: "Concert Hall", floor: 1 }));
     m.box(glow("#ffd8a0", 1.2), 0.04, 0.04, 3.4, FX - 0.05, 3.3, 8);
   }
 
@@ -227,7 +227,7 @@ export function buildFoyer(L: Level, program: { draw: (g: CanvasRenderingContext
     board.rotation.y = 0.35;
     g.add(board);
     L.rects.push([-5.4, 11, -3.6, 12]);
-    L.pick(board, "<b>Tonight's program</b><span>Block Symphony</span>", program.info);
+    L.pick(board, "<b>Tonight's programme</b><span>a piece per block</span>", program.info);
   }
 
   // Utzon's tapestry on the back wall: a field of red, blue and gold

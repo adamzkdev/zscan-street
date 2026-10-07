@@ -4,7 +4,7 @@ import { place } from "../furniture";
 import { glowMat, textPlane } from "../kit";
 import { bake, Geo, type Torch } from "./geo";
 import { TORCH, type PyramidKit } from "./kit";
-import { brazier, guardian, jar, mummy, sand, skeleton } from "./models";
+import { brazier, guardian, jar, sand, skeleton } from "./models";
 
 /**
  * Level 0: the descending passage from the street, the entrance gallery (corbelled, two zebra-headed
@@ -25,6 +25,12 @@ const HALL = N * N,
   PASS = N * N + 1,
   EXITR = N * N + 2;
 const ENTRY_C = 4;
+/** The ascending passage: from the exit chamber up to the Grand Gallery (1:3, like the gallery). */
+export const ASC_LEN = 12,
+  ASC_RISE = 4;
+/** The way down to the subterranean chamber: a doorway in the entrance gallery's west wall. */
+export const SUB_Z = -14.1,
+  SUB_X = -6.5;
 
 export interface Game {
   found: number;
@@ -276,12 +282,22 @@ export function labyrinth(k: PyramidKit, seed: number, game: Game) {
     HH = 4.2;
   floor.flat(-HX, HZ0, HX, HZ1, 0);
   for (const sgn of [-1, 1]) {
-    walls.box(sgn < 0 ? -HX - 0.5 : HX, 0, HZ0, sgn < 0 ? -HX : HX + 0.5, HH, HZ1, ["top", "bottom"]);
+    if (sgn > 0) walls.box(HX, 0, HZ0, HX + 0.5, HH, HZ1, ["top", "bottom"]);
+    else {
+      // the west wall has the low doorway down to the subterranean chamber
+      walls.box(-HX - 0.5, 0, HZ0, -HX, HH, SUB_Z - 0.8, ["top", "bottom"]);
+      walls.box(-HX - 0.5, 0, SUB_Z + 0.8, -HX, HH, HZ1, ["top", "bottom"]);
+      walls.box(-HX - 0.5, 2.4, SUB_Z - 0.8, -HX, HH, SUB_Z + 0.8, ["top"]);
+    }
     for (let i = 0; i < 3; i++) {
       const inner = HX - 0.55 * (i + 1);
       walls.box(sgn < 0 ? -HX - 0.5 : inner, HH + 0.6 * i, HZ0, sgn < 0 ? -inner : HX + 0.5, HH + 0.6 * (i + 1), HZ1, ["top"]);
     }
-    solid(sgn < 0 ? -HX - 0.5 : HX, HZ0, sgn < 0 ? -HX : HX + 0.5, HZ1);
+    if (sgn > 0) solid(HX, HZ0, HX + 0.5, HZ1);
+    else {
+      solid(-HX - 0.5, HZ0, -HX, SUB_Z - 0.8);
+      solid(-HX - 0.5, SUB_Z + 0.8, -HX, HZ1);
+    }
   }
   const HTOP = HH + 1.8;
   ceil.flat(-HX, HZ0, HX, HZ1, HTOP, false);
@@ -297,7 +313,7 @@ export function labyrinth(k: PyramidKit, seed: number, game: Game) {
   for (const sgn of [-1, 1]) {
     k.torch(f, V(sgn * HX, 1.8, -11.6), V(-sgn, 0, 0), HALL, 8);
     k.torch(f, V(sgn * HX, 1.8, -16.6), V(-sgn, 0, 0), HALL, 8);
-    k.panelOn(panels, 6, V(sgn * HX, 0.6, -14.1), V(-sgn, 0, 0), 1.5, 3.0);
+    if (sgn > 0) k.panelOn(panels, 6, V(sgn * HX, 0.6, -14.1), V(-sgn, 0, 0), 1.5, 3.0);
     k.panelOn(panels, sgn < 0 ? 2 : 5, V(sgn * HX, 0.9, -18.7), V(-sgn, 0, 0), 1.0, 2.0);
     k.panelOn(panels, sgn < 0 ? 3 : 7, V(sgn * 4.4, 0.4, HZ0 + T / 2), V(0, 0, 1), 1.6, 3.2);
     k.panelOn(panels, 1, V(sgn * 3.6, 0.4, HZ1), V(0, 0, -1), 1.1, 2.2);
@@ -311,6 +327,14 @@ export function labyrinth(k: PyramidKit, seed: number, game: Game) {
     place(g, "pyr-jar0", () => jar(0, true), sgn * 5.5, 0, -10.8, 1);
     solid(sgn * 5.4 - 0.4, -11.2, sgn * 5.4 + 0.4, -9.6);
   }
+  const downSign = textPlane("▼ SUBTERRANEAN CHAMBER", { h: 0.2, glow: true, color: "#f4b728" });
+  downSign.position.set(-HX + 0.03, 2.72, SUB_Z);
+  downSign.rotation.y = Math.PI / 2;
+  g.add(downSign);
+  const downGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.06), glowMat("#ffb050", 1.4));
+  downGlow.position.set(-HX - 0.2, 0.02, SUB_Z);
+  downGlow.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+  g.add(downGlow);
   const sign = textPlane("LABYRINTH · 迷宮", { h: 0.42, glow: true, color: "#f4b728" });
   sign.position.set(0, MH + 0.75, HZ0 + T / 2 + 0.02);
   g.add(sign);
@@ -330,18 +354,29 @@ export function labyrinth(k: PyramidKit, seed: number, game: Game) {
   walls.box(rx0, 0, RZ0 - 0.5, ex - 0.8, MH, RZ0, ["top", "bottom", "nz"]);
   walls.box(ex + 0.8, 0, RZ0 - 0.5, rx1, MH, RZ0, ["top", "bottom", "nz"]);
   walls.box(ex - 0.8, 2.4, RZ0 - 0.5, ex + 0.8, MH, RZ0, ["top", "nz"]);
-  solid(rx0, RZ0 - 0.5, rx1, RZ0);
-  // the ascending passage: steps climbing into the dark
+  solid(rx0, RZ0 - 0.5, ex - 0.8, RZ0);
+  solid(ex + 0.8, RZ0 - 0.5, rx1, RZ0);
+  // the ascending passage: 40 steps cut in a 1:3 slope, climbing 4 m to the Grand Gallery's door
   const AZ = RZ0 - 0.5;
-  for (let i = 0; i < 9; i++) walls.box(ex - 0.8, 0, AZ - 0.4 * (i + 1), ex + 0.8, 0.2 * (i + 1), AZ - 0.4 * i, ["bottom", "nz"]);
-  walls.box(ex - 1.3, 0, AZ - 3.8, ex - 0.8, 4.4, AZ, ["nx", "bottom"]);
-  walls.box(ex + 0.8, 0, AZ - 3.8, ex + 1.3, 4.4, AZ, ["px", "bottom"]);
-  ceil.quad(V(ex + 0.8, 2.4, AZ), V(-1.6, 0, 0), V(0, 1.8, -3.6));
-  walls.box(ex - 0.8, 0, AZ - 4.2, ex + 0.8, 4.4, AZ - 3.6, []);
+  const NSTEP = 40,
+    SD = ASC_LEN / NSTEP,
+    SH = ASC_RISE / NSTEP,
+    PH2 = 2.6;
+  for (let i = 0; i < NSTEP; i++) walls.box(ex - 0.8, SH * i, AZ - SD * (i + 1), ex + 0.8, SH * (i + 1), AZ - SD * i, ["bottom", "px", "nx", "nz"], 0.9);
+  const up3 = V(0, ASC_RISE, -ASC_LEN),
+    tall = V(0, PH2, 0);
+  walls.quad(V(ex - 0.8, -0.1, AZ), up3, tall);
+  walls.quad(V(ex + 0.8, -0.1, AZ), tall, up3);
+  ceil.quad(V(ex + 0.8, PH2 - 0.1, AZ), V(-1.6, 0, 0), up3);
+  solid(ex - 1.3, AZ - ASC_LEN - 0.2, ex - 0.8, AZ);
+  solid(ex + 0.8, AZ - ASC_LEN - 0.2, ex + 1.3, AZ);
+  k.torch(f, V(ex - 0.8, (ASC_RISE * 3.5) / ASC_LEN + 1.3, AZ - 3.5), V(1, 0, 0), EXITR, 6);
+  k.torch(f, V(ex + 0.8, (ASC_RISE * 8.5) / ASC_LEN + 1.3, AZ - 8.5), V(-1, 0, 0), EXITR, 6);
+  k.panelOn(panels, 5, V(ex + 0.8, 0.9, AZ - 3.5), V(-1, 0, 0), 0.7, 1.4);
   const doorway = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.4), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
   doorway.position.set(ex, 1.2, RZ0 - 0.3);
   g.add(doorway);
-  k.pick(f, doorway, "<b>▲ Grand Gallery</b><span>the ascending passage</span>", () => ({ eyebrow: "Ascending passage", title: "Grand Gallery", floor: 1 }));
+  hoverOnly(k, f, doorway, "<b>▲ Grand Gallery</b><span>climb the ascending passage</span>");
   const up = textPlane("▲ GRAND GALLERY", { h: 0.24, glow: true, color: "#f4b728" });
   up.position.set(ex, 2.72, RZ0 + 0.02);
   g.add(up);
@@ -360,54 +395,9 @@ export function labyrinth(k: PyramidKit, seed: number, game: Game) {
     const [dr, dc] = exits(rr, c)[0] ?? [1, 0];
     return { x: cx(c), z: cz(rr), dx: dc, dz: -dr };
   };
-  for (const cell of mummyCells) {
-    const o = facing(cell);
-    const x = o.x - o.dx * 0.6,
-      z = o.z - o.dz * 0.6;
-    const mm = place(g, "pyr-mummy", () => mummy(), x, 0, z, Math.atan2(o.dx, o.dz));
-    solid(x - 0.35, z - 0.35, x + 0.35, z + 0.35);
-    hoverOnly(k, f, mm, "<b>Mummy</b><span>don't wake it</span>");
-  }
   if (skeletonCell >= 0) {
     const o = facing(skeletonCell);
     place(g, "pyr-skeleton", skeleton, o.x - o.dx * 0.4, 0, o.z - o.dz * 0.4, Math.atan2(o.dz, -o.dx));
-  }
-  // a mummy that walks the longest straight corridor, back and forth
-  let best: [number, number, number, number] = [0, 0, 0, 0];
-  for (let rr = 0; rr < N; rr++) {
-    let run = 0;
-    for (let c = 0; c < N; c++) {
-      run = c > 0 && !vw[rr][c] ? run + 1 : 0;
-      if (run > best[0]) best = [run, rr, c - run, c];
-    }
-  }
-  let alongX = true;
-  for (let c = 0; c < N; c++) {
-    let run = 0;
-    for (let rr = 0; rr < N; rr++) {
-      run = rr > 0 && !hw[rr][c] ? run + 1 : 0;
-      if (run > best[0]) (best = [run, c, rr - run, rr]), (alongX = false);
-    }
-  }
-  if (best[0] >= 2) {
-    const [, line, a, b] = best;
-    const A = alongX ? V(cx(a), 0, cz(line)) : V(cx(line), 0, cz(a));
-    const B = alongX ? V(cx(b), 0, cz(line)) : V(cx(line), 0, cz(b));
-    const walker = place(g, "pyr-mummy2", () => mummy("#ff5a3a", 2), A.x, 0, A.z, 0);
-    hoverOnly(k, f, walker, "<b>Mummy</b><span>on its rounds</span>");
-    const len = A.distanceTo(B);
-    k.ticks[f].push((_dt, t) => {
-      const u = (t * 0.42) % (2 * len + 4);
-      // walk, pause, turn, walk back, pause
-      const s = u < len ? u : u < len + 2 ? len : u < 2 * len + 2 ? 2 * len + 2 - u : 0;
-      const forward = u < len + 1 || u > 2 * len + 3;
-      walker.position.lerpVectors(A, B, s / len);
-      walker.position.y = Math.abs(Math.sin(t * 3.2)) * 0.03;
-      const d = B.clone().sub(A).normalize().multiplyScalar(forward ? 1 : -1);
-      const target = Math.atan2(d.x, d.z);
-      walker.rotation.y += Math.atan2(Math.sin(target - walker.rotation.y), Math.cos(target - walker.rotation.y)) * 0.08;
-      walker.rotation.z = Math.sin(t * 1.6) * 0.04;
-    });
   }
   void k.person(f, 2140, [-3.9, -12.2], "Guide", { face: V(1, 0, 0.6).normalize() });
   void k.person(f, 777, [4.2, -17.8], "Archaeologist", { face: V(-0.6, 0, 1).normalize() });
@@ -558,7 +548,24 @@ export function labyrinth(k: PyramidKit, seed: number, game: Game) {
   k.lightUp(f);
   void TORCH;
   k.scene.userData.maze = { coins: coinCells.map((c) => [cx(c % N), cz(Math.floor(c / N))]), traps: traps.map((c) => [cx(c % N), cz(Math.floor(c / N))]), exit: [ex, MZ1], mummies: mummyCells.map((c) => [cx(c % N), cz(Math.floor(c / N))]) };
-  return { cellOf, neighbours };
+  const cells = [...Array(N * N).keys()].map((c) => [cx(c % N), cz(Math.floor(c / N))] as [number, number]);
+  return {
+    cellOf,
+    neighbours,
+    /** Where the mummies sleep (dead ends far from the entrance, then any far cells; never the first two rows). */
+    homes: [...new Set([...mummyCells, ...others.slice(3), ...cells.map((_, c) => c).filter((c) => dist[c] >= 8 && !coinCells.includes(c))])]
+      .filter((c) => c >= 2 * N)
+      .slice(0, 3)
+      .map((c) => cells[c]),
+    cells,
+    /** The ascending passage's foot (its first step) and side. */
+    asc: { x: ex, z: AZ },
+    /** Step height under (x, z) in the ascending passage, null elsewhere. */
+    ground(x: number, z: number): number | null {
+      if (z >= AZ || z < AZ - ASC_LEN - 0.01 || Math.abs(x - ex) > 1.3) return null;
+      return Math.min(ASC_RISE, Math.ceil((AZ - z) / SD - 1e-6) * SH);
+    },
+  };
 }
 
 /** Something that shows a tooltip but has nothing to open. */

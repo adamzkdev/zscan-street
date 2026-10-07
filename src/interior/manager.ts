@@ -2,6 +2,8 @@ import * as THREE from "three";
 import type { Interior, PickInfo } from "./types";
 import { WalkControls } from "./walk";
 import { Router } from "./path";
+import { Circulation } from "./lift";
+import { PLANS } from "./liftplan";
 import type { Snark } from "../scene/snark";
 
 type Key = Interior["key"];
@@ -11,6 +13,10 @@ export interface InteriorEvents {
   left(): void;
   /** A short fade to black covers each jump (entering, leaving, the elevator). */
   fade(): void;
+  /** The walker reached another floor on foot or by lift, without a cut (stairs, a lift car). */
+  walked?(floor: number): void;
+  /** A lift arrived. */
+  ding?(): void;
 }
 
 /**
@@ -24,6 +30,9 @@ export class InteriorManager {
   private cache = new Map<Key, Interior>();
   private routers = new Map<Interior, Router[]>();
   private routeCheck = 0;
+  /** The lifts, stairs and escalators of the place you are in (see lift.ts). */
+  circ: Circulation | null = null;
+  private circs = new Map<Interior, Circulation>();
   private ray = new THREE.Raycaster();
   private ndc = new THREE.Vector2();
 
@@ -55,7 +64,7 @@ export class InteriorManager {
   warming = false;
   private warmId = 0;
 
-  private warmUp(i: Interior) {
+  private warmUp(i: Interior, quiet = false) {
     if (!this.compile) return;
     const id = ++this.warmId;
     const t0 = performance.now();
@@ -64,7 +73,7 @@ export class InteriorManager {
       if (id !== this.warmId || !this.warming) return;
       this.warming = false;
       // a long wait: the place is revealed with a fresh fade
-      if (performance.now() - t0 > 150 && this.active === i) this.ev.fade();
+      if (!quiet && performance.now() - t0 > 150 && this.active === i) this.ev.fade();
     };
     try {
       this.compile(i.scene, this.walk.camera).then(done, done);
@@ -103,6 +112,7 @@ export class InteriorManager {
     this.park(i);
     this.ev.fade();
     this.active = i;
+    this.circ = this.circOf(i);
     this.walk.enabled = true;
     this.goTo(floor);
     this.ev.entered(i, this.floor);
@@ -120,26 +130,102 @@ export class InteriorManager {
     }
   }
 
-  /** Take the elevator. */
+  /** A place's lifts and flights, built on its first visit. */
+  private circOf(i: Interior) {
+    let c = this.circs.get(i);
+    if (!c) {
+      c = new Circulation(i, PLANS[i.key] ?? {}, {
+        walk: this.walk,
+        floor: () => this.floor,
+        switchFloor: (n) => this.switchFloor(n),
+        ding: () => this.ev.ding?.(),
+      });
+      if (c.problems.length) console.warn(`[lifts] ${i.key}: ${c.problems.join("; ")}`);
+      this.circs.set(i, c);
+    }
+    return c;
+  }
+
+  /** Where goTo(n) puts the walker (for tests). */
+  spawnOf(n: number) {
+    const f = this.active!.floors[n];
+    const arr = n > 0 ? this.circ?.arrival(n) : null;
+    return arr ? { x: arr.pos.x, z: arr.pos.z, yaw: arr.yaw } : { x: f.spawn.x, z: f.spawn.z, yaw: f.yaw };
+  }
+
+  /** Walls of a floor: the place's own (its flights cut out), plus its lift cars and rails. */
+  collidersOf(n: number) {
+    const i = this.active!;
+    const c = this.circs.get(i);
+    return c ? [...c.placeRects(n), ...c.rects(n)] : i.colliders(n);
+  }
+
+  /** Point the walker at a floor's walls (the place's array itself when nothing is cut out of it). */
+  private wallsFor(n: number) {
+    const i = this.active!;
+    const c = this.circs.get(i);
+    this.walk.colliders = c ? c.placeRects(n) : i.colliders(n);
+    this.walk.extra = c ? c.rects(n) : [];
+  }
+
+  /** The ground of a floor: in a car or on a flight, else the place's own. */
+  private groundOf(n: number) {
+    const i = this.active!;
+    const c = this.circs.get(i);
+    return (x: number, z: number) => c?.groundAt(n, x, z) ?? i.groundAt?.(n, x, z) ?? null;
+  }
+
+  /**
+   * Jump to a floor's spawn point (entering; the hidden PgUp/PgDn shortcut; tests). The walker's
+   * own way between floors is physical: the lifts and stairs (see lift.ts).
+   */
   goTo(floor: number) {
     const i = this.active;
     if (!i) return;
+    this.circ?.reset();
     this.floor = THREE.MathUtils.clamp(floor, 0, i.floors.length - 1);
     const f = i.floors[this.floor];
     i.setFloor?.(this.floor);
-    this.walk.place(f.spawn, f.yaw, f.y);
     const n = this.floor;
-    this.walk.ground = i.groundAt ? (x, z) => i.groundAt!(n, x, z) : undefined;
-    this.walk.colliders = i.colliders(this.floor);
+    // above the ground floor you arrive in the lift car, if the floor has one
+    const arr = n > 0 ? this.circ?.arrival(n) : null;
+    if (arr) this.walk.place(arr.pos, arr.yaw, arr.pos.y);
+    else this.walk.place(f.spawn, f.yaw, f.y);
+    this.walk.ground = this.groundOf(n);
+    this.wallsFor(n);
     // every place is entered from the street side (+z) on its ground floor
-    this.walk.door = this.floor === 0 ? doorOf(f, this.walk.colliders) : null;
+    this.walk.door = this.floor === 0 ? doorOf(f, i.colliders(0)) : null;
+    this.circ?.show(n);
     this.walk.arrived();
     // this floor's lights make its own shader variants: compile them before the first frame
     this.warmUp(i);
   }
 
+  /**
+   * Change floor where the walker stands, without a cut: in a closed lift car, near a flight's
+   * head or foot (`silent`: floors that are one space, nothing to switch but the label).
+   */
+  switchFloor(n: number, silent = false) {
+    const i = this.active;
+    if (!i || n === this.floor) return;
+    this.floor = n;
+    const f = i.floors[n];
+    if (!silent) {
+      i.setFloor?.(n);
+      this.walk.ground = this.groundOf(n);
+      this.wallsFor(n);
+      this.walk.setBase(f.y);
+      this.walk.arrived();
+    }
+    this.walk.door = n === 0 ? doorOf(f, i.colliders(0)) : null;
+    this.ev.walked?.(n);
+    if (!silent) this.warmUp(i, true);
+  }
+
   exit() {
     if (!this.active) return;
+    this.circ?.reset();
+    this.circ = null;
     this.ev.fade();
     this.warming = false;
     this.active = null;
@@ -150,7 +236,7 @@ export class InteriorManager {
   /** Everyone inside gets the way round the furniture of their floor (people arrive any time). */
   private giveRoutes(i: Interior) {
     let rs = this.routers.get(i);
-    if (!rs) this.routers.set(i, (rs = i.floors.map((_, k) => new Router(i.colliders(k)))));
+    if (!rs) this.routers.set(i, (rs = i.floors.map((_, k) => new Router(this.collidersOf(k)))));
     i.scene.traverse((o) => {
       const s = o.userData.snarkRef as Snark | undefined;
       if (!s || s.router) return;
@@ -171,7 +257,24 @@ export class InteriorManager {
     this.walk.update(dt);
     // walking out of the door closes the place mid-frame
     if (!this.active) return;
+    const riding = this.circ?.update(dt);
+    // floors that are one space (a long stair, a helix): the floor is the highest one under your feet
+    const grp = this.circ?.together.find((g) => g.length > 1 && g.includes(this.floor));
+    if (grp && !riding && !this.active.floorNow) {
+      const F = this.active.floors;
+      const feet = this.walk.floor + 0.3;
+      const under = grp.filter((k) => F[k].y <= feet);
+      const best = under.length ? under.reduce((a, b) => (F[b].y > F[a].y ? b : a)) : this.floor;
+      if (best !== this.floor) this.switchFloor(best, true);
+    }
     this.active.update(dt, t, this.walk.camera);
+    // walked up or down the stairs to another floor
+    const now = this.active.floorNow?.();
+    if (now !== undefined && now !== this.floor) {
+      this.floor = now;
+      if (now === 0 && !this.walk.door) this.walk.door = doorOf(this.active.floors[0], this.walk.colliders);
+      this.ev.walked?.(now);
+    }
   }
 
   private hitAt(x: number, y: number) {

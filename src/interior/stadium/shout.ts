@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Fans } from "./fans";
+import { bubbles } from "../../scene/speech";
 
 /**
  * The crowd shouts. A small pool of comic bubbles (sprites, each with its own canvas, redrawn
@@ -211,6 +212,8 @@ export class Shouts {
     b.wob = Math.random() * 10;
     this.fans.head(seat, b.at);
     b.sprite.visible = true;
+    // shown only while the fan can be seen (see scene/speech.ts)
+    bubbles.track(b.sprite);
     return true;
   }
 
@@ -243,8 +246,8 @@ export class Shouts {
       }
       // follow the fan (standing up, jumping)
       this.fans.head(b.seat, b.at);
-      const d = b.at.distanceTo(this.cam);
-      const h = this.ortho ? this.ortho * this.orthoSize : THREE.MathUtils.clamp(d * this.size, this.minH, this.maxH);
+      // the same size on screen as everyone's bubbles (scene/speech.ts), a touch smaller
+      const h = this.ortho ? this.ortho * this.orthoSize : bubbles.metres(camera, b.at, 0.9);
       // pop in with an overshoot, shrink away at the end
       const a = b.age;
       const pin = a < 0.22 ? THREE.MathUtils.smoothstep(a, 0, 0.16) * (1 + 0.25 * Math.sin((a / 0.22) * Math.PI)) : 1;
@@ -252,7 +255,7 @@ export class Shouts {
       const k = Math.max(0.01, pin * out) * (1 + 0.03 * Math.sin(a * 14 + b.wob));
       b.sprite.scale.set(h * b.aspect * k, h * k, 1);
       b.sprite.position.copy(b.at).add(this.tmp.set(0, h * 0.06 + a * 0.08, 0));
-      (b.sprite.material as THREE.SpriteMaterial).opacity = Math.min(1, out * 1.5);
+      b.sprite.userData.alpha = Math.min(1, out * 1.5);
     }
   }
 }

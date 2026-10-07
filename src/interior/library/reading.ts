@@ -7,7 +7,8 @@ import { WHISPERS } from "./data";
 /**
  * The reading room behind the back wall, high over the atrium: today's Zcash news as framed
  * front pages of THE ZCASH TIMES, the ticker over the back wall, long oak tables with green
- * lamps, and a glass wall looking down on the terraces and the sphere.
+ * lamps, a newspaper rack down the middle with more of today's papers on their sticks, and a
+ * glass wall looking down on the terraces and the sphere. Every page and the ticker open the story.
  */
 
 interface NewsItem {
@@ -206,8 +207,74 @@ export function buildReading(lv: Level) {
     const z = -66.4 - k * 2.25;
     slots.push({ pos: new THREE.Vector3(x0 + 0.06, Y + 2.15, z), yaw: Math.PI / 2 }, { pos: new THREE.Vector3(x1 - 0.06, Y + 2.15, z), yaw: -Math.PI / 2 });
   }
+  // the newspaper desk down the middle aisle: a long slanted reading stand, today's papers laid
+  // open on both sides (low, so the window stays in view)
+  const RACK = { z0: -75.6, z1: -67.4 };
+  const TILT = 0.75;
+  m.box(darkOak, 0.7, 0.86, RACK.z1 - RACK.z0, 0, Y, (RACK.z0 + RACK.z1) / 2);
+  m.box(oak, 0.08, 0.3, RACK.z1 - RACK.z0, 0, Y + 0.86, (RACK.z0 + RACK.z1) / 2);
+  lv.rects.push([-0.75, RACK.z0 - 0.05, 0.75, RACK.z1 + 0.05]);
+  const rackSlots: { pos: THREE.Vector3; rot: THREE.Euler }[] = [];
+  const tmp = new THREE.Matrix4();
+  for (let k = 0; k < 4; k++) {
+    const z = RACK.z0 + 1.0 + k * 2.07;
+    for (const sx of [-1, 1]) {
+      const rot = new THREE.Euler(-TILT, sx * (Math.PI / 2), 0, "YXZ");
+      const pos = new THREE.Vector3(sx * 0.27, Y + 1.02, z);
+      const board = new THREE.BoxGeometry(1.0, 1.12, 0.04);
+      board.applyMatrix4(tmp.makeRotationFromEuler(rot).setPosition(pos.clone().add(new THREE.Vector3(-sx * 0.02, -0.02, 0))));
+      m.add(oak, board);
+      rackSlots.push({ pos: pos.add(new THREE.Vector3(sx * 0.008, 0.008, 0)), rot });
+    }
+  }
+  const plate = canvasTex(512, 96, (g) => {
+    g.fillStyle = "#1c1a17";
+    g.fillRect(0, 0, 512, 96);
+    g.fillStyle = "#ffd28a";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = '800 40px "JetBrains Mono", monospace';
+    g.fillText("TODAY'S PAPERS", 256, 50);
+  });
+  for (const [z, ry] of [
+    [RACK.z0 - 0.01, Math.PI],
+    [RACK.z1 + 0.01, 0],
+  ]) {
+    const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.13), new THREE.MeshBasicMaterial({ map: plate.t }));
+    pm.position.set(0, Y + 0.62, z);
+    pm.rotation.y = ry;
+    pm.raycast = () => {};
+    lv.group.add(pm);
+  }
+  const story = (n: NewsItem) => ({
+    eyebrow: `${CATEGORY[n.category]?.label ?? esc(n.category.toUpperCase())} · ${esc(n.source_name)}`,
+    title: esc(n.title),
+    tag: [day(n.published_at), "muted"] as [string, "muted"],
+    body: n.summary ? `<p>${esc(n.summary)}</p>` : undefined,
+    link: { href: n.url, label: "Read the story" },
+  });
   void get<NewsItem[]>("/v1/news?limit=40").then((news) => {
     if (!news?.length) return void (headlines = "  news.zscan.cash  ");
+    // the rack holds the papers after the ones on the walls (or the latest again if few)
+    const rackNews = news.length > slots.length ? news.slice(slots.length, slots.length + rackSlots.length) : news.slice(0, rackSlots.length);
+    rackNews.forEach((n, i) => {
+      const { pos, rot } = rackSlots[i];
+      const page = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.06), new THREE.MeshStandardMaterial({ map: frontPage(n), roughness: 0.95 }));
+      page.position.copy(pos);
+      page.rotation.copy(rot);
+      lv.group.add(page);
+      lv.pick(page, `<b>${esc(n.title)}</b><span>${esc(n.source_name)} · ${day(n.published_at)}</span>`, () => story(n));
+    });
+    lv.pick(ticker, "<b>The ticker</b><span>every headline · click for the list</span>", () => ({
+      eyebrow: "THE ZCASH TIMES · TICKER",
+      title: "Today's headlines",
+      tag: [`${news.length} stories`, "info"],
+      body: news
+        .slice(0, 30)
+        .map((n) => `<p><a href="${n.url}" target="_blank" rel="noopener"><b>${esc(n.title)}</b></a><br><span class="note">${esc(n.source_name)} · ${day(n.published_at)}</span></p>`)
+        .join(""),
+      link: { href: "https://news.zscan.cash/", label: "news.zscan.cash" },
+    }));
     headlines = news.map((n) => `  ${n.title.toUpperCase()}  ◆`).join("") + "  ";
     news.slice(0, slots.length).forEach((n, i) => {
       const { pos, yaw } = slots[i];
@@ -222,13 +289,7 @@ export function buildReading(lv: Level) {
       band.position.y = -1.07;
       frame.add(border, page, band);
       lv.group.add(frame);
-      lv.pick(page, `<b>${esc(n.title)}</b><span>${esc(n.source_name)} · ${day(n.published_at)}</span>`, () => ({
-        eyebrow: `${CATEGORY[n.category]?.label ?? n.category} · ${n.source_name}`,
-        title: n.title,
-        tag: [day(n.published_at), "muted"],
-        body: n.summary ? `<p>${esc(n.summary)}</p>` : undefined,
-        link: { href: n.url, label: "Read the story" },
-      }));
+      lv.pick(page, `<b>${esc(n.title)}</b><span>${esc(n.source_name)} · ${day(n.published_at)}</span>`, () => story(n));
     });
   });
   for (const [x, z] of [
@@ -242,7 +303,7 @@ export function buildReading(lv: Level) {
   }
   lv.rects.push([x0 - 0.3, z0 - 0.3, x1 + 0.3, z0 + 0.05], [x0 - 0.3, z0, x0 + 0.05, z1], [x1 - 0.05, z0, x1 + 0.3, z1], [x0, z1 - 0.4, x1, z1 + 0.3]);
   // readers at the tables, an editor
-  void lv.person(4242, -7.7, Y, -71.6, "Editor", { lines: ["Today's paper is on the walls.", "Every headline comes from news.zscan.cash.", "Shh, deadline."], face: new THREE.Vector3(0, 0, 1), wander: [[-8, -71.6], [8, -71.6], [0, -66], [0, -78]] });
+  void lv.person(4242, -7.7, Y, -77.2, "Editor", { lines: ["Today's paper is on the walls and on the rack.", "Every headline comes from news.zscan.cash.", "Click the ticker for all the headlines.", "Shh, deadline."], face: new THREE.Vector3(0, 0, 1), wander: [[-10.4, -77.2], [10.4, -77.2], [-4, -77.4], [4, -77.4]] });
   void lv.person(808, -4.9, Y, -67.8, "Reader", { sit: true, face: new THREE.Vector3(0, 0, -1), lines: WHISPERS.reader });
   void lv.person(2718, 6.1, Y, -75.2, "Reader", { sit: true, face: new THREE.Vector3(0, 0, 1), lines: WHISPERS.reader });
   void lv.person(5150, 3.5, Y, -72.8, "Student", { sit: true, face: new THREE.Vector3(0, 0, -1), lines: WHISPERS.student });

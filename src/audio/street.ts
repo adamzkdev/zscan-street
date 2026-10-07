@@ -49,6 +49,7 @@ const GARDENS = lot("gardens");
 const ROME = lot("colosseum");
 const PARIS = lot("eiffel");
 const WESTMINSTER = lot("parliament");
+const CEMETERY = lot("cemetery");
 const PARKR = { x0: GRID.park.x0, x1: GRID.park.x1, z0: GRID.park.z0, z1: GRID.park.z1 };
 const PALM = { x0: Math.min(BAY.palm.x0, BAY.arab.x0), x1: Math.max(BAY.palm.x1, BAY.arab.x1), z0: Math.min(BAY.palm.z0, BAY.arab.z0), z1: Math.max(BAY.palm.z1, BAY.arab.z1) };
 /** The suspension bridge over the bay's mouth, as a thin strip. */
@@ -161,6 +162,17 @@ const DISTRICTS: Record<string, District> = {
     weight: (e) => fall(dRect(PARIS, e.x, e.z), 35),
     build(s) {
       loop(s, "paris", 0.75);
+    },
+  },
+  /** The ZK Cemetery: wind in the dead trees, crows, the zombies groaning (a crowd of them at night). */
+  cemetery: {
+    weight: (e) => fall(dRect(CEMETERY, e.x, e.z), 40),
+    build(s, e) {
+      preload(s.ctx, "crow", "crow2", "groan", "groan2", "groan3");
+      loop(s, "graveyard", e.night ? 0.9 : 0.55);
+      if (e.night) loop(s, "zombies", 0.16, { lp: 1400 });
+      s.every("crow", 7, 18, (t) => shot(s, Math.random() < 0.5 ? "crow" : "crow2", t, 0.45, { pan: side() }), 2);
+      s.every("groan", e.night ? 4 : 9, e.night ? 10 : 20, (t) => shot(s, (["groan", "groan2", "groan3"] as const)[Math.floor(Math.random() * 3)], t, 0.4 + Math.random() * 0.25, { pan: side(), rate: 0.85 + Math.random() * 0.3, lp: 3000 }), 3);
     },
   },
   westminster: {

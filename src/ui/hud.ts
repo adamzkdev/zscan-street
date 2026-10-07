@@ -156,6 +156,7 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   "tower-orchard": { icon: "tower", color: "#d9b25a" },
   "tower-sapling": { icon: "tower", color: "#5cff9a" },
   "tower-halo": { icon: "tower", color: "#3ef0ff" },
+  cemetery: { icon: "vault", color: "#7dff9a" },
 };
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
@@ -678,34 +679,10 @@ export class Hud {
     };
     const [fname, fsub] = split(f.name);
     const many = i.floors.length > 1;
-    // the next floor up and down by height (floor indexes need not be in height order)
-    const order = i.floors.map((x, k) => ({ y: x.y, k })).sort((a, b) => a.y - b.y || a.k - b.k);
-    const at = order.findIndex((o) => o.k === floor);
-    const up = order[at + 1]?.k ?? null,
-      down = order[at - 1]?.k ?? null;
+    // no floor list: floors are reached on foot, by the lifts and stairs inside (see interior/lift.ts)
     this.$(".indoor").innerHTML = `
       <div class="ihead hud" style="--c:${st.color}"><span class="logo">${pix(st.icon)}</span><span class="it"><b>${esc(i.title)}</b><span>${many ? `<em>${esc(f.label)}</em>` : ""}${esc(fname)}${fsub ? ` · ${esc(fsub)}` : ""}</span></span></div>
-      ${
-        many
-          ? `<nav class="lift hud${i.floors.length > 4 ? " tall" : ""}" style="--c:${st.color}" aria-label="Elevator">
-              <div class="lh"><span class="mh">Elevator</span><span class="ud">
-                <button data-floor="${up ?? ""}" ${up === null ? "disabled" : ""} title="Up (Page Up)">${icon("up")}</button>
-                <button data-floor="${down ?? ""}" ${down === null ? "disabled" : ""} title="Down (Page Down)" class="dn">${icon("up")}</button>
-              </span></div>
-              ${i.floors
-                .map((x, k) => ({ x, k }))
-                // highest at the top (basements, whatever their index, at the bottom)
-                .sort((a, b) => a.x.y - b.x.y || a.k - b.k)
-                .map(({ x, k }) => {
-                  const [n, sub] = split(x.name);
-                  return `<button class="fl ${k === floor ? "on" : ""}" data-floor="${k}" aria-current="${k === floor}"><b>${esc(x.label)}</b><span><strong>${esc(n)}</strong>${sub ? `<small>${esc(sub)}</small>` : ""}</span></button>`;
-                })
-                .reverse()
-                .join("")}
-            </nav>`
-          : ""
-      }
-      <div class="ihint"><span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>click</kbd> inspect</span>${many ? "<span><kbd>PgUp</kbd><kbd>PgDn</kbd> floors</span>" : ""}<span>walk out the door to leave</span></div>`;
+      <div class="ihint"><span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>click</kbd> inspect</span>${many ? "<span>lifts &amp; stairs to other floors</span>" : ""}<span>walk out the door to leave</span></div>`;
     this.fitLift();
   }
 

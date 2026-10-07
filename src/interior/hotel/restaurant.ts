@@ -4,6 +4,7 @@ import { fitText } from "../../scene/fit";
 import * as F from "../furniture";
 import { box, glowMat, std } from "../kit";
 import * as H from "./furniture";
+import { soloist } from "../music/acts";
 import { HotelKit, LEVELS, boards, num, usd } from "./kit";
 
 const MENU: [string, number][] = [
@@ -110,6 +111,9 @@ export function restaurant(k: HotelKit) {
     }
     k.put(f, "pendantR", () => F.pendant(1.6, "#ffd8a0"), x, z, 0, { dy: h - 1.6, solid: false });
   });
+  // a violinist plays Bach between the tables (a real recording, heard from where she stands)
+  soloist(g, "violin", { x: 6.4, y, z: -11.6, yaw: 0.25 }, { place: "hotel", floor: f, track: "violin-bach", id: 7650, role: "Violinist", level: 0.75 });
+  k.rects[f].push([6.0, -12.0, 6.8, -11.2]);
   void k.person(f, 7660, [0, -8], "Waiter", { wander: [[0, -8], [8, -4], [-8, -4], [10, -10], [4, -16.5], [-4, -7.5]] });
   void k.person(f, 7661, [6, -10], "Waiter", { wander: [[6, -10], [11, -14], [-2, -4], [4, -16.5]] });
   for (const [i, [x, z]] of ([[-13.8, -20.8], [14.2, -1], [-13.8, -1.2]] as [number, number][]).entries()) k.put(f, `plantR${i}`, () => F.plant((["ficus", "monstera", "monstera"] as const)[i], 60 + i), x, z);

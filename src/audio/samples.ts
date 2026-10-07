@@ -41,9 +41,11 @@ export const LOOPS: Record<string, number> = {
   arcade: 28,
   gym: 26,
   construction: 26,
+  graveyard: 26,
+  zombies: 12,
 };
 /** One-shots (played whole). */
-export type Shot = "goal" | "bigben-bong" | "cell-door" | "ship-horn" | "foghorn" | "crossing-cuckoo" | "forklift";
+export type Shot = "goal" | "bigben-bong" | "cell-door" | "ship-horn" | "foghorn" | "crossing-cuckoo" | "forklift" | "applause" | "crow" | "crow2" | "groan" | "groan2" | "groan3";
 export type Bed = keyof typeof LOOPS;
 
 const LEAD = 0.1;

@@ -201,7 +201,11 @@ export class TowerKit {
       const base = LEVELS[f].y + (o.dy ?? 0);
       s.root.position.set(at[0], base, at[1]);
       s.faceDir = o.face ?? new THREE.Vector3(0, 0, 1);
-      if (o.sit) s.sit(true);
+      // lifted onto the seat (dy = its height): sit on it; on the floor: onto the seat it is next to
+      if (o.sit) {
+        if (o.dy) s.sit(true, o.dy);
+        else s.perchNear();
+      }
       this.groups[f].add(s.root);
       this.people[f].push(s);
       if (o.bob) this.ticks[f].push((_, t) => (s.root.position.y = base + Math.abs(Math.sin(t * o.bob! + id)) * 0.08));

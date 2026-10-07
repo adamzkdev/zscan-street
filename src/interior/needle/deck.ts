@@ -4,6 +4,7 @@ import * as F from "../furniture";
 import { box, glowMat, std } from "../kit";
 import { GOLD, LEVELS, MONO, NeedleKit, angDiff, compass, fmt, makeCanvas } from "./kit";
 import * as P from "./props";
+import { trio } from "../music/acts";
 
 /** Places in the city a telescope can be aimed at (their centres, city metres). */
 const TARGETS: { name: string; x: number; z: number; live?: (k: NeedleKit) => [string, string] }[] = [
@@ -386,6 +387,9 @@ export function sky(k: NeedleKit) {
   }, 999);
   plaque.position.set(0, y + 1.6, -c - 0.05);
   plaque.rotation.y = Math.PI;
+  // a jazz trio plays for the lounge: trumpet, double bass, drums (src/interior/music)
+  trio(g, { x: -5.8, y, z: 2.6, yaw: 1.0 }, { place: "needle", floor: f, track: "jazz-combo", ids: [3360, 3361, 3362], level: 0.9 });
+  k.rects[f].push([-7.8, 1.2, -4.6, 4.0]);
   // guests: champagne and photos
   void k.person(f, 3333, [-1.2, 6.6], "Guest", { sit: true, dy: 0.42, face: new THREE.Vector3(0, 0, 1) });
   void k.person(f, 3334, [0.6, 6.6], "Guest", { sit: true, dy: 0.42, face: new THREE.Vector3(0, 0, 1), phone: true });

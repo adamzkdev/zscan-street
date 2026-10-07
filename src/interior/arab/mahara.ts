@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { roundTable, velvetChair } from "../hotel/furniture";
+import { soloist } from "../music/acts";
 import { F, GOLD, MONO, PAL, paint, SERIF, type ArabKit } from "./kit";
 
 /**
@@ -293,6 +294,10 @@ export function mahara(k: ArabKit) {
   menu.position.set(-3.82, y0 + 1.7, -0.9);
   menu.rotation.y = Math.PI / 2;
   for (const [x, z] of tables.slice(0, 4)) k.light(f, x, 3.4, z, "#ffd8a0", 6, 7);
+
+  // a violinist between the aquarium and the tables (src/interior/music)
+  soloist(g, "violin", { x: C0.x + 6.1, y: y0, z: C0.z - 1.1, yaw: Math.PI / 2 }, { place: "arab", floor: f, track: "violin-bach", id: 1720, role: "Violinist", level: 0.75 });
+  k.solid(f, C0.x + 5.7, C0.z - 1.5, C0.x + 6.5, C0.z - 0.7);
 
   // ---- people ---------------------------------------------------------------------------------------
   k.onCast(f, () => {

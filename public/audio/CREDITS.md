@@ -42,6 +42,8 @@ loudness-matched (about -20 LUFS for beds) and encoded as HE-AAC (.m4a).
 | arcade.m4a | game halls, cinema arcade, bowling | [Ghostly Japanese Game Center](https://freesound.org/people/tennysonmusic/sounds/416489/) | tennysonmusic | CC0 |
 | gym.m4a | tower gym | [Fitness studio / Gym ambience](https://freesound.org/people/Pfannkuchn/sounds/360629/) | Pfannkuchn | CC0 |
 | construction.m4a | ZSA construction site | [INDUSTRY CONSTRUCTION SITE 01.wav](https://freesound.org/people/sengjinn/sounds/193351/) | sengjinn | CC0 |
+| graveyard.m4a | ZK Cemetery (wind in the dead trees), its crypt | [Halloween - Graveyard At Night Howling Wind.mp3](https://freesound.org/people/mistersherlock/sounds/159509/) | mistersherlock | CC0 |
+| zombies.m4a | ZK Cemetery at night, its crypt (zombies groaning, faint) | [Crowd Of Zombies Groaning, Increasing Intensity](https://freesound.org/people/ShangusBurger/sounds/763806/) | ShangusBurger | CC0 |
 
 ## One-shots
 
@@ -54,3 +56,39 @@ loudness-matched (about -20 LUFS for beds) and encoded as HE-AAC (.m4a).
 | foghorn.m4a | Golden Gate fog horn | [foghorn.wav (San Francisco)](https://freesound.org/people/tec_studio/sounds/99630/) | tec_studio | CC0 |
 | crossing-cuckoo.m4a | Shibuya crossing signal | [CuckooSignal.wav](https://freesound.org/people/hrhk/sounds/98154/) | hrhk | CC0 |
 | forklift.m4a | Proof Factory forklifts | [Forklift reverse beeping](https://freesound.org/people/peridactyloptrix/sounds/221927/) | peridactyloptrix | CC0 |
+| crow.m4a | ZK Cemetery crows | [Hooded Crow: Cawing](https://freesound.org/people/Mish7913/sounds/741366/) | Mish7913 | CC0 |
+| crow2.m4a | ZK Cemetery crows | [crow.wav](https://freesound.org/people/nigelcoop/sounds/75162/) | nigelcoop | CC0 |
+| groan.m4a | zombie zkSNARKs (cemetery, crypt) | [Zombie Groan 0](https://freesound.org/people/OwNathan/sounds/754438/) | OwNathan | CC0 |
+| groan2.m4a | zombie zkSNARKs (cemetery, crypt) | [Zombie Groan 3](https://freesound.org/people/OwNathan/sounds/754441/) | OwNathan | CC0 |
+| groan3.m4a | zombie zkSNARKs (cemetery, crypt) | [SZ_Zombies_06.wav](https://freesound.org/people/PaulMorek/sounds/196722/) | PaulMorek | CC0 |
+
+## Live music (public/audio/music, src/audio/live.ts)
+
+Real recordings in the public domain or under CC0, from [Wikimedia Commons](https://commons.wikimedia.org)
+(most of them [Musopen](https://musopen.org) recordings released to the public domain) and Freesound.
+Each is an excerpt of about a block's length (80–100 s), loudness-matched (about -18 LUFS, linear),
+faded in and out, encoded as HE-AAC (.m4a): the Opera's pieces in stereo at 40 kb/s, the hotels'
+musicians in mono at 32 kb/s (they are heard through a positional panner anyway).
+
+| File | Used for | Source | Performer / author | Licence |
+| --- | --- | --- | --- | --- |
+| applause.m4a | Opera: the ovation at the end of every piece (muffled in the foyer) | [Sound Effects - Applause after a concert](https://commons.wikimedia.org/wiki/File:Sound_Effects_-_Applause_after_a_concert.ogg) | Amada44 | CC0 |
+| music/op-vivaldi.m4a | Opera: Vivaldi, The Four Seasons, Spring, I. Allegro | [Vivaldi's Spring, RV 269 - I. Allegro](https://commons.wikimedia.org/wiki/File:The_Modena_Chamber_Orchestra_-_Vivaldi%27s_Spring,_RV_269_-_I._Allegro.ogg) | The Modena Chamber Orchestra (Musopen) | Public domain (PDM) |
+| music/op-figaro.m4a | Opera: Mozart, The Marriage of Figaro, Overture | [The Marriage of Figaro (overture)](https://commons.wikimedia.org/wiki/File:Mozart,_The_Marriage_of_Figaro_(overture).ogg) | Musopen | CC0 |
+| music/op-beethoven5.m4a | Opera: Beethoven, Symphony No. 5, I. Allegro con brio | [Symphony No. 5 in C minor, Op. 67 - i.](https://commons.wikimedia.org/wiki/File:Ludwig_van_Beethoven_-_symphony_no._5_in_c_minor,_op._67_-_i._allegro_con_brio.ogg) | Skidmore College Orchestra (Musopen) | Public domain |
+| music/op-swanlake.m4a | Opera: Tchaikovsky, Swan Lake, Act II (the ballet) | [Swan Lake Op.20 - Act II Pt.1](https://commons.wikimedia.org/wiki/File:Tchaikovsky_-_Swan_Lake_Op.20_-_Act_II_Pt.1.ogg) | European Archive (Musopen) | Public domain |
+| music/op-badinerie.m4a | Opera: J. S. Bach, Orchestral Suite No. 2, Badinerie (flute solo) | [Suite No.2 in B Minor - Badinerie](https://commons.wikimedia.org/wiki/File:Bach,_Johann_Sebastian_-_Suite_No.2_in_B_Minor_-_X._Badinerie.ogg) | Musopen | CC0 |
+| music/op-traviata.m4a | Opera: Verdi, La Traviata, Libiamo ne' lieti calici (duet) | [La Traviata - Act 1 - Libiamo](https://commons.wikimedia.org/wiki/File:La_Traviata_-_Act_1_-_Libiamo_ne%27_lieti_calici.ogg) | Musopen | CC0 |
+| music/op-newworld.m4a | Opera: Dvořák, Symphony No. 9, IV. Allegro con fuoco | [Symphony No. 9 'From the New World' - iv.](https://commons.wikimedia.org/wiki/File:Antonin_Dvorak_-_symphony_no._9_in_e_minor_%27from_the_new_world%27,_op._95_-_iv._allegro_con_fuoco.ogg) | Musopen | Public domain |
+| music/op-toreador.m4a | Opera: Bizet, Carmen, Toreador Song (baritone) | [Carmen - Toreador Song (French)](https://commons.wikimedia.org/wiki/File:Bizet_-_Carmen_-_Toreador_Song_(French,_Musopen).ogg) | Musopen | CC0 |
+| music/op-danube.m4a | Opera: Johann Strauss II, The Blue Danube (the waltz) | [An der schönen blauen Donau](https://commons.wikimedia.org/wiki/File:Strauss,_An_der_sch%C3%B6nen_blauen_Donau.ogg) | European Archive (Musopen) | CC0 |
+| music/op-puccini.m4a | Opera: Puccini, Gianni Schicchi, O mio babbino caro (soprano) | [O mio babbino caro (Victor 64802, 1919)](https://commons.wikimedia.org/wiki/File:Frances_Alda,_O_mio_babbino_caro_(Gianni_Schicchi).ogg) | Frances Alda; transfer Tim Ecker, restored Adam Cuerden | Public domain |
+| music/op-mountainking.m4a | Opera: Grieg, Peer Gynt, In the Hall of the Mountain King | [In the Hall Of The Mountain King](https://commons.wikimedia.org/wiki/File:Musopen_-_In_the_Hall_Of_The_Mountain_King.ogg) | Czech National Symphony Orchestra as Musopen Symphony | Public domain |
+| music/piano-nocturne.m4a | pianists: Marina hotel lobby bar, Halo VIP lounge (Chopin, Nocturne Op. 9 No. 2) | [Chopin Nocturne No. 2 in E Flat Major, Op. 9](https://commons.wikimedia.org/wiki/File:Chopin_Nocturne_No._2_in_E_Flat_Major,_Op._9.ogg) | Peter Johnston (Musopen) | CC0 |
+| music/piano-gymnopedie.m4a | pianist: ZEC Needle Sky Lounge (Satie, Gymnopédie No. 1) | [Gymnopedie No. 1](https://commons.wikimedia.org/wiki/File:Gymnopedie_No._1..ogg) | Teknopazzo | CC0 |
+| music/piano-waltz.m4a | pianist: Burj Al ZEC gold atrium (Chopin, Waltz Op. 64 No. 2) | [Chopin waltz Op. 64 No. 2](https://commons.wikimedia.org/wiki/File:Chopin-waltz-op-64-no-2-in-c-sharp-minor.oga) | Luke Faulkner (Musopen) | CC0 |
+| music/violin-bach.m4a | violinists: Marina sky restaurant, Al Mahara (Bach, Violin Sonata No. 1, Adagio) | [Violin Sonata No.1 in G minor, BWV 1001, I. Adagio](https://commons.wikimedia.org/wiki/File:J._S._Bach_%E2%80%93_Violin_Sonata_No.1_in_G_minor,_BWV_1001,_I._Adagio.ogg) | unknown (Goodenough College, London, 2014) | CC0 |
+| music/jazz-combo.m4a | jazz trio: ZEC Needle, At the Top SKY (After You've Gone, 1918) | [After You've Gone](https://commons.wikimedia.org/wiki/File:After_You%27ve_Gone_-_U.S._Coast_Guard_Band.ogg) | U.S. Coast Guard Band, Dixieland Jazz Band | Public domain (US government work; composition 1918) |
+| music/jazz-dixie.m4a | jazz quartet: The Nullifier club, ZK Tower Orchard (Way Down Yonder in New Orleans, 1922) | [Way Down Yonder In New Orleans](https://commons.wikimedia.org/wiki/File:Way_Down_Yonder_In_New_Orleans_-_U.S._Coast_Guard_Band.ogg) | U.S. Coast Guard Band | Public domain (US government work; composition 1922) |
+| music/sax-solo.m4a | saxophonist: Marina SkyPark | [sax solo dry](https://freesound.org/people/DieRechnug/sounds/607303/) | DieRechnug | CC0 |
+| music/sax-park.m4a | saxophonist: ZK Tower Sapling rooftop sky bar | [Jazz at the park (flute and tenor sax duo)](https://commons.wikimedia.org/wiki/File:Jazz_at_the_park.ogg) | Manwithmetalpig | CC0 |

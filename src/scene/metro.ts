@@ -357,7 +357,7 @@ export class Train {
     const row = j % 2;
     const x = 12 + Math.floor(j / 2) * 4;
     car.add(root);
-    root.position.copy(carLocal(Math.min(CAR.w - 4, x), FLOOR, BENCH[row] + (row ? -0.6 : 0.6)));
+    root.position.copy(carLocal(Math.min(CAR.w - 4, x), FLOOR + 3, BENCH[row] + (row ? -0.6 : 0.6)));
     root.rotation.set(0, 0, 0);
     return row;
   }

@@ -3,6 +3,7 @@ import { backBar, barCounter, stool } from "../../furniture";
 import { cabana, palm, teakLounger } from "../../hotel/furniture";
 import { drawBlocks, drawTicker, paint, type SkyKit } from "../kit";
 import { creepers, djBooth, drawSapling, eggChair, GREEN, LIFT, meshScreen, oakTex, saplingInfo, SAP } from "./parts";
+import { soloist } from "../../music/acts";
 
 /**
  * R — the rooftop, 110 m up: an infinity pool the width of the tower along its front, glowing
@@ -149,6 +150,9 @@ export function rooftop(k: SkyKit) {
   }
 
   // ---- the DJ ------------------------------------------------------------------------------------
+  // a saxophonist by the sky bar (a real recording, heard from where he plays: src/interior/music)
+  soloist(g, "sax", { x: -5.6, y: y0, z: -22.4, yaw: 0.3 }, { place: "tower-sapling", floor: f, track: "sax-park", id: 4420, role: "Saxophonist", level: 0.85 });
+  k.solid(f, -6.0, -22.8, -5.2, -22.0);
   k.vox(f, "sap-dj", () => djBooth(), 9.2, -25.2, 0);
   for (const x of [7.4, 11.0]) {
     k.box(f, 0.7, 1.6, 0.6, x, 0, -26.2, "#1a1a20", "matte");
