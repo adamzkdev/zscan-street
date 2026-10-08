@@ -1,0 +1,20 @@
+// fps on foot (minimap + talk scan running): node shots/_walkfps.mjs
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1400, height: 860 } });
+const p = await b.newPage();
+p.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
+await p.goto(`http://localhost:3007/?debug&theme=night`);
+await p.waitForFunction(() => window.street?.game, { timeout: 180000 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await sleep(9000);
+await p.click(".rail .walk");
+await sleep(3000);
+const fps = () => p.evaluate(() => new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 4000) requestAnimationFrame(f); else res(Math.round((n * 1000) / (performance.now() - t0))); }; requestAnimationFrame(f); }));
+await p.keyboard.down("KeyW");
+console.log("walking fps", await fps());
+await p.keyboard.up("KeyW");
+console.log("standing fps", await fps());
+await p.evaluate(() => document.querySelector(".minimap")?.classList.remove("on"));
+await p.evaluate(() => (document.querySelector(".minimap").style.display = "none"));
+console.log("(map hidden) standing fps", await fps());
+await b.close();

@@ -45,7 +45,6 @@ export class Casino {
     document.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("[data-casino]")) this.open();
     });
-    hud.addRow(() => `<dt>Block Casino</dt><dd><button class="caselink" data-casino>play</button></dd>`);
     clock.onBlock((b) => this.settle(b));
   }
 

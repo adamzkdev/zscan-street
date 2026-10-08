@@ -50,11 +50,6 @@ export class Factions {
   ) {
     this.load();
     clock.onBlock((b) => this.block(b));
-    hud.addRow(() =>
-      profile.p.faction
-        ? `<dt>Your side holds</dt><dd>${this.held(profile.p.faction)} / ${ZONES.length} quarters</dd>`
-        : `<dt>Pick a side</dt><dd><button class="caselink" data-join="shielded">Shielded</button> · <button class="caselink" data-join="transparent">Transparent</button></dd>`,
-    );
     hud.root.addEventListener("click", (e) => {
       const j = (e.target as HTMLElement).closest<HTMLElement>("[data-join]")?.dataset.join as Faction | undefined;
       if (!j) return;

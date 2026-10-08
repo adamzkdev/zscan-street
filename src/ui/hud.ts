@@ -82,6 +82,7 @@ const PIX: Record<string, string[]> = {
   grid: ["............", ".###.###.###", ".###.###.###", "............", ".###.###.###", ".###.###.###", "............", ".###.###.###", ".###.###.###", "............", "............", "............"],
   cards: ["...#######..", "...#.....#..", ".#######.#..", ".#.....#.#..", ".#.###.#.#..", ".#.#.#.#.#..", ".#.###.#.#..", ".#.....#.#..", ".#.....###..", ".#######....", "............", "............"],
   bank: [".....##.....", "...##..##...", ".##......##.", "############", "............", ".##.##.##.##", ".##.##.##.##", ".##.##.##.##", ".##.##.##.##", "............", "############", "............"],
+  mail: ["................", "################", "#o############d#", "#ww##########ww#", "#www########www#", "#wwww######wwww#", "#wwwww####wwwww#", "#wwwwww##wwwwww#", "#wwwwwwwwwwwwww#", "#dddddddddddddd#", "################", "................"],
   door: [".########...", ".#......#...", ".#......#...", ".#......#...", ".#......#...", ".#....#.#...", ".#......#...", ".#......#...", ".#......#...", ".#......#...", "##########..", "............"],
 };
 /**
@@ -89,7 +90,7 @@ const PIX: Record<string, string[]> = {
  * k ink (the Z of the coin, wheels, a keyhole).
  */
 const PAINT: Record<string, string> = { "#": `fill="currentColor"`, d: `fill="currentColor" opacity=".55"`, o: `fill="#fff" opacity=".7"`, w: `fill="#f4efe2"`, k: `fill="#141219"` };
-const pix = (k: string) => {
+export const pix = (k: string) => {
   const rows = PIX[k];
   if (!rows) return icon(k);
   const d: Record<string, string> = {};
@@ -315,7 +316,7 @@ export class Hud {
     if (!h) {
       h = document.createElement("div");
       h.className = "whint";
-      h.innerHTML = `<span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>Shift</kbd> run</span><span>walk into a door to go in</span><span><kbd>Esc</kbd> back to the map</span>`;
+      h.innerHTML = `<span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>Shift</kbd> run</span><span><kbd>E</kbd> talk</span><span><kbd>M</kbd> map</span><span>walk into a door to go in</span><span><kbd>Esc</kbd> back to the map</span>`;
       this.root.appendChild(h);
     }
   }

@@ -50,7 +50,6 @@ export class TimeTravel {
       if ((e.target as HTMLElement).closest("[data-x]")) this.panel.classList.remove("open");
       if (b) void this.go(b.dataset.era === "now" ? null : (ERAS.find((x) => x.key === b.dataset.era) ?? null));
     });
-    hud.addRow(() => `<dt>Genesis Line</dt><dd><button class="caselink" data-genesis>${this.era ? `in ${this.era.year}` : "⏳ ride"}</button></dd>`);
     hud.root.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("[data-genesis]")) this.open();
     });

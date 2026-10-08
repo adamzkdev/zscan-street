@@ -46,7 +46,6 @@ export class Mayor {
       if (!this.current || b.height >= this.current.until) setTimeout(() => void this.fetch(), 3000);
       else if (this.current.decree.effect === "festival" && b.txs.length) this.hooks.party(3);
     });
-    hud.addRow(() => (this.current ? `<dt>Mayor's decree</dt><dd><button class="caselink" data-decree>${this.current.decree.title}</button></dd>` : ""));
     hud.root.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("[data-decree]")) this.announce();
     });
@@ -66,7 +65,7 @@ export class Mayor {
       this.festivalAt = performance.now();
       this.hooks.party(8);
     }
-    this.announce();
+    this.announce(true);
   }
 
   private end() {
@@ -74,11 +73,11 @@ export class Mayor {
     this.treasure.clear();
   }
 
-  announce() {
+  announce(mail = false) {
     const d = this.current;
     if (!d) return;
     this.decor.alert({ kind: "game", title: "MAYOR'S DECREE  市長令", big: d.decree.title.toUpperCase(), line: `UNTIL BLOCK ${d.until.toLocaleString("en-US")}`, color: COLOR[d.decree.effect] });
-    this.hud.say(`<b>MAYOR'S DECREE</b> · ${d.decree.title} — ${d.decree.text}`);
+    if (mail) this.hud.mail("mayor", `Decree: ${d.decree.title}`, d.decree.text);
   }
 }
 
@@ -101,6 +100,10 @@ export class Treasure {
 
   get left() {
     return this.coins.length;
+  }
+
+  get spots() {
+    return this.coins.map((c) => c.position);
   }
 
   hide(spots: THREE.Vector3[], n: number) {

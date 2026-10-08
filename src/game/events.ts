@@ -38,10 +38,6 @@ export class LiveEvents {
     void this.load();
     setInterval(() => void this.load(), 10 * 60_000);
     setInterval(() => this.tick(), 20_000);
-    hud.addRow(() => {
-      const n = this.next();
-      return n ? `<dt>Next event</dt><dd>${n.e.title}${n.live ? " · LIVE" : ` · in ${fmt(n.in)}`}</dd>` : "";
-    });
   }
 
   async load() {
@@ -77,15 +73,15 @@ export class LiveEvents {
       if (s === null) continue;
       const dt = s - Date.now();
       const place = e.place ?? PLACE[e.kind];
-      const go = place ? () => this.go(place) : undefined;
+      const go = place ? { label: `Go to the ${place}`, fn: () => this.go(place) } : undefined;
       if (dt > 0 && dt < 15 * 60_000 && !this.told.has(`${e.key}:soon`)) {
         this.told.add(`${e.key}:soon`);
-        this.hud.say(`<b>${e.title.toUpperCase()}</b> · starts in ${fmt(dt)}`, go);
+        this.hud.mail("event", e.title, `Starts in ${fmt(dt)}${place ? ` at the ${place}` : ""}.`, go);
       }
       if (dt <= 0 && -dt < e.duration_s * 1000 && !this.told.has(`${e.key}:${s}`)) {
         this.told.add(`${e.key}:${s}`);
         this.decor.alert({ kind: "game", title: "LIVE NOW  ライブ", big: e.title.toUpperCase(), line: place ? `AT THE ${place.toUpperCase()}` : "IN THE CITY", color: COLOR[e.kind] });
-        this.hud.say(`<b>LIVE NOW</b> · ${e.title}`, go);
+        this.hud.mail("event", `Live now: ${e.title}`, place ? `At the ${place}.` : "In the city.", go);
       }
     }
   }

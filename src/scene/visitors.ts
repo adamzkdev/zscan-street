@@ -55,6 +55,7 @@ export class Visitors {
   private pendingEvents: { k: string; n?: number }[] = [];
   private eventFns: ((e: CityEvent) => void)[] = [];
   private plotFns: ((plot: number) => void)[] = [];
+  private worksFns: (() => void)[] = [];
   /** How many visitors are in each place (key → count), from the last list. */
   readonly places = new Map<string, number>();
 
@@ -94,6 +95,7 @@ export class Visitors {
           else if (msg.type === "presence") this.onList(msg.n, msg.v);
           else if (msg.type === "event" && msg.id !== this.me) for (const fn of this.eventFns) fn(msg as CityEvent);
           else if (msg.type === "plot") for (const fn of this.plotFns) fn(msg.plot as number);
+          else if (msg.type === "works") for (const fn of this.worksFns) fn();
         } catch {}
       };
       ws.onclose = () => {
@@ -113,6 +115,11 @@ export class Visitors {
   /** A player plot was rebuilt (somebody saved their building). */
   onPlot(fn: (plot: number) => void) {
     this.plotFns.push(fn);
+  }
+
+  /** The city works changed (a vote, a site opened). */
+  onWorks(fn: () => void) {
+    this.worksFns.push(fn);
   }
 
   /** Tell everyone (sent with the next position, at most a few a second). */
@@ -209,6 +216,11 @@ export class Visitors {
       o.s.update(dt, t, camQuat, camRight);
       o.marker.position.y = 1.55 + Math.sin(t * 3 + o.avatar) * 0.05;
     }
+  }
+
+  /** Where the other visitors stand (for the minimap). */
+  positions() {
+    return [...this.others.values()].filter((o) => o.s.root.visible).map((o) => o.s.root.position);
   }
 
   get others_count() {

@@ -47,7 +47,7 @@ import { GoldenGate } from "./scene/goldengate";
 import { Forest } from "./scene/forest";
 import { Cemetery } from "./scene/cemetery";
 import { Chatter } from "./scene/chatter";
-import { bubbles } from "./scene/speech";
+import { bubbles, drawBubbles } from "./scene/speech";
 import { PLACE_LORE } from "./data/lore";
 import { Hud } from "./ui/hud";
 import { Venues } from "./ui/venues";
@@ -76,6 +76,9 @@ import { Tram } from "./scene/tram";
 import { CityTraffic } from "./scene/citytraffic";
 import { Life } from "./scene/life";
 import { Alive } from "./scene/alive";
+import { slotId, type Crowd } from "./scene/alive/crowd";
+import { Agents } from "./game/agents";
+import { Npcs } from "./game/npcs";
 import { Horns } from "./scene/horns";
 import { Prison, PRISON } from "./scene/prison";
 import { policeModel } from "./scene/voxel/vehicles";
@@ -88,13 +91,13 @@ import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
 import { Photo } from "./ui/photo";
 import { Visitors } from "./scene/visitors";
-import { npcSpeaker, snarkSpeaker, Talk } from "./ui/talk";
+import { crowdSpeaker, npcSpeaker, snarkSpeaker, Talk } from "./ui/talk";
+import { Minimap, type Blip } from "./ui/minimap";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
 import { ChainClock } from "./game/clock";
 import { GameWorld } from "./game/world";
 import { GameHud } from "./game/ui";
-import { Predict } from "./game/predict";
 import { profile } from "./game/profile";
 import { Whale } from "./scene/whale";
 import { CaseBook } from "./game/cases";
@@ -103,6 +106,8 @@ import { PaperView } from "./game/paper";
 import { Mayor } from "./game/mayor";
 import { Editor } from "./build/editor";
 import { Plots } from "./build/plots";
+import { Works } from "./game/works";
+import { Nu7Quarter } from "./game/nu7quarter";
 import { Factions } from "./game/factions";
 import { LiveEvents } from "./game/events";
 import { Disasters } from "./game/disasters";
@@ -259,6 +264,8 @@ let factions: Factions | null = null;
 let driveNextBus = false;
 let jobBus: BlockBus | null = null;
 let jobs: Jobs | null = null;
+/** The city's agents: the day's cast and everyone's persona (game/agents.ts). */
+let agents: Agents | null = null;
 const rainListeners: ((on: boolean) => void)[] = [];
 function weather(now = false) {
   const raining = rainOn && ((theme === "night" && showering) || chainStorm);
@@ -680,7 +687,7 @@ hud = new Hud(
       hud.renderIndoor(interiors.floor);
     },
     leave: () => interiors.exit(),
-    talk: (s) => talk.show(snarkSpeaker(s, director)),
+    talk: (s) => talk.show(snarkSpeaker(s, director, agents)),
     walk: (on) => setWalking(on),
   },
   director,
@@ -1281,6 +1288,7 @@ canvas.addEventListener("pointerup", (e) => {
     ray.setFromCamera(ndc, viewCam());
     if (mayor.treasure.click(ray)) return;
     if (plots.click(ray)) return;
+    if (works.click(ray)) return;
     if (eggs.click(ray)) return;
     const ci = critters.catAt(ray);
     if (ci >= 0) return adoptCat(ci);
@@ -1572,9 +1580,8 @@ gameWorld = new GameWorld(chainClock, decor, lampLights, city.factory?.hall ?? n
   },
   thunder: () => sound.thunder(),
   inside: () => interiors.active !== null,
-  say: (h) => gameHud.say(h),
+  mail: (k, title, text) => gameHud.mail(k, title, text),
 });
-const predict = new Predict(gameHud, chainClock);
 
 caseBook = new CaseBook(gameHud, (h) => {
   if (interiors.active?.key !== "mempool") enterPlace("mempool");
@@ -1584,6 +1591,10 @@ caseBook = new CaseBook(gameHud, (h) => {
 });
 
 // the street's gossip about each block (one model call per block, shared), and the morning paper
+// every citizen an agent: personas for all, a turn per block for the day's cast
+agents = new Agents(chainClock, director);
+residents.brain = agents;
+agents.onTurn(() => residents.replan());
 const gossip = new Gossip(chainClock);
 gossip.on((g) => chatter.gossip(g.lines));
 setTimeout(() => void gossip.fetch(), 4000);
@@ -1596,7 +1607,7 @@ void paper.load().then((p) => {
     seen = localStorage.getItem("street.paper") ?? "";
     localStorage.setItem("street.paper", p.day);
   } catch {}
-  if (seen !== p.day) setTimeout(() => gameHud.say(`<b>THE ZSTREET DAILY</b> · ${p.headline}`, () => void paper.open()), 6000);
+  if (seen !== p.day) gameHud.mail("paper", "The ZStreet Daily", p.headline, { label: "Read", fn: () => void paper.open() });
 });
 
 // the mayor: a decree every 40 blocks (festival, curfew, treasure hunt) that changes the city
@@ -1615,7 +1626,6 @@ setTimeout(() => void mayor.fetch(), 5000);
 factions = new Factions(chainClock, gameHud);
 setTimeout(() => chainClock.height && void factions?.seed(chainClock.height), 9000);
 caseBook.onSolved = () => factions?.deed(10);
-predict.onWon = () => factions?.deed(2);
 
 // the city's live events: everyone gets the same reminders, the toast takes you in
 const liveEvents = new LiveEvents(gameHud, decor, (place) => enterPlace(place, place === "stadium" ? 0 : undefined), () => chainClock.height || director.blockHeight || 0);
@@ -1631,6 +1641,27 @@ const plots = new Plots(scene, document.getElementById("ui")!, editor, {
 });
 visitors.onPlot(() => plots.changed());
 
+// the city works: the day's agents propose buildings, visitors vote, the winner goes up block by block
+const works = new Works(scene, document.getElementById("ui")!, renderer, chainClock, gameHud, decor, {
+  go: (x, z) => {
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    rig.district(new THREE.Vector3(x, 1, z), 0.42);
+  },
+  near: () => (walking ? onFoot.camera.position : rig.focus),
+});
+visitors.onWorks(() => works.changed());
+
+// the NU7 quarter: the NU7 Tower and the karting go up as NU7 gets closer
+const nu7Quarter = new Nu7Quarter(scene, gameHud, {
+  go: (x, z, zoom = 0.4) => {
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    rig.district(new THREE.Vector3(x, 1, z), zoom);
+  },
+  nu7: () => ({ date: nu7.date, height: nu7.height, activated: nu7.activated, tip: director.blockHeight || null }),
+});
+
 // a street cat to adopt: it follows you around the city (and is still yours next visit)
 const CAT_NAMES = ["Mochi", "Nori", "Satoshi", "Zooko", "Halo", "Sapling", "Orchard", "Nullifier", "Tofu", "Yuzu", "Proof", "Memo"];
 const catFollow = () => (walking ? onFoot.camera.position : rig.focus);
@@ -1643,10 +1674,9 @@ function adoptCat(i: number) {
   gameHud.say(`<b>🐈 ${name}</b> · ${own ? `swapped ${own.name} for a new friend` : "adopted you"}: it follows you everywhere now`);
 }
 if (profile.p.cat) critters.adopt(profile.p.cat.id, catFollow);
-gameHud.addRow(() => (profile.p.cat ? `<dt>Cat</dt><dd>🐈 ${profile.p.cat.name}</dd>` : ""));
 
 // the season follows the last network upgrade (its colour on every block's neon swing)
-void loadSeason().then((s) => gameHud.addRow(() => `<dt>Season</dt><dd style="color:${s.color}">${s.name}</dd>`));
+void loadSeason();
 
 // jobs: courier, miner, bus driver (from the citizen card)
 jobs = new Jobs(gameHud, chainClock, {
@@ -1708,9 +1738,152 @@ const whale = new Whale(scene, document.getElementById("ui")!, { x0: -TUNNEL.mou
   },
   escaped: () => {
     sound.crowd(false);
-    gameHud.say(`<b>THE WHALE GOT AWAY</b> · into the chain, in plain sight`);
   },
   project,
+});
+// on foot: the radar in the corner, M for the whole map
+const minimap = new Minimap(document.getElementById("ui")!, renderer, scene);
+let minimapOn = false;
+/** Each place's sign on the map, in the city's kanji. */
+const PLACE_ICON: Record<Interior["key"], string> = {
+  mempool: "待",
+  factory: "工",
+  library: "書",
+  tower: "塔",
+  museum: "美",
+  stadium: "球",
+  prison: "獄",
+  mall: "店",
+  hotel: "宿",
+  needle: "針",
+  pyramid: "金",
+  eiffel: "鉄",
+  colosseum: "闘",
+  reserve: "銀",
+  opera: "歌",
+  bigben: "鐘",
+  statue: "像",
+  arab: "帆",
+  gardens: "園",
+  palm: "椰",
+  "tower-orchard": "楼",
+  "tower-sapling": "緑",
+  "tower-halo": "環",
+  cemetery: "霊",
+};
+const placeBlips: Blip[] = doors.map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));
+function mapBlips(): Blip[] {
+  const out = [...placeBlips];
+  const g = jobs?.goal;
+  if (g) out.push({ x: g.x, z: g.z, kind: "goal" });
+  const e = eggs.where;
+  if (e) out.push({ x: e.x, z: e.z, kind: "secret" });
+  if (whale.active) out.push({ x: whale.position.x, z: whale.position.z, kind: "whale" });
+  for (const c of mayor.treasure.spots) out.push({ x: c.x, z: c.z, kind: "coin" });
+  const wb = works.blip();
+  if (wb) out.push({ x: wb.x, z: wb.z, kind: "place", label: wb.label, icon: "建" });
+  const nb = nu7Quarter.blip();
+  out.push({ x: nb.x, z: nb.z, kind: "place", label: nb.label, icon: "七" });
+  for (const p of visitors.positions()) out.push({ x: p.x, z: p.z, kind: "visitor" });
+  for (const s of director.snarks) if (s.state === "resident" && s.root.visible && s.root.parent === scene) out.push({ x: s.root.position.x, z: s.root.position.z, kind: "agent" });
+  return out;
+}
+// on foot: walk up to anyone and press E to talk (residents, carriers, the crowd on the pavements)
+type TalkTarget = { s: Snark; i?: undefined; id: number; at: THREE.Vector3 } | { s?: undefined; i: number; id: number; at: THREE.Vector3 };
+const crowdOf = () => (alive.named.people as unknown as { crowd?: Crowd } | undefined)?.crowd ?? null;
+const talkPrompt = document.createElement("button");
+talkPrompt.className = "talk-prompt hud";
+document.getElementById("ui")!.append(talkPrompt);
+let talkNear: TalkTarget | null = null;
+let talkWith: TalkTarget | null = null;
+let talkScan = 0;
+const talkTmp = new THREE.Vector3();
+function findTalker(): TalkTarget | null {
+  const p = onFoot.camera.position;
+  const fx = -Math.sin(onFoot.heading),
+    fz = -Math.cos(onFoot.heading);
+  // in front of you, close enough to talk
+  const ahead = (x: number, z: number) => {
+    const dx = x - p.x,
+      dz = z - p.z;
+    const d = Math.hypot(dx, dz);
+    return d < 3.4 && (d < 1.2 || (dx * fx + dz * fz) / d > 0.45) ? d : Infinity;
+  };
+  let best: TalkTarget | null = null,
+    bd = Infinity;
+  for (const s of director.snarks) {
+    if (!s.root.visible || s.root.parent !== scene || s.state === "riding" || s.state === "boarding" || s.state === "chauffeured") continue;
+    const d = ahead(s.root.position.x, s.root.position.z);
+    if (d < bd) (bd = d), (best = { s, id: s.id, at: s.root.position });
+  }
+  const crowd = crowdOf();
+  if (crowd) {
+    const i = crowd.nearest(p.x, p.z, 3.4, talkTmp);
+    if (i >= 0) {
+      const d = ahead(talkTmp.x, talkTmp.z);
+      if (d < bd) best = { i, id: slotId(crowd.people[i].slot ?? 0), at: talkTmp.clone() };
+    }
+  }
+  return best;
+}
+function showTalkPrompt(t: TalkTarget | null) {
+  if (!t || talk.open || doorPrompt.classList.contains("on")) {
+    talkPrompt.classList.remove("on");
+    return;
+  }
+  const html = `<span><kbd>E</kbd> talk</span>`;
+  if (talkPrompt.innerHTML !== html) talkPrompt.innerHTML = html;
+  talkPrompt.classList.add("on");
+}
+function talkTo(t: TalkTarget) {
+  const me = onFoot.camera.position;
+  talkWith = t;
+  talkPrompt.classList.remove("on");
+  if (t.s) {
+    const s = t.s;
+    const face = s.faceDir;
+    s.paused = true;
+    s.faceDir = new THREE.Vector3(me.x - s.root.position.x, 0, me.z - s.root.position.z).normalize();
+    talk.show(snarkSpeaker(s, director, agents), () => {
+      s.paused = false;
+      s.faceDir = face;
+      talkWith = null;
+    });
+  } else {
+    const crowd = crowdOf();
+    if (!crowd || !agents) return;
+    const i = t.i;
+    crowd.hold(i, me.x - t.at.x, me.z - t.at.z);
+    talk.show(crowdSpeaker(t.id, director, agents), () => {
+      crowd.release(i);
+      talkWith = null;
+    });
+  }
+}
+function talkUpdate(dt: number) {
+  // walked away mid-conversation: they carry on with their day
+  if (talkWith && talk.open && Math.hypot(talkWith.at.x - onFoot.camera.position.x, talkWith.at.z - onFoot.camera.position.z) > 7) talk.close();
+  if ((talkScan -= dt) > 0) return;
+  talkScan = 0.12;
+  talkNear = talk.open ? null : findTalker();
+  showTalkPrompt(talkNear);
+}
+talkPrompt.addEventListener("click", () => talkNear && talkTo(talkNear));
+// everyone round you on foot: now and then someone notices you and says something
+const npcs = new Npcs(scene, agents!, {
+  snarks: () => [...director.snarks].filter((s) => s.root.parent === scene),
+  crowd: crowdOf,
+  me: () => (walking && !interiors.active ? { p: onFoot.camera.position, heading: onFoot.heading } : null),
+  gossip: () => gossip.latest?.lines.map((l) => l.text) ?? [],
+  height: () => chainClock.height,
+  mempool: () => director.mempoolList().length,
+  busy: (id) => talk.open && talkWith?.id === id,
+  open: (x, z) => !city.nav.wall(x, z),
+});
+window.addEventListener("keydown", (e) => {
+  if (e.code !== "KeyE" || !walking || interiors.active || talk.open || !talkNear || (e.target as HTMLElement).closest?.("input,textarea")) return;
+  e.preventDefault();
+  talkTo(talkNear);
 });
 visitors.onEvent((e) => {
   if (e.k === "whale") whale.remote();
@@ -1719,18 +1892,18 @@ visitors.onEvent((e) => {
 director.onTx((tx) => {
   if (whale.active || tx.kind === "shielded" || (tx.visible ?? 0) < WHALE_ZAT) return;
   whale.spawn(tx, visitors.others_count);
-  decor.alert({ kind: "game", title: "WHALE ALERT  鯨", big: `${((tx.visible ?? 0) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 0 })} ZEC`, line: "IN PLAIN SIGHT · SHIELD IT", color: "#5fb4ee" });
-  gameHud.say(`<b>🐋 WHALE ALERT</b> · ${((tx.visible ?? 0) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 0 })} ZEC moving in public · tap it to shield it`, () => {
-    if (interiors.active) interiors.exit();
-    if (walking) setWalking(false);
-    // meet it a little ahead of where it is
-    rig.district(whale.position.clone().setY(1).add(new THREE.Vector3(30, 0, 0)), AREAS[0]?.zoom ?? 1);
+  gameHud.mail("whale", "Whale alert", `${((tx.visible ?? 0) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 0 })} ZEC moving in public over the avenue. Tap it to shield it.`, {
+    label: "Go",
+    fn: () => {
+      if (!whale.active) return;
+      if (interiors.active) interiors.exit();
+      if (walking) setWalking(false);
+      rig.district(whale.position.clone().setY(1).add(new THREE.Vector3(30, 0, 0)), AREAS[0]?.zoom ?? 1);
+    },
   });
+  decor.alert({ kind: "game", title: "WHALE ALERT  鯨", big: `${((tx.visible ?? 0) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 0 })} ZEC`, line: "IN PLAIN SIGHT · SHIELD IT", color: "#5fb4ee" });
 });
-{
-  const bonus = profile.checkIn();
-  if (bonus) setTimeout(() => gameHud.say(`<b>DAY ${profile.p.streak}</b> · daily bonus ⓩ +${bonus}`), 2500);
-}
+profile.checkIn();
 
 connectFeed({
   snapshot: (txs, last) => {
@@ -1763,7 +1936,6 @@ if (new URLSearchParams(location.search).has("debug")) {
       game: {
         clock: chainClock,
         world: gameWorld,
-        predict,
         profile,
         block: (n = 0, kind: Tx["kind"] = "shielded") =>
           chainClock.feed({
@@ -1780,11 +1952,42 @@ if (new URLSearchParams(location.search).has("debug")) {
         mayor,
         gossip,
         plots,
+        works,
+        nu7Quarter,
         editor,
         factions: () => factions,
         quake: (d = 1) => disasters.quake(d),
         eggs,
         jobs: () => jobs,
+        agents: () => agents,
+        residents,
+        /** On foot at (x, z), heading `yaw`. */
+        stand: (x: number, z: number, yaw = 0) => {
+          if (!walking) setWalking(true);
+          onFoot.place(new THREE.Vector3(x, CURB, z), yaw);
+        },
+        /** On foot, a step in front of `id` (a resident), facing them. */
+        meet: (id: number) => {
+          const s = [...director.snarks].find((x) => x.id === id);
+          if (!s) return false;
+          if (!walking) setWalking(true);
+          const p = s.root.position;
+          onFoot.place(new THREE.Vector3(p.x, CURB, p.z + 2.2), 0);
+          return true;
+        },
+        /** On foot, facing the crowd walker nearest the street's centre. */
+        meetCrowd: () => {
+          const c = crowdOf();
+          if (!c) return -1;
+          if (!walking) setWalking(true);
+          const me = onFoot.camera.position;
+          const at = new THREE.Vector3();
+          const i = c.nearest(me.x, me.z, 80, at);
+          if (i < 0) return -1;
+          const later = c.positionOf(i, new THREE.Vector3());
+          onFoot.place(new THREE.Vector3(at.x, CURB, at.z + 2), 0);
+          return { i, x: later.x, z: later.z };
+        },
         genesis,
         events: liveEvents,
         whale: (zec = 812) => whale.spawn({ txid: "test-whale", kind: "transparent", fee: 1000, size: 400, actions: 2, transparentOut: zec * 1e8, visible: zec * 1e8, seenAt: Date.now() } as Tx),
@@ -2115,7 +2318,10 @@ function frameBody(stepDt?: number) {
     // speech bubbles: only for speakers in sight, a steady size, kept apart and on screen
     bubbles.update(dt, interiors.walk.camera, window.innerWidth, window.innerHeight);
     // its shaders are still compiling: hold the last frame behind the entry fade, no stall
-    if (!interiors.warming) composer.render();
+    if (!interiors.warming) {
+      composer.render();
+      drawBubbles(renderer, interiors.active.scene, interiors.walk.camera);
+    }
     if (grabbers.length) {
       const g = grabbers;
       grabbers = [];
@@ -2127,6 +2333,8 @@ function frameBody(stepDt?: number) {
   }
   renderPass.scene = scene;
   if (!walking) prompt(null);
+  const mapOn = walking && !interiors.active;
+  if (mapOn !== minimapOn) minimap.show((minimapOn = mapOn));
   if (walking) {
     onFoot.update(dt);
     throughDoors(dt);
@@ -2248,7 +2456,14 @@ function frameBody(stepDt?: number) {
   mayor?.treasure.update(t);
   eggs?.update(dt);
   jobs?.update(dt);
+  works.update(dt);
+  nu7Quarter.update(dt);
   if (walking) mayor?.treasure.near(onFoot.camera.position);
+  agents?.update(dt, focus);
+  if (walking && !interiors.active) talkUpdate(dt);
+  else if (talkPrompt.classList.contains("on")) talkPrompt.classList.remove("on");
+  npcs.update(dt);
+  if (minimapOn) minimap.update(dt, onFoot.camera.position.x, onFoot.camera.position.z, onFoot.heading, mapBlips());
   hall?.update(t, dt);
   press?.update(t, dt);
   lightBudget.update();
@@ -2257,6 +2472,7 @@ function frameBody(stepDt?: number) {
   const quake = disasters?.shake(dt) ?? null;
   if (quake) cam.position.add(quake);
   composer.render();
+  drawBubbles(renderer, scene, cam);
   if (quake) cam.position.sub(quake);
   // a photo is read from the canvas right after the frame is drawn (the buffer isn't kept)
   if (grabbers.length) {

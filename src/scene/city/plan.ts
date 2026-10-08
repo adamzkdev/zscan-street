@@ -93,7 +93,7 @@ export const SHOTENGAI = { x: ST.shotengai, z0: -39.4 + 1, z1: 32 - 1, half: 4 +
  * The landmarks' lots: whole blocks (merged across the small streets inside them) kept for a
  * building of their own, placed like a city planner would.
  */
-export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "plots";
+export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "plots" | "works" | "nu7";
 /** A player plot: 32 × 32 voxels (5.3 m) of ground, its front centre and which way it faces. */
 export interface PlotSlot {
   id: number;
@@ -123,6 +123,46 @@ export function plotSlots(): PlotSlot[] {
         out.push({ id: out.length, cx, front, face, x0: cx - size / 2, x1: cx + size / 2, z0, z1 });
       }
   }
+  return out;
+}
+
+/** A site of the agents' quarter (the city works): 64 × 64 voxels, fronting the park or the street east. */
+export interface WorkSite {
+  id: number;
+  cx: number;
+  cz: number;
+  /** The street its front faces: west (the park) or east. */
+  face: "w" | "e";
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+}
+export const WORKS_VOX = 64;
+
+/**
+ * The NU7 quarter: the karting circuit along the boulevard (west) behind a fence, the tower on a
+ * plaza by the ring road (east, where nothing tall stands between it and the map's camera), its
+ * billboard on the plaza's south edge.
+ */
+export const NU7Q = {
+  tower: { x: 205.5, z: -84, half: 8 },
+  board: { x: 205.5, z: -54.5 },
+  kart: { x0: 131, x1: 187, z0: -113, z1: -50.5 },
+};
+
+/** The agents' quarter: two columns of five sites, filled from the south end (nearest the heart). */
+export function worksSites(): WorkSite[] {
+  const l = LOTS.find((x) => x.kind === "works")!;
+  const size = WORKS_VOX * VOX;
+  const gap = (l.z1 - l.z0 - size * 5) / 6;
+  const out: WorkSite[] = [];
+  for (let row = 0; row < 5; row++)
+    for (const face of ["w", "e"] as const) {
+      const cx = face === "w" ? l.x0 + 0.9 + size / 2 : l.x1 - 0.9 - size / 2;
+      const cz = l.z1 - gap - size / 2 - row * (size + gap);
+      out.push({ id: out.length, cx, cz, face, x0: cx - size / 2, x1: cx + size / 2, z0: cz - size / 2, z1: cz + size / 2 });
+    }
   return out;
 }
 
@@ -163,6 +203,10 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
   // Builders' Row: two blocks on the avenue either side of the heart where visitors build their own
   { kind: "plots", x0: -82, x1: -58, z0: 2.6, z1: 32 },
   { kind: "plots", x0: 58, x1: 82, z0: 2.6, z1: 32 },
+  // the agents' quarter on the park's east side: the city works, where the winning projects go up
+  { kind: "works", x0: 58, x1: 82, z0: -116, z1: CORE.minZ - 8 },
+  // the NU7 quarter, the stadium's twin east of Midtown: the NU7 Tower and the karting, built by the upgrade
+  { kind: "nu7", x0: 129, x1: 221, z0: -116, z1: CORE.minZ - 8 },
   // the Binhai Library on the south bank, facing the heart across the river and its footbridges
   { kind: "binhai", x0: -50, x1: 50, z0: 77, z1: 131 },
 ];
@@ -271,6 +315,7 @@ export const AREAS = [
   { key: "stadium", name: "Block Stadium", blurb: "Shielded vs Transparent, live", color: "#f4b728", x: -175, z: -82, zoom: 0.5 },
   { key: "shotengai", name: "Shōtengai & Hawker", blurb: "Covered shops, the food hall", color: "#ff6a3a", x: -112, z: 10, zoom: 0.65 },
   { key: "wallst", name: "Wall Street", blurb: "The ZEC Reserve, the towers, the mall", color: "#3a7bff", x: 130, z: 0, zoom: 0.5 },
+  { key: "nu7", name: "NU7 Quarter", blurb: "The NU7 Tower and the karting, built by NU7", color: "#b07bff", x: 175, z: -82, zoom: 0.5 },
   { key: "midtown", name: "Midtown", blurb: "Supertalls and the ZEC Needle", color: "#3ef0ff", x: 120, z: -120, zoom: 0.4 },
   { key: "marina", name: "Marina Bay", blurb: "The sky park, the supertrees", color: "#1baf7a", x: 170, z: 100, zoom: 0.5 },
   { key: "port", name: "Proof Factory District", blurb: "The mining hall, the docks, the trucks", color: "#eda100", x: -175, z: 104, zoom: 0.5 },
@@ -916,6 +961,23 @@ export function planCity() {
         props.push({ type: "tree", args: [kind, seed], x, z: cz - 2.6, rot: gk, y: CURB, district: "downtown" });
         circles.push([x, cz - 2.6, 0.5]);
         props.push({ type: "bench", args: [], x: x + 3, z: cz + 2.4, rot: Math.PI, y: CURB, district: "downtown" });
+      }
+    } else if (c.kind === "lot" && c.lot === "works") {
+      // the city works: each site is fenced off (game/works.ts builds on them)
+      for (const w of worksSites()) rects.push([w.x0, w.z0, w.x1, w.z1]);
+    } else if (c.kind === "lot" && c.lot === "nu7") {
+      // the NU7 quarter: the tower, the billboard's legs and the fenced circuit (game/nu7quarter.ts)
+      const T = NU7Q.tower,
+        B = NU7Q.board,
+        K = NU7Q.kart;
+      rects.push([T.x - T.half - 1.2, T.z - T.half - 1.2, T.x + T.half + 1.2, T.z + T.half + 1.2], [K.x0, K.z0, K.x1, K.z1]);
+      circles.push([B.x - 3.6, B.z, 0.4], [B.x + 3.6, B.z, 0.4]);
+      for (let z = T.z + T.half + 6; z < -52; z += 7) {
+        const [kind, seed] = greenKinds[gk++ % greenKinds.length];
+        for (const x of [193.5, 217.5]) {
+          props.push({ type: "tree", args: [kind, seed], x, z, rot: gk, y: CURB, district: "downtown" });
+          circles.push([x, z, 0.5]);
+        }
       }
     } else if (c.kind === "lot" && c.lot === "green") {
       // a square: a lawn, a ring of trees, benches round a fountain

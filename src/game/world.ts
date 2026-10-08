@@ -15,7 +15,7 @@ export interface WorldHooks {
   /** Whether the visitor is inside a place (the cut only shows in the city). */
   inside(): boolean;
   /** A line for the game toast. */
-  say(html: string): void;
+  mail(kind: "power" | "storm", title: string, text: string): void;
 }
 
 const SPREAD = 7; // seconds for the dark to reach its radius
@@ -72,7 +72,7 @@ export class GameWorld {
     if (b.txs.length === 0) {
       this.empties++;
       this.blackout(this.empties >= 2 ? 420 : 120);
-      this.hooks.say(this.empties >= 2 ? `<b>BLACKOUT</b> · ${this.empties} empty blocks in a row, the whole city is dark` : `<b>POWER CUT</b> · empty block ${b.height.toLocaleString("en-US")}`);
+      this.hooks.mail("power", this.empties >= 2 ? "Blackout" : "Power cut", this.empties >= 2 ? `${this.empties} empty blocks in a row: the whole city went dark.` : `Block ${b.height.toLocaleString("en-US")} came empty: the lights went out round the Proof Factory.`);
     } else this.empties = 0;
     this.bigBlock = b.txs.length >= STORM_TXS ? 3 : Math.max(0, this.bigBlock - 1);
     this.weather();
@@ -102,7 +102,7 @@ export class GameWorld {
     if (on === this.stormy) return;
     this.stormy = on;
     this.hooks.storm(on);
-    if (on) this.hooks.say(`<b>STORM</b> · ${this.mempool} transactions waiting`);
+    if (on) this.hooks.mail("storm", "Storm", this.bigBlock > 0 ? "A packed block brought the storm." : `${this.mempool} transactions waiting in the mempool: rain over the city.`);
   }
 
   /** A power cut reaching `radius` metres round the Proof Factory (tests call it too). */

@@ -3,6 +3,7 @@ import { KIND_HELP, KIND_LABEL } from "../data/types";
 import { Market } from "../data/market";
 import { VOICE } from "../data/lore";
 import { API, ZScan } from "../data/zscan";
+import type { Agents } from "../game/agents";
 import type { Director } from "../scene/director";
 import type { Snark } from "../scene/snark";
 
@@ -21,6 +22,10 @@ export interface Speaker {
   facts: () => string;
   /** First line they say when you open the chat. */
   hello: string;
+  /** The input's placeholder. */
+  ask?: string;
+  /** A line under the name (their job). */
+  sub?: string;
 }
 
 interface Turn {
@@ -54,17 +59,23 @@ const STATE_LINE: Record<string, string> = {
   guard: "a bodyguard escorting a limousine",
 };
 
-/** A street zkSNARK as a speaker: what it carries and where it is in its journey. */
-export function snarkSpeaker(s: Snark, director: Director): Speaker {
+/** A street zkSNARK as a speaker: who it is (its persona), what it carries and where it is in its journey. */
+export function snarkSpeaker(s: Snark, director: Director, agents?: Agents | null): Speaker {
   const role = s.state === "guard" ? "a bodyguard" : s.state === "resident" ? "a resident" : s.role ? `the ${s.role.toLowerCase()}` : "a carrier";
+  const p = agents?.persona(s.id) ?? null;
+  const name = p ? p.name : s.name;
   return {
     key: `snark-${s.id}`,
-    name: s.name,
-    who: `${s.name}, ${role} in ZStreet`,
+    name,
+    who: p ? `${p.name}, a ${p.job} in ZStreet (${role}), zkSNARK #${s.id}` : `${s.name}, ${role} in ZStreet`,
     portrait: ZScan.zkSnarkImage(s.id),
-    hello: s.txs.length ? "Hey! Busy day, I've got a parcel to deliver. What do you want to know?" : "Hi there! Nice evening in the city, isn't it? Ask me anything.",
+    sub: p?.job,
+    ask: s.txs.length ? undefined : `Say something to ${p ? p.name : "them"}…`,
+    hello: s.txs.length ? "Hey! Busy day, I've got a parcel to deliver. What do you want to know?" : agents ? agents.hello(s.id) : "Hi there! Nice evening in the city, isn't it? Ask me anything.",
     facts: () => {
       const lines = [`You are ${s.name}${s.rank ? `, rank #${num(s.rank)} in the zkSNARKs collection` : ""}. Right now you are ${STATE_LINE[s.state] ?? s.state}.`];
+      const who = agents?.facts(s.id);
+      if (who) lines.push(who);
       if (s.item) lines.push(`Your traits: ${s.item.traits.map((t) => `${t.trait_type} ${t.value}`).join(", ")}.`);
       for (const t of s.txs) {
         const bits = [`You carry transaction ${t.txid} (${KIND_LABEL[t.kind]}: ${KIND_HELP[t.kind]}).`, `Size ${(t.size / 1000).toFixed(1)} kB, ${t.actions} action(s), fee ${t.fee == null ? "unknown" : zec(t.fee, 8)}.`];
@@ -76,6 +87,21 @@ export function snarkSpeaker(s: Snark, director: Director): Speaker {
       }
       return `${lines.join("\n")}\n${cityFacts(director)}`;
     },
+  };
+}
+
+/** Someone from the crowd on the pavements: a zkSNARK out for a walk, with their persona. */
+export function crowdSpeaker(id: number, director: Director, agents: Agents): Speaker {
+  const p = agents.persona(id);
+  return {
+    key: `snark-${id}`,
+    name: p.name,
+    sub: p.job,
+    who: p ? `${p.name}, a ${p.job} in ZStreet, zkSNARK #${id}, out walking` : `zkSNARK #${id}, out walking in ZStreet`,
+    portrait: ZScan.zkSnarkImage(id),
+    hello: agents.hello(id),
+    ask: `Say something to ${p ? p.name : "them"}…`,
+    facts: () => `You are zkSNARK #${id}, walking along the pavement when the visitor stopped you.\n${agents.facts(id)}\n${cityFacts(director)}`,
   };
 }
 
@@ -158,13 +184,20 @@ export class Talk {
     return !!this.who;
   }
 
-  show(sp: Speaker) {
+  /** Called once when the conversation shown last is closed (the character walks on). */
+  private closed: (() => void) | null = null;
+
+  show(sp: Speaker, onClose?: () => void) {
+    this.closed?.();
+    this.closed = onClose ?? null;
     this.who = sp;
     if (sp.key.startsWith("snark-") && !this.memories.has(sp.key)) void this.recall(sp);
     const face = this.el.querySelector<HTMLImageElement>(".tk-face")!;
     face.hidden = !sp.portrait;
     if (sp.portrait) face.src = sp.portrait;
     this.el.querySelector(".tk-name")!.textContent = sp.name;
+    this.el.querySelector(".tk-eyebrow")!.textContent = sp.sub ?? "会話 · TALK";
+    this.input.placeholder = sp.ask ?? "Ask about its transaction, its block, Zcash…";
     if (!this.threads.has(sp.key)) this.threads.set(sp.key, [{ role: "assistant", content: sp.hello }]);
     this.render();
     this.el.classList.add("on");
@@ -172,6 +205,8 @@ export class Talk {
   }
 
   close() {
+    this.closed?.();
+    this.closed = null;
     if (this.who) void this.remember(this.who);
     speechSynthesis?.cancel();
     this.who = null;

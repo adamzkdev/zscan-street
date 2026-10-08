@@ -2151,13 +2151,16 @@ kbd {
 .walking .rail > button:not(.walk),
 .walking .rail > i,
 .walking .labels,
-.walking .placetag {
+.walking .placetag,
+.walking .strip,
+.walking .strip-cards,
+.walking .sdetails {
   display: none;
 }
 .whint {
   position: absolute;
   left: 50%;
-  bottom: 80px;
+  bottom: 22px;
   transform: translateX(-50%);
   display: none;
   gap: 14px;
@@ -4002,54 +4005,10 @@ a.srow:hover span {
   }
 }
 
-/* ---- game: ⓩ wallet chip, citizen card, game toast, next-block bets ---- */
-.zchip {
-  width: auto !important;
-  padding: 0 10px;
-  gap: 6px;
-  display: flex !important;
-  position: relative;
-  font: 400 13px var(--pixel);
-  color: var(--text) !important;
-}
-.zchip b {
-  font-weight: 400;
-  color: var(--gold-ink);
-  text-shadow: 0 0 6px color-mix(in srgb, var(--gold) 60%, transparent);
-}
-.zchip i {
+/* ---- game: the inbox, game toast ---- */
+.inbox {
   position: absolute;
-  right: 4px;
-  top: 100%;
-  font: 400 12px var(--pixel);
-  font-style: normal;
-  animation: zfloat 1.6s ease-out forwards;
-  pointer-events: none;
-}
-.zchip i.up {
-  color: var(--good);
-}
-.zchip i.down {
-  color: var(--bad);
-}
-@keyframes zfloat {
-  from {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateY(18px);
-    opacity: 0;
-  }
-}
-.bet-btn b {
-  font: 400 16px var(--pixel);
-  color: var(--gold-ink);
-}
-.zcard,
-.betpanel {
-  position: absolute;
-  top: 62px;
+  bottom: 84px;
   right: 16px;
   width: min(320px, calc(100vw - 32px));
   padding: 12px 14px;
@@ -4060,104 +4019,446 @@ a.srow:hover span {
   font: 400 12.5px var(--pixel);
   color: var(--text);
 }
-.zcard.open,
-.betpanel.open {
+.inbox.open {
   display: flex;
 }
-.zcard header,
-.betpanel header {
+.inbox header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-.zcard label,
-.betpanel label {
+.inbox label {
   font: 400 12px var(--pixel);
   letter-spacing: 0.08em;
   color: var(--gold-ink);
 }
-.zcard header button,
-.betpanel header button {
+.inbox header button {
   all: unset;
   cursor: pointer;
   font-size: 18px;
   color: var(--muted);
   padding: 0 4px;
 }
-.zcard .big b {
-  font: 400 26px var(--pixel);
-  color: var(--gold-ink);
-  text-shadow: 0 0 10px color-mix(in srgb, var(--gold) 50%, transparent);
-  display: block;
-}
-.zcard .big small,
-.betpanel .since {
-  color: var(--muted);
-  font-size: 11px;
-}
-.zcard dl {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 12px;
-  margin: 0;
-}
-.zcard dt {
-  color: var(--muted);
-}
-.zcard dd {
-  margin: 0;
-  text-align: right;
-}
-.betpanel .stakes,
-.betpanel .mk > div {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.betpanel .mk {
+/* ---- the inbox: the city's news, kept for when you want them (square button, bottom right) ---- */
+.mailbtn {
+  all: unset;
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 56px;
+  height: 56px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.betpanel .mk em {
-  font-style: normal;
-  color: var(--bad);
-  font-size: 11px;
-}
-.betpanel button[data-a="stake"],
-.betpanel button[data-a="bet"] {
-  all: unset;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   cursor: pointer;
-  padding: 5px 9px;
-  display: inline-flex;
-  gap: 6px;
-  align-items: baseline;
-  font: 400 12.5px var(--pixel);
-  box-shadow: inset 0 0 0 1px var(--ink-line);
+  pointer-events: auto;
+  z-index: 46;
+  background: var(--hud);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
 }
-.betpanel button i {
+.mailbtn:hover,
+.mailbtn:has(i:not(:empty)) {
+  border-color: var(--gold);
+}
+.mailbtn svg.px {
+  width: 30px;
+  height: 22px;
+  color: var(--gold);
+}
+.mailbtn i {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: #ff4d6a;
+  color: #fff;
+  font: 400 10px/15px var(--pixel);
   font-style: normal;
-  font-size: 10.5px;
-  color: var(--gold-ink);
+  text-align: center;
+  pointer-events: none;
 }
-.betpanel button.on {
-  background: var(--gold);
-  color: #0d0d0d;
+.mailbtn i:empty {
+  display: none;
 }
-.betpanel button.on i {
-  color: #0d0d0d;
+.mailbtn.ping i {
+  animation: mailping 0.9s ease-out 2;
 }
-.betpanel button:disabled:not(.on) {
-  opacity: 0.4;
-  cursor: default;
+@keyframes mailping {
+  50% {
+    transform: scale(1.35);
+  }
 }
-.betpanel .res {
-  border-top: 1px solid var(--ink-line);
-  padding-top: 6px;
+.inbox {
+  max-height: min(460px, calc(100vh - 140px));
+}
+.inbox ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.inbox li {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 2px 8px;
+  padding: 7px 4px;
+  border-top: 1px solid var(--ink-line);
+}
+.inbox li .k {
+  grid-row: span 2;
+  font: 400 15px var(--pixel);
+  color: var(--c, var(--gold-ink));
+  text-align: center;
+}
+.inbox li b {
+  font-weight: 400;
+  color: var(--text);
+}
+.inbox li time {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.inbox li p {
+  grid-column: 2 / 4;
+  margin: 0;
+  color: var(--text);
   font-size: 11.5px;
+  line-height: 1.35;
+}
+.inbox li[data-open] {
+  cursor: pointer;
+}
+.inbox li[data-open]:hover {
+  background: color-mix(in srgb, var(--c, var(--gold)) 10%, transparent);
+}
+.inbox li p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* one mail opened big, in the middle of the screen */
+.mailread {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+  z-index: 48;
+  font: 400 13px var(--pixel);
+  color: var(--text);
+  border-top: 2px solid var(--c, var(--gold));
+}
+.mailread.open {
+  display: flex;
+}
+.mailread header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.mailread header label {
+  font: 400 12px var(--pixel);
+  letter-spacing: 0.08em;
+  color: var(--gold-ink);
+}
+.mailread header span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mailread header em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.mailread header button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+  padding: 0 6px;
+}
+.mailread header button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.mailread .head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.mailread .head .k {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  font: 400 30px var(--pixel);
+  color: var(--c, var(--gold-ink));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--gold)) 55%, transparent);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--c, var(--gold)) 60%, transparent);
+}
+.mailread h3 {
+  margin: 0 0 4px;
+  font: 400 20px/1.25 var(--pixel);
+  color: var(--text);
+}
+.mailread time {
+  font-size: 11px;
+  color: var(--muted);
+}
+.mailread p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.mailread .go {
+  all: unset;
+  align-self: flex-start;
+  cursor: pointer;
+  padding: 8px 16px;
+  font: 400 13px var(--pixel);
+  color: #1a1408;
+  background: var(--gold);
+  border-radius: 2px;
+}
+.inbox li.new {
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+}
+.inbox li button {
+  all: unset;
+  grid-column: 2 / 4;
+  justify-self: start;
+  cursor: pointer;
+  margin-top: 3px;
+  font: 400 11.5px var(--pixel);
+  color: var(--gold-ink);
+}
+.inbox .empty {
+  color: var(--muted);
+  padding: 10px 4px;
+}
+/* ---- the city works: the agents' proposals, the vote, the sites ---- */
+.works {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(920px, calc(100vw - 32px));
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 47;
+  font: 400 12.5px var(--pixel);
+  color: var(--text);
+}
+.works.open {
+  display: flex;
+}
+.works header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.works label {
+  font: 400 12px var(--pixel);
+  letter-spacing: 0.08em;
+  color: var(--gold-ink);
+}
+.works header button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.works h3 {
+  margin: 0;
+  font: 400 15px var(--pixel);
+  color: var(--text);
+}
+.works .sub,
+.works .by {
+  margin: 0;
+  color: var(--muted);
+}
+.works .pitch {
+  margin: 0;
+  line-height: 1.45;
+}
+.works .focus {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.works .cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.works article {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--n);
+  border-radius: 8px;
+  background: var(--line);
+}
+.works article.mine {
+  background: rgba(244, 183, 40, 0.07);
+  border-color: rgba(244, 183, 40, 0.35);
+  border-top-color: var(--n);
+}
+.works .pv {
+  height: 170px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: radial-gradient(ellipse at 50% 85%, rgba(255, 255, 255, 0.06), transparent 70%);
+}
+.works .pv img {
+  max-height: 170px;
+  max-width: 100%;
+}
+.works .pv i {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--muted);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: wkspin 0.8s linear infinite;
+}
+.works .tx {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+.works .chips {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.works .chips span {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+.works ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.works ul b {
+  color: var(--text);
+  font-weight: 400;
+}
+.works .bar {
+  position: relative;
+  height: 18px;
+  margin-top: auto;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+.works .bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--n);
+  opacity: 0.45;
+}
+.works .bar span {
+  position: relative;
+  padding-left: 6px;
+  line-height: 18px;
+  font-size: 11px;
+}
+.works article button,
+.works .sites button {
+  all: unset;
+  cursor: pointer;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--gold-ink);
+  color: #120c04;
+}
+.works article button:disabled {
+  cursor: default;
+  background: transparent;
+  color: var(--gold-ink);
+  box-shadow: inset 0 0 0 1px var(--gold-ink);
+}
+.works .sites {
+  margin: 0;
+  padding: 8px 0 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+}
+.works .sites li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.works .sites li span {
+  margin-left: auto;
+  color: var(--muted);
+}
+.works .sites button {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+@media (max-width: 720px) {
+  .works .cards {
+    grid-template-columns: 1fr;
+  }
+  .works .pv {
+    height: 130px;
+  }
+  .works .pv img {
+    max-height: 130px;
+  }
 }
 .gtoast {
   position: absolute;
@@ -4336,12 +4637,6 @@ a.srow:hover span {
 }
 .casepanel .done {
   color: var(--good);
-}
-.zcard .caselink {
-  all: unset;
-  cursor: pointer;
-  color: var(--gold-ink);
-  text-decoration: underline dotted;
 }
 /* ---- the ZStreet Daily ---- */
 .paperbtn {
@@ -4957,4 +5252,163 @@ a.srow:hover span {
 .genesis .eras button.on b,
 .genesis .eras button.on span {
   color: #0d0d0d;
+}
+
+/* ---- on foot: the radar (minimap) and the whole map ---- */
+.minimap {
+  position: absolute;
+  left: calc(16px + env(safe-area-inset-left));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  width: 250px;
+  height: 168px;
+  border-radius: 10px;
+  display: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(11, 11, 17, 0.85), 0 6px 22px rgba(0, 0, 0, 0.55);
+}
+.minimap.on {
+  display: block;
+}
+.minimap canvas {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  display: block;
+}
+.minimap .mm-n {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font: 400 11px var(--pixel, monospace);
+  color: #0b0b11;
+  background: var(--gold);
+  width: 15px;
+  height: 15px;
+  line-height: 15px;
+  text-align: center;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.bigmap {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  background: rgba(6, 6, 10, 0.82);
+  z-index: 60;
+  cursor: pointer;
+}
+.bigmap.on {
+  display: flex;
+}
+.bigmap header {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  font: 400 12px var(--pixel, monospace);
+  color: var(--muted);
+}
+.bigmap header label {
+  font-size: 16px;
+  color: var(--gold-ink);
+  letter-spacing: 0.08em;
+}
+.bigmap canvas {
+  width: min(86vmin, 900px);
+  height: min(86vmin, 900px);
+  border: 2px solid rgba(244, 183, 40, 0.5);
+}
+/* touch: the joystick has the bottom-left corner */
+@media (pointer: coarse) {
+  .minimap {
+    bottom: auto;
+    top: calc(64px + env(safe-area-inset-top));
+    width: 150px;
+    height: 104px;
+  }
+}
+
+/* ---- on foot: someone to talk to ---- */
+.talk-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 26%;
+  transform: translateX(-50%);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px 5px;
+  border: 0;
+  background: rgba(11, 11, 17, 0.78);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(95, 215, 255, 0.35);
+  cursor: pointer;
+  z-index: 30;
+  font: inherit;
+  color: inherit;
+}
+.talk-prompt.on {
+  display: flex;
+}
+.indoors .talk-prompt {
+  display: none !important;
+}
+.talk-prompt b {
+  font: 17px var(--pixel, monospace);
+  letter-spacing: 0.06em;
+  color: #5fd7ff;
+}
+.talk-prompt small {
+  font: 11.5px var(--pixel, monospace);
+  color: var(--muted);
+}
+.talk-prompt q {
+  font: 12.5px var(--pixel, monospace);
+  color: #f4e6c0;
+  text-align: center;
+}
+.talk-prompt q::before {
+  content: "“";
+}
+.talk-prompt q::after {
+  content: "”";
+}
+.talk-prompt span {
+  font: 12px var(--pixel, monospace);
+  color: var(--gold-ink);
+}
+.talk-prompt kbd {
+  font: inherit;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  margin-right: 4px;
+}
+@media (pointer: coarse) {
+  .talk-prompt kbd {
+    display: none;
+  }
+}
+/* the radar is round: no signage corners, no panel fill */
+.minimap.hud {
+  background: none;
+  border: 0;
+  border-radius: 10px;
+  clip-path: none;
+  box-shadow: 0 0 0 3px rgba(11, 11, 17, 0.85), 0 6px 22px rgba(0, 0, 0, 0.55);
+}
+.minimap.hud::before,
+.minimap.hud::after {
+  display: none;
+}
+
+@keyframes wkspin {
+  to {
+    transform: rotate(360deg);
+  }
 }

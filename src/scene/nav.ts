@@ -70,6 +70,14 @@ export class Nav {
   }
 
   /** Is this spot free for a body of radius `rad`? */
+  /** Inside something big (a building, a wall), not just a bench or a lamp post. */
+  wall(x: number, z: number) {
+    const c = this.grid.get(`${Math.floor(x / CELL)},${Math.floor(z / CELL)}`);
+    if (!c) return false;
+    for (const o of c.rects) if (o.x1 - o.x0 > 2.5 && o.z1 - o.z0 > 2.5 && x > o.x0 && x < o.x1 && z > o.z0 && z < o.z1) return true;
+    return false;
+  }
+
   free(x: number, z: number, rad: number) {
     const c = this.grid.get(`${Math.floor(x / CELL)},${Math.floor(z / CELL)}`);
     if (!c) return true;

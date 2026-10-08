@@ -1,0 +1,23 @@
+// Walk-mode HUD: node shots/_walkhud.mjs [name] [w h]
+import puppeteer from "puppeteer-core";
+const name = process.argv[2] ?? "a";
+const w = Number(process.argv[3] ?? 1400), h = Number(process.argv[4] ?? 860);
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: w, height: h } });
+const p = await b.newPage();
+const logs = [];
+p.on("console", (m) => m.type() === "error" && logs.push(m.text()));
+p.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
+await p.goto(`http://localhost:3007/?debug&theme=night`);
+await p.waitForFunction(() => window.street?.game, { timeout: 120000 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await sleep(8000);
+await p.click(".rail .walk");
+await sleep(4000);
+await p.keyboard.down("KeyW"); await sleep(1500); await p.keyboard.up("KeyW");
+await sleep(800);
+await p.screenshot({ path: `shots/walkhud-${name}.png` });
+await p.keyboard.press("KeyM");
+await sleep(600);
+await p.screenshot({ path: `shots/walkhud-${name}-map.png` });
+console.log(logs.join("\n") || "no errors");
+await b.close();

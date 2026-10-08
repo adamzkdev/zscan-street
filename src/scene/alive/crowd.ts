@@ -249,16 +249,27 @@ function drawDog(g: CanvasRenderingContext2D, ox: number, oy: number, coat: numb
   px(15, 7, 2, 2, "#f4b728");
 }
 
+/** Which zkSNARK each portrait cell of the crowd shows. */
+let slotIds: number[] | null = null;
+function portraitIds() {
+  if (slotIds) return slotIds;
+  const r = rng(4242);
+  const ids: number[] = [];
+  const seen = new Set<number>();
+  while (ids.length < PORTRAITS) {
+    const id = 1 + Math.floor(r() * 10000);
+    if (!seen.has(id)) seen.add(id), ids.push(id);
+  }
+  return (slotIds = ids);
+}
+/** The zkSNARK a crowd portrait slot is. */
+export const slotId = (slot: number) => portraitIds()[slot % PORTRAITS];
+
 let atlas: Promise<{ tex: THREE.Texture; cloth: THREE.Color[] }> | null = null;
 function loadAtlas() {
   atlas ??= (async () => {
     const r = rng(4242);
-    const ids: number[] = [];
-    const seen = new Set<number>();
-    while (ids.length < PORTRAITS) {
-      const id = 1 + Math.floor(r() * 10000);
-      if (!seen.has(id)) seen.add(id), ids.push(id);
-    }
+    const ids = portraitIds();
     const c = document.createElement("canvas");
     c.width = ACOLS * 32;
     c.height = (CELLS / ACOLS) * 32;
@@ -441,6 +452,79 @@ export class Crowd {
       out.set(ax + ((bx - ax) * d) / len, out.y, az + ((bz - az) * d) / len);
     }
     return out;
+  }
+
+  /** Walkers stopped for a chat: their path and how far along it they were. */
+  private held = new Map<number, { a: number[]; kind: number; s: number }>();
+
+  /** Stop walker `i` where it is, facing (dx, dz) (someone is talking to them). */
+  hold(i: number, dx: number, dz: number) {
+    if (this.held.has(i)) return;
+    const p = this.people[i];
+    const at = this.positionOf(i, new THREE.Vector3());
+    const t = this.uniforms.uTime.value;
+    const sp = p.speed ?? 0;
+    const s = (p.phase ?? 0) + (p.kind === Kind.Loop || p.kind === Kind.DogLoop ? sp : Math.abs(sp)) * t;
+    this.held.set(i, { a: [...p.a], kind: p.kind, s });
+    p.a = [at.x, at.z, Math.atan2(dz, dx), 0];
+    p.kind = Kind.Stand;
+    this.write(i);
+  }
+
+  /** Walker `i` carries on from where it stopped. */
+  release(i: number) {
+    const h = this.held.get(i);
+    if (!h) return;
+    this.held.delete(i);
+    const p = this.people[i];
+    const t = this.uniforms.uTime.value;
+    const sp = p.speed ?? 0;
+    p.kind = h.kind as Kind;
+    p.a = h.a as Person["a"];
+    p.phase = h.s - (p.kind === Kind.Loop || p.kind === Kind.DogLoop ? sp : Math.abs(sp)) * t;
+    this.write(i);
+  }
+
+  private write(i: number) {
+    const p = this.people[i];
+    (this.A.array as Float32Array).set(p.a, i * 4);
+    const b = this.B.array as Float32Array;
+    b[i * 4 + 1] = p.phase ?? 0;
+    b[i * 4 + 3] = p.kind;
+    this.A.needsUpdate = this.B.needsUpdate = true;
+  }
+
+  /** Everyone (not dogs, not runners) within `r` of (x, z). */
+  within(x: number, z: number, r: number): number[] {
+    const out: number[] = [];
+    const tmp = new THREE.Vector3();
+    for (let i = 0; i < this.people.length; i++) {
+      const k = this.people[i].kind;
+      if (k === Kind.Race || k === Kind.DogLoop || k === Kind.DogStand || k === Kind.DogPath) continue;
+      this.positionOf(i, tmp);
+      if ((tmp.x - x) ** 2 + (tmp.z - z) ** 2 < r * r) out.push(i);
+    }
+    return out;
+  }
+
+  /** The nearest person (not a dog, not a runner) within `r` of (x, z), or -1. */
+  nearest(x: number, z: number, r: number, out: THREE.Vector3): number {
+    let best = -1,
+      bd = r * r;
+    const tmp = new THREE.Vector3();
+    for (let i = 0; i < this.people.length; i++) {
+      const k = this.people[i].kind;
+      if (k === Kind.Race || k === Kind.DogLoop || k === Kind.DogStand || k === Kind.DogPath) continue;
+      const [ax, az] = this.people[i].a;
+      // the cheap test first: walkers stay on their loop or segment
+      if (k === Kind.Stand || k === Kind.Dance) {
+        if ((ax - x) ** 2 + (az - z) ** 2 > bd) continue;
+      }
+      this.positionOf(i, tmp);
+      const d = (tmp.x - x) ** 2 + (tmp.z - z) ** 2;
+      if (d < bd) (bd = d), (best = i), out.copy(tmp);
+    }
+    return best;
   }
 
   update(t: number, focus: THREE.Vector3, radius: number, race: number) {

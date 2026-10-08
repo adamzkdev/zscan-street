@@ -11,7 +11,7 @@ const cache = new Map<string, { tex: THREE.CanvasTexture; aspect: number }>();
 const CACHE_MAX = 120;
 
 /** Break a line into a few short lines, at spaces. */
-function wrap(text: string, max = 22) {
+function wrap(text: string, max = text.length > 80 ? 30 : 22) {
   const out: string[] = [];
   let line = "";
   for (const w of text.split(" ")) {
@@ -87,6 +87,27 @@ function texture(text: string, tone: Tone) {
 }
 
 
+/**
+ * The layer the bubbles live on: kept out of the scene's pass (tilt-shift blur, bloom, rain) and
+ * drawn crisp on top afterwards (`drawBubbles`).
+ */
+export const BUBBLE_LAYER = 5;
+
+/** Draws the bubbles of `scene` over the finished frame, sharp, without the post effects. */
+export function drawBubbles(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
+  const bg = scene.background;
+  const mask = camera.layers.mask;
+  const auto = renderer.autoClear;
+  scene.background = null;
+  camera.layers.set(BUBBLE_LAYER);
+  renderer.autoClear = false;
+  renderer.setRenderTarget(null);
+  renderer.render(scene, camera);
+  renderer.autoClear = auto;
+  camera.layers.mask = mask;
+  scene.background = bg;
+}
+
 /** A bubble sprite: bottom-left corner (the tail) at its position. `height` in metres (one line). */
 export function speechSprite(text: string, tone: Tone = "talk", height = 0.85) {
   const { tex, aspect } = texture(text, tone);
@@ -98,6 +119,7 @@ export function speechSprite(text: string, tone: Tone = "talk", height = 0.85) {
   const k = height / 116;
   s.scale.set(k * px * aspect, k * px, 1);
   s.renderOrder = 6;
+  s.layers.set(BUBBLE_LAYER);
   s.userData.speech = true;
   s.userData.lines = px / 116;
   s.userData.aspect = aspect;

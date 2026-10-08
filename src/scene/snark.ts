@@ -358,6 +358,8 @@ export class Snark {
   rush = 1;
   /** Which way to look while standing (e.g. toward the head of the queue). */
   faceDir: THREE.Vector3 | null = null;
+  /** Stopped where they are (someone is talking to them): the walk resumes after. */
+  paused = false;
   private phase = Math.random() * 10;
   private facing = 1;
   private walking = false;
@@ -770,7 +772,7 @@ export class Snark {
     // billboard in world space, whatever the root is parented to (the street or a bus)
     this.visual.quaternion.copy(this.root.getWorldQuaternion(tmpQ).invert().multiply(camQuat));
     let moving = false;
-    if (this.walking && this.path.length) {
+    if (this.walking && this.path.length && !this.paused) {
       const target = this.path[0];
       const pos = this.root.position;
       const d = new THREE.Vector3().subVectors(target, pos);

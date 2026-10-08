@@ -74,7 +74,7 @@ export class Eggs {
     this.door.visible = true;
     this.active = { rule, height: b.height };
     this.decor.alert({ kind: "game", title: "A SECRET OPENED  秘密", big: rule.name.toUpperCase(), line: "SOMEWHERE IN THE CITY · FIND IT", color: "#f4b728" });
-    this.hud.say(`<b>${rule.name.toUpperCase()}</b> · block ${b.height.toLocaleString("en-US")} opened a secret door somewhere in the city. First one there wins.`);
+    this.hud.mail("secret", rule.name, `Block ${b.height.toLocaleString("en-US")} opened a secret door somewhere in the city. Follow the gold beam: first one there wins.`);
   }
 
   private close() {
@@ -102,7 +102,7 @@ export class Eggs {
   taken(height: number) {
     if (this.active?.height !== height) return;
     this.close();
-    this.hud.say(`<b>TOO LATE</b> · another visitor found the secret door`);
+    this.hud.mail("secret", "Secret door taken", "Another visitor found it first.");
   }
 
   update(dt: number) {

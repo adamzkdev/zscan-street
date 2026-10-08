@@ -28,7 +28,6 @@ export class Radio {
       speechSynthesis.addEventListener?.("voiceschanged", pickVoice);
     }
     gossip.on((g) => this.on && this.soundOn() && this.read(g.height, g.lines.map((l) => l.text)));
-    hud.addRow(() => `<dt>Radio ZStreet</dt><dd><button class="caselink" data-radio>${this.on ? "📻 on air" : "off"}</button></dd>`);
     hud.root.addEventListener("click", (e) => {
       if (!(e.target as HTMLElement).closest("[data-radio]")) return;
       this.on = !this.on;

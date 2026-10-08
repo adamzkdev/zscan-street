@@ -300,8 +300,17 @@ export function streetLife(h = new Date().getHours()) {
   return 0.8;
 }
 
+/** The city's agents (game/agents.ts): who comes out, where each of them wants to be. */
+export interface ResidentBrain {
+  nextOut(out: Set<number>): number | null;
+  wants(id: number): string | null;
+  partner(id: number): number | null;
+}
+
 interface Resident {
   s: Snark;
+  /** Told to head home (to make room for someone of the day's cast). */
+  leave?: boolean;
   node: number;
   alive: boolean;
   born: number;
@@ -317,8 +326,26 @@ export class Residents {
   private raining = false;
   private seq = 0;
   private spawning = false;
+  brain: ResidentBrain | null = null;
 
   constructor(private director: Director) {}
+
+  /** A new turn: make room for cast members who want to be out and aren't yet. */
+  replan() {
+    const b = this.brain;
+    if (!b) return;
+    const out = new Set([...this.list].map((r) => r.s.id));
+    let missing = 0;
+    for (let id = b.nextOut(out); id !== null; id = b.nextOut(out)) {
+      out.add(id);
+      missing++;
+    }
+    // the extras (not in the cast) who have been out longest go home first
+    const extras = [...this.list].filter((r) => r.alive && !r.leave && b.wants(r.s.id) === null).sort((x, y) => x.born - y.born);
+    const room = Math.max(0, this.list.size + missing - this.target);
+    for (const r of extras.slice(0, room)) r.leave = true;
+    if (this.list.size < this.target && !this.spawning) void this.fill();
+  }
 
   get count() {
     return this.list.size;
@@ -364,7 +391,8 @@ export class Residents {
     try {
       while (this.list.size < this.target) {
         const door = pick(DOORS);
-        const id = ((castSeed + this.seq++ * 397) % 10000) + 1;
+        const cast = this.brain?.nextOut(new Set([...this.list].map((r) => r.s.id))) ?? null;
+        const id = cast ?? ((castSeed + this.seq++ * 397) % 10000) + 1;
         let s: Snark;
         try {
           s = await this.director.newSnark(id);
@@ -434,9 +462,11 @@ export class Residents {
       // the street is fuller than it should be: the ones out longest head home first
       const over = this.list.size > this.target;
       const oldest = [...this.list].filter((x) => x.alive).sort((a, b) => a.born - b.born)[0] === r;
-      if ((over && oldest) || errands > 7) break;
-      const act = this.choose();
-      const sp = act && this.freeSpot(act);
+      const want = this.brain?.wants(s.id) ?? null;
+      // the day's cast lives by its plan; the extras run a few errands and go home
+      if (r.leave || want === "home" || (want === null && ((over && oldest) || errands > 7))) break;
+      const act = want ? (this.acts[ACT_KEYS.indexOf(want as ActKey)] ?? this.choose()) : this.choose();
+      const sp = act && this.freeSpot(act, this.partnerSpot(s.id));
       if (!act || !sp) {
         await this.goTo(r, Math.floor(Math.random() * nodes.length), speed);
         await sleep(rand(800, 2500));
@@ -500,9 +530,19 @@ export class Residents {
     return this.acts[0];
   }
 
-  private freeSpot(a: Activity) {
+  /** The spot the agent's partner holds (or is walking to), to sit next to them. */
+  private partnerSpot(id: number) {
+    const p = this.brain?.partner(id);
+    if (!p) return null;
+    for (const a of this.acts) for (const sp of a.spots) if (sp.taken?.id === p) return sp.p;
+    return null;
+  }
+
+  private freeSpot(a: Activity, near: THREE.Vector3 | null = null) {
     const free = a.spots.filter((x) => !x.taken);
-    return free.length ? pick(free) : null;
+    if (!free.length) return null;
+    if (near) return free.reduce((b, x) => (x.p.distanceTo(near) < b.p.distanceTo(near) ? x : b));
+    return pick(free);
   }
 
   /** Where everyone is, for debugging (?debug: street.residents.debug()). */

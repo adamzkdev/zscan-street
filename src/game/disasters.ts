@@ -54,13 +54,13 @@ export class Disasters {
     this.hooks.rumble();
     this.hooks.react();
     this.decor.alert({ kind: "game", title: "CHAIN REORG  地震", big: `${depth} BLOCK${depth === 1 ? "" : "S"}`, line: "THE CHAIN REWROTE ITS TIP", color: "#f06b76" });
-    this.hud.say(`<b>EARTHQUAKE</b> · a ${depth}-block reorg: the chain swapped its latest block${depth === 1 ? "" : "s"}`);
+    this.hud.mail("quake", "Earthquake", `A ${depth}-block reorg: the chain swapped its latest block${depth === 1 ? "" : "s"}.`);
   }
 
   trip(pct: number) {
     this.hooks.blackout(150, this.hooks.powerPlant());
     this.decor.alert({ kind: "game", title: "POWER STATION  停電", big: `HASHRATE −${pct}%`, line: "MINERS WENT DARK", color: "#f06b76" });
-    this.hud.say(`<b>THE POWER STATION TRIPPED</b> · hashrate down ${pct}% in the last hour`);
+    this.hud.mail("power", "Power station tripped", `Hashrate down ${pct}% in the last hour: part of the city is dark.`);
   }
 
   /** A shake to add to the camera this frame (and take back after drawing). */

@@ -25,7 +25,6 @@ export interface JobHooks {
 
 type Job = "courier" | "miner" | "driver";
 
-const NAME: Record<Job, string> = { courier: "Courier", miner: "Miner", driver: "Bus driver" };
 
 /**
  * Work the chain's jobs for ⓩ:
@@ -81,11 +80,15 @@ export class Jobs {
       e.preventDefault();
       this.hit();
     });
-    hud.addRow(() => `<dt>Jobs</dt><dd><button class="caselink" data-jobs>${this.job ? `${NAME[this.job]} · on shift` : "find work"}</button></dd>`);
     hud.root.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("[data-jobs]")) this.openBoard();
     });
     clock.onBlock(() => this.job === "miner" && this.payMiner());
+  }
+
+  /** Where the shift wants you (the minimap's gold diamond). */
+  get goal(): THREE.Vector3 | null {
+    return this.job === "courier" && this.parcel ? this.parcel.to : null;
   }
 
   openBoard() {

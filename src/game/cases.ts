@@ -99,7 +99,6 @@ export class CaseBook {
       const v = Number((this.panel.querySelector("input") as HTMLInputElement).value.replace(/[^\d]/g, ""));
       if (v) this.guess(v);
     });
-    hud.addRow(() => `<dt>Today's case</dt><dd><button class="caselink" data-case>${this.def ? (this.solved ? "Solved ✓" : `${this.found.size}/4 clues`) : "…"}</button></dd>`);
     hud.root.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("[data-case]")) this.open();
     });
