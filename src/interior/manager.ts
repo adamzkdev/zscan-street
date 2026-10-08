@@ -5,6 +5,7 @@ import { Router } from "./path";
 import { Circulation } from "./lift";
 import { PLANS } from "./liftplan";
 import type { Snark } from "../scene/snark";
+import { posterHit } from "../scene/memes";
 
 type Key = Interior["key"];
 
@@ -114,7 +115,9 @@ export class InteriorManager {
     this.active = i;
     this.circ = this.circOf(i);
     this.walk.enabled = true;
+    this.entering = true;
     this.goTo(floor);
+    this.entering = false;
     this.ev.entered(i, this.floor);
   }
 
@@ -199,7 +202,11 @@ export class InteriorManager {
     this.walk.arrived();
     // this floor's lights make its own shader variants: compile them before the first frame
     this.warmUp(i);
+    // the place's header shows the floor you are on (entering announces the place itself)
+    if (!this.entering) this.ev.walked?.(n);
   }
+  /** Inside enter(): its goTo is announced by `entered`. */
+  private entering = false;
 
   /**
    * Change floor where the walker stands, without a cut: in a closed lift car, near a flight's
@@ -302,13 +309,25 @@ export class InteriorManager {
     return null;
   }
 
+  /** A meme poster (or the like, scene/memes.ts) under the pointer, nearer than the place's own pick. */
+  private posterAt(h: THREE.Intersection | null) {
+    const i = this.active;
+    if (!i) return null;
+    const p = posterHit(this.ray, i.scene, this.ray.far);
+    return p && (!h || p.distance < h.distance) ? p : null;
+  }
+
   pickAt(x: number, y: number): PickInfo | null {
     const h = this.hitAt(x, y);
+    const p = this.posterAt(h);
+    if (p) return p.info();
     return h && this.active ? this.active.pick(h) : null;
   }
 
   hoverAt(x: number, y: number): string | null {
     const h = this.hitAt(x, y);
+    const p = this.posterAt(h);
+    if (p) return p.hover;
     return h && this.active?.hover ? this.active.hover(h) : null;
   }
 }

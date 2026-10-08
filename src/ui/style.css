@@ -1766,7 +1766,10 @@ kbd {
   display: block;
 }
 .indoors .rail,
-.indoors .labels {
+.indoors .labels,
+.indoors .strip,
+.indoors .strip-cards,
+.indoors .sdetails {
   display: none;
 }
 .ihead {

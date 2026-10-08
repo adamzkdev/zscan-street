@@ -8,6 +8,8 @@ import { boxGeo, canvasTex, FACE, type MuseumKit } from "./kit";
 import { coffers, limestone, stoneFloor } from "./look";
 import { bandTexture, beamGeo, escalator, lifts, rodGeo, SANS, wayfinding } from "./parts";
 import { banquette, bust, stonePyramid, ticketMachine } from "./voxels";
+import { memePoster } from "../../scene/memes";
+import { nextMeme } from "../../scene/memewalls";
 
 /**
  * Floor 0, the Hall Napoléon: the stone hall under the glass pyramid. You come in from the
@@ -707,6 +709,13 @@ function carrousel(k: MuseumKit, f: number, stone: THREE.Material, stoneDark: TH
     g.add(win);
     k.hang(f, { x, y: 1.9, z: shopZ - 0.03, yaw: FACE.nz, s: 0.9, rank: 140 + i * 37, tone: 2, label: "none" });
     k.box(f, k.black, 3.9, 0.2, 0.2, x, 3.2, shopZ - 0.05);
+    // the gift shop sells the community's memes too, framed
+    for (const dx of [-1.3, 1.3]) {
+      const p = memePoster(nextMeme(), 0.72, { kind: "frame", frame: "#c9a227" });
+      p.position.set(x + dx, 1.55, shopZ - 0.03);
+      p.rotation.y = FACE.nz;
+      g.add(p);
+    }
   }
   const shop = k.panel(f, 1024, 160, 4.4, (c, w, h2) => {
     c.fillStyle = "#16161a";

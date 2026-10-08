@@ -7,6 +7,8 @@ import { Boxes, fanMaterial, GLASS, GLOW, rotorGeometry, SOLID, voxObj } from ".
 import { canvasTex, drawWall as wallTexture, GOLD, hazardSign, JP, makeCanvas, MONO, neonSign, verticalNeon } from "./canvas";
 import { BACK_Z, BELT, CTRL, DOCKS, DOOR_H, DOOR_W, EAVE, LANES_X, LANES_Z, MAIN_Z, MID_Z, PODS, PRESS, RACK, RIDGE, ROBOT, SEG_LEN, SEGS, X0, X1, Z0, Z1, AGV_STOP } from "./layout";
 import { lockersModel } from "./voxels";
+import { memePoster } from "../../scene/memes";
+import { nextMeme } from "../../scene/memewalls";
 
 /**
  * The building around the miners: painted floor, clad walls, the sawtooth roof with its glazing
@@ -712,6 +714,18 @@ export function buildShell(root: THREE.Object3D, ground: Rect[]) {
     root.add(v);
   }
   ground.push([-6.8, -0.95, -4.6, 0]);
+  // the break corner's wall: memes pinned up over the lockers (2 m tall, x −14.5…−7.5) and the machines
+  for (const [x, y, h] of [
+    [-13.2, 2.75, 0.9],
+    [-11.0, 2.8, 1.0],
+    [-8.8, 2.75, 0.9],
+    [-5.7, 2.8, 0.8],
+  ]) {
+    const p = memePoster(nextMeme(), h, { kind: x < -12 || x > -6 ? "paste" : "frame", frame: "#2a2933" });
+    p.position.set(x, y, -0.04);
+    p.rotation.y = Math.PI;
+    root.add(p);
+  }
   // hard hats and vests on their rack
   for (let i = 0; i < 12; i++) {
     const x = 4.6 + i * 0.42;

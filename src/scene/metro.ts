@@ -1,3 +1,5 @@
+import { freezePosters, memePoster } from "./memes";
+import { nextMeme } from "./memewalls";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Block, Tx } from "../data/types";
@@ -416,6 +418,8 @@ export class Metro {
     scene.add(this.group);
     this.viaduct(nav);
     this.stationsBuild();
+    // the meme posters on the pillars and the platforms: a few batches
+    freezePosters(this.group);
   }
 
   /** The deck, its parapets, neon edges, the pillars, and the portal at the east edge. */
@@ -474,6 +478,16 @@ export class Metro {
       seen.add(key);
       collect(concrete, pillar.clone().translate(p.x, (this.deck - 0.8) / 2, p.z));
       const along = this.route.at(s + 1).sub(p);
+      // posters pasted on every third pillar, both faces across the street
+      if (seen.size % 3 === 0) {
+        const yaw = Math.atan2(along.x, along.z) + Math.PI / 2;
+        for (const f of [0, Math.PI]) {
+          const ad = memePoster(nextMeme(), 0.86, { kind: "paste" });
+          ad.position.set(p.x + Math.sin(yaw + f) * 0.455, CURB + 1.75, p.z + Math.cos(yaw + f) * 0.455);
+          ad.rotation.y = yaw + f;
+          this.group.add(ad);
+        }
+      }
       collect(concrete, cap.clone().rotateY(Math.atan2(-along.z, along.x) + Math.PI / 2).translate(p.x, this.deck - 1.05, p.z));
       nav.addCircle(p.x, p.z, 0.6);
     }
@@ -561,6 +575,14 @@ export class Metro {
         g.add(b);
       }
       mergeByMaterial(g);
+      // backlit meme ads on the platforms' back walls, facing the track (scene/memes.ts)
+      for (const side of [-1, 1])
+        for (const px of [-9.5, 3, 9]) {
+          const ad = memePoster(nextMeme(), 1.25, { kind: "lightbox", frame: this.line.stripe });
+          ad.position.set(px, this.deck + 1.95, side * 4.36);
+          ad.rotation.y = side > 0 ? Math.PI : 0;
+          g.add(ad);
+        }
       this.group.add(g);
       const pos = new THREE.Vector3(x, this.deck, z);
       const first = this.route.nearest(x, z);

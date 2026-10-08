@@ -1,0 +1,58 @@
+/**
+ * The zkSNARKs community's memes (https://zksnarks.net/memes), vendored under public/memes: each
+ * one re-encoded to at most 512 px (<slug>.webp), plus atlas.webp, all of them at 128 × 128 in an
+ * 8 × 6 grid (in this order) for the far, cheap version. The site sends no CORS headers, so its
+ * files cannot be used as WebGL textures from there. Data only: [slug, title, width, height].
+ */
+export const MEMES_PAGE = "https://zksnarks.net/memes";
+export const MEME_ATLAS = { file: "memes/atlas.webp", cols: 8, rows: 6 };
+export const MEMES: [string, string, number, number][] = [
+  ["courtside", "Courtside", 512, 512],
+  ["poolside", "Poolside", 512, 512],
+  ["yacht-toast", "Yacht Toast", 512, 512],
+  ["the-vault", "The Vault", 512, 512],
+  ["the-address", "The Address", 512, 512],
+  ["on-the-green", "On the Green", 512, 512],
+  ["make-it-rain", "Make It Rain", 512, 512],
+  ["find-out", "Find Out", 512, 510],
+  ["gladiator", "Are You Not Shielded", 512, 512],
+  ["success", "Success", 512, 341],
+  ["king-of-shields", "King of Shields", 414, 512],
+  ["stonks", "Stonks", 512, 512],
+  ["pointing", "That’s Me", 512, 512],
+  ["roll-safe", "Roll Safe", 512, 512],
+  ["absolute-cinema", "Absolute Cinema", 512, 512],
+  ["laughing", "Laughing", 512, 512],
+  ["imagination", "Imagination", 512, 336],
+  ["here-we-go-again", "Here We Go Again", 512, 503],
+  ["handshake", "Handshake", 512, 512],
+  ["enlightened", "Enlightened", 512, 512],
+  ["cheers", "Cheers", 512, 512],
+  ["back-to-mcdonalds", "Back to McDonald’s", 512, 512],
+  ["award-night", "Award Night", 512, 512],
+  ["the-speech", "The Speech", 512, 512],
+  ["spin-cycle", "Spin Cycle", 512, 512],
+  ["concorde", "Concorde", 512, 512],
+  ["doing-the-math", "Doing the Math", 512, 512],
+  ["work-from-bed", "Work from Bed", 512, 512],
+  ["bed-of-cash", "Bed of Cash", 512, 512],
+  ["counting-table", "Counting Table", 512, 512],
+  ["the-pitch", "The Pitch", 512, 512],
+  ["storage-unit", "Storage Unit", 512, 512],
+  ["catch-me-if-you-can", "Catch Me If You Can", 512, 512],
+  ["counting-bills", "Counting Bills", 512, 512],
+  ["lying-in-cash", "Lying in Cash", 512, 512],
+  ["burning-money", "Burning Money", 512, 512],
+  ["salt-bae", "Salt Bae", 512, 512],
+  ["and-then-he-said", "And Then He Said", 512, 512],
+  ["show-me-the-money", "Show Me the Money", 512, 512],
+  ["to-the-moon", "To the Moon", 512, 512],
+  ["walking-away", "Walking Away", 512, 512],
+  ["green-candles", "Green Candles", 512, 512],
+  ["mastermind", "Mastermind", 512, 512],
+  ["the-boss", "The Boss", 512, 512],
+  ["money-bags", "Money Bags", 512, 512],
+  ["pointing-ii", "Pointing II", 512, 512],
+  ["hot-tub", "Hot Tub", 512, 512],
+  ["big-chains", "Big Chains", 512, 512],
+];

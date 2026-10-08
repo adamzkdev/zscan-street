@@ -10,7 +10,11 @@ import type { PickInfo } from "../types";
 import { bush, tree, vine } from "./atrium";
 import { COL, CZ, JP, LEVELS, MallKit, MONO, NORTH, SANS, SERIF, X0, X1, Z0 } from "./kit";
 import { poster, shop, type ShopDef } from "./shops";
+import { Cinema } from "./cinema";
+import { FILM_SLOTS, FILMS, filmInfo, filmPosterMesh } from "../../scene/films";
 import { carpetTex, stoneTex, tileTex, tiledMat } from "./tex";
+import { memePoster } from "../../scene/memes";
+import { nextMeme } from "../../scene/memewalls";
 
 /**
  * The levels: what stands where. Every upper level has the same plan — six shops in the side
@@ -34,7 +38,11 @@ const SOUTH: [number, number][] = [
 const n = (v: number, d = 0) => v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 const usd = (v: number) => `$${v >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : n(v, 2)}`;
 
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
 export class Levels {
+  /** ZK CINEMA's screening rooms (level 4). */
+  cine: Cinema | null = null;
   constructor(readonly k: MallKit) {}
 
   // ---- live figures for the panels -------------------------------------------------------------
@@ -252,6 +260,16 @@ export class Levels {
       g.font = `600 24px ${MONO}`;
       fitText(g, k.height ? `BLOCK #${n(k.height)}` : "", W / 2, H - 30);
     }, 10, 360);
+    // memes framed on the lobby's walls: over the bench, and opposite
+    for (const [lx, ly, lz, lr] of [
+      [4.36, 2.15, -4.6, -Math.PI / 2],
+      [-4.36, 2.0, -2.3, Math.PI / 2],
+    ]) {
+      const p = memePoster(nextMeme(), 1.15, { kind: "frame", frame: "#5a3a24" });
+      p.position.copy(k.world(lx, ly, lz));
+      p.rotation.y = Math.PI + lr;
+      k.groups[f].add(p);
+    }
     bush(k, 3.6, 0.7, -1.0, 0.8, 900 + f);
     tree(k, 3.6, 0.7, -1.0, 2.6, 910 + f);
   }
@@ -1092,15 +1110,16 @@ void main(){
       g.fillStyle = "#ff4a5a";
       g.font = `800 ${H * 0.13}px ${MONO}`;
       fitText(g, "NOW SHOWING · 正在上映", W / 2, H * 0.26);
+      // the holder spotlights, one after the other
+      const F = FILMS[Math.floor(performance.now() / 4000) % Math.max(1, FILMS.length)];
       g.fillStyle = "#ffffff";
       g.font = `900 ${H * 0.27}px ${SANS}`;
-      fitText(g, k.height ? `BLOCK #${n(k.height)}` : "…", W / 2, H * 0.58);
-      const b = k.block;
+      fitText(g, F ? F.name.toUpperCase() : "…", W / 2, H * 0.58);
       g.fillStyle = "#ffd27a";
       g.font = `700 ${H * 0.1}px ${MONO}`;
-      fitText(g, b ? `${b.tx_count} TX · ${n(b.size / 1024, 1)} kB · ${b.miner_pool ?? "solo"}` : "", W / 2, H * 0.8);
+      fitText(g, F ? `HOLDER SPOTLIGHT · ${F.runtime} · SCREEN ${FILMS.indexOf(F) + 1}` : "", W / 2, H * 0.8);
     }, 0.6, 1024);
-    k.hit(f, 12, 3.2, 0.4, 10, 0.8, 0.3, "<b>ZK CINEMA</b><span>now showing</span>", () => ({ eyebrow: "ZK CINEMA · Now showing", title: k.height ? `Block #${n(k.height)}` : "ZK CINEMA", mono: true, ...(this.lastBlock() ?? {}) }));
+    k.hit(f, 12, 3.2, 0.4, 10, 0.8, 0.3, "<b>ZK CINEMA</b><span>now showing</span>", () => filmInfo(Math.floor(performance.now() / 4000) % Math.max(1, FILMS.length)));
     // lobby: ticket counter with showtime screens, posters, popcorn, rope lines
     k.box(k.paint, "#3a1020", 8, 1.1, 0.8, -15, 0, -D + 2.2);
     k.box(k.gloss, "#c9a227", 8.1, 0.05, 0.86, -15, 1.1, -D + 2.2);
@@ -1114,12 +1133,22 @@ void main(){
         g.fillStyle = "#ff4a5a";
         g.font = `800 34px ${MONO}`;
         g.textAlign = "left";
-        g.fillText(`SCREEN ${i + 1}`, 18, 44);
-        const h = k.height;
+        const F = FILMS[i];
+        g.fillText(F ? `SCREEN ${i + 1}` : "SOON", 18, 44);
+        g.fillStyle = "#ffffff";
+        g.font = `800 40px ${SANS}`;
+        fitText(g, F ? F.name.toUpperCase() : `${FILM_SLOTS - FILMS.length} MORE SPOTLIGHTS`, 18, 100, W - 36);
         g.font = `700 26px ${MONO}`;
-        for (let r = 0; r < 4; r++) {
-          g.fillStyle = r === 0 ? "#ffffff" : "#c8b8a8";
-          fitText(g, h ? `${String(10 + i * 2 + r * 3).padStart(2, "0")}:${["00", "15", "30", "45"][(i + r) % 4]}  BLOCK #${n(h + 1 + r + i * 4)}` : "", 18, 96 + r * 44, W - 36);
+        // the shows of the day: every runtime + 2 min, the rooms a minute apart (as their boards)
+        const cyc = F ? Number(F.runtime.split(":")[0]) * 60 + Number(F.runtime.split(":")[1]) + 120 : 0;
+        for (let r = 0; r < 3 && F; r++) {
+          const t = new Date((Math.ceil((Date.now() / 1000 + i * 60) / cyc) + r) * cyc * 1000 - i * 60000);
+          g.fillStyle = r === 0 ? "#3ee08f" : "#c8b8a8";
+          fitText(g, `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}  ${F.runtime}  zkSNARK #${F.snark}`, 18, 150 + r * 40, W - 36);
+        }
+        if (!F) {
+          g.fillStyle = "#c8b8a8";
+          fitText(g, "zksnarks.net/network", 18, 150, W - 36);
         }
       }, 10, 512);
       void sc;
@@ -1128,18 +1157,15 @@ void main(){
     void k.person(f, 777, [-16.5, -D + 1.5], "Ticket desk", { face: new THREE.Vector3(0, 0, 1) });
     void k.person(f, 1999, [-13.5, -D + 1.5], "Ticket desk", { face: new THREE.Vector3(0, 0, 1) });
     k.hit(f, 8, 1.2, 0.9, -15, 0, -D + 2.2, "<b>Tickets</b><span>now showing</span>", () => ({ eyebrow: "ZK CINEMA · Tickets", title: k.height ? `Block #${n(k.height)}` : "ZK CINEMA", mono: true, ...(this.lastBlock() ?? {}) }));
-    const films: [string, string, string, string][] = [
-      ["THE NULLIFIER", "no double spend", "#1a0a2a", "#ff4a5a"],
-      ["HALVING", "the reward, cut in two", "#0a1a2a", "#f4b728"],
-      ["ORCHARD", "a shielded love story", "#2a0a0a", "#eb6834"],
-      ["ZERO KNOWLEDGE", "trust nobody", "#000000", "#3ef0ff"],
-      ["SAPLING", "from seed to forest", "#0a2a14", "#7aff6a"],
-      ["MEMPOOL", "the waiting room", "#14102a", "#c89aff"],
-    ];
-    films.forEach(([t, s, a, b], i) => {
-      const left = i < 3;
-      poster(k, 1.3, 1.9, left ? -24.85 : -5.25, 2.2, -D + 4.5 + (i % 3) * 3.4, left ? Math.PI / 2 : -Math.PI / 2, t, s, a, b, true, b);
-    });
+    // the films' posters along the lobby's walls: each holder spotlight, then the slots to come
+    for (let i = 0; i < FILM_SLOTS; i++) {
+      const left = i < 4;
+      const P = filmPosterMesh(i, 1.3);
+      P.group.position.copy(k.world(left ? -24.88 : -5.15, 2.25, -D + 4.0 + (left ? i : i - 4) * 2.7));
+      P.group.rotation.y = left ? Math.PI / 2 : -Math.PI / 2;
+      k.groups[f].add(P.group);
+      k.pick(f, P.pic, FILMS[i] ? `<b>${esc(FILMS[i].name)}</b><span>holder spotlight · ${esc(FILMS[i].runtime)}</span>` : "<b>Coming soon</b><span>holder spotlight</span>", () => filmInfo(i));
+    }
     // popcorn machine
     k.box(k.paint, "#c81e1e", 1.0, 0.9, 0.7, -8, 0, -D + 1.0);
     k.box(k.glass, "#ffffff", 1.0, 0.9, 0.7, -8, 0.9, -D + 1.0);
@@ -1157,78 +1183,14 @@ void main(){
         k.geo(k.paint, "#8a0e1e", rope, new THREE.Matrix4().makeTranslation(x + 1.5, 0.85, z));
       }
     }
-    // the screening hall: tiered seats facing the screen on the east wall
-    k.box(k.paint, "#1a0e1e", 0.25, 6, 0.9, -5, 0, -D + 0.45);
-    k.box(k.paint, "#1a0e1e", 0.25, 6, D - 3.1, -5, 0, -(D - 3.1) / 2);
-    k.box(k.paint, "#1a0e1e", 0.25, 3.4, 2.2, -5, 2.6, -D + 2.0);
-    k.solid(f, -5.15, -D, -4.85, -D + 0.9);
-    k.solid(f, -5.15, -D + 3.1, -4.85, 0);
-    k.sign("SCREEN 1", 0.26, -5.15, 2.9, -D + 2.0, -Math.PI / 2, { color: "#ff4a5a" });
-    k.sign("SCREEN 1", 0.26, -4.85, 2.9, -D + 2.0, Math.PI / 2, { color: "#ff4a5a" });
-    const seatM = k.paint;
-    const rows = 11;
-    for (let r = 0; r < rows; r++) {
-      const x = 14 - r * 1.15;
-      const ty = r * 0.32;
-      k.box(k.paint, "#1e1220", 1.15, ty + 0.02, D - 3.6, x, 0, -D / 2 - 1.2);
-      k.box(k.glow, "#ffb070", 0.04, 0.02, D - 3.6, x + 0.55, ty, -D / 2 - 1.2, 0, 1.2);
-      for (let s = 0; s < 13; s++) {
-        const z = -D + 0.9 + s * 0.9;
-        k.box(seatM, "#a01428", 0.55, 0.42, 0.62, x + 0.05, ty, z);
-        k.box(seatM, "#b81c32", 0.16, 0.6, 0.62, x - 0.22, ty + 0.42, z);
-        k.box(k.paint, "#1a1a1e", 0.6, 0.12, 0.06, x + 0.05, ty + 0.55, z - 0.34);
-      }
-    }
-    k.solid(f, 14 - (rows - 1) * 1.15 - 0.6, -D, 14.6, -2.9);
-    // a few people at the movies
-    for (let i = 0; i < 9; i++) {
-      const r = 2 + Math.floor(hash(i, 1, 5, 5) * 8),
-        s = Math.floor(hash(i, 2, 5, 5) * 13);
-      void k.person(f, 1 + Math.floor(hash(i, 3, 5, 5) * 9999), [14 - r * 1.15, -D + 0.9 + s * 0.9], "Moviegoer", { sit: true, dy: r * 0.32 + 0.42, face: new THREE.Vector3(1, 0, 0) });
-    }
-    // the screen, the curtains, the projector beam
-    const scr = k.screen(f, 13, 4.6, 24.7, 2.9, -D / 2, -Math.PI / 2, (g, W, H) => {
-      const t = performance.now() / 1000;
-      g.fillStyle = "#020208";
-      g.fillRect(0, 0, W, H);
-      for (let i = 0; i < 120; i++) {
-        const z = ((i * 37.7 + t * 30) % 100) / 100;
-        const a = i * 2.39996;
-        const r = z * W * 0.7;
-        g.fillStyle = `rgba(255,255,255,${z})`;
-        g.fillRect(W / 2 + Math.cos(a) * r, H / 2 + Math.sin(a) * r * 0.6, 1 + z * 3, 1 + z * 3);
-      }
-      g.textAlign = "center";
-      g.fillStyle = "#f4b728";
-      g.font = `900 ${H * 0.2}px ${SANS}`;
-      g.globalAlpha = 0.6 + 0.4 * Math.sin(t * 0.8);
-      fitText(g, k.height ? `BLOCK #${n(k.height)}` : "ZK CINEMA", W / 2, H * 0.5);
-      g.globalAlpha = 1;
-      const b = k.block;
-      g.fillStyle = "#e8e0d0";
-      g.font = `600 ${H * 0.06}px ${MONO}`;
-      fitText(g, b ? `${b.tx_count} TRANSACTIONS · MINED BY ${(b.miner_pool ?? "SOLO").toUpperCase()}` : "", W / 2, H * 0.68);
-    }, 0.1, 1024);
-    k.pick(f, scr, "<b>Screen 1</b><span>now showing</span>", () => ({ eyebrow: "ZK CINEMA · Screen 1", title: k.height ? `Block #${n(k.height)}` : "ZK CINEMA", mono: true, ...(this.lastBlock() ?? {}) }));
-    k.box(k.paint, "#0a0a0c", 0.1, 5.4, 14, 24.85, 0, -D / 2);
-    for (const sz of [-1, 1]) for (let i = 0; i < 6; i++) k.box(k.paint, i % 2 ? "#6a0a1a" : "#7a1022", 0.25, 5.4, 0.3, 24.6, 0, -D / 2 + sz * (6.7 + i * 0.22));
-    const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.15, 2.4, 29, 24, 1, true),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 0.27, 0.32), transparent: true, opacity: 0.06, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
-    );
-    beam.geometry.rotateZ(Math.PI / 2);
-    beam.position.copy(k.world(10.2, 4.0, -D / 2));
-    k.groups[f].add(beam);
-    k.box(k.paint, "#0a0a0c", 0.4, 0.6, 0.6, -4.6, 4.3, -D / 2);
-    for (let x = -2; x <= 22; x += 3)
-      for (const z of [-D + 0.16, -0.36]) {
-        k.box(k.glow, "#ffb070", 0.3, 0.5, 0.04, x, 2.6, z, 0, 1.3);
-        k.box(k.paint, "#3a1a20", 0.4, 0.6, 0.04, x, 2.55, z + (z < -8 ? -0.03 : 0.03));
-      }
+    // the screening rooms behind the lobby, one per holder spotlight (cinema.ts)
+    this.cine = new Cinema(k);
+    this.cine.build();
     k.at(f);
     this.crowd(f, 12, [this.ring(), [[-22, -42], [-15, -42], [-8, -42]]], [[20.5, -36, -Math.PI / 2]]);
-    k.light(f, -15, -48, "#ff8a9a", 14.3, 3.0, 18);
-    k.light(f, 18, -48, "#6a7aff", 7.7, 3.0, 18);
+    // the cinema: the lobby, warm; the corridor to the screens
+    k.light(f, -15, -48, "#ffc8b0", 30, 3.4, 20);
+    k.light(f, 10, -41.6, "#ffb48a", 9, 3.2, 18);
     k.light(f, -13, -24, "#fff0e0", 16.5, 3.0);
     k.light(f, 13, -24, "#fff0e0", 16.5, 3.0);
     k.light(f, 0, -11, "#fff0e0", 16.5, 3.0);

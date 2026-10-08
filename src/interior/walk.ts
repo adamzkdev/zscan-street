@@ -20,6 +20,10 @@ export class WalkControls {
   private pitch = -0.08;
   private floorY = 0;
   private keys = new Set<string>();
+  /** Is the walker being moved (keys or the touch stick)? */
+  get walking() {
+    return ["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", "z", "q"].some((k) => this.keys.has(k)) || Math.abs(this.stick.x) + Math.abs(this.stick.y) > 0.1;
+  }
   private drag: { x: number; y: number; id: number } | null = null;
   /** Analog move from the touch stick: x strafes right, y walks forward, both in [-1, 1]. */
   readonly stick = { x: 0, y: 0 };

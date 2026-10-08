@@ -9,6 +9,8 @@ import { C, E, G, shades, VoxelModel } from "../scene/voxel/model";
 import { box, glowMat, makeScene, room, std, textPlane } from "./kit";
 import { buildArchive } from "./archive";
 import type { Interior, InteriorContext, PickInfo, Rect } from "./types";
+import { memePoster } from "../scene/memes";
+import { nextMeme } from "../scene/memewalls";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const num = (n: number) => n.toLocaleString("en-US");
@@ -171,6 +173,16 @@ export function buildMempool(ctx: InteriorContext): Interior {
   const parcels = new Parcels(ctx, scene, tableSlot);
   pickables.push(parcels.group);
   ticks.push(() => parcels.sync());
+  // memes on the hall's walls: back wall by the partition, side wall above the queue's end
+  for (const [x, y, z, ry, h] of [
+    [2.35, 1.8, Z0 + 0.12, 0, 0.95],
+    [X0 + 0.12, 1.75, -3.95, Math.PI / 2, 1.0],
+  ]) {
+    const p = memePoster(nextMeme(), h, { kind: "frame", frame: "#ff9f2e" });
+    p.position.set(x, y, z);
+    p.rotation.y = ry;
+    scene.add(p);
+  }
   const board = liveBoard(ctx);
   board.mesh.position.set(-0.6, 2.6, Z0 + 0.15);
   scene.add(board.mesh);

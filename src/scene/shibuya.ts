@@ -1,3 +1,4 @@
+import { memeAd } from "./memes";
 import * as THREE from "three";
 import { atlasBitmap } from "../data/atlas";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -1089,11 +1090,11 @@ export class Shibuya {
 
   private landmarkScreens(p: Record<string, THREE.Vector3>) {
     const has = (...k: string[]) => k.every((x) => p[x]);
-    if (has("scrMainA", "scrMainB")) this.screen(p.scrMainA, p.scrMainB, 768, this.programme([this.walkAd, this.faceAd, ADS[0], this.chainAd, MARKET_ADS[0], ADS[2], this.faceAd, ADS[3]], 8), 15);
-    if (has("scrSideA", "scrSideB")) this.screen(p.scrSideA, p.scrSideB, 512, this.programme([this.chainAd, ADS[6], MARKET_ADS[1], this.walkAd, ADS[5], MARKET_ADS[2]], 9, 2), 12);
+    if (has("scrMainA", "scrMainB")) this.screen(p.scrMainA, p.scrMainB, 768, this.programme([this.walkAd, this.faceAd, memeAd, ADS[0], this.chainAd, MARKET_ADS[0], memeAd, ADS[2], this.faceAd, ADS[3], memeAd], 8), 15);
+    if (has("scrSideA", "scrSideB")) this.screen(p.scrSideA, p.scrSideB, 512, this.programme([this.chainAd, memeAd, ADS[6], MARKET_ADS[1], this.walkAd, memeAd, ADS[5], MARKET_ADS[2]], 9, 2), 12);
     if (has("tickA", "tickB")) this.screen(p.tickA, p.tickB, 1536, (ctx, w, h, t) => TICKER(ctx, w, h, t, this.live), 20);
     if (has("tickSA", "tickSB")) this.screen(p.tickSA, p.tickSB, 1024, (ctx, w, h, t) => TICKER(ctx, w, h, t + 7, this.live), 20);
-    if (has("roofA", "roofB")) this.screen(p.roofA, p.roofB, 512, this.programme([ADS[3], ADS[1], ADS[4], MARKET_ADS[0]], 10, 1), 10);
+    if (has("roofA", "roofB")) this.screen(p.roofA, p.roofB, 512, this.programme([ADS[3], memeAd, ADS[1], ADS[4], memeAd, MARKET_ADS[0]], 10, 1), 10);
     // the 109's pylon: printed, lit from inside
     if (has("p109EA", "p109EB", "p109SA", "p109SB")) {
       const tex = pylonTexture();
@@ -1137,7 +1138,7 @@ export class Shibuya {
     const ne = find("s", -44, this.Z0 - 2.6);
     if (ne) rooftop((ne.x0 + ne.x1) / 2, ne.z - 3, ne.height + CURB, 7, 4, this.programme([MARKET_ADS[0], ADS[5], this.walkAd, ADS[6]], 9, 3));
     const sw = find("n", -67.8, this.Z1 + 2.6);
-    if (sw) rooftop((sw.x0 + sw.x1) / 2, sw.z + 3, sw.height + CURB, 8, 4.5, this.programme([ADS[2], this.chainAd, ADS[0], this.faceAd], 9, 1));
+    if (sw) rooftop((sw.x0 + sw.x1) / 2, sw.z + 3, sw.height + CURB, 8, 4.5, this.programme([ADS[2], memeAd, this.chainAd, ADS[0], this.faceAd, memeAd], 9, 1));
     const se = find("n", -43.9, this.Z1 + 2.6);
     if (se) rooftop((se.x0 + se.x1) / 2, se.z + 3, se.height + CURB, 9, 5, this.programme([this.faceAd, MARKET_ADS[1], ADS[3], this.chainAd], 10, 2));
     // a facade screen on the office east of the corner, over the boulevard

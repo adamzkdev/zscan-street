@@ -148,8 +148,9 @@ export function first(k: EiffelKit) {
   k.telescope(f, 18.6, -5, -Math.PI / 2, 3);
   k.telescope(f, 18.6, 5, -Math.PI / 2, 4);
   k.telescope(f, 0, -18.6, 0, 5);
-  k.put(f, "eBench1", F.bench, 15.2, -9, Math.PI / 2);
-  k.put(f, "eBench1", F.bench, 15.2, 9, Math.PI / 2);
+  k.put(f, "eBench1", F.bench, 17.4, -9, Math.PI / 2);
+  // (clear of the pillar lift's landing)
+  k.put(f, "eBench1", F.bench, 17.4, 9, Math.PI / 2);
   void k.person(f, 1914, [17.4, -0.4], "Couple", { face: new THREE.Vector3(-1, 0, 0) });
   void k.person(f, 1915, [17.4, 0.45], "Couple", { face: new THREE.Vector3(-1, 0, 0) });
   void k.person(f, 1839, [13.2, 0], "Photographer", { face: new THREE.Vector3(1, 0, 0) });

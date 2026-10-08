@@ -1,3 +1,5 @@
+import { freezePosters, memePoster } from "../memes";
+import { nextMeme } from "../memewalls";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CURB, GRID, gridCells, PARK, RIVER, ST } from "../city/plan";
@@ -260,6 +262,11 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
     // its open side (+z) to the street
     o.rotation.y = axis === "z" ? (side > 0 ? -Math.PI / 2 : Math.PI / 2) : side > 0 ? Math.PI : 0;
     statics.add(o);
+    // a meme in the shelter's backlit ad box (its end panel's outer face, scene/memes.ts)
+    const ad = memePoster(nextMeme(), 1.15, { kind: "lightbox", frame: "#f4b728" });
+    ad.position.set(2.36, 1.45, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), o.rotation.y).add(o.position);
+    ad.rotation.y = o.rotation.y + Math.PI / 2;
+    group.add(ad);
     const ids: number[] = [];
     const face = axis === "z" ? (side > 0 ? Math.PI : 0) : side > 0 ? -Math.PI / 2 : Math.PI / 2;
     for (let i = 0; i < 2 + Math.floor(rnd() * 4); i++) {
@@ -276,6 +283,7 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
   }
   for (const x of [-140, 30, 170]) busStop("x", ST.blvdN, 1, x);
   for (const x of [-20, 100]) busStop("x", ST.bank, -1, x);
+  freezePosters(group);
 
   // ---- 5. food trucks, with their queues ----
   const TRUCKS: [number, number, number, string, string, string][] = [

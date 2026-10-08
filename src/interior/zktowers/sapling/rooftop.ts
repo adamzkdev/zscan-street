@@ -106,7 +106,7 @@ export function rooftop(k: SkyKit) {
       k.geo(f, new THREE.ConeGeometry(1.5, 0.5, 10).translate(x + 1.7, 2.55, -12.6), i % 4 ? "#f4f0e4" : "#2a8a5a");
     }
   }
-  for (const [x, z, s] of [[-12.4, -11.2, 1], [12.4, -11.2, 2], [-12.4, -20.6, 3], [5.4, -19.6, 4]] as const) k.vox(f, `sap-palm${s}`, () => palm(s + 50), x, z, s);
+  for (const [x, z, s] of [[-12.4, -11.2, 1], [12.4, -11.2, 2], [-12.4, -16.2, 3], [5.4, -19.6, 4]] as const) k.vox(f, `sap-palm${s}`, () => palm(s + 50), x, z, s);
   k.vox(f, "sap-cabana", () => cabana("#2a8a5a"), 11.8, -15.6, -Math.PI / 2);
   k.vox(f, "sap-cabana", () => cabana("#2a8a5a"), 11.8, -19.6, -Math.PI / 2);
   // the fire-pit lounge

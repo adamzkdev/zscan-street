@@ -14,6 +14,8 @@ import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
 import { buildDecor } from "./scene/decor";
 import { Soundscape } from "./audio";
+import { memeStats, posterHit, updateMemes } from "./scene/memes";
+import { cityMemes } from "./scene/memewalls";
 import { LampLights, tiltShift } from "./scene/post";
 import { applyTheme, setRainWanted, type Theme } from "./scene/theme";
 import type { Snark } from "./scene/snark";
@@ -341,6 +343,8 @@ shibuyaNight = (n) => shibuya.setNight(n);
 shibuya.setNight(theme === "night");
 // the second elevated line: the NU7 line, a shuttle north–south along the east avenue
 const metro2 = new Metro(scene, city.nav, NU7_LINE());
+// meme posters round the street, ZK CINEMA's films by the mall (scene/memewalls.ts)
+cityMemes(city);
 // horns: you (on foot) or a jaywalker in front of a vehicle; trains and trams sound off too
 const earPos = new THREE.Vector3();
 const horns = new Horns(
@@ -1238,6 +1242,9 @@ canvas.addEventListener("pointerup", (e) => {
       hud.follow(null);
       return syncCamera();
     }
+    // a meme poster on a wall, a film poster: what it is
+    const mp = posterAtCity(e.clientX, e.clientY);
+    if (mp) return void hud.showPick(mp.info());
     // a shop of the shōtengai: its counter, live
     const st = storeAt(e.clientX, e.clientY);
     if (st) return void openStore(st.id);
@@ -1272,9 +1279,10 @@ canvas.addEventListener("pointermove", (e) => {
   const item = hit ? null : itemAt(e.clientX, e.clientY);
   const train = hit || item ? null : trainCarAt(e.clientX, e.clientY);
   const bus = hit || item || train ? null : busAt(e.clientX, e.clientY);
-  const store = hit || item || bus ? null : storeAt(e.clientX, e.clientY);
-  const place = hit || item || bus || store ? null : placeAt(e.clientX, e.clientY);
-  canvas.style.cursor = hit || item || place || bus || store || train ? "pointer" : "";
+  const poster = hit || item || bus || train ? null : posterAtCity(e.clientX, e.clientY);
+  const store = hit || item || bus || poster ? null : storeAt(e.clientX, e.clientY);
+  const place = hit || item || bus || store || poster ? null : placeAt(e.clientX, e.clientY);
+  canvas.style.cursor = hit || item || place || bus || store || train || poster ? "pointer" : "";
   // hovering a place lights it up, with its name and the way in over its door
   if (place) hud.hoverPlace(place);
   highlight(place);
@@ -1283,6 +1291,7 @@ canvas.addEventListener("pointermove", (e) => {
   else if (item?.tx) hud.hoverText(`<b>Parcel</b><span>${item.tx.kind} tx waiting for a block</span>`, e.clientX, e.clientY);
   else if (train) hud.hoverText(`<b>ZEC LINE</b><span>click to ride inside</span>`, e.clientX, e.clientY);
   else if (store) hud.hoverText(`<b>${store.name}</b><span>click for the counter</span>`, e.clientX, e.clientY);
+  else if (poster) hud.hoverText(poster.hover, e.clientX, e.clientY);
   else if (bus) hud.hoverText(`<b>Block bus${bus.blockHeight ? ` ${bus.blockHeight.toLocaleString("en-US")}` : ""}</b><span>click to ride inside</span>`, e.clientX, e.clientY);
   else {
     const flying = place ? null : skyAt(e.clientX, e.clientY);
@@ -1307,6 +1316,13 @@ function trainCarAt(x: number, y: number) {
       if (ray.intersectObject(c, true).length) return c;
     }
   return null;
+}
+
+/** A meme poster (or a film poster) on the street under the cursor, not too far away. */
+function posterAtCity(x: number, y: number) {
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, viewCam());
+  return posterHit(ray, scene, 70);
 }
 
 /** A shop of the shōtengai under the cursor. */
@@ -1496,6 +1512,7 @@ connectFeed({
 if (new URLSearchParams(location.search).has("debug")) {
   Object.assign(window, {
     street: {
+      memes: memeStats,
       director,
       renderer,
       overlays,
@@ -1787,6 +1804,7 @@ function frameBody(stepDt?: number) {
   if (interiors.active) {
     interiors.update(dt, t);
     if (!interiors.active) return again();
+    updateMemes(dt, interiors.walk.camera, interiors.active.scene);
     // near the way out (ground floor): say so
     const out = interiors.walk.exitAhead();
     // or at a lift's doors / a stairway's door: what it is
@@ -1844,6 +1862,7 @@ function frameBody(stepDt?: number) {
     scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 : 0) + up * 1.6;
   }
   renderPass.camera = cam;
+  updateMemes(dt, cam, scene);
   cam.getWorldQuaternion(camQuat);
   camRight.set(1, 0, 0).applyQuaternion(camQuat);
 

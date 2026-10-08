@@ -235,13 +235,14 @@ export function lobby(k: TowerKit) {
   });
   k.put(f, "plantPiano", () => F.plant("monstera", 9), -10.8, -1.2);
 
-  // security gates in front of the elevators (walk through the gaps)
-  for (const z of [-6.4, -8.2, -10.0, -11.8]) k.put(f, "turnstile", F.turnstile, -9.2, z, Math.PI / 2);
+  // security gates across the lift lobby, clear of the lifts' landing (walk through the gaps)
+  const GX = -6.6;
+  for (const z of [-6.4, -8.2, -10.0, -11.8]) k.put(f, "turnstile", F.turnstile, GX, z, Math.PI / 2);
   const gate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.1, 5.6), new THREE.MeshBasicMaterial({ visible: false }));
-  gate.position.set(-9.2, y + 0.55, -9.1);
+  gate.position.set(GX, y + 0.55, -9.1);
   g.add(gate);
   k.pick(f, gate, "<b>Security gates</b><span>tap your key</span>", () => ({ eyebrow: "Security", title: "Access granted ✓", body: "<p>Welcome back, resident. Every key here is a viewing key: it shows what you allow, nothing more.</p>" }));
-  k.label(f, "RESIDENTS & GUESTS", -9.2, 1.6, -9.1, { h: 0.14, color: "#3ee08f", rot: Math.PI / 2 });
+  k.label(f, "RESIDENTS & GUESTS", GX, 1.6, -9.1, { h: 0.14, color: "#3ee08f", rot: Math.PI / 2 });
   void k.person(f, 6060, [-8.4, -5.2], "Concierge", { face: new THREE.Vector3(1, 0, 0) });
   // elevator floor indicators above the doors
   for (const z of [-7.4, -10.6]) {

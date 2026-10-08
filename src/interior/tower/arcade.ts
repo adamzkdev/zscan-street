@@ -4,7 +4,9 @@ import { hash } from "../../scene/voxel/model";
 import type { Game } from "../../ui/arcade";
 import * as F from "../furniture";
 import { box, glowMat, std } from "../kit";
-import { LEVELS, TowerKit, Z0, makeCanvas } from "./kit";
+import { LEVELS, TowerKit, X0, Z0, makeCanvas } from "./kit";
+import { memePoster } from "../../scene/memes";
+import { nextMeme } from "../../scene/memewalls";
 
 export const ART: Record<string, { name: string; color: string; bg: string; side: string }> = {
   snake: { name: "ZEC SNAKE", color: "#3ee08f", bg: "#06120c", side: "#0f3a24" },
@@ -90,6 +92,15 @@ export function arcade(k: TowerKit) {
   k.label(f, "ZK ARCADE · ゲームセンター", -8.7, 3.95, -9, { h: 0.42, color: "#ff3e8a", rot: -Math.PI / 2 });
   k.label(f, "ZK ARCADE · ゲームセンター", -8.1, 3.95, -9, { h: 0.42, color: "#3ef0ff", rot: Math.PI / 2 });
   k.rects[f].push([-8.7, -12.9, -8.1, -12.3], [-8.7, -5.7, -8.1, -5.1]);
+  for (const [z, c] of [
+    [-4.5, "#ff3e8a"],
+    [-2.2, "#3ef0ff"],
+  ] as const) {
+    const p = memePoster(nextMeme(), 1.3, { kind: "lightbox", frame: c });
+    p.position.set(X0 + 0.12, y + 1.95, z);
+    p.rotation.y = Math.PI / 2;
+    g.add(p);
+  }
   // the arcade row along the north glass
   (["snake", "invaders", "flappy", "whack", "memory", "snake", "invaders", "flappy", "whack"] as Game[]).forEach((game, i) => cabinet(k, f, -6.4 + i * 1.0, Z0 + 0.75, 0, game));
   k.label(f, "VIDEO GAMES · ビデオゲーム", -2.4, 3.5, Z0 + 0.3, { h: 0.3, color: "#3ef0ff" });

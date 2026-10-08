@@ -1,3 +1,5 @@
+import { filmAd } from "./films";
+import { memeAd } from "./memes";
 import * as THREE from "three";
 import type { City, Facade } from "./city";
 import { CURB } from "./city";
@@ -484,7 +486,7 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
       for (let k = 0; k < (f.height > 25 ? 2 : 1); k++)
         make(f.extras, w, h, new THREE.Vector3(f.x0 + width * (0.3 + k * 0.4), CURB + f.height * (0.55 + k * 0.18), z + 0.2), 0, [MARKET_ADS[(k + Math.floor(rand() * 3)) % 3], ADS[Math.floor(rand() * ADS.length)]]);
     } else if (f.type === "apartment" || f.type === "shophouse") {
-      if (rand() > 0.55) make(f.extras, Math.min(2.4, width * 0.4), 1.35, new THREE.Vector3(f.x0 + width * (0.25 + rand() * 0.5), CURB + f.height * 0.72, z + 0.95), 0, [ADS[Math.floor(rand() * ADS.length)]]);
+      if (rand() > 0.55) make(f.extras, Math.min(2.4, width * 0.4), 1.35, new THREE.Vector3(f.x0 + width * (0.25 + rand() * 0.5), CURB + f.height * 0.72, z + 0.95), 0, rand() > 0.5 ? [ADS[Math.floor(rand() * ADS.length)], memeAd] : [ADS[Math.floor(rand() * ADS.length)]]);
     }
   }
   // the downtown tower gets the live board, big, on the side facing the crossing
@@ -492,8 +494,8 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
   if (tower) make(tower.extras, 4.2, 2.4, new THREE.Vector3((tower.x0 + tower.x1) / 2, CURB + tower.height * 0.48, tower.z + 0.4), 0, [MARKET_ADS[0], ADS[1], MARKET_ADS[1], MARKET_ADS[2]]);
   // two rooftop billboards over the square and over the yard
   const board = new THREE.Group();
-  make(board, 7, 3, new THREE.Vector3(0, 0, -0.08), Math.PI, [ADS[6], ADS[2], ADS[4]]);
-  make(board, 7, 3, new THREE.Vector3(0, 0, 0.08), 0, [MARKET_ADS[0], ADS[3], MARKET_ADS[1], ADS[0]]);
+  make(board, 7, 3, new THREE.Vector3(0, 0, -0.08), Math.PI, [ADS[6], memeAd, ADS[2], ADS[4], memeAd]);
+  make(board, 7, 3, new THREE.Vector3(0, 0, 0.08), 0, [MARKET_ADS[0], memeAd, ADS[3], MARKET_ADS[1], memeAd, ADS[0]]);
   board.position.set(0, CURB + 13.4, 29.2);
   const legs = new THREE.MeshStandardMaterial({ color: "#1e1c26", metalness: 0.6, roughness: 0.4 });
   for (const x of [-2.6, 2.6]) {
@@ -504,7 +506,7 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
   city.group.add(board);
   const yardBoard = new THREE.Group();
   make(yardBoard, 6, 2.6, new THREE.Vector3(0.08, 0, 0), Math.PI / 2, [MARKET_ADS[2], ADS[4], MARKET_ADS[0]]);
-  make(yardBoard, 6, 2.6, new THREE.Vector3(-0.08, 0, 0), -Math.PI / 2, [ADS[2], ADS[6], ADS[1]]);
+  make(yardBoard, 6, 2.6, new THREE.Vector3(-0.08, 0, 0), -Math.PI / 2, [ADS[2], memeAd, ADS[6], ADS[1], memeAd]);
   yardBoard.position.set(49.6, CURB + 9, 18);
   city.group.add(yardBoard);
 
@@ -515,7 +517,7 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
   if (mall)
     for (const k of ["screenA", "screenB"]) {
       const p = mall.points[k];
-      if (p) make(city.group, (56 * 2) / 6, (49 * 2) / 6, p.clone().add(front(mall.yaw, 0.14)), mall.yaw, k === "screenA" ? [MARKET_ADS[0], ADS[0], ADS[3], MARKET_ADS[1]] : [ADS[2], MARKET_ADS[2], ADS[5], ADS[1]]);
+      if (p) make(city.group, (56 * 2) / 6, (49 * 2) / 6, p.clone().add(front(mall.yaw, 0.14)), mall.yaw, k === "screenA" ? [filmAd, MARKET_ADS[0], filmAd, ADS[0], memeAd, ADS[3], MARKET_ADS[1]] : [filmAd, ADS[2], memeAd, MARKET_ADS[2], filmAd, ADS[5], ADS[1]]);
     }
   const reserve = lm.get("reserve");
   if (reserve?.points.tickerA && reserve.points.tickerB) {

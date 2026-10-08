@@ -671,6 +671,7 @@ export class Hud {
     const i = this.indoor;
     if (!i) return;
     const f = i.floors[floor];
+    if (!f) return;
     const st = PLACE_STYLE[i.key];
     // "The shop · pending transactions": a name, then what is on it
     const split = (n: string) => {

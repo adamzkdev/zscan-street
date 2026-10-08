@@ -29,6 +29,7 @@ export function buildMall(ctx: InteriorContext): Interior {
   lv.food();
   lv.cinema();
   k.finish();
+  if (location.search.includes("debug")) (window as unknown as Record<string, unknown>).__cinema = lv.cine;
 
   const setTheme = (t: Theme) => {
     k.night = t === "night";
@@ -88,6 +89,9 @@ export function buildMall(ctx: InteriorContext): Interior {
       for (const s of k.people[k.current]) s.update(dt, t, camQuat, camRight);
       for (const tick of k.ticks[k.current]) tick(dt, t);
       for (const tick of k.always) tick(dt, t);
+      // the cinema's films play only in the room you are in
+      if (k.current === 4) lv.cine?.update(dt, camera, k.current);
+      else lv.cine?.idle(dt);
     },
   };
 }

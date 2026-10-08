@@ -1,0 +1,347 @@
+{
+"source": "https://zksnarks.net/memes",
+"atlas": {
+"file": "atlas.webp",
+"cols": 8,
+"rows": 6,
+"cell": 128
+},
+"memes": [
+{
+"slug": "courtside",
+"title": "Courtside",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "poolside",
+"title": "Poolside",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "yacht-toast",
+"title": "Yacht Toast",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "the-vault",
+"title": "The Vault",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "the-address",
+"title": "The Address",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "on-the-green",
+"title": "On the Green",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "make-it-rain",
+"title": "Make It Rain",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "find-out",
+"title": "Find Out",
+"kind": "image",
+"w": 512,
+"h": 510
+},
+{
+"slug": "gladiator",
+"title": "Are You Not Shielded",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "success",
+"title": "Success",
+"kind": "image",
+"w": 512,
+"h": 341
+},
+{
+"slug": "king-of-shields",
+"title": "King of Shields",
+"kind": "image",
+"w": 414,
+"h": 512
+},
+{
+"slug": "stonks",
+"title": "Stonks",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "pointing",
+"title": "That’s Me",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "roll-safe",
+"title": "Roll Safe",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "absolute-cinema",
+"title": "Absolute Cinema",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "laughing",
+"title": "Laughing",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "imagination",
+"title": "Imagination",
+"kind": "image",
+"w": 512,
+"h": 336
+},
+{
+"slug": "here-we-go-again",
+"title": "Here We Go Again",
+"kind": "image",
+"w": 512,
+"h": 503
+},
+{
+"slug": "handshake",
+"title": "Handshake",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "enlightened",
+"title": "Enlightened",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "cheers",
+"title": "Cheers",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "back-to-mcdonalds",
+"title": "Back to McDonald’s",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "award-night",
+"title": "Award Night",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "the-speech",
+"title": "The Speech",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "spin-cycle",
+"title": "Spin Cycle",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "concorde",
+"title": "Concorde",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "doing-the-math",
+"title": "Doing the Math",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "work-from-bed",
+"title": "Work from Bed",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "bed-of-cash",
+"title": "Bed of Cash",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "counting-table",
+"title": "Counting Table",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "the-pitch",
+"title": "The Pitch",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "storage-unit",
+"title": "Storage Unit",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "catch-me-if-you-can",
+"title": "Catch Me If You Can",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "counting-bills",
+"title": "Counting Bills",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "lying-in-cash",
+"title": "Lying in Cash",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "burning-money",
+"title": "Burning Money",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "salt-bae",
+"title": "Salt Bae",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "and-then-he-said",
+"title": "And Then He Said",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "show-me-the-money",
+"title": "Show Me the Money",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "to-the-moon",
+"title": "To the Moon",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "walking-away",
+"title": "Walking Away",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "green-candles",
+"title": "Green Candles",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "mastermind",
+"title": "Mastermind",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "the-boss",
+"title": "The Boss",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "money-bags",
+"title": "Money Bags",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "pointing-ii",
+"title": "Pointing II",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "hot-tub",
+"title": "Hot Tub",
+"kind": "image",
+"w": 512,
+"h": 512
+},
+{
+"slug": "big-chains",
+"title": "Big Chains",
+"kind": "image",
+"w": 512,
+"h": 512
+}
+]
+}

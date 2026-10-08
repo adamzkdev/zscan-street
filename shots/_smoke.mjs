@@ -5,7 +5,7 @@ const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.
 const p = await b.newPage();
 const errs = [];
 p.on("pageerror", (e) => errs.push(e.message));
-await p.goto("http://localhost:3008/?debug&theme=day");
+await p.goto(`http://localhost:${process.env.PORT ?? 3008}/?debug&theme=day`);
 await p.waitForFunction(() => window.street, { timeout: 120000 });
 await new Promise((r) => setTimeout(r, 6000));
 for (const k of keys) {

@@ -1,0 +1,36 @@
+{
+ "source": "https://zksnarks.net/network",
+ "slots": 7,
+ "films": [
+  {
+   "name": "Derech",
+   "snark": 9025,
+   "handle": "IDerech",
+   "runtime": "1:12",
+   "quote": "I share my work because I want people to see it. It doesn’t mean I want every part of my life to be public. Having that choice matters to me.",
+   "bio": "Ilan Derech is a Mexico-born, Tokyo-based visual artist whose work distills fleeting human moments into contemplative, cinematic experiences. With roots in motion graphics, 3D design, and generative coding, he evolved into a filmmaker and photographer known for capturing emotional atmospheres.",
+   "video": "cinema/derech-spotlight-3.mp4",
+   "art": "cinema/snark-9025.webp"
+  },
+  {
+   "name": "Josh Ong",
+   "snark": 5478,
+   "handle": "beijingdou",
+   "runtime": "1:08",
+   "quote": "When I got into crypto, I was already doxxed, so sharing publicly came naturally. Becoming a father changed how I think about privacy - and the importance of protecting my family.",
+   "bio": "Josh Ong is a longtime Web3 operator, investor, and collector, best known as co-founder of Bored Room Ventures and an early member of the Bored Ape Yacht Club community. Today, he advises Web3 and AI projects while serving as Co-COO and Partner, Web3 at NewChic Capital.",
+   "video": "cinema/josh-spotlight.mp4",
+   "art": "cinema/snark-5478.webp"
+  },
+  {
+   "name": "CryptoVonDoom",
+   "snark": 9311,
+   "handle": "CRYPTOVONDOOM",
+   "runtime": "1:44",
+   "quote": "Privacy, to me, means being able to choose what I share and with whom.  I still want to be open and accessible, but I want to make that choice consciously, especially when something involves other people’s privacy too.",
+   "bio": "VonDoom is an entrepreneur and collector who turns ideas into businesses and brings people together around art, culture, community and emerging technology.",
+   "video": "cinema/vondoom-spotlight.mp4",
+   "art": "cinema/snark-9311.webp"
+  }
+ ]
+}

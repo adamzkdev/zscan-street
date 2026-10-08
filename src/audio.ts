@@ -63,6 +63,11 @@ export class Soundscape {
   private lastEar = 0;
   /** How much of the street's rain reaches you (1 outside). */
   private rainIn = 1;
+  /** Places' soundscapes go through `bed`, so a film's soundtrack can duck them (see film()). */
+  private bed!: GainNode;
+  private filmGain!: GainNode;
+  private filmEl: HTMLMediaElement | null = null;
+  private filmSrc = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
   on = false;
 
   constructor() {
@@ -71,6 +76,16 @@ export class Soundscape {
     window.addEventListener("zstreet:colosseum", (e) => {
       const d = (e as CustomEvent<{ type: string; winner?: number }>).detail;
       if (d?.type) this.event(d.type, d);
+    });
+    // ZK CINEMA's film playing in the room you are in (or none)
+    window.addEventListener("zstreet:film", (e) => this.film((e as CustomEvent<{ el: HTMLMediaElement | null }>).detail?.el ?? null));
+    // the cinema threw a video away: let go of its source node
+    window.addEventListener("zstreet:film-gone", (e) => {
+      const el = (e as CustomEvent<{ el: HTMLMediaElement }>).detail?.el;
+      if (!el) return;
+      this.filmSrc.get(el)?.disconnect();
+      this.filmSrc.delete(el);
+      if (this.filmEl === el) this.film(null);
     });
     window.addEventListener("zstreet:sound", (e) => {
       const d = (e as CustomEvent<{ name: string; arg?: unknown }>).detail;
@@ -85,12 +100,14 @@ export class Soundscape {
     this.on = true;
     this.fade(this.master, 0.9, 1.5);
     this.apply(true);
+    this.filmSync();
   }
 
   stop() {
     if (!this.ctx) return;
     this.on = false;
     this.fade(this.master, 0, 0.6);
+    this.filmSync();
     // let the machine rest once it is silent
     const ctx = this.ctx;
     setTimeout(() => {
@@ -198,7 +215,7 @@ export class Soundscape {
       this.fade(this.musicGain, 0, xf);
       this.rainIn = p?.rain ?? 0.1;
       if (p && (changed || !this.scene)) {
-        const s = new Scene(this.ctx, this.bufs, this.master, id, p.room);
+        const s = new Scene(this.ctx, this.bufs, this.bed, id, p.room);
         try {
           p.build(s, { night: this.ear.night, floor: this.floor, name: this.placeName });
         } catch (e) {
@@ -214,6 +231,36 @@ export class Soundscape {
     const t = this.ctx.currentTime;
     this.rainLP.frequency.setTargetAtTime(this.rainIn >= 1 ? 16000 : 400 + 3000 * this.rainIn, t, 0.4);
     this.fade(this.rainGain, this.rainOn ? 0.55 * this.rainIn : 0, xf);
+  }
+
+  /**
+   * A film's soundtrack (a <video> playing in the cinema room you are in; null: none). Its sound
+   * reaches you only with the sound on, through the master (so the sound button and the fades
+   * apply), and the place's soundscape is ducked under it. Otherwise the video stays muted.
+   */
+  film(el: HTMLMediaElement | null) {
+    const old = this.filmEl;
+    this.filmEl = el;
+    if (old && old !== el) old.muted = true;
+    this.filmSync();
+  }
+
+  private filmSync() {
+    const el = this.filmEl;
+    if (this.ctx) this.fade(this.bed, el && this.on ? 0.22 : 1, 0.8);
+    if (!el) return;
+    if (!this.ctx || !this.on) {
+      el.muted = true;
+      return;
+    }
+    try {
+      let src = this.filmSrc.get(el);
+      if (!src) this.filmSrc.set(el, (src = this.ctx.createMediaElementSource(el)));
+      src.connect(this.filmGain);
+    } catch {
+      return;
+    }
+    el.muted = false;
   }
 
   private get indoors() {
@@ -331,6 +378,11 @@ export class Soundscape {
     this.bufs = makeBufs(ctx);
     this.master = ctx.createGain();
     this.master.gain.value = 0;
+    this.bed = ctx.createGain();
+    this.bed.connect(this.master);
+    this.filmGain = ctx.createGain();
+    this.filmGain.gain.value = 0.9;
+    this.filmGain.connect(this.master);
     this.streetBus = ctx.createGain();
     this.streetBus.gain.value = 1;
     this.streetBus.connect(this.master);

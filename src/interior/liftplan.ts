@@ -7,7 +7,6 @@ import type { Interior, Rect } from "./types";
  * (`at`, or the Interior's own `lifts` / `stairs`). Places not listed get one lift on every floor.
  */
 
-const lift = (o: LiftDecl = {}) => () => [o];
 /**
  * The mall's escalators (mall/atrium.ts): two lanes each (up, down) between consecutive levels over
  * the void, landing on slab tongues ("piers") reached through gaps in the void's railing.
@@ -69,33 +68,88 @@ const needleCar = (c: number): LiftDecl => ({ at: { x: 0, z: c - 1.22, yaw: Math
 /** Per floor, the lifts there. */
 const per = (m: Record<number, LiftDecl[]>) => (n: number) => m[n] ?? [];
 
+/**
+ * A bank of two set on a modelled lift lobby (the towers', the Reserve's, the Burj Al Arab's
+ * `lifts(f, x, z, ry)`: a 6.6 m wall with two doors at ±1.7 m, `ry` turning it, 0 = doors facing +z):
+ * the car on its first door, its twin on the second, both backed onto the lobby wall, the lobby's
+ * own call panel and floor signs left showing between and over them.
+ */
+function lobby(x: number, z: number, ry: number, o: LiftDecl = {}): LiftDecl {
+  const c = Math.cos(ry),
+    s = Math.sin(ry);
+  // local (−1.7, 1.23): the first door, 1.23 m out (the car's back on the doors' faces)
+  const lx = -1.7,
+    lz = 1.23;
+  return { at: { x: x + lx * c + lz * s, z: z - lx * s + lz * c, yaw: ry + Math.PI }, bank: -1, pier: 0.92, ...o };
+}
+
+/**
+ * The same on a wall of single lift doors facing +x (the ZK Tower's and the Marina hotel's
+ * `elevators` / `lifts`: doors at x + 0.2, their wall to x + 0.5): the car on the door at `z`, its
+ * twin on the one `gap` metres further along −z.
+ */
+const westWall = (x: number, z: number, gap: number, o: LiftDecl = {}): LiftDecl => ({ at: { x: x + 0.5 + 0.98, z, yaw: -Math.PI / 2 }, bank: -1, pier: gap - 2.48, ...o });
+
 export const PLANS: Partial<Record<Interior["key"], Plan>> = {
   // its own stairs (another part of the code); the spiral stair joins Big Ben's floors
   pyramid: { lifts: () => [] },
   bigben: { lifts: () => [] },
-  mempool: { style: "industrial", lifts: lift({ name: "FREIGHT LIFT" }) },
-  // the freight lift by the "EV" doors of the control room and the catwalks
-  factory: { style: "industrial", lifts: lift({ name: "FREIGHT LIFT", near: { x: 16, z: -1.5 } }) },
-  // terraces I and II: at the front end of their left arm, where the old lift doors are; the
-  // auditorium in the sphere: a narrow car against its back wall
+  // the shop: against the back wall in the corner by the dock (clear of the mempool board), facing the
+  // counter; the archive: on its front wall, where its door is
+  mempool: {
+    style: "industrial",
+    lifts: per({
+      0: [{ at: { x: 1.2, z: -12.88, yaw: Math.PI } }],
+      1: [{ at: { x: 0, z: -1.42, yaw: 0 } }],
+    }),
+  },
+  // the freight lift at the "EV" doors on the control room's back wall, one shaft from the hall to the catwalks
+  factory: { style: "industrial", lifts: (n) => [{ name: "FREIGHT LIFT", at: { x: 16, z: -1.8, yaw: 0 } }] },
+  // The Binhai atrium: every lift on the front wall at its east end, stepping out with the terraces:
+  // the ground floor's bank of two in the corner by the glass, the terraces' cars at the end of their
+  // walkway where their lift doors are; the reading room's bank in its back corner (not under the
+  // masthead), the ZIP Archive's on its two lift doors; the auditorium's narrow car against its back wall
   library: {
     style: "wood",
     lifts: per({
-      0: [{}],
-      1: [{ at: { x: -20.4, z: -1.55, yaw: 0 } }],
-      2: [{ at: { x: -25.1, z: -1.55, yaw: 0 } }],
-      3: [{}],
+      0: [{ at: { x: 14.6, z: -1.5, yaw: 0 }, bank: -1, wing: [0, 0.16] }],
+      1: [{ at: { x: 20.4, z: -1.55, yaw: 0 } }],
+      2: [{ at: { x: 25.1, z: -1.55, yaw: 0 } }],
+      3: [{ at: { x: 10.6, z: -78.98, yaw: Math.PI }, bank: 1, wing: [0.16, 0] }],
       4: [{ narrow: true, at: { x: 0, z: 5.55, yaw: 0 } }],
-      5: [{}],
+      5: [{ at: { x: -3.2, z: -67.04, yaw: 0 }, bank: 1, pier: 3.92 }],
     }),
   },
-  // the lift by the old elevator doors on the west wall; on the residences' floor the corridor is too
-  // narrow beside them: it stands across the corridor's west end, facing the hallway to the flats
-  tower: { style: "steel", lifts: (n) => [n === 6 ? { at: { x: -10.91, z: -9, yaw: -Math.PI / 2 } } : {}] },
-  "tower-orchard": { style: "gold" },
-  "tower-sapling": { style: "garden" },
-  "tower-halo": { style: "neon" },
-  museum: { style: "brass" },
+  // the lifts on the core's west wall, on its two lift doors, on every floor (the lobby's security
+  // gates stand clear of their landing); the residences' corridor is too narrow beside them: the car
+  // closes the corridor's west end; the rooftop: in front of the lift kiosk's door
+  tower: {
+    style: "steel",
+    lifts: (n) => [n === 6 ? { at: { x: -10.91, z: -9, yaw: -Math.PI / 2 } } : n === 7 ? { at: { x: -8.52, z: -9, yaw: -Math.PI / 2 } } : westWall(-12, -7.4, 3.2)],
+  },
+  // the three ZK towers: on each floor's lift lobby
+  "tower-orchard": {
+    style: "gold",
+    lifts: per({ 0: [lobby(-11.85, -13, Math.PI / 2)], 1: [lobby(-11.85, -10, Math.PI / 2)], 2: [lobby(-11.85, -10, Math.PI / 2)], 3: [lobby(0, -6.4, 0)] }),
+  },
+  "tower-sapling": {
+    style: "garden",
+    lifts: per({ 0: [lobby(-5, -23.84, 0)], 1: [lobby(0, -9.84, 0)], 2: [lobby(-11.84, -12, Math.PI / 2)], 3: [lobby(-11.84, -12, Math.PI / 2)], 4: [lobby(-10.5, -22.84, 0)] }),
+  },
+  "tower-halo": {
+    style: "neon",
+    lifts: per({ 0: [lobby(-14.8, -24, Math.PI / 2)], 1: [lobby(-17.8, -7, Math.PI / 2)], 2: [lobby(-13.7, -7, Math.PI / 2)], 3: [lobby(0, 1.68, Math.PI)] }),
+  },
+  // the Napoleon hall: on the front wall right of the entrance; upstairs, on each floor's middle lift door
+  museum: {
+    style: "brass",
+    lifts: per({
+      0: [{ at: { x: 4.5, z: -1.42, yaw: 0 } }],
+      1: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
+      2: [{ at: { x: 4.5, z: -1.46, yaw: 0 } }],
+      3: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
+    }),
+  },
   // the stands and the pitch: a lift in a south vomitory (x 20: the middle one is the way out) down
   // to the back of the players' tunnel
   stadium: {
@@ -119,60 +173,109 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
       { from: 1, to: 3, zone: [14.4, -6.9, 15.4, -1.78], up: "+z", build: true },
     ],
   },
-  // the escalators over the void, both ways; the lifts in the lobby by the entrance
-  mall: { style: "white", lifts: lift({ near: { x: -20.5, z: -1.4 } }), stairs: mallEscalators() },
-  hotel: { style: "gold" },
-  // the lobby's lift wall; upstairs, the walk-in cabin cut into each floor's core (half-size c)
+  // the escalators over the void, both ways; the lifts on the two lift doors of the lift lobby in the
+  // south-west corner, on every level
+  mall: { style: "white", lifts: () => [{ at: { x: -22.7, z: -1.38, yaw: 0 }, bank: 1, pier: 1.92 }], stairs: mallEscalators() },
+  // the lift wall on the west side of every floor (the SkyPark's further out): the car between its two
+  // modelled doors (a bank of three), on the axis of the corridor that leads to it (the lobby is 4 m deep)
+  hotel: { style: "gold", lifts: (n) => [{ at: { x: (n === 6 ? -27 : -15) + 1.48, z: n === 6 ? -10.15 : -11, yaw: -Math.PI / 2 } }] },
+  // the lobby's lift wall: on the first two of its four doors; upstairs, the walk-in cabin cut into each floor's core (half-size c)
   needle: {
     style: "white",
     lifts: per({
-      0: [{ near: { x: 0, z: -26.4 } }],
+      0: [{ at: { x: -2.5, z: -26.58, yaw: Math.PI }, bank: -1, pier: 2.52 }],
       1: [needleCar(3.5)],
       2: [needleCar(3.5)],
       3: [needleCar(3.2)],
       4: [needleCar(3.0)],
     }),
   },
-  arab: { style: "gold" },
-  reserve: { style: "brass" },
-  // the foyer's "CONCERT HALL ▲" doors on its east wall
-  opera: { style: "wood", lifts: per({ 0: [{ near: { x: 13.6, z: 8 } }], 1: [{}] }) },
-  // the podium terrace is a 2.2 m ring: a narrow car across it by the spawn
-  colosseum: { style: "stone", lifts: (n) => [n === 2 ? { narrow: true, at: { x: 1.33, z: 17.52, yaw: Math.PI / 2 } } : {}] },
-  // the pillar lifts to the 1st and 2nd floors, the summit lift from the 2nd, the stairs to the 2nd
+  // the lift lobbies of the atrium, Al Mahara and the salon; in the bedroom against the wall by the
+  // spiral stair; on the helipad at the end of the gangway, at the door into the tower
+  arab: {
+    style: "gold",
+    lifts: per({
+      0: [lobby(0, -33.8, 0)],
+      1: [lobby(0, 0.3, Math.PI)],
+      2: [lobby(0, -0.15, Math.PI)],
+      3: [{ at: { x: 9.6, z: -8.1, yaw: Math.PI } }],
+      // the rim's rail opens onto the gangway
+      4: [{ at: { x: 13.3, z: -14, yaw: Math.PI / 2 }, clear: [[10.4, -15.35, 12.0, -12.65]] }],
+    }),
+  },
+  // the bank's lift lobbies, floor by floor
+  reserve: {
+    style: "brass",
+    lifts: per({
+      0: [lobby(-19.95, -14, Math.PI / 2)],
+      1: [lobby(-21.75, -8, Math.PI / 2)],
+      2: [lobby(-17.85, -6, Math.PI / 2)],
+      3: [lobby(-15.8, -9, Math.PI / 2)],
+      4: [lobby(-12.38, -15, Math.PI / 2)],
+      5: [lobby(0, -0.16, Math.PI)],
+      6: [lobby(-15.95, -15, Math.PI / 2)],
+    }),
+  },
+  // the foyer's "CONCERT HALL ▲" doors on its east wall; in the hall, the back wall's east corner
+  opera: {
+    style: "wood",
+    lifts: per({ 0: [{ at: { x: 13.6, z: 7.9, yaw: Math.PI / 2 } }], 1: [{ at: { x: 10, z: 13.52, yaw: 0 }, wing: [0, 0.36] }] }),
+  },
+  // one shaft beside the gate: in the arena against the podium wall, below in the hypogeum's
+  // substructure by the gate stair; the podium terrace is a 2.2 m ring: a narrow car across it by the spawn
+  colosseum: {
+    style: "stone",
+    lifts: per({
+      0: [{ at: { x: 3.95, z: 12.9, yaw: 0 } }],
+      1: [{ at: { x: 3.95, z: 12.9, yaw: 0 } }],
+      2: [{ narrow: true, at: { x: 1.33, z: 17.52, yaw: Math.PI / 2 } }],
+    }),
+  },
+  // the pillar lift at the Pilier Est's doors (esplanade, 1st, 2nd), the summit lift at the core's doors
   eiffel: {
     style: "eiffel",
     lifts: per({
-      0: [{ shaft: "pillar", near: { x: 13.9, z: 16.6 } }],
-      1: [{ shaft: "pillar", near: { x: 12.1, z: 14 } }],
-      2: [{ shaft: "pillar", near: { x: 7.7, z: 8.6 } }, { shaft: "summit", name: "SUMMIT LIFT", near: { x: 0, z: -4.2 } }],
-      3: [{ shaft: "summit", name: "SUMMIT LIFT" }],
+      0: [{ shaft: "pillar", at: { x: 12.7, z: 17.8, yaw: Math.PI / 2 } }],
+      // the door onto the east terrace (the other one is boxed in by the 58's pavilion)
+      1: [{ shaft: "pillar", at: { x: 15, z: 10.92, yaw: 0 } }],
+      2: [{ shaft: "pillar", at: { x: 6.52, z: 9.7, yaw: Math.PI / 2 } }, { shaft: "summit", name: "SUMMIT LIFT", at: { x: 0, z: -4.03, yaw: 0 } }],
+      3: [{ shaft: "summit", name: "SUMMIT LIFT", at: { x: 0, z: -4.3, yaw: 0 } }],
     }),
   },
-  // the pedestal lift; the helix joins the balcony and the crown; a service lift up the arm to the torch
+  // the pedestal lift: one shaft in the north-west, against the museum's north wall and the
+  // balcony's parapet; the helix joins the balcony and the crown; a service lift up the arm to the torch
   statue: {
     style: "brass",
     together: [[1, 2]],
     // the torch's car hangs off its balcony (south side), a lattice down the arm under it
     lifts: per({
-      0: [{ shaft: "pedestal" }],
-      1: [{ shaft: "pedestal" }, { shaft: "torch", name: "SERVICE LIFT", style: "industrial" }],
+      0: [{ shaft: "pedestal", at: { x: -8.3, z: -13.4, yaw: Math.PI } }],
+      1: [{ shaft: "pedestal", at: { x: -8.3, z: -8.55, yaw: Math.PI } }, { shaft: "torch", name: "SERVICE LIFT", style: "industrial" }],
       3: [{ shaft: "torch", name: "SERVICE LIFT", style: "industrial", narrow: true, at: { x: 9.33, z: 4.98, yaw: 0 }, clear: [[8.5, 3.3, 10.2, 3.95]], column: 6 }],
     }),
   },
-  // the Supertree lift to the Skyway; a garden tram between the grove and the two domes; the Cloud Forest's lift to its Cloud Walk
+  // the Supertree lift to the Skyway; a garden tram between the grove and the two domes, its stops at
+  // the side of the paths; the Cloud Forest's lift to its Cloud Walk
   gardens: {
     style: "garden",
     lifts: per({
       // the Supertree lift: a cabin on a lattice beside T0's trunk, from the lawn up to the Skyway's first landing
-      0: [{ shaft: "tree", name: "SUPERTREE LIFT", at: { x: -24.82, z: -40, yaw: -Math.PI / 2 }, rise: 22 }, { shaft: "tram", name: "GARDEN TRAM", windows: true, style: "white" }],
+      0: [{ shaft: "tree", name: "SUPERTREE LIFT", at: { x: -24.82, z: -40, yaw: -Math.PI / 2 }, rise: 22 }, { shaft: "tram", name: "GARDEN TRAM", windows: true, style: "white", at: { x: -1.95, z: -3.1, yaw: -Math.PI / 2 } }],
       1: [{ shaft: "tree", name: "SUPERTREE LIFT", at: { x: -24.82, z: -40, yaw: Math.PI / 2 }, clear: [[-26.4, -40.8, -25.5, -39.2]], column: 22 }],
       // the Cloud Forest's lift in the mountain's east flank, up to the Cloud Walk's bridge
-      2: [{ shaft: "tram", name: "GARDEN TRAM", windows: true, style: "white" }, { shaft: "cloud", name: "CLOUD LIFT", at: { x: 14.55, z: -30, yaw: -Math.PI / 2 } }],
+      2: [{ shaft: "tram", name: "GARDEN TRAM", windows: true, style: "white", at: { x: -2.0, z: 2.0, yaw: -Math.PI / 2 } }, { shaft: "cloud", name: "CLOUD LIFT", at: { x: 14.55, z: -30, yaw: -Math.PI / 2 } }],
       3: [{ shaft: "cloud", name: "CLOUD LIFT", narrow: true, at: { x: 12.5, z: -30, yaw: -Math.PI / 2 }, clear: [[11.1, -31.3, 13.8, -28.7]] }],
-      4: [{ shaft: "tram", name: "GARDEN TRAM", windows: true, style: "white" }],
+      4: [{ shaft: "tram", name: "GARDEN TRAM", windows: true, style: "white", at: { x: -2.6, z: 8.2, yaw: 0 } }],
     }),
   },
-  // the beach, the villa, the crescent: monorail stops
-  palm: { style: "palm", lifts: lift({ shaft: "monorail", name: "MONORAIL", windows: true }) },
+  // the monorail stops: on the beach against the villas' wall, in the villa by its door, on the
+  // crescent at the boardwalk's edge under the line
+  palm: {
+    style: "palm",
+    lifts: per({
+      0: [{ shaft: "monorail", name: "MONORAIL", windows: true, at: { x: -8.6, z: 10.2, yaw: -Math.PI / 2 } }],
+      1: [{ shaft: "monorail", name: "MONORAIL", windows: true }],
+      2: [{ shaft: "monorail", name: "MONORAIL", windows: true }],
+    }),
+  },
 };

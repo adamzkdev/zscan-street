@@ -53,6 +53,15 @@ export interface LiftDecl {
   column?: number;
   /** …or this far up over it (the same shaft seen from its foot). */
   rise?: number;
+  /**
+   * A bank of two: a second car (its doors shut, its own indicator) beside this one, on the right (1)
+   * or the left (−1) as you walk out of it, with the call panel on the pier between them.
+   */
+  bank?: 1 | -1;
+  /** The pier between the two (m, default 0.55); a wide one leaves the room's own wall between them. */
+  pier?: number;
+  /** Lobby wall either side of the lift(s), flush with the doors (m, on the left and right as you walk out). */
+  wing?: [number, number];
 }
 export interface StairDecl {
   from: number;
@@ -367,6 +376,63 @@ class Car {
     const call = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.03), new THREE.MeshBasicMaterial({ color: new THREE.Color(st.accent).multiplyScalar(1.4), toneMapped: false }));
     call.position.set(DW / 2 + 0.28, 1.15, OZ - 0.02);
     g.add(call);
+    // ---- a bank of two: the twin car beside it (doors shut), the pier between with the call panel
+    const extra: Rect[] = [];
+    const edge = WI / 2 + T + 0.12; // half the front's width
+    let uL = -edge,
+      uR = edge;
+    if (decl.bank) {
+      const s = decl.bank,
+        PIER = decl.pier ?? 0.55;
+      const o = s * (2 * edge + PIER);
+      const doorL = lit(st.door, st.metal * 0.6, 0.4);
+      // the twin's shaft and front, its doors shut in a trimmed portal, its sign
+      boxAt(g, shell, o - WI / 2 - T, 0, OZ + 0.1, o + WI / 2 + T, HS, DI / 2 + T, false);
+      boxAt(g, shell, o - edge, 0, OZ, o + edge, HS, OZ + 0.12, false);
+      for (const k of [-1, 1]) {
+        boxAt(g, doorL, o + (k < 0 ? -DW / 2 : 0.009), 0.02, OZ - 0.035, o + (k < 0 ? -0.009 : DW / 2), DH, OZ + 0.01, false);
+        boxAt(g, trim, o + k * (DW / 4) - (DW / 2 - 0.06) / 2, 1.03, OZ - 0.045, o + k * (DW / 4) + (DW / 2 - 0.06) / 2, 1.07, OZ - 0.03, false);
+      }
+      boxAt(g, basic("#15171b"), o - 0.009, 0.02, OZ - 0.04, o + 0.009, DH, OZ - 0.02, false);
+      boxAt(g, trim, o - DW / 2 - 0.08, 0, OZ - 0.03, o - DW / 2, DH + 0.08, OZ + 0.01, false);
+      boxAt(g, trim, o + DW / 2, 0, OZ - 0.03, o + DW / 2 + 0.08, DH + 0.08, OZ + 0.01, false);
+      boxAt(g, trim, o - DW / 2 - 0.08, DH, OZ - 0.03, o + DW / 2 + 0.08, DH + 0.08, OZ + 0.01, false);
+      boxAt(g, trim, o - WI / 2 - T - 0.02, HS, OZ - 0.02, o + WI / 2 + T + 0.02, HS + 0.08, DI / 2 + T + 0.02, false);
+      const sign2 = sign.clone();
+      sign2.position.x = o;
+      g.add(sign2);
+      // the pier between the two, the call panel on it
+      const p0 = Math.min(s * edge, o - s * edge),
+        p1 = Math.max(s * edge, o - s * edge);
+      if (PIER < 0.8) {
+        boxAt(g, shell, p0, 0, OZ, p1, HS, DI / 2 + T, false);
+        boxAt(g, trim, (p0 + p1) / 2 - 0.09, 0.95, OZ - 0.025, (p0 + p1) / 2 + 0.09, 1.38, OZ, false);
+        call.position.set((p0 + p1) / 2, 1.22, OZ - 0.035);
+      } else call.position.x = -s * (DW / 2 + 0.28);
+      const call2 = call.clone();
+      call2.position.y -= 0.14;
+      g.add(call2);
+      if (PIER >= 0.8) call2.position.x = o + s * (DW / 2 + 0.28);
+      // one band over the whole bank
+      uL = Math.min(uL, o - edge);
+      uR = Math.max(uR, o + edge);
+      if (PIER < 0.8) extra.push(rectOf(spot, Math.min(s * (WI / 2 + T), o + s * edge), OZ, Math.max(s * (WI / 2 + T), o + s * edge), DI / 2 + T));
+      else extra.push(rectOf(spot, o - edge, OZ, o + edge, DI / 2 + T));
+    }
+    if (decl.wing) {
+      const [wl, wr] = decl.wing;
+      if (wl > 0.01) {
+        boxAt(g, shell, uL - wl, 0, OZ, uL, HS, OZ + 0.3, false);
+        extra.push(rectOf(spot, uL - wl, OZ, uL, OZ + 0.3));
+      }
+      if (wr > 0.01) {
+        boxAt(g, shell, uR, 0, OZ, uR + wr, HS, OZ + 0.3, false);
+        extra.push(rectOf(spot, uR, OZ, uR + wr, OZ + 0.3));
+      }
+      uL -= wl;
+      uR += wr;
+    }
+    if ((decl.bank && (decl.pier ?? 0.55) < 0.8) || decl.wing) boxAt(g, trim, uL - 0.02, HS, OZ - 0.02, uR + 0.02, HS + 0.08, OZ + 0.3, false);
     // a slender frame down to the ground (a lift up a tree trunk, a tower's leg)
     if (decl.column && decl.column > 0.5) {
       const c = decl.column;
@@ -403,7 +469,7 @@ class Car {
     // an open door's collider folds into the wall beside it (a valid rect, never in the way)
     this.openRect = this.rects[3].slice() as Rect;
     this.doorRect = this.shutRect.slice() as Rect;
-    this.rects.push(this.doorRect);
+    this.rects.push(this.doorRect, ...extra);
   }
 
   setOpen(o: number) {
@@ -812,6 +878,8 @@ export class Circulation {
   /** Floors that share one walkable space (Big Ben's stair, the statue's helix): no lift needed. */
   readonly together: number[][];
   ride: Ride | null = null;
+  /** Trying to walk in an open car without getting anywhere: how long, and from where. */
+  private stuck = { t: 0, x: 0, z: 0 };
   private shownFloors: number[] = [];
   private panel: HTMLElement | null = null;
   private panelKey = "";
@@ -1081,8 +1149,13 @@ export class Circulation {
         const dir = F[r.to].y > F[r.path[0]].y ? 1 : -1;
         c.indicate(F[r.path[i]].label, dir);
         c.slide(dt);
-        // turn to face out on the way
-        W.turnToward(c.spot.yaw, dt * 1.2);
+        // turn to face out on the way, and drift onto the doors' axis: the doorway is narrow, and
+        // someone who rode in a corner would walk straight into a jamb on the way out
+        W.turnToward(c.spot.yaw, dt * 1.6);
+        const [cu, cv] = c.local(p.x, p.z);
+        const keep = Math.max(0, 1 - dt * 2.5);
+        const [cx, cz] = toWorld(c.spot, cu * keep, cv);
+        W.shift(cx - p.x, 0, cz - p.z);
         if (!r.switched && k >= 0.5) {
           r.switched = true;
           const to = this.carOf(c.shaft, r.to)!;
@@ -1104,6 +1177,29 @@ export class Circulation {
         }
       } else if (r.phase === "opening" && r.car.open >= 1) this.ride = null;
     }
+    // the doorway funnels: near the door line of an open car (inside or just outside it), slide onto
+    // the doors' axis so a walker a little off-centre never catches on a jamb
+    if (!this.ride && W.walking) {
+      for (const c of this.cars) {
+        if (!this.shownFloors.includes(c.floor) || c.open < 0.6) continue;
+        const [u, v] = c.local(p.x, p.z);
+        if (Math.abs(v - FZ) > 0.9 || Math.abs(u) > 1.1 || Math.abs(u) < 0.03) continue;
+        const [x, z] = toWorld(c.spot, u * Math.max(0, 1 - dt * 4), v);
+        W.shift(x - p.x, 0, z - p.z);
+      }
+    }
+    // never trapped in a car: pushing to move for a while in an open car without getting anywhere
+    // (facing a wall, caught on a jamb) steps you out in front of its doors, facing out
+    const inCar = !this.ride ? this.carIn() : null;
+    if (inCar && inCar.open >= 0.9 && W.walking) {
+      if (Math.hypot(p.x - this.stuck.x, p.z - this.stuck.z) > 0.25) this.stuck = { t: 0, x: p.x, z: p.z };
+      else if ((this.stuck.t += dt) > 1.2) {
+        const [x, z] = toWorld(inCar.spot, 0, FZ - 0.7);
+        W.shift(x - p.x, 0, z - p.z);
+        W.turnToward(inCar.spot.yaw, 1);
+        this.stuck = { t: 0, x, z };
+      }
+    } else this.stuck.t = 0;
     let drift: [number, number] | null = null;
     // flights: the floor follows the walker up and down (same place, no shift)
     const on = !this.ride ? this.flightAt(this.shownFloors, p.x, p.z) : null;
