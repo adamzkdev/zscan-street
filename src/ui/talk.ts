@@ -1,3 +1,4 @@
+import { visitorToken } from "../data/token";
 import { KIND_HELP, KIND_LABEL } from "../data/types";
 import { Market } from "../data/market";
 import { VOICE } from "../data/lore";
@@ -88,8 +89,17 @@ export function npcSpeaker(key: string, name: string, who: string, portrait: str
  * Answers come from `/v1/street/chat` (a small model on the API's key, in character, from the facts
  * the street knows). Conversations are kept while the page stays open.
  */
+type Recognition = { lang: string; interimResults: boolean; start(): void; stop(): void; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null };
+
 export class Talk {
   private el: HTMLElement;
+  /** What each zkSNARK remembers of this visitor (from the API), by speaker key. */
+  private memories = new Map<string, string | null>();
+  /** Turns already summarised into memory, by speaker key. */
+  private saved = new Map<string, number>();
+  /** Spoken conversation: the mic was used, answers are read aloud. */
+  private voice = false;
+  private rec: Recognition | null = null;
   private log: HTMLElement;
   private input: HTMLInputElement;
   private who: Speaker | null = null;
@@ -102,7 +112,7 @@ export class Talk {
     this.el.innerHTML = `
       <div class="tk-head"><img class="tk-face" alt="" /><div><div class="tk-eyebrow">会話 · TALK</div><b class="tk-name"></b></div><button class="tk-x" aria-label="Close">✕</button></div>
       <div class="tk-log"></div>
-      <form class="tk-form"><input name="q" maxlength="400" autocomplete="off" placeholder="Ask about its transaction, its block, Zcash…" /><button>Say</button></form>`;
+      <form class="tk-form"><button type="button" class="tk-mic" title="Talk with your voice" hidden>🎙</button><input name="q" maxlength="400" autocomplete="off" placeholder="Ask about its transaction, its block, Zcash…" /><button>Say</button></form>`;
     root.append(this.el);
     this.log = this.el.querySelector(".tk-log")!;
     this.input = this.el.querySelector("input")!;
@@ -111,6 +121,32 @@ export class Talk {
       e.preventDefault();
       void this.send();
     });
+    // the microphone, where the browser can listen
+    const SR = (window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition }).SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition?: new () => Recognition }).webkitSpeechRecognition;
+    const mic = this.el.querySelector<HTMLButtonElement>(".tk-mic")!;
+    if (SR) {
+      mic.hidden = false;
+      mic.addEventListener("click", () => {
+        if (this.rec) return this.rec.stop();
+        const r = new SR();
+        r.lang = navigator.language || "en-US";
+        r.interimResults = false;
+        r.onresult = (e) => {
+          const text = e.results[0]?.[0]?.transcript ?? "";
+          if (!text) return;
+          this.voice = true;
+          this.input.value = text;
+          void this.send();
+        };
+        r.onend = r.onerror = () => {
+          this.rec = null;
+          mic.classList.remove("on");
+        };
+        this.rec = r;
+        mic.classList.add("on");
+        r.start();
+      });
+    }
     // keys typed here stay here (no walking, no shortcuts)
     this.input.addEventListener("keydown", (e) => {
       e.stopPropagation();
@@ -124,6 +160,7 @@ export class Talk {
 
   show(sp: Speaker) {
     this.who = sp;
+    if (sp.key.startsWith("snark-") && !this.memories.has(sp.key)) void this.recall(sp);
     const face = this.el.querySelector<HTMLImageElement>(".tk-face")!;
     face.hidden = !sp.portrait;
     if (sp.portrait) face.src = sp.portrait;
@@ -135,6 +172,8 @@ export class Talk {
   }
 
   close() {
+    if (this.who) void this.remember(this.who);
+    speechSynthesis?.cancel();
     this.who = null;
     this.el.classList.remove("on");
     this.input.blur();
@@ -160,7 +199,7 @@ export class Talk {
       const r = await fetch(`${API}/v1/street/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ who: sp.who, facts: sp.facts(), messages: thread.filter((m, i) => i > 0 || m.role === "user") }),
+        body: JSON.stringify({ who: sp.who, facts: sp.facts() + this.memoryFact(sp), messages: thread.filter((m, i) => i > 0 || m.role === "user") }),
       });
       const j = (await r.json().catch(() => ({}))) as { reply?: string; message?: string };
       reply = j.reply ?? `(${j.message ?? "They didn't answer, try again"})`;
@@ -170,5 +209,60 @@ export class Talk {
     this.busy = false;
     thread.push({ role: "assistant", content: reply });
     if (this.who === sp) this.render();
+    if (this.voice && this.who === sp && !reply.startsWith("(")) this.speak(reply);
+  }
+
+  private speak(text: string) {
+    if (!("speechSynthesis" in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = navigator.language || "en-US";
+    u.rate = 1.05;
+    u.pitch = 1.15;
+    speechSynthesis.speak(u);
+  }
+
+  private memoryFact(sp: Speaker) {
+    const m = this.memories.get(sp.key);
+    return m ? `\nYou have met this visitor before. What you remember of them: ${m} Greet them as an old acquaintance.` : "";
+  }
+
+  /** What this zkSNARK remembers of the visitor, from earlier visits. */
+  private async recall(sp: Speaker) {
+    const token = visitorToken();
+    if (!token) return;
+    this.memories.set(sp.key, null);
+    try {
+      const r = await fetch(`${API}/v1/street/memory?snark=${sp.key.slice(6)}&token=${token}`);
+      const j = (await r.json().catch(() => ({}))) as { summary?: string | null };
+      if (!j.summary) return;
+      this.memories.set(sp.key, j.summary);
+      // it recognises you
+      const thread = this.threads.get(sp.key);
+      if (thread?.length === 1 && thread[0].role === "assistant") {
+        thread[0] = { role: "assistant", content: `Oh, it's you again! ${sp.hello}` };
+        if (this.who === sp) this.render();
+      }
+    } catch {}
+  }
+
+  /** After a chat with a zkSNARK: the API sums it up, so it remembers next time. */
+  private async remember(sp: Speaker) {
+    if (!sp.key.startsWith("snark-")) return;
+    const thread = this.threads.get(sp.key) ?? [];
+    const users = thread.filter((m) => m.role === "user").length;
+    if (!users || (this.saved.get(sp.key) ?? 0) >= users) return;
+    const token = visitorToken();
+    if (!token) return;
+    this.saved.set(sp.key, users);
+    try {
+      const r = await fetch(`${API}/v1/street/memory`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ snark: Number(sp.key.slice(6)), token, messages: thread.slice(-12).filter((m) => !m.content.startsWith("(")) }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { summary?: string };
+      if (j.summary) this.memories.set(sp.key, j.summary);
+    } catch {}
   }
 }

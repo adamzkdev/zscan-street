@@ -187,6 +187,9 @@ export class Critters {
   private clock = 0;
   private group = new THREE.Group();
   private camRight = new THREE.Vector3();
+  /** The visitor's adopted cat follows this point (their place in the city). */
+  private pet: Cat | null = null;
+  private follow: (() => THREE.Vector3 | null) | null = null;
 
   constructor(
     scene: THREE.Object3D,
@@ -213,6 +216,22 @@ export class Critters {
       this.group.add(s);
       this.cats.push({ s, frames, spot, pos: spot.p.clone(), path: [], speed: 0, until: rand(20, 60), facing: 1, phase: 0 });
     }
+  }
+
+  /** The cat under a click (index), or -1. */
+  catAt(ray: THREE.Raycaster) {
+    const sphere = new THREE.Sphere(new THREE.Vector3(), 0.7);
+    return this.cats.findIndex((c) => (sphere.center.copy(c.pos).setY(c.pos.y + 0.3), ray.ray.intersectsSphere(sphere)));
+  }
+
+  /** Cat `i` (by coat, stable across visits) follows `to` from now on; -1 lets it go. */
+  adopt(i: number, to: (() => THREE.Vector3 | null) | null) {
+    this.pet = i >= 0 ? (this.cats[i] ?? null) : null;
+    this.follow = to;
+  }
+
+  get petIndex() {
+    return this.pet ? this.cats.indexOf(this.pet) : -1;
   }
 
   setVisible(on: boolean) {
@@ -284,6 +303,22 @@ export class Critters {
       this.face(b.s, b.facing, PIGEON.stand.w);
     }
 
+    // the adopted cat trots after its person, and sits when it catches up
+    if (this.pet && this.follow) {
+      const c = this.pet;
+      const to = this.follow();
+      if (to) {
+        const d = Math.hypot(to.x - c.pos.x, to.z - c.pos.z);
+        if (d > 40) c.pos.set(to.x - 1.4, CITY.curb, to.z + 0.8);
+        else if (d > 2.4 && (!c.path.length || c.path[c.path.length - 1].distanceTo(to) > 1.5)) {
+          const k = (d - 1.4) / d;
+          c.path = [new THREE.Vector3(c.pos.x + (to.x - c.pos.x) * k, CITY.curb, c.pos.z + (to.z - c.pos.z) * k)];
+          c.speed = Math.min(5, 1.2 + d * 0.5);
+        }
+        c.until = this.clock + 999;
+      }
+    }
+
     for (const c of this.cats) {
       if (c.path.length) {
         const target = c.path[0];
@@ -308,6 +343,11 @@ export class Critters {
           c.until = this.clock + rand(25, 80);
         }
       } else {
+        if (c === this.pet) {
+          c.s.position.copy(c.pos);
+          this.face(c.s, c.facing, c.frames.sit.w);
+          continue;
+        }
         const scared = threats.some((x) => x.p.distanceTo(c.pos) < (c.spot.p.y > CITY.curb + 0.3 ? 1.2 : 1.7) && x.r < 2);
         if (scared || this.clock > c.until) {
           // somewhere free, along the pavement (and down from the bench first)

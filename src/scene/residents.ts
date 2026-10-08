@@ -248,8 +248,57 @@ const DOORS: { p: THREE.Vector3; via: string }[] = [
 ];
 
 const UMBRELLAS = ["#d0383a", "#2e5ab8", "#f4b728", "#e8e4dc", "#3a9a6a", "#7a5ac0", "#1a1820", "#ff7aa8"];
-/** Portraits for the residents: spread over the collection, different on every visit. */
-const castSeed = Math.floor(Math.random() * 10000);
+/**
+ * Portraits for the residents: the day's cast, the same for every visitor (seeded by the UTC date),
+ * so the people you meet today are the ones everyone else meets too.
+ */
+const castSeed = (() => {
+  let h = 2166136261;
+  for (const c of new Date().toISOString().slice(0, 10)) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return (h >>> 0) % 10000;
+})();
+
+/** Activities in the order `activities()` lists them. */
+const ACT_KEYS = ["bench", "fountain", "koi", "market", "vending", "window", "bus", "orchard"] as const;
+type ActKey = (typeof ACT_KEYS)[number];
+
+/**
+ * The day's rhythm (the visitor's clock, like the sky): commuters at the bus stop and the vending
+ * machines in the morning, the market at lunch, the garden and the koi in the afternoon, window
+ * shopping in the evening, a few night owls on the benches.
+ */
+function hourly(key: ActKey, h: number): number {
+  const morning = h >= 6 && h < 10,
+    lunch = h >= 11 && h < 14,
+    afternoon = h >= 14 && h < 18,
+    evening = h >= 18 && h < 23,
+    night = h >= 23 || h < 6;
+  switch (key) {
+    case "bus":
+      return morning ? 4 : evening ? 2 : night ? 0.3 : 1;
+    case "vending":
+      return morning ? 2.5 : night ? 2 : 1;
+    case "market":
+      return lunch ? 3 : morning || afternoon ? 1 : night ? 0 : 0.6;
+    case "window":
+      return evening ? 3 : afternoon ? 1.5 : night ? 0.4 : 0.8;
+    case "orchard":
+      return afternoon || morning ? 1.6 : night ? 0 : 0.6;
+    case "koi":
+    case "fountain":
+      return afternoon ? 2 : night ? 0.5 : 1;
+    case "bench":
+      return night ? 2 : 1;
+  }
+}
+
+/** How busy the street is by the hour (residents out, as a share of the device's budget). */
+export function streetLife(h = new Date().getHours()) {
+  if (h >= 1 && h < 6) return 0.35;
+  if (h >= 23 || h < 1) return 0.6;
+  if ((h >= 7 && h < 9) || (h >= 12 && h < 14) || (h >= 18 && h < 21)) return 1;
+  return 0.8;
+}
 
 interface Resident {
   s: Snark;
@@ -443,9 +492,11 @@ export class Residents {
   }
 
   private choose() {
-    const total = this.acts.reduce((a, x) => a + x.weight, 0);
+    const h = new Date().getHours();
+    const w = this.acts.map((a, i) => a.weight * hourly(ACT_KEYS[i] ?? "bench", h));
+    const total = w.reduce((a, x) => a + x, 0);
     let k = Math.random() * total;
-    for (const a of this.acts) if ((k -= a.weight) <= 0) return a;
+    for (let i = 0; i < this.acts.length; i++) if ((k -= w[i]) <= 0) return this.acts[i];
     return this.acts[0];
   }
 

@@ -4001,3 +4001,960 @@ a.srow:hover span {
     display: none;
   }
 }
+
+/* ---- game: ⓩ wallet chip, citizen card, game toast, next-block bets ---- */
+.zchip {
+  width: auto !important;
+  padding: 0 10px;
+  gap: 6px;
+  display: flex !important;
+  position: relative;
+  font: 400 13px var(--pixel);
+  color: var(--text) !important;
+}
+.zchip b {
+  font-weight: 400;
+  color: var(--gold-ink);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--gold) 60%, transparent);
+}
+.zchip i {
+  position: absolute;
+  right: 4px;
+  top: 100%;
+  font: 400 12px var(--pixel);
+  font-style: normal;
+  animation: zfloat 1.6s ease-out forwards;
+  pointer-events: none;
+}
+.zchip i.up {
+  color: var(--good);
+}
+.zchip i.down {
+  color: var(--bad);
+}
+@keyframes zfloat {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+}
+.bet-btn b {
+  font: 400 16px var(--pixel);
+  color: var(--gold-ink);
+}
+.zcard,
+.betpanel {
+  position: absolute;
+  top: 62px;
+  right: 16px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 46;
+  font: 400 12.5px var(--pixel);
+  color: var(--text);
+}
+.zcard.open,
+.betpanel.open {
+  display: flex;
+}
+.zcard header,
+.betpanel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.zcard label,
+.betpanel label {
+  font: 400 12px var(--pixel);
+  letter-spacing: 0.08em;
+  color: var(--gold-ink);
+}
+.zcard header button,
+.betpanel header button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.zcard .big b {
+  font: 400 26px var(--pixel);
+  color: var(--gold-ink);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--gold) 50%, transparent);
+  display: block;
+}
+.zcard .big small,
+.betpanel .since {
+  color: var(--muted);
+  font-size: 11px;
+}
+.zcard dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  margin: 0;
+}
+.zcard dt {
+  color: var(--muted);
+}
+.zcard dd {
+  margin: 0;
+  text-align: right;
+}
+.betpanel .stakes,
+.betpanel .mk > div {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.betpanel .mk {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.betpanel .mk em {
+  font-style: normal;
+  color: var(--bad);
+  font-size: 11px;
+}
+.betpanel button[data-a="stake"],
+.betpanel button[data-a="bet"] {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 9px;
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  font: 400 12.5px var(--pixel);
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.betpanel button i {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--gold-ink);
+}
+.betpanel button.on {
+  background: var(--gold);
+  color: #0d0d0d;
+}
+.betpanel button.on i {
+  color: #0d0d0d;
+}
+.betpanel button:disabled:not(.on) {
+  opacity: 0.4;
+  cursor: default;
+}
+.betpanel .res {
+  border-top: 1px solid var(--ink-line);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11.5px;
+}
+.gtoast {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  font: 400 12.5px var(--pixel);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 40;
+  transition:
+    opacity 0.35s,
+    transform 0.35s;
+}
+.gtoast b {
+  font-weight: 400;
+  color: var(--gold-ink);
+}
+.gtoast.hidden {
+  opacity: 0;
+  transform: translate(-50%, -8px);
+  pointer-events: none;
+}
+.indoors .gtoast {
+  top: 96px;
+}
+.whaletag {
+  all: unset;
+  position: absolute;
+  left: 0;
+  top: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 14px;
+  font: 400 12px var(--pixel);
+  color: var(--text);
+  z-index: 30;
+  --c: #5fb4ee;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.whaletag b {
+  font: 400 16px var(--pixel);
+  font-weight: 400;
+  color: #8fd6ff;
+  text-shadow: 0 0 8px rgba(95, 180, 238, 0.7);
+}
+.whaletag span {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.whaletag i {
+  font-style: normal;
+  letter-spacing: 1px;
+  color: #b07bff;
+}
+.whaletag:active {
+  transform-origin: center;
+  filter: brightness(1.4);
+}
+.whaletag.won {
+  --c: #b07bff;
+}
+.whaletag.won b {
+  color: #b07bff;
+}
+.gtoast.act {
+  cursor: pointer;
+}
+.gtoast u {
+  text-decoration: none;
+  color: var(--gold-ink);
+  margin-left: 6px;
+}
+.casepanel {
+  position: absolute;
+  top: 62px;
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 47;
+  font: 400 12.5px var(--pixel);
+  color: var(--text);
+}
+.casepanel.open {
+  display: flex;
+}
+.casepanel header {
+  display: flex;
+  justify-content: space-between;
+}
+.casepanel label {
+  font: 400 12px var(--pixel);
+  letter-spacing: 0.08em;
+  color: var(--gold-ink);
+}
+.casepanel header button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.casepanel h3 {
+  margin: 0;
+  font: 400 18px var(--pixel);
+  color: var(--gold-ink);
+}
+.casepanel p {
+  margin: 0;
+  color: var(--muted);
+}
+.casepanel ol {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.casepanel li b {
+  font-weight: 400;
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+}
+.casepanel li em {
+  font-style: normal;
+  color: var(--faint);
+}
+.casepanel li.got {
+  color: var(--text);
+}
+.casepanel form {
+  display: flex;
+  gap: 6px;
+}
+.casepanel input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  font: 400 14px var(--pixel);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--gold);
+  outline: none;
+}
+.casepanel form button,
+.casepanel .arch {
+  all: unset;
+  cursor: pointer;
+  height: 32px;
+  padding: 0 12px;
+  display: grid;
+  place-items: center;
+  background: var(--gold);
+  color: #0d0d0d;
+  font: 400 13px var(--pixel);
+}
+.casepanel .arch {
+  background: transparent;
+  color: var(--gold-ink);
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.casepanel .done {
+  color: var(--good);
+}
+.zcard .caselink {
+  all: unset;
+  cursor: pointer;
+  color: var(--gold-ink);
+  text-decoration: underline dotted;
+}
+/* ---- the ZStreet Daily ---- */
+.paperbtn {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  margin: 2px 0 8px;
+  padding: 7px 10px;
+  font: 400 12.5px var(--pixel);
+  color: var(--gold-ink);
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.paper {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  background: rgba(5, 5, 10, 0.55);
+  z-index: 80;
+  pointer-events: auto;
+  padding: 16px;
+}
+.paper.open {
+  display: grid;
+}
+.paper article {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: #f3ecdc;
+  color: #1d1a14;
+  padding: 26px 30px 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  font: 15px/1.5 Georgia, "Times New Roman", serif;
+  transform: rotate(-0.4deg);
+}
+.paper article > button {
+  all: unset;
+  cursor: pointer;
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  font-size: 24px;
+  color: #6b604c;
+}
+.paper header {
+  text-align: center;
+  border-bottom: 3px double #1d1a14;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+}
+.paper header small {
+  display: block;
+  font: 12px var(--mono);
+  letter-spacing: 0.08em;
+  color: #6b604c;
+}
+.paper h1 {
+  margin: 4px 0;
+  font: 900 clamp(28px, 6vw, 52px) / 1 "Times New Roman", Georgia, serif;
+  letter-spacing: 0.02em;
+}
+.paper h2 {
+  margin: 0 0 4px;
+  font: 800 clamp(20px, 3.6vw, 30px) / 1.15 Georgia, serif;
+}
+.paper .sub {
+  margin: 0 0 14px;
+  font-style: italic;
+  color: #4a4234;
+}
+.paper .cols {
+  columns: 2 260px;
+  column-gap: 26px;
+  column-rule: 1px solid #c9bea6;
+}
+.paper section {
+  break-inside: avoid;
+  margin-bottom: 12px;
+}
+.paper h3 {
+  margin: 0 0 3px;
+  font: 700 17px/1.2 Georgia, serif;
+}
+.paper section p {
+  margin: 0;
+}
+.paper footer {
+  border-top: 1px solid #1d1a14;
+  padding-top: 8px;
+  margin-top: 6px;
+  font-size: 14px;
+}
+.paper footer b {
+  font: 700 12px var(--mono);
+  letter-spacing: 0.1em;
+  margin-right: 8px;
+}
+.tk-form .tk-mic {
+  all: unset;
+  cursor: pointer;
+  width: 34px;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+  font-size: 15px;
+}
+.tk-form .tk-mic[hidden] {
+  display: none;
+}
+.tk-form .tk-mic.on {
+  background: #f06b76;
+  animation: micpulse 1s ease-in-out infinite;
+}
+@keyframes micpulse {
+  50% {
+    opacity: 0.6;
+  }
+}
+/* ---- Builders' Row: plot panel and the voxel workshop ---- */
+.plotpanel {
+  position: absolute;
+  bottom: 96px;
+  left: 20px;
+  width: min(320px, calc(100vw - 40px));
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 46;
+  font: 400 12.5px var(--pixel);
+  color: var(--text);
+}
+.plotpanel.open {
+  display: flex;
+}
+.plotpanel header {
+  display: flex;
+  justify-content: space-between;
+}
+.plotpanel label {
+  font: 400 12px var(--pixel);
+  letter-spacing: 0.08em;
+  color: var(--gold-ink);
+}
+.plotpanel header button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+}
+.plotpanel h3 {
+  margin: 0;
+  font: 400 18px var(--pixel);
+}
+.plotpanel p {
+  margin: 0;
+  color: var(--muted);
+}
+.plotpanel button[data-a="build"],
+.plotpanel button[data-a="report"] {
+  all: unset;
+  cursor: pointer;
+  align-self: flex-start;
+  padding: 7px 12px;
+  font: 400 13px var(--pixel);
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.plotpanel button.go {
+  background: var(--gold);
+  color: #0d0d0d;
+}
+.editor {
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 100;
+  font-family: var(--pixel);
+  color: #f1f1f1;
+  --ink: rgba(11, 9, 19, 0.9);
+  --ink-line: rgba(140, 120, 255, 0.28);
+}
+.editor.open {
+  display: block;
+}
+.editor canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+.editor .hud {
+  position: absolute;
+  padding: 8px 10px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.editor button {
+  all: unset;
+  cursor: pointer;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  display: grid;
+  place-items: center;
+  font: 400 14px var(--pixel);
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.editor button.on {
+  background: var(--gold);
+  color: #0d0d0d;
+}
+.editor .go {
+  background: var(--gold);
+  color: #0d0d0d;
+}
+.ed-top {
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 32px));
+  box-sizing: border-box;
+}
+.ed-top label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #f4b728;
+  white-space: nowrap;
+}
+.ed-top input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  font: 400 14px var(--pixel);
+  color: #f1f1f1;
+  background: transparent;
+  border: 1px solid #f4b728;
+  outline: none;
+}
+.ed-tools {
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: column;
+}
+.ed-tools span {
+  font-size: 10px;
+  color: #a3a3a3;
+  margin-top: 6px;
+}
+.ed-pal {
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-wrap: wrap;
+  justify-content: center;
+  width: min(860px, calc(100vw - 32px));
+  box-sizing: border-box;
+}
+.ed-pal button {
+  min-width: 26px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--sw);
+}
+.ed-pal button.glass {
+  background: linear-gradient(135deg, var(--sw), color-mix(in srgb, var(--sw) 40%, transparent));
+}
+.ed-pal button.emit {
+  box-shadow:
+    0 0 8px var(--sw),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+.ed-pal button.on {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+.ed-help {
+  position: absolute;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #a3a3a3;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .ed-help {
+    display: none;
+  }
+  .ed-tools {
+    top: auto;
+    bottom: 120px;
+    transform: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: calc(100vw - 32px);
+    box-sizing: border-box;
+  }
+}
+/* ---- jobs ---- */
+.jobboard {
+  position: absolute;
+  top: 62px;
+  right: 16px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 47;
+  font: 400 12.5px var(--pixel);
+  color: var(--text);
+}
+.jobboard.open {
+  display: flex;
+}
+.jobboard header {
+  display: flex;
+  justify-content: space-between;
+}
+.jobboard label {
+  font: 400 12px var(--pixel);
+  letter-spacing: 0.08em;
+  color: var(--gold-ink);
+}
+.jobboard header button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+}
+.jobboard [data-job] {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.jobboard [data-job]:hover {
+  background: var(--gold-soft);
+}
+.jobboard [data-job] b {
+  font: 400 15px var(--pixel);
+  font-weight: 400;
+  color: var(--gold-ink);
+}
+.jobboard [data-job] span {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.jobbar {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  z-index: 44;
+  font: 400 12.5px var(--pixel);
+  color: var(--text);
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+}
+.jobbar.on {
+  display: flex;
+}
+.jobbar label {
+  color: var(--gold-ink);
+  letter-spacing: 0.06em;
+}
+.jobbar button {
+  all: unset;
+  cursor: pointer;
+  padding: 6px 12px;
+  font: 400 13px var(--pixel);
+  background: var(--gold);
+  color: #0d0d0d;
+}
+.jobbar button[data-quit] {
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 6px;
+}
+.jobbar .meter {
+  position: relative;
+  width: 180px;
+  height: 14px;
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.jobbar .meter .band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+.jobbar .meter .needle {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 6px #fff;
+}
+.jobbar.miss .meter {
+  box-shadow: inset 0 0 0 1px var(--bad);
+}
+.jobmark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: none;
+  width: 22px;
+  height: 30px;
+  background: var(--gold);
+  clip-path: polygon(50% 100%, 0 40%, 0 0, 100% 0, 100% 40%);
+  filter: drop-shadow(0 0 8px var(--gold));
+  animation: jobbob 1s ease-in-out infinite;
+  z-index: 30;
+  pointer-events: none;
+}
+@keyframes jobbob {
+  50% {
+    margin-top: -6px;
+  }
+}
+.indoors .jobmark {
+  display: none !important;
+}
+/* ---- the Block Casino ---- */
+.casino {
+  position: absolute;
+  top: 62px;
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 7px;
+  z-index: 48;
+  font: 400 12.5px var(--pixel);
+  color: var(--text);
+  --c: #ff3e8a;
+}
+.casino.open {
+  display: flex;
+}
+.casino header {
+  display: flex;
+  justify-content: space-between;
+}
+.casino header label {
+  color: #ff7aa8;
+  letter-spacing: 0.08em;
+}
+.casino header button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+}
+.casino p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.casino p b {
+  color: var(--text);
+  font-weight: 400;
+}
+.casino .sub {
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+.casino .row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.casino .row button {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 9px;
+  font: 400 12.5px var(--pixel);
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.casino .row button:hover,
+.casino .row button.on {
+  background: var(--gold);
+  color: #0d0d0d;
+}
+.casino .digits button {
+  width: 14px;
+  text-align: center;
+  font-family: var(--mono);
+}
+.casino button.red {
+  color: #ff5a6a;
+}
+.casino button.black {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.35);
+}
+.casino button.zero {
+  color: #38ff9c;
+}
+.casino .bets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 11.5px;
+  color: var(--gold-ink);
+}
+.casino .res {
+  border-top: 1px solid var(--ink-line);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11.5px;
+}
+.casino .res a {
+  color: var(--gold-ink);
+}
+.casino .res code {
+  font: 11px var(--mono);
+  color: var(--muted);
+}
+.casino .res code b {
+  color: var(--text);
+}
+/* ---- the Genesis Line ---- */
+.genesis {
+  position: absolute;
+  top: 62px;
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 48;
+  font: 400 12.5px var(--pixel);
+  color: var(--text);
+  --c: #c9a25b;
+}
+.genesis.open {
+  display: flex;
+}
+.genesis header {
+  display: flex;
+  justify-content: space-between;
+}
+.genesis header label {
+  color: #c9a25b;
+  letter-spacing: 0.08em;
+}
+.genesis header button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--muted);
+}
+.genesis h3 {
+  margin: 0;
+  font: 400 18px var(--pixel);
+  color: #e6c98a;
+}
+.genesis p {
+  margin: 0;
+  color: var(--muted);
+}
+.genesis .blk a {
+  color: var(--gold-ink);
+}
+.genesis .eras {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 4px;
+}
+.genesis .eras button {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.genesis .eras button b {
+  font: 400 15px var(--pixel);
+  font-weight: 400;
+  color: #e6c98a;
+}
+.genesis .eras button span {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.genesis .eras button.on {
+  background: #c9a25b;
+}
+.genesis .eras button.on b,
+.genesis .eras button.on span {
+  color: #0d0d0d;
+}

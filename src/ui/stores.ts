@@ -80,6 +80,7 @@ export async function storeInfo(id: string, d: StoreData): Promise<PickInfo | { 
         image: ZScan.zkSnarkImage(n),
         tag: item?.rank ? [`Rank ${item.rank.toLocaleString("en-US")}`, item.rank <= 500 ? "ok" : "info"] : undefined,
         stats: (item?.traits ?? []).slice(0, 4).map((t) => [t.trait_type, t.value] as [string, string]),
+        body: `<button class="paperbtn" data-casino>🎰 The Block Casino, in the back ▸</button>`,
         link: item?.url ? { href: item.url, label: "On ZScan" } : undefined,
       };
     }
@@ -185,7 +186,7 @@ export async function storeInfo(id: string, d: StoreData): Promise<PickInfo | { 
       return {
         eyebrow: "新聞 NEWS · NEWSSTAND",
         title: "Zcash today",
-        body: news.length ? `<div class="srows">${news.map((n) => `<a class="srow" href="${esc(n.url)}" target="_blank" rel="noopener"><span>${esc(n.title)}</span></a>`).join("")}</div>` : "",
+        body: `<button class="paperbtn" data-paper>📰 Read today's ZStreet Daily ▸</button>` + (news.length ? `<div class="srows">${news.map((n) => `<a class="srow" href="${esc(n.url)}" target="_blank" rel="noopener"><span>${esc(n.title)}</span></a>`).join("")}</div>` : ""),
         link: { href: "https://news.zscan.cash", label: "news.zscan.cash" },
       };
     }

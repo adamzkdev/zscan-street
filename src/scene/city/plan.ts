@@ -93,7 +93,39 @@ export const SHOTENGAI = { x: ST.shotengai, z0: -39.4 + 1, z1: 32 - 1, half: 4 +
  * The landmarks' lots: whole blocks (merged across the small streets inside them) kept for a
  * building of their own, placed like a city planner would.
  */
-export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery";
+export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "plots";
+/** A player plot: 32 × 32 voxels (5.3 m) of ground, its front centre and which way it faces. */
+export interface PlotSlot {
+  id: number;
+  cx: number;
+  /** World z of the front edge. */
+  front: number;
+  face: "n" | "s";
+  /** Footprint, world. */
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+}
+export const PLOT_VOX = { w: 32, h: 48, d: 32 };
+
+/** Builders' Row: four plots facing the avenue and four facing the street behind, per block. */
+export function plotSlots(): PlotSlot[] {
+  const out: PlotSlot[] = [];
+  const size = PLOT_VOX.w * VOX;
+  for (const l of LOTS.filter((x) => x.kind === "plots")) {
+    const step = (l.x1 - l.x0) / 4;
+    for (const face of ["n", "s"] as const)
+      for (let i = 0; i < 4; i++) {
+        const cx = l.x0 + step * (i + 0.5);
+        const front = face === "n" ? l.z0 + 2.2 : l.z1 - 2.2;
+        const [z0, z1] = face === "n" ? [front, front + size] : [front - size, front];
+        out.push({ id: out.length, cx, front, face, x0: cx - size / 2, x1: cx + size / 2, z0, z1 });
+      }
+  }
+  return out;
+}
+
 export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: number }[] = [
   // the Block Stadium, out west on the park's latitude
   { kind: "stadium", x0: -221, x1: -129, z0: -116, z1: CORE.minZ - 8 },
@@ -128,6 +160,9 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
   { kind: "zkorchard", x0: 90, x1: 115, z0: -149, z1: -124 },
   { kind: "zksapling", x0: 198, x1: 221, z0: 77, z1: 100 },
   { kind: "zkhalo", x0: 198, x1: 221, z0: -39.4, z1: -5.4 },
+  // Builders' Row: two blocks on the avenue either side of the heart where visitors build their own
+  { kind: "plots", x0: -82, x1: -58, z0: 2.6, z1: 32 },
+  { kind: "plots", x0: 58, x1: 82, z0: 2.6, z1: 32 },
   // the Binhai Library on the south bank, facing the heart across the river and its footbridges
   { kind: "binhai", x0: -50, x1: 50, z0: 77, z1: 131 },
 ];
@@ -871,6 +906,16 @@ export function planCity() {
         const [kind, seed] = greenKinds[gk++ % greenKinds.length];
         props.push({ type: "tree", args: [kind, seed], x, z, rot: gk, y: CURB, district: "downtown" });
         circles.push([x, z, 0.5]);
+      }
+    } else if (c.kind === "lot" && c.lot === "plots") {
+      // Builders' Row: the plots are fenced off (plots.ts draws them), a garden lane between the rows
+      const cz = (c.z0 + c.z1) / 2;
+      for (const p of plotSlots().filter((q) => q.cx > c.x0 && q.cx < c.x1)) rects.push([p.x0, p.z0, p.x1, p.z1]);
+      for (let x = c.x0 + 3; x < c.x1 - 2; x += 6) {
+        const [kind, seed] = greenKinds[gk++ % greenKinds.length];
+        props.push({ type: "tree", args: [kind, seed], x, z: cz - 2.6, rot: gk, y: CURB, district: "downtown" });
+        circles.push([x, cz - 2.6, 0.5]);
+        props.push({ type: "bench", args: [], x: x + 3, z: cz + 2.4, rot: Math.PI, y: CURB, district: "downtown" });
       }
     } else if (c.kind === "lot" && c.lot === "green") {
       // a square: a lawn, a ring of trees, benches round a fountain

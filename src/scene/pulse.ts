@@ -1,3 +1,4 @@
+import { season } from "../game/season";
 import * as THREE from "three";
 import type { Soundscape } from "../audio";
 import { Market } from "../data/market";
@@ -56,7 +57,7 @@ export class CityPulse {
     }
     const big = count >= BIG_BLOCK;
     this.decor.alert({ kind: "block", height: b.height, txs: count, pool: b.pool });
-    this.decor.pulse("#f4b728", big ? 5 : 2.5);
+    this.decor.pulse(season.color, big ? 5 : 2.5);
     this.sound.blockMelody(big);
     if (big) {
       this.nu7.party(6);

@@ -63,6 +63,8 @@ export class LampLights {
   private lastPick = -1;
   /** 0 by day: the street lamps are off. */
   scale = 1;
+  /** 0 during a power cut (the game world's blackout), times `scale`. */
+  dim = 1;
 
   constructor(
     scene: THREE.Scene,
@@ -108,7 +110,7 @@ export class LampLights {
       if (!lamp) return void (l.intensity = 0);
       l.position.copy(lamp.pos);
       l.color.set(lamp.color);
-      l.intensity = (lamp.intensity ?? 14) * this.scale;
+      l.intensity = (lamp.intensity ?? 14) * this.scale * this.dim;
     });
   }
 }

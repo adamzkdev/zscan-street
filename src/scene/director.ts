@@ -255,6 +255,12 @@ export class Director {
     this.proofs.add(fn);
   }
 
+  private enriched = new Set<(tx: Tx) => void>();
+  /** Every new mempool transaction once its details (public amounts, pool) are known. */
+  onTx(fn: (tx: Tx) => void) {
+    this.enriched.add(fn);
+  }
+
   private visitors = new Set<(v: ShopVisit) => void>();
   /** Listen to the shop's door: every pickup and delivery, as it starts. */
   onShopVisit(fn: (v: ShopVisit) => void) {
@@ -295,7 +301,10 @@ export class Director {
   addTx(tx: Tx) {
     if (this.mempool.has(tx.txid) || this.confirmedTx.has(tx.txid)) return;
     this.mempool.set(tx.txid, tx);
-    void withTimeout(ZScan.enrich(tx), 3000).then(() => this.mempool.has(tx.txid) && this.place(tx, "walk"));
+    void withTimeout(ZScan.enrich(tx), 3000).then(() => {
+      for (const fn of this.enriched) fn(tx);
+      if (this.mempool.has(tx.txid)) this.place(tx, "walk");
+    });
     this.emitStats();
   }
 

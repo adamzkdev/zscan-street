@@ -28,7 +28,9 @@ export type Alert =
   | { kind: "block"; height: number; txs: number; pool: string | null }
   | { kind: "empty"; height: number; pool: string | null }
   | { kind: "proof"; actions: number; pool: string | null }
-  | { kind: "price"; usd: number; pct: number };
+  | { kind: "price"; usd: number; pct: number }
+  /** The game's news (a whale, the mayor's decree, an event): a title, one big figure, a line. */
+  | { kind: "game"; title: string; big: string; line: string; color: string };
 
 export interface Decor {
   update(t: number, dt: number, focus: THREE.Vector3, camPos: THREE.Vector3): void;
@@ -40,6 +42,8 @@ export interface Decor {
   pulse(color: string, seconds: number): void;
   /** Lightning on the Proof Factory's roof (a big shielded transaction being proven). */
   strike(): void;
+  /** Lighting level of the neon tubes and lamp halos: 1 normal, 0 in a power cut. */
+  dim(level: number): void;
 }
 
 type Tick = (t: number, dt: number, focus: THREE.Vector3, camPos: THREE.Vector3) => void;
@@ -61,7 +65,7 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
   const screens = ads(city, ticks, live);
   const neon = neonTrim(city, ticks);
   const bolt = lightning(scene, city, ticks);
-  lampGlow(city, ticks);
+  const glow = lampGlow(city, ticks);
   const rain = rainfall(scene, ticks);
   hologram(scene, ticks);
   koi(scene, ticks);
@@ -80,6 +84,11 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
     alert: (a) => screens.alert(a),
     pulse: (c, sec) => neon.pulse(c, sec),
     strike: () => bolt(),
+    dim(level) {
+      neon.level = level;
+      screens.dim(level);
+      glow?.(level);
+    },
   };
 }
 
@@ -573,6 +582,10 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
     alert(a: Alert) {
       alert = { a, from: now, until: now + (a.kind === "block" || a.kind === "empty" ? 6.5 : 5) };
     },
+    /** A power cut: screens go black (a faint standby glow). */
+    dim(level: number) {
+      for (const s of screens) (s.mesh.material as THREE.MeshBasicMaterial).color.setScalar(1.25 * (0.03 + 0.97 * level));
+    },
   };
 }
 
@@ -585,6 +598,7 @@ function alertAd(ctx: CanvasRenderingContext2D, w: number, h: number, age: numbe
     empty: { bg: "#0b0b0e", band: "#5a5866", ink: "#e8e6ee", title: "EMPTY BLOCK  空", big: "", line: "", lineCol: "#8a8896" },
     proof: { bg: "#05100b", band: "#3ee08f", ink: "#04140c", title: "SHIELDED  秘密", big: "", line: "", lineCol: "#3ee08f" },
     price: { bg: "#06070a", band: "#2fbf9c", ink: "#04140c", title: "ZEC / USD", big: "", line: "", lineCol: "#2fbf9c" },
+    game: { bg: "#07060c", band: "#f4b728", ink: "#0d0d0d", title: "", big: "", line: "", lineCol: "#f4b728" },
   }[a.kind];
   if (a.kind === "block") {
     look.big = `#${a.height.toLocaleString("en-US")}`;
@@ -595,6 +609,11 @@ function alertAd(ctx: CanvasRenderingContext2D, w: number, h: number, age: numbe
   } else if (a.kind === "proof") {
     look.big = `${a.actions} ACTIONS`;
     look.line = a.pool ? `${POOL_NAME[a.pool] ?? a.pool.toUpperCase()} POOL` : "SHIELDED POOL";
+  } else if (a.kind === "game") {
+    look.title = a.title;
+    look.big = a.big;
+    look.line = a.line;
+    look.band = look.lineCol = a.color;
   } else {
     const up = a.pct >= 0;
     look.band = look.lineCol = up ? "#2fbf9c" : "#f06b76";
@@ -679,6 +698,10 @@ function lampGlow(city: City, ticks: Tick[]) {
   });
   cones.renderOrder = 2;
   city.group.add(cones);
+  return (level: number) => {
+    haloMat.opacity = 0.8 * level;
+    coneMat.opacity = 0.07 * level;
+  };
 }
 
 // ---- neon tubes ---------------------------------------------------------------------------------
@@ -707,18 +730,27 @@ function neonTrim(city: City, ticks: Tick[]) {
     }
   }
   let pulse: { color: THREE.Color; left: number; len: number } | null = null;
-  ticks.push((_t, dt) => {
-    if (!pulse) return;
-    pulse.left -= dt;
-    const k = Math.max(0, pulse.left / pulse.len);
-    for (const tb of tubes) tb.m.color.copy(tb.base).lerp(pulse.color, Math.min(1, k * 1.6)).multiplyScalar(1 + k * 0.9);
-    if (pulse.left <= 0) pulse = null;
-  });
-  return {
+  let shown = 1;
+  const api = {
+    /** 1 normal, 0 dark (a power cut). */
+    level: 1,
     pulse(color: string, seconds: number) {
       pulse = { color: new THREE.Color(color).multiplyScalar(2.4), left: seconds, len: seconds };
     },
   };
+  ticks.push((_t, dt) => {
+    if (!pulse && shown === api.level) return;
+    shown = api.level;
+    if (pulse) pulse.left -= dt;
+    const k = pulse ? Math.max(0, pulse.left / pulse.len) : 0;
+    for (const tb of tubes) {
+      tb.m.color.copy(tb.base);
+      if (pulse) tb.m.color.lerp(pulse.color, Math.min(1, k * 1.6)).multiplyScalar(1 + k * 0.9);
+      tb.m.color.multiplyScalar(0.04 + 0.96 * shown);
+    }
+    if (pulse && pulse.left <= 0) pulse = null;
+  });
+  return api;
 }
 
 // ---- lightning ------------------------------------------------------------------------------------

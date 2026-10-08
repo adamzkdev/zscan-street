@@ -75,6 +75,7 @@ export const ZScan = {
     const t = Date.parse(b.time);
     return {
       height: b.height,
+      hash: b.hash,
       time: t,
       size: b.size,
       fees: b.fees ?? 0,

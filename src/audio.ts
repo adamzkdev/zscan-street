@@ -338,6 +338,39 @@ export class Soundscape {
     });
   }
 
+  /** The power going (a falling mains hum and a breaker's thunk) or coming back (a rising hum). */
+  power(down: boolean) {
+    if (!this.on || !this.ctx || this.indoors) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.05;
+    const o = ctx.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(down ? 120 : 30, t);
+    o.frequency.exponentialRampToValueAtTime(down ? 28 : 100, t + (down ? 1.6 : 1.1));
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 700;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.06, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (down ? 1.8 : 1.3));
+    o.connect(lp).connect(g).connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 2);
+    // the breaker
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise(0.2, false);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = down ? 220 : 1600;
+    const gn = ctx.createGain();
+    const at = down ? t : t + 1.05;
+    gn.gain.setValueAtTime(0.25, at);
+    gn.gain.exponentialRampToValueAtTime(0.0001, at + 0.15);
+    n.connect(bp).connect(gn).connect(this.sfxGain);
+    n.start(at);
+  }
+
   /** Thunder after the lightning: a crack, then a long low roll. */
   thunder() {
     if (!this.on || !this.ctx) return;

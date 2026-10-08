@@ -24,6 +24,15 @@ export interface Here {
   x: number;
   z: number;
   mode: 0 | 1 | 2;
+  /** The place they are in (its key), when inside. */
+  place?: string | null;
+}
+
+/** A game event relayed to everyone in the city (a tap on the whale…). */
+export interface CityEvent {
+  id: number;
+  k: string;
+  n?: number | null;
 }
 
 /**
@@ -43,6 +52,11 @@ export class Visitors {
   private pendingEmoji: number | null = null;
   private count = 0;
   private markerMat: THREE.SpriteMaterial;
+  private pendingEvents: { k: string; n?: number }[] = [];
+  private eventFns: ((e: CityEvent) => void)[] = [];
+  private plotFns: ((plot: number) => void)[] = [];
+  /** How many visitors are in each place (key → count), from the last list. */
+  readonly places = new Map<string, number>();
 
   constructor(
     private scene: THREE.Scene,
@@ -78,6 +92,8 @@ export class Visitors {
           const msg = JSON.parse(m.data as string);
           if (msg.type === "hello") this.me = msg.id;
           else if (msg.type === "presence") this.onList(msg.n, msg.v);
+          else if (msg.type === "event" && msg.id !== this.me) for (const fn of this.eventFns) fn(msg as CityEvent);
+          else if (msg.type === "plot") for (const fn of this.plotFns) fn(msg.plot as number);
         } catch {}
       };
       ws.onclose = () => {
@@ -89,8 +105,25 @@ export class Visitors {
     open();
   }
 
-  private onList(n: number, list: [number, number, number, number, number, number][]) {
+  /** Game events from the other visitors. */
+  onEvent(fn: (e: CityEvent) => void) {
+    this.eventFns.push(fn);
+  }
+
+  /** A player plot was rebuilt (somebody saved their building). */
+  onPlot(fn: (plot: number) => void) {
+    this.plotFns.push(fn);
+  }
+
+  /** Tell everyone (sent with the next position, at most a few a second). */
+  emit(k: string, n?: number) {
+    if (this.pendingEvents.length < 4) this.pendingEvents.push(n === undefined ? { k } : { k, n });
+  }
+
+  private onList(n: number, list: [number, number, number, number, number, number, (string | null)?][]) {
     this.count = n;
+    this.places.clear();
+    for (const v of list) if (v[6]) this.places.set(v[6], (this.places.get(v[6]) ?? 0) + 1);
     const now = performance.now();
     const h = this.here();
     // the nearest ones out on the street (not inside a place), up to SHOWN
@@ -153,10 +186,14 @@ export class Visitors {
     const now = performance.now();
     if (this.ws?.readyState === WebSocket.OPEN && now - this.sentAt > 250) {
       const h = this.here();
-      const msg: Record<string, number> = { a: this.avatar, x: Math.round(h.x * 10) / 10, z: Math.round(h.z * 10) / 10, m: h.mode };
+      const msg: Record<string, unknown> = { a: this.avatar, x: Math.round(h.x * 10) / 10, z: Math.round(h.z * 10) / 10, m: h.mode };
+      // an empty place tells the server we came back out
+      msg.p = h.place ?? "";
       if (this.pendingEmoji !== null) msg.e = this.pendingEmoji;
+      const ev = this.pendingEvents.shift();
+      if (ev) msg.ev = ev;
       const text = JSON.stringify(msg);
-      if (text !== this.lastSent || now - this.sentAt > 5000) {
+      if (ev || text !== this.lastSent || now - this.sentAt > 5000) {
         this.ws.send(text);
         this.lastSent = text;
         this.sentAt = now;

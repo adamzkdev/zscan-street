@@ -156,6 +156,12 @@ export const MATERIALS = {
 export const EMIT_TIME = { value: 0 };
 
 /**
+ * A power cut on the city's lights: (x, z) of the substation, the radius the dark has spread to
+ * (metres) and how dark (0 lit … 1 out). Set by the game world on an empty block.
+ */
+export const BLACKOUT = { value: new THREE.Vector4(0, 0, 0, 0) };
+
+/**
  * The city's lights live a little, on the GPU and at no cost: on the upper floors a window goes
  * dark now and then and another comes on (per window cell, every minute or two), and now and
  * again a neon stutters for a moment. Pale, warm lights are windows; saturated ones are signs,
@@ -163,11 +169,15 @@ export const EMIT_TIME = { value: 0 };
  */
 MATERIALS.emit.onBeforeCompile = (sh) => {
   sh.uniforms.uTime = EMIT_TIME;
+  sh.uniforms.uDark = BLACKOUT;
   sh.vertexShader = sh.vertexShader
     .replace("#include <common>", "#include <common>\nvarying vec3 vCityPos;")
-    .replace("#include <project_vertex>", "#include <project_vertex>\nvCityPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    .replace(
+      "#include <project_vertex>",
+      "#include <project_vertex>\n#ifdef USE_BATCHING\nvCityPos = (modelMatrix * batchingMatrix * vec4(transformed, 1.0)).xyz;\n#else\nvCityPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#endif",
+    );
   sh.fragmentShader = sh.fragmentShader
-    .replace("#include <common>", "#include <common>\nvarying vec3 vCityPos;\nuniform float uTime;\nfloat cityHash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }")
+    .replace("#include <common>", "#include <common>\nvarying vec3 vCityPos;\nuniform float uTime;\nuniform vec4 uDark;\nfloat cityHash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }")
     .replace(
       "#include <color_fragment>",
       `#include <color_fragment>
@@ -188,16 +198,29 @@ MATERIALS.emit.onBeforeCompile = (sh) => {
           float buzz = step(0.45, fract(sin(floor(uTime * 24.0) + h * 91.0) * 43758.5453));
           diffuseColor.rgb *= mix(1.0, 0.25 + 0.75 * buzz, burst);
         }
+        if (uDark.w > 0.0) {
+          // the cut spreads from the substation; a few emergency lights stay on, dim red
+          float k = uDark.w * (1.0 - smoothstep(uDark.z - 8.0, uDark.z, length(vCityPos.xz - uDark.xy)));
+          vec3 emergency = vec3(0.35, 0.02, 0.02) * step(0.985, h);
+          diffuseColor.rgb = mix(diffuseColor.rgb, emergency, k * 0.96);
+        }
       }`,
     );
 };
+
+/** A copy of a shared material (to fade or tint one building) that keeps its shader hooks. */
+export function ownMaterial(kind: Kind) {
+  const m = MATERIALS[kind].clone();
+  m.onBeforeCompile = MATERIALS[kind].onBeforeCompile;
+  return m;
+}
 
 /** A model as a group of up to three meshes (solid, glass, light). */
 export function toObject(m: VoxelModel, opts: { shadows?: boolean; own?: boolean } = {}) {
   const geos = meshModel(m);
   const g = new THREE.Group();
   for (const [kind, geo] of Object.entries(geos) as [Kind, THREE.BufferGeometry][]) {
-    const mat = opts.own ? MATERIALS[kind].clone() : MATERIALS[kind];
+    const mat = opts.own ? ownMaterial(kind) : MATERIALS[kind];
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = kind !== "emit" && opts.shadows !== false;
     mesh.receiveShadow = kind !== "emit";

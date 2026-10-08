@@ -9,13 +9,14 @@ import { Market } from "../data/market";
  * pool, as bright as the pool is full), Mempool (where the transactions are being carried).
  */
 
-export type View = "off" | "zones" | "traffic" | "privacy" | "mempool";
+export type View = "off" | "zones" | "traffic" | "privacy" | "mempool" | "factions";
 
 const VIEWS: { key: View; name: string; jp: string }[] = [
   { key: "zones", name: "Zones", jp: "区域" },
   { key: "traffic", name: "Traffic", jp: "交通" },
   { key: "privacy", name: "Privacy", jp: "秘匿" },
   { key: "mempool", name: "Mempool", jp: "待合" },
+  { key: "factions", name: "Territory", jp: "陣地" },
 ];
 
 const ZONE_COLOR: Record<string, [string, string]> = {
@@ -55,6 +56,8 @@ export interface OverlayData {
   /** Transaction carriers on foot, and how many transactions each one holds. */
   carriers(): Iterable<{ pos: THREE.Vector3; n: number }>;
   mempool(): number;
+  /** Shielded vs Transparent, per quarter (game/factions.ts). */
+  territory?: () => Map<string, { sh: number; tr: number }> | null;
   /** Building footprints with their heights (the facades), to size each block's volume. */
   buildings: { x0: number; x1: number; z: number; height: number }[];
 }
@@ -185,6 +188,24 @@ export class Overlays {
       const top = Math.max(1, ...heat.values());
       this.cells.forEach((_c, i) => this.tiles.setColorAt(i, col.set("#ff3e8a").lerp(dim, 1 - Math.min(1, (heat.get(i) ?? 0) / top) * 0.9 - 0.05)));
       leg.push(`<span><i style="background:#ff3e8a"></i>Being carried<b>${carried} tx</b></span>`, `<span><i style="background:#3a2a3a"></i>In the mempool<b>${this.data.mempool()} tx</b></span>`);
+    } else if (this.view === "factions") {
+      const t = this.data.territory?.() ?? null;
+      const SH = "#b07bff",
+        TR = "#eda100";
+      let sh = 0,
+        tr = 0;
+      this.cells.forEach((c, i) => {
+        const s = t?.get(zoneAt((c.x0 + c.x1) / 2, (c.z0 + c.z1) / 2));
+        if (!s || s.sh === s.tr) return void this.tiles.setColorAt(i, col.copy(dim));
+        const lead = Math.abs(s.sh - s.tr) / Math.max(1, s.sh + s.tr);
+        this.tiles.setColorAt(i, col.set(s.sh > s.tr ? SH : TR).lerp(dim, 0.55 - 0.5 * Math.min(1, lead * 2)));
+      });
+      if (t)
+        for (const s of t.values()) {
+          if (s.sh > s.tr) sh++;
+          else if (s.tr > s.sh) tr++;
+        }
+      leg.push(`<span><i style="background:${SH}"></i>Shielded<b>${sh} quarters</b></span>`, `<span><i style="background:${TR}"></i>Transparent<b>${tr} quarters</b></span>`, `<span class="sum">today's transactions + visitors' deeds</span>`);
     } else if (roadsOn) {
       this.cells.forEach((_c, i) => this.tiles.setColorAt(i, col.set("#ffffff")));
       const count = new Array(this.segs.length + 1).fill(0);
@@ -224,7 +245,7 @@ export class Overlays {
     this.roadMat.opacity = 0.9 * this.fade;
     // live views refresh twice a second
     this.acc += dt;
-    if (on && this.acc > 0.5 && (this.view === "traffic" || this.view === "mempool")) {
+    if (on && this.acc > 0.5 && (this.view === "traffic" || this.view === "mempool" || (this.view === "factions" && this.acc > 3))) {
       this.acc = 0;
       this.paint();
     }

@@ -1,0 +1,11 @@
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } });
+const p = await b.newPage();
+await p.goto(`http://localhost:3007/?debug&theme=night`);
+await p.waitForFunction(() => window.street?.game, { timeout: 120000 });
+await new Promise((r) => setTimeout(r, 8000));
+await p.screenshot({ path: "shots/gm-0.png" });
+await p.evaluate(() => document.querySelector(".bet-btn").click());
+await new Promise((r) => setTimeout(r, 400));
+await p.screenshot({ path: "shots/gm-1-bets.png" });
+await b.close();

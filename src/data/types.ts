@@ -128,6 +128,8 @@ export interface TxDetail {
 
 export interface Block {
   height: number;
+  /** Absent on blocks made up for tests and rehearsals. */
+  hash?: string;
   time: number;
   size: number;
   fees: number;

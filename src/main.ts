@@ -69,7 +69,7 @@ import { Quality } from "./scene/quality";
 import { warm, idle, warmTarget } from "./scene/warm";
 import { pxPerMetre } from "./scene/farview";
 import { LightBudget } from "./scene/lights";
-import { Residents } from "./scene/residents";
+import { streetLife, Residents } from "./scene/residents";
 import { CityPulse } from "./scene/pulse";
 import { Metro, NU7_LINE } from "./scene/metro";
 import { Tram } from "./scene/tram";
@@ -91,6 +91,28 @@ import { Visitors } from "./scene/visitors";
 import { npcSpeaker, snarkSpeaker, Talk } from "./ui/talk";
 import { get } from "./data/zscan";
 import type { BlockSummary, Tx } from "./data/types";
+import { ChainClock } from "./game/clock";
+import { GameWorld } from "./game/world";
+import { GameHud } from "./game/ui";
+import { Predict } from "./game/predict";
+import { profile } from "./game/profile";
+import { Whale } from "./scene/whale";
+import { CaseBook } from "./game/cases";
+import { Gossip } from "./game/gossip";
+import { PaperView } from "./game/paper";
+import { Mayor } from "./game/mayor";
+import { Editor } from "./build/editor";
+import { Plots } from "./build/plots";
+import { Factions } from "./game/factions";
+import { LiveEvents } from "./game/events";
+import { Disasters } from "./game/disasters";
+import { Eggs } from "./game/eggs";
+import { loadSeason } from "./game/season";
+import { Radio } from "./game/radio";
+import { Jobs } from "./game/jobs";
+import { Casino } from "./game/casino";
+import { TimeTravel } from "./game/timetravel";
+import { TUNNEL } from "./scene/city/plan";
 
 // ---- renderer ----------------------------------------------------------------------------------
 // The API down or rate-limiting (a portrait, a block that won't load): whoever asked just goes
@@ -221,10 +243,26 @@ setInterval(() => {
 // ---- weather: at night, passing showers (when rain is on), a few minutes wet, a few dry ----
 let rainOn = true;
 let showering = true;
+/** A storm brought by the chain (crowded mempool, packed block): rain day or night. */
+let chainStorm = false;
+/** The game world (power cuts, chain weather); set once the HUD is up. */
+let gameWorld: GameWorld | null = null;
+/** Today's ZK Detective case: places hand out clues as you walk in. */
+let caseBook: CaseBook | null = null;
+/** The mayor's curfew: the street empties. */
+let curfew = false;
+/** The voxel workshop is open: the city stops drawing. */
+let cityPaused = false;
+/** Shielded vs Transparent, quarter by quarter (set with the game layer). */
+let factions: Factions | null = null;
+/** Jobs: the next bus is the visitor's to drive, and the one they drive. */
+let driveNextBus = false;
+let jobBus: BlockBus | null = null;
+let jobs: Jobs | null = null;
 const rainListeners: ((on: boolean) => void)[] = [];
 function weather(now = false) {
-  const raining = rainOn && theme === "night" && showering;
-  setRainWanted(rainOn && showering);
+  const raining = rainOn && ((theme === "night" && showering) || chainStorm);
+  setRainWanted(rainOn && (showering || chainStorm));
   decor.setRain(raining, now);
   sound.setRain(raining);
   for (const fn of rainListeners) fn(raining);
@@ -276,6 +314,7 @@ const director = new Director(scene, city, {
   stats: (s) => {
     lastSummary = s.lastBlock;
     mempoolCount = s.mempool;
+    gameWorld?.setMempool(s.mempool);
     hud.setStats(s);
     if (s.lastBlock) hall?.setLast(s.lastBlock.height, s.lastBlock.miner_pool, Date.parse(s.lastBlock.time));
     decor.setLive({ height: s.lastBlock?.height ?? null, mempool: s.mempool });
@@ -300,6 +339,19 @@ const director = new Director(scene, city, {
       rig.followTheBus(bus);
       hud.follow(null);
     }
+    // the bus driver's shift: from inside, then graded when it pulls in
+    if (phase === "arriving" && driveNextBus && bus) {
+      driveNextBus = false;
+      jobBus = bus;
+      if (walking) setWalking(false);
+      rig.rideIn(bus);
+      hud.follow(null);
+      jobs?.busArriving();
+    }
+    if (phase === "boarding" && bus && bus === jobBus) {
+      jobBus = null;
+      jobs?.busStopped();
+    }
   },
   removed: (s) => {
     if (rig.following === s) {
@@ -321,7 +373,8 @@ const director = new Director(scene, city, {
 const residents = new Residents(director);
 const RESIDENTS_BY_TIER = [24, 22, 16, 10, 6];
 function crowd() {
-  residents.setTarget(RESIDENTS_BY_TIER[quality.level] + Math.min(8, Math.floor(director.mempoolList().length / 2)));
+  // the street follows the visitor's clock (busy at rush hours, a few night owls), a curfew empties it
+  residents.setTarget((RESIDENTS_BY_TIER[quality.level] + Math.min(8, Math.floor(director.mempoolList().length / 2))) * streetLife() * (curfew ? 0.3 : 1));
 }
 crowd();
 setInterval(crowd, 5000);
@@ -387,7 +440,6 @@ const prison = new Prison(scene, city.nav, director);
 }
 const jailBanner = document.createElement("div");
 jailBanner.className = "jail";
-document.getElementById("ui")!.append(jailBanner);
 let jailed = false;
 horns.onArrest = () => void arrest();
 async function arrest() {
@@ -634,8 +686,11 @@ hud = new Hud(
   director,
   themePref,
 );
+// the Hud rewrote #ui: widgets made before it go in now
+document.getElementById("ui")!.append(jailBanner);
 // SimCity-style data views over the city (after the HUD, which rewrites #ui)
 const overlays = new Overlays(scene, document.getElementById("ui")!, {
+  territory: () => factions?.scores ?? null,
   *cars() {
     for (const m of cityTraffic.movers) yield m.group.position;
     for (const v of director.traffic.vehicles) yield v.mover.group.position;
@@ -1096,6 +1151,7 @@ function enterPlace(key: string, floor?: number) {
     onFoot.enabled = false;
   }
   interiors.enter(key as Interior["key"], floor ?? 0);
+  caseBook?.visit(key);
 }
 
 window.addEventListener("keydown", (e) => {
@@ -1219,6 +1275,17 @@ canvas.addEventListener("pointerup", (e) => {
     return;
   }
   if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+  // the game's things in the city: a treasure coin, the whale
+  if (e.button === 0) {
+    ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+    ray.setFromCamera(ndc, viewCam());
+    if (mayor.treasure.click(ray)) return;
+    if (plots.click(ray)) return;
+    if (eggs.click(ray)) return;
+    const ci = critters.catAt(ray);
+    if (ci >= 0) return adoptCat(ci);
+    if (whale.hit(ray)) return;
+  }
   const hit = hitAt(e.clientX, e.clientY);
   const s = hit ? (hit.object.userData.snark as Snark) : null;
   if (!s && e.button === 0) {
@@ -1346,6 +1413,11 @@ async function openStore(id: string) {
     nu7: () => ({ height: nu7.height, date: nu7.date, activated: nu7.activated, tip: director.blockHeight }),
   });
   if ("game" in info && !("title" in info)) return void arcade.show(info.game);
+  const mood = gameWorld?.shop(id);
+  if (mood) {
+    (info as PickInfo).tag = mood.tag;
+    if (mood.bonus) profile.pay(mood.bonus, "happy hour");
+  }
   hud.showPick(info as PickInfo);
 }
 
@@ -1479,7 +1551,7 @@ const tracker = new Tracker(document.getElementById("ui")!, director, {
 // the other visitors in the city, live (presence through the API)
 const visitors = new Visitors(scene, document.getElementById("ui")!, () => {
   const p = walking ? onFoot.camera.position : rig.focus;
-  return { x: p.x, z: p.z, mode: interiors.active ? 2 : walking ? 1 : 0 };
+  return { x: p.x, z: p.z, mode: interiors.active ? 2 : walking ? 1 : 0, place: interiors.active?.key ?? null };
 });
 
 // photo mode: the HUD steps aside, a filter, a signed PNG of the frame
@@ -1489,9 +1561,181 @@ new Photo(document.getElementById("ui")!, canvas, {
   height: () => director.blockHeight,
 });
 
+// ---- the game: one block = one turn ----
+const chainClock = new ChainClock();
+const gameHud = new GameHud(document.getElementById("ui")!);
+gameWorld = new GameWorld(chainClock, decor, lampLights, city.factory?.hall ?? null, {
+  power: (st) => sound.power(st === "down"),
+  storm: (on) => {
+    chainStorm = on;
+    weather();
+  },
+  thunder: () => sound.thunder(),
+  inside: () => interiors.active !== null,
+  say: (h) => gameHud.say(h),
+});
+const predict = new Predict(gameHud, chainClock);
+
+caseBook = new CaseBook(gameHud, (h) => {
+  if (interiors.active?.key !== "mempool") enterPlace("mempool");
+  interiors.goTo(1);
+  hud.renderIndoor(1);
+  window.dispatchEvent(new CustomEvent("zstreet:archive", { detail: h || chainClock.height || director.blockHeight }));
+});
+
+// the street's gossip about each block (one model call per block, shared), and the morning paper
+const gossip = new Gossip(chainClock);
+gossip.on((g) => chatter.gossip(g.lines));
+setTimeout(() => void gossip.fetch(), 4000);
+new Radio(gossip, gameHud, () => sound.on);
+const paper = new PaperView(document.getElementById("ui")!);
+void paper.load().then((p) => {
+  if (!p) return;
+  let seen = "";
+  try {
+    seen = localStorage.getItem("street.paper") ?? "";
+    localStorage.setItem("street.paper", p.day);
+  } catch {}
+  if (seen !== p.day) setTimeout(() => gameHud.say(`<b>THE ZSTREET DAILY</b> · ${p.headline}`, () => void paper.open()), 6000);
+});
+
+// the mayor: a decree every 40 blocks (festival, curfew, treasure hunt) that changes the city
+const mayor = new Mayor(scene, chainClock, decor, gameHud, {
+  effect: (e) => {
+    curfew = e === "curfew";
+    crowd();
+    if (e === "festival") decor.pulse("#ff7aa8", 8);
+  },
+  party: (sec) => nu7.party(sec),
+  spots: () => city.lamps.filter((l) => Math.abs(l.pos.x) < 140 && Math.abs(l.pos.z) < 120).map((l) => new THREE.Vector3(l.pos.x, CURB, l.pos.z)),
+});
+setTimeout(() => void mayor.fetch(), 5000);
+
+// Shielded vs Transparent: today's transactions and the visitors' deeds hold the quarters
+factions = new Factions(chainClock, gameHud);
+setTimeout(() => chainClock.height && void factions?.seed(chainClock.height), 9000);
+caseBook.onSolved = () => factions?.deed(10);
+predict.onWon = () => factions?.deed(2);
+
+// the city's live events: everyone gets the same reminders, the toast takes you in
+const liveEvents = new LiveEvents(gameHud, decor, (place) => enterPlace(place, place === "stadium" ? 0 : undefined), () => chainClock.height || director.blockHeight || 0);
+
+// Builders' Row: visitors' own buildings, made in the voxel workshop, kept by the API
+const editor = new Editor(document.body);
+const plots = new Plots(scene, document.getElementById("ui")!, editor, {
+  say: (h) => gameHud.say(h),
+  pause: (on) => {
+    cityPaused = on;
+    document.getElementById("ui")!.style.visibility = on ? "hidden" : "";
+  },
+});
+visitors.onPlot(() => plots.changed());
+
+// a street cat to adopt: it follows you around the city (and is still yours next visit)
+const CAT_NAMES = ["Mochi", "Nori", "Satoshi", "Zooko", "Halo", "Sapling", "Orchard", "Nullifier", "Tofu", "Yuzu", "Proof", "Memo"];
+const catFollow = () => (walking ? onFoot.camera.position : rig.focus);
+function adoptCat(i: number) {
+  const own = profile.p.cat;
+  if (own && critters.petIndex === i) return void gameHud.say(`<b>${own.name}</b> · purrs`);
+  const name = CAT_NAMES[Math.floor(Math.random() * CAT_NAMES.length)];
+  profile.update((p) => (p.cat = { id: i, name }));
+  critters.adopt(i, catFollow);
+  gameHud.say(`<b>🐈 ${name}</b> · ${own ? `swapped ${own.name} for a new friend` : "adopted you"}: it follows you everywhere now`);
+}
+if (profile.p.cat) critters.adopt(profile.p.cat.id, catFollow);
+gameHud.addRow(() => (profile.p.cat ? `<dt>Cat</dt><dd>🐈 ${profile.p.cat.name}</dd>` : ""));
+
+// the season follows the last network upgrade (its colour on every block's neon swing)
+void loadSeason().then((s) => gameHud.addRow(() => `<dt>Season</dt><dd style="color:${s.color}">${s.name}</dd>`));
+
+// jobs: courier, miner, bus driver (from the citizen card)
+jobs = new Jobs(gameHud, chainClock, {
+  walkFrom: (at) => {
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    rig.controls.target.copy(at);
+    setWalking(true);
+  },
+  onFoot: () => (walking ? onFoot.camera.position : null),
+  project,
+  depot: () => city.docks.find((d) => d.kind === "depot")?.at?.clone() ?? null,
+  hq: () => director.shopSites()[0]?.site.door.clone() ?? null,
+  mempoolTx: () => {
+    const l = director.mempoolList();
+    return l.length ? l[Math.floor(Math.random() * l.length)] : null;
+  },
+  rideNextBus: () => {
+    if (interiors.active) interiors.exit();
+    driveNextBus = true;
+  },
+  busX: () => jobBus?.group.position.x ?? null,
+  stopX: DISTRICTS[0].stopX,
+  factory: () => enterPlace("factory"),
+});
+
+// the Block Casino: settled by the next block's hash (from the citizen card or the gacha shop)
+new Casino(gameHud, chainClock);
+
+// the Genesis Line: back through Zcash's history, the city shrinking to what it was
+const genesis = new TimeTravel(scene, canvas, decor, gameHud);
+
+// secrets the chain unlocks: a door opens somewhere on a rare block, first visitor there wins
+const eggs = new Eggs(scene, chainClock, city.facades, decor, gameHud, (h) => visitors.emit("egg", h));
+
+// when the network shakes, so does the city: a reorg is an earthquake, a hashrate drop trips the power station
+const disasters = new Disasters(chainClock, decor, gameHud, {
+  rumble: () => sound.thunder(),
+  react: () => residents.react("!", null, 0.8),
+  blackout: (r, at) => gameWorld?.blackout(r, at),
+  powerPlant: () => (city.factory ? new THREE.Vector2(city.factory.hall.x, city.factory.hall.z) : new THREE.Vector2(-175, 104)),
+});
+
+// the whale: a big public amount swims over the avenue until visitors shield it
+const WHALE_ZAT = 500e8;
+const whale = new Whale(scene, document.getElementById("ui")!, { x0: -TUNNEL.mouth + 10, x1: TUNNEL.mouth - 10, z: (CITY.road.z0 + CITY.road.z1) / 2 }, {
+  hit: () => {
+    profile.pay(5, "proof");
+    sound.event("hit");
+    visitors.emit("whale");
+  },
+  shielded: (tx) => {
+    profile.pay(100, "whale");
+    profile.update((p) => p.stats.whales++);
+    factions?.deed(15);
+    nu7.party(5);
+    sound.crowd(true);
+    gameHud.say(`<b>WHALE SHIELDED</b> · ${((tx.visible ?? 0) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 0 })} ZEC out of sight · ⓩ +100`);
+  },
+  escaped: () => {
+    sound.crowd(false);
+    gameHud.say(`<b>THE WHALE GOT AWAY</b> · into the chain, in plain sight`);
+  },
+  project,
+});
+visitors.onEvent((e) => {
+  if (e.k === "whale") whale.remote();
+  if (e.k === "egg" && e.n) eggs.taken(e.n);
+});
+director.onTx((tx) => {
+  if (whale.active || tx.kind === "shielded" || (tx.visible ?? 0) < WHALE_ZAT) return;
+  whale.spawn(tx, visitors.others_count);
+  decor.alert({ kind: "game", title: "WHALE ALERT  鯨", big: `${((tx.visible ?? 0) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 0 })} ZEC`, line: "IN PLAIN SIGHT · SHIELD IT", color: "#5fb4ee" });
+  gameHud.say(`<b>🐋 WHALE ALERT</b> · ${((tx.visible ?? 0) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 0 })} ZEC moving in public · tap it to shield it`, () => {
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    // meet it a little ahead of where it is
+    rig.district(whale.position.clone().setY(1).add(new THREE.Vector3(30, 0, 0)), AREAS[0]?.zoom ?? 1);
+  });
+});
+{
+  const bonus = profile.checkIn();
+  if (bonus) setTimeout(() => gameHud.say(`<b>DAY ${profile.p.streak}</b> · daily bonus ⓩ +${bonus}`), 2500);
+}
+
 connectFeed({
   snapshot: (txs, last) => {
     director.snapshot(txs, last);
+    if (last) chainClock.start(last.height);
     if (first) {
       first = false;
       const q = new URLSearchParams(location.search).get("interior");
@@ -1504,7 +1748,10 @@ connectFeed({
     director.addTx(tx);
     pulse.tx(tx);
   },
-  block: (b) => director.block(b),
+  block: (b) => {
+    director.block(b);
+    chainClock.feed(b);
+  },
   mempool: (ids) => director.sweep(ids),
   status: (s) => hud.setStatus(s),
 });
@@ -1512,6 +1759,40 @@ connectFeed({
 if (new URLSearchParams(location.search).has("debug")) {
   Object.assign(window, {
     street: {
+      /** The game layer: feed a made-up block (n transactions, "shielded" kind), cut the power… */
+      game: {
+        clock: chainClock,
+        world: gameWorld,
+        predict,
+        profile,
+        block: (n = 0, kind: Tx["kind"] = "shielded") =>
+          chainClock.feed({
+            height: chainClock.height + 1,
+            time: Date.now(),
+            size: 2000,
+            fees: 0,
+            pool: null,
+            txs: Array.from({ length: n }, (_, i) => ({ txid: `test${chainClock.height}-${i}`, kind, fee: 1000, size: 2000, actions: 2, transparentOut: 0, seenAt: Date.now() }) as Tx),
+          }),
+        blackout: (r = 420) => gameWorld?.blackout(r),
+        whaleObj: whale,
+        cases: () => caseBook,
+        mayor,
+        gossip,
+        plots,
+        editor,
+        factions: () => factions,
+        quake: (d = 1) => disasters.quake(d),
+        eggs,
+        jobs: () => jobs,
+        genesis,
+        events: liveEvents,
+        whale: (zec = 812) => whale.spawn({ txid: "test-whale", kind: "transparent", fee: 1000, size: 400, actions: 2, transparentOut: zec * 1e8, visible: zec * 1e8, seenAt: Date.now() } as Tx),
+        storm: (on = true) => {
+          chainStorm = on;
+          weather(true);
+        },
+      },
       memes: memeStats,
       director,
       renderer,
@@ -1661,7 +1942,7 @@ const camQuat = new THREE.Quaternion();
 
 // ---- capture mode (?debug&capture): no HUD, time advanced by the script, camera set per frame ----
 const CAPTURE = new URLSearchParams(location.search).has("capture");
-type CapShot = { pos: [number, number, number]; look: [number, number, number]; fov?: number; tilt?: number; roll?: number };
+type CapShot = { pos: [number, number, number]; look: [number, number, number]; fov?: number; tilt?: number; roll?: number; far?: number };
 let capShot: CapShot | null = null;
 let capT = 0;
 const capCam = new THREE.PerspectiveCamera(34, window.innerWidth / window.innerHeight, 0.05, 600);
@@ -1678,6 +1959,11 @@ if (CAPTURE) {
       },
       leave: () => interiors.exit(),
       theme: (t: "day" | "night") => setTheme(t),
+      /** Rain on or off for good (no passing showers while filming). */
+      rain: (on: boolean) => {
+        rainOn = on;
+        weather(true);
+      },
       /** Show or hide the HUD (gameplay shots keep it). */
       ui: (on: boolean) => (document.getElementById("ui")!.style.display = on ? "" : "none"),
       /** Take the lift, as the HUD's floor buttons do. */
@@ -1727,6 +2013,7 @@ function aimCapture(cam: THREE.PerspectiveCamera, s: CapShot) {
   cam.lookAt(...s.look);
   if (s.roll) cam.rotateZ(s.roll);
   cam.fov = s.fov ?? 34;
+  cam.far = s.far ?? 600;
   cam.aspect = window.innerWidth / window.innerHeight;
   cam.updateProjectionMatrix();
 }
@@ -1786,6 +2073,11 @@ function frame(stepDt?: number) {
   }
 }
 function frameBody(stepDt?: number) {
+  // the voxel workshop draws on its own: the city waits (one cheap frame a second keeps it alive)
+  if (cityPaused && !stepDt) {
+    timer.update();
+    return void setTimeout(() => requestAnimationFrame(() => frame()), 500);
+  }
   timer.update();
   const real = timer.getDelta();
   if (stepDt === undefined) quality.sample(real);
@@ -1951,11 +2243,21 @@ function frameBody(stepDt?: number) {
   else city.lod(focus, rig.shot ? 60 : 40, rig.shot ? 140 : 95);
   prison.lod(focus, wide ? 50 : rig.shot ? 140 : 95);
   city.update(t, dt);
+  gameWorld?.update(dt);
+  whale?.update(dt);
+  mayor?.treasure.update(t);
+  eggs?.update(dt);
+  jobs?.update(dt);
+  if (walking) mayor?.treasure.near(onFoot.camera.position);
   hall?.update(t, dt);
   press?.update(t, dt);
   lightBudget.update();
   bubbles.update(dt, cam, window.innerWidth, window.innerHeight);
+  // an earthquake shakes whichever camera draws this frame
+  const quake = disasters?.shake(dt) ?? null;
+  if (quake) cam.position.add(quake);
   composer.render();
+  if (quake) cam.position.sub(quake);
   // a photo is read from the canvas right after the frame is drawn (the buffer isn't kept)
   if (grabbers.length) {
     const g = grabbers;

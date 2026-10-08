@@ -1,0 +1,58 @@
+// Lot 4 shots: node shots/_lot4.mjs [theme]
+import puppeteer from "puppeteer-core";
+const theme = process.argv[2] ?? "day";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1400, height: 860 } });
+const p = await b.newPage();
+const logs = [];
+p.on("console", (m) => m.type() === "error" && !m.text().startsWith("Failed to load") && logs.push(m.text()));
+p.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
+await p.goto(`http://localhost:3007/?debug&theme=${theme}`);
+await p.waitForFunction(() => window.street?.game?.genesis, { timeout: 120000 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const shot = (n) => p.screenshot({ path: `shots/lot4-${theme}-${n}.png` });
+await sleep(8000);
+await p.click(".zchip");
+await sleep(400);
+await shot("0-card");
+await p.evaluate(() => document.querySelector("[data-jobs]").click());
+await sleep(400);
+await shot("1-jobs");
+await p.evaluate(() => document.querySelector('[data-job="miner"]').click());
+await sleep(4000);
+for (let i = 0; i < 6; i++) {
+  await p.keyboard.press("Space");
+  await sleep(180);
+}
+await shot("2-miner");
+await p.evaluate(() => document.querySelector(".jobbar [data-quit]")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+await p.evaluate(() => street.interiors?.exit?.());
+await sleep(2500);
+await p.evaluate(() => document.querySelector("[data-casino]") ? document.querySelector("[data-casino]").click() : null);
+await p.evaluate(() => {
+  document.querySelector(".zcard")?.classList.remove("open");
+  document.querySelector('.casino [data-c="high"]')?.click();
+  document.querySelector('.casino [data-c="red"]')?.click();
+});
+await sleep(300);
+await p.evaluate(() => street.game.clock.feed({ height: street.game.clock.height + 1, hash: "00000000012ab34cd56ef7890a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3f", time: Date.now(), size: 1, fees: 0, pool: null, txs: [] }));
+await sleep(600);
+await shot("3-casino");
+await p.evaluate(() => document.querySelector(".casino").classList.remove("open"));
+await p.evaluate(() => street.game.genesis.go({ key: "genesis", year: "2016", name: "Genesis · Sprout", height: 1, radius: 55, filter: "sepia(0.75) contrast(1.05) brightness(0.95)", line: "test" }));
+await p.evaluate(() => street.rig.home());
+await sleep(4000);
+await shot("4-genesis-2016");
+await p.evaluate(() => street.game.genesis.go(null));
+await sleep(500);
+await p.evaluate(() => { document.querySelector(".genesis")?.classList.remove("open"); street.game.eggs.test("palindrome", 3511153); });
+await sleep(800);
+const where = await p.evaluate(() => { const w = street.game.eggs.where; return w ? [w.x, w.z] : null; });
+console.log("egg at", where);
+if (where) await p.evaluate((w) => { const v = street.rig.focus.clone(); v.set(w[0], 1, w[1] + 6); street.rig.district(v, 1.6); }, where);
+await sleep(3000);
+await shot("5-egg");
+await p.evaluate(() => street.game.quake(2));
+await sleep(700);
+await shot("6-quake");
+console.log(logs.join("\n") || "no errors");
+await b.close();

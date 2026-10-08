@@ -112,6 +112,9 @@ const chg = () => Market.state.price?.usd_24h_change ?? 0;
 const sh = () => Math.round((Market.state.pools?.shielded_ratio ?? 0.29) * 100);
 
 export class Chatter {
+  /** What the street says about the last block (the API writes it once per block). */
+  private gossipLines: Line[] = [];
+  private gossipAt = 0;
   private busy = new Set<Snark>();
   private cool = new WeakMap<Snark, number>();
   private acc = 0;
@@ -131,6 +134,21 @@ export class Chatter {
     M = mempool;
   }
 
+  /** The last block's gossip, from the API: conversations pick it up for a few minutes. */
+  gossip(lines: { text: string; tone: Tone }[]) {
+    this.gossipLines = lines.map((l) => (l.tone === "talk" ? l.text : ([l.text, l.tone] as [string, Tone])));
+    this.gossipAt = performance.now();
+  }
+
+  private gossipScript(): Script[] {
+    const g = this.gossipLines;
+    if (g.length < 2 || performance.now() - this.gossipAt > 5 * 60_000) return [];
+    // two or three remarks in a row, as one conversation
+    const i = Math.floor(Math.random() * g.length);
+    const n = Math.random() < 0.5 ? 2 : 3;
+    return [Array.from({ length: Math.min(n, g.length) }, (_, k) => g[(i + k) % g.length])];
+  }
+
   private topicAt(x: number, z: number): Script[] {
     let best: string | null = null,
       bd = 70 * 70;
@@ -141,6 +159,8 @@ export class Chatter {
     // the prison is on its rock: the quay facing it counts
     if (z > 120 && x < -90 && x > -160) best = "prison";
     const local = best ? NEAR[best] : undefined;
+    const fresh = this.gossipScript();
+    if (fresh.length && Math.random() < 0.45) return fresh;
     const r = Math.random();
     if (local?.length && r < 0.55) return local;
     if (r < 0.75) return [pick(LIVE)()];

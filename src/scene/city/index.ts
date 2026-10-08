@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Nav } from "../nav";
 import { blobTexture, concreteTexture, grassTexture, neonTexture, pavingTexture, roadTexture, waterTexture } from "../textures";
-import { MATERIALS, toObject } from "../voxel/mesher";
+import { MATERIALS, ownMaterial, toObject } from "../voxel/mesher";
 import { C, E, G, VOX, VoxelModel, type Kind } from "../voxel/model";
 import type { SignSpot } from "../voxel/parts";
 import { mat } from "./kit";
@@ -202,7 +202,7 @@ function geometry(d: NonNullable<Geos[Kind]>) {
 function objectFrom(geos: Geos, own: boolean) {
   const o = new THREE.Group();
   for (const [kind, d] of Object.entries(geos) as [Kind, NonNullable<Geos[Kind]>][]) {
-    const mesh = new THREE.Mesh(geometry(d), own ? MATERIALS[kind].clone() : MATERIALS[kind]);
+    const mesh = new THREE.Mesh(geometry(d), own ? ownMaterial(kind) : MATERIALS[kind]);
     mesh.castShadow = kind !== "emit";
     mesh.receiveShadow = kind !== "emit";
     o.add(mesh);
