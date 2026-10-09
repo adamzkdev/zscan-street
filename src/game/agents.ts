@@ -3,7 +3,7 @@ import { API } from "../data/zscan";
 import type { Director } from "../scene/director";
 import type { Snark } from "../scene/snark";
 import type { ChainClock } from "./clock";
-import { persona, type Persona } from "./personas";
+import { persona, sheet, type Persona } from "./personas";
 
 /** What a citizen of the day's cast is doing after the last block. */
 export interface AgentNow {
@@ -103,13 +103,14 @@ export class Agents {
 
   /** Who `id` is. */
   persona(id: number): Persona {
-    return this.cast.get(id) ?? persona(id);
+    // computed here (the API's mirror may lag a deploy behind on the newer fields)
+    return persona(id);
   }
 
   /** The persona and the day so far, for the model when you talk to them. */
   facts(id: number): string {
     const p = this.persona(id);
-    const lines = [`Your name is ${p.name}. You are a ${p.job} in ZStreet, living in ${p.home}. You are ${p.trait}. Your take on Zcash: ${p.take}.`];
+    const lines = [sheet(p)];
     const c = this.cast.get(id);
     if (c) {
       const n = c.now;
@@ -122,7 +123,6 @@ export class Agents {
       const t = this.talks.find((x) => x.a === id || x.b === id);
       if (t) lines.push(`What you and ${this.persona(t.a === id ? t.b : t.a).name} just said: ${t.lines.map((l) => `"${l}"`).join(" ")}`);
     }
-    lines.push("Stay in character: answer as this person, with their temperament, in a few sentences.");
     return lines.join("\n");
   }
 
@@ -130,8 +130,7 @@ export class Agents {
   hello(id: number): string {
     const c = this.cast.get(id);
     if (c?.now.thought) return c.now.thought;
-    const p = this.persona(id);
-    return `Hi, I'm ${p.name}. What's up?`;
+    return this.persona(id).hello;
   }
 
   private snark(id: number): Snark | null {

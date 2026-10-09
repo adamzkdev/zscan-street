@@ -42,8 +42,7 @@ function cityFacts(director: Director) {
   if (m.network) lines.push(`Last 24h: ${num(m.network.txs_24h)} transactions, ${Math.round(m.network.shielded_tx_ratio_24h * 100)}% shielded, blocks every ~${Math.round(m.network.avg_block_time)} s.`);
   lines.push("NU7 (25-second blocks, the Network Sustainability Mechanism sending 60% of fees to a reserve) is planned for mainnet around 2026-11-05.");
   lines.push("ZStreet's landmarks: the Louvre-style zkSNARK Museum, Block Stadium, the Colosseum's Proof Games, the Eiffel Tower, the Great Pyramid's labyrinth, the ZEC Needle, the Marina ZEC Hotel, the ZK Mall, the ZEC Reserve on Wall Street, Big Ben, the Opera House, the zkSNARK of Liberty and the Alcatraz-style prison in the bay, the Golden Gate bridge, the ZEC Flyer wheel.");
-  lines.push(VOICE);
-  return lines.join("\n");
+  return `City background (true, but don't recite it: use a number only if asked or if it really fits):\n${lines.join("\n")}`;
 }
 
 const STATE_LINE: Record<string, string> = {
@@ -71,11 +70,12 @@ export function snarkSpeaker(s: Snark, director: Director, agents?: Agents | nul
     portrait: ZScan.zkSnarkImage(s.id),
     sub: p?.job,
     ask: s.txs.length ? undefined : `Say something to ${p ? p.name : "them"}…`,
-    hello: s.txs.length ? "Hey! Busy day, I've got a parcel to deliver. What do you want to know?" : agents ? agents.hello(s.id) : "Hi there! Nice evening in the city, isn't it? Ask me anything.",
+    hello: p ? (s.txs.length ? `${p.hello} (I've got a parcel to deliver, so make it quick.)` : agents!.hello(s.id)) : s.txs.length ? "Hey! I've got a parcel to deliver, make it quick." : "Hm? Oh, hi.",
     facts: () => {
-      const lines = [`You are ${s.name}${s.rank ? `, rank #${num(s.rank)} in the zkSNARKs collection` : ""}. Right now you are ${STATE_LINE[s.state] ?? s.state}.`];
+      // who they are and how they talk first (the API clips the end of long facts)
       const who = agents?.facts(s.id);
-      if (who) lines.push(who);
+      const lines = who ? [who, VOICE] : [`You are ${s.name}.`, VOICE];
+      lines.push(`You are zkSNARK #${s.id}${s.rank ? `, rank #${num(s.rank)} in the zkSNARKs collection` : ""}. Right now you are ${STATE_LINE[s.state] ?? s.state}.`);
       if (s.item) lines.push(`Your traits: ${s.item.traits.map((t) => `${t.trait_type} ${t.value}`).join(", ")}.`);
       for (const t of s.txs) {
         const bits = [`You carry transaction ${t.txid} (${KIND_LABEL[t.kind]}: ${KIND_HELP[t.kind]}).`, `Size ${(t.size / 1000).toFixed(1)} kB, ${t.actions} action(s), fee ${t.fee == null ? "unknown" : zec(t.fee, 8)}.`];
@@ -101,13 +101,13 @@ export function crowdSpeaker(id: number, director: Director, agents: Agents): Sp
     portrait: ZScan.zkSnarkImage(id),
     hello: agents.hello(id),
     ask: `Say something to ${p ? p.name : "them"}…`,
-    facts: () => `You are zkSNARK #${id}, walking along the pavement when the visitor stopped you.\n${agents.facts(id)}\n${cityFacts(director)}`,
+    facts: () => `${agents.facts(id)}\n${VOICE}\nYou are zkSNARK #${id}, walking along the pavement when the visitor stopped you.\n${cityFacts(director)}`,
   };
 }
 
 /** A character inside a place (the MEMPOOL shopkeeper, a miner…), with its own facts. */
 export function npcSpeaker(key: string, name: string, who: string, portrait: string | null, hello: string, facts: () => string, director: Director): Speaker {
-  return { key, name, who, portrait, hello, facts: () => `${facts()}\n${cityFacts(director)}` };
+  return { key, name, who, portrait, hello, facts: () => `${facts()}\n${VOICE}\n${cityFacts(director)}` };
 }
 
 /**
