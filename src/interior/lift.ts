@@ -87,6 +87,12 @@ export interface StairDecl {
   /** Escalators: 1 runs up, -1 down. */
   move?: 1 | -1;
   style?: StyleName;
+  /**
+   * A flight between floors that are not one space (each floor its own room, at notional heights):
+   * it lives on `from` only and climbs `rise` metres there (the place models it, up to a landing);
+   * at its head the walker arrives on `to`, at `at` (default: that floor's spawn), behind a fade.
+   */
+  link?: { rise: number; at?: { x: number; z: number; yaw: number } };
 }
 export interface Plan {
   style?: StyleName;
@@ -228,6 +234,8 @@ class Car {
   private ind: ReturnType<typeof canvasTex>;
   private indKey = "";
   private windows: THREE.Texture | null = null;
+  /** In a bank of two: 0 the first car, 1 its twin (a ride keeps to its slot when it can). */
+  slot = 0;
   constructor(
     readonly floor: number,
     readonly shaft: string,
@@ -385,22 +393,7 @@ class Car {
       const s = decl.bank,
         PIER = decl.pier ?? 0.55;
       const o = s * (2 * edge + PIER);
-      const doorL = lit(st.door, st.metal * 0.6, 0.4);
-      // the twin's shaft and front, its doors shut in a trimmed portal, its sign
-      boxAt(g, shell, o - WI / 2 - T, 0, OZ + 0.1, o + WI / 2 + T, HS, DI / 2 + T, false);
-      boxAt(g, shell, o - edge, 0, OZ, o + edge, HS, OZ + 0.12, false);
-      for (const k of [-1, 1]) {
-        boxAt(g, doorL, o + (k < 0 ? -DW / 2 : 0.009), 0.02, OZ - 0.035, o + (k < 0 ? -0.009 : DW / 2), DH, OZ + 0.01, false);
-        boxAt(g, trim, o + k * (DW / 4) - (DW / 2 - 0.06) / 2, 1.03, OZ - 0.045, o + k * (DW / 4) + (DW / 2 - 0.06) / 2, 1.07, OZ - 0.03, false);
-      }
-      boxAt(g, basic("#15171b"), o - 0.009, 0.02, OZ - 0.04, o + 0.009, DH, OZ - 0.02, false);
-      boxAt(g, trim, o - DW / 2 - 0.08, 0, OZ - 0.03, o - DW / 2, DH + 0.08, OZ + 0.01, false);
-      boxAt(g, trim, o + DW / 2, 0, OZ - 0.03, o + DW / 2 + 0.08, DH + 0.08, OZ + 0.01, false);
-      boxAt(g, trim, o - DW / 2 - 0.08, DH, OZ - 0.03, o + DW / 2 + 0.08, DH + 0.08, OZ + 0.01, false);
-      boxAt(g, trim, o - WI / 2 - T - 0.02, HS, OZ - 0.02, o + WI / 2 + T + 0.02, HS + 0.08, DI / 2 + T + 0.02, false);
-      const sign2 = sign.clone();
-      sign2.position.x = o;
-      g.add(sign2);
+      // (the twin itself is a car of its own, built beside this one: see Circulation)
       // the pier between the two, the call panel on it
       const p0 = Math.min(s * edge, o - s * edge),
         p1 = Math.max(s * edge, o - s * edge);
@@ -416,8 +409,8 @@ class Car {
       // one band over the whole bank
       uL = Math.min(uL, o - edge);
       uR = Math.max(uR, o + edge);
-      if (PIER < 0.8) extra.push(rectOf(spot, Math.min(s * (WI / 2 + T), o + s * edge), OZ, Math.max(s * (WI / 2 + T), o + s * edge), DI / 2 + T));
-      else extra.push(rectOf(spot, o - edge, OZ, o + edge, DI / 2 + T));
+      // the pier between the two shafts (the twin has its own walls)
+      if (PIER < 0.8) extra.push(rectOf(spot, Math.min(s * (WI / 2 + T), o - s * (WI / 2 + T)), OZ, Math.max(s * (WI / 2 + T), o - s * (WI / 2 + T)), DI / 2 + T));
     }
     if (decl.wing) {
       const [wl, wr] = decl.wing;
@@ -856,6 +849,8 @@ export interface CircHost {
   switchFloor(n: number): void;
   /** Lift ding. */
   ding?(): void;
+  /** Arrive on floor `n` (at a spot, else its spawn) behind a fade: the head of a linking flight. */
+  arrive?(n: number, at?: { x: number; z: number; yaw: number }): void;
 }
 
 interface Ride {
@@ -955,12 +950,24 @@ export class Circulation {
         car.setOpen(0);
         i.scene.add(car.group);
         this.cars.push(car);
+        // a bank of two: the twin works too (same shaft, its own doors, its own ride)
+        if (d.bank) {
+          const edge = (d.narrow ? 0.8 : WI0 / 2) + T + 0.12;
+          const o = d.bank * (2 * edge + (d.pier ?? 0.55));
+          const [tx, tz] = toWorld(at, o, 0);
+          const tAt = { x: tx, z: tz, yaw: at.yaw };
+          const twin = new Car(n, shaft, tAt, this.floorY(n, tAt), st, d.name ?? "LIFT", order.map((k) => F[k].label), f.label, !!d.windows, { narrow: d.narrow, compact: d.compact, name: d.name, style: d.style });
+          twin.slot = 1;
+          twin.setOpen(0);
+          i.scene.add(twin.group);
+          this.cars.push(twin);
+        }
       }
     });
     // ---- flights in the place's own space
     for (const s of i.stairs ?? plan.stairs ?? []) {
       const st = s.style ? STYLES[s.style] : style;
-      const fl = new Flight(s, F[s.from].y, F[s.to].y, st);
+      const fl = new Flight(s, F[s.from].y, s.link ? F[s.from].y + s.link.rise : F[s.to].y, st);
       if (fl.group.children.length) i.scene.add(fl.group);
       this.flights.push(fl);
     }
@@ -993,9 +1000,14 @@ export class Circulation {
     return [...new Set(this.cars.filter((c) => c.shaft === car.shaft).map((c) => c.floor))].sort((a, b) => F[a].y - F[b].y || a - b);
   }
 
-  /** The car on floor `n` of a shaft. */
-  carOf(shaft: string, n: number) {
-    return this.cars.find((c) => c.shaft === shaft && c.floor === n) ?? null;
+  /** The car on floor `n` of a shaft (the given slot of a bank when there is one). */
+  carOf(shaft: string, n: number, slot = 0) {
+    return this.cars.find((c) => c.shaft === shaft && c.floor === n && c.slot === slot) ?? this.cars.find((c) => c.shaft === shaft && c.floor === n) ?? null;
+  }
+
+  /** Whether a flight belongs to the floors `fl` (a linking flight only to its own floor). */
+  private touches(f: Flight, fl: number[]) {
+    return fl.includes(f.decl.from) || (!f.decl.link && fl.includes(f.decl.to));
   }
 
   /** Colliders of every car and flight on floor `n` (its whole shared space). */
@@ -1003,7 +1015,7 @@ export class Circulation {
     const fl = this.groupOf(n);
     return [
       ...this.cars.filter((c) => fl.includes(c.floor)).flatMap((c) => c.rects),
-      ...this.flights.filter((f) => fl.includes(f.decl.from) || fl.includes(f.decl.to)).flatMap((f) => f.rects),
+      ...this.flights.filter((f) => this.touches(f, fl)).flatMap((f) => f.rects),
       ...this.flights.flatMap((f) => (f.decl.walls ?? []).filter(([k]) => fl.includes(k)).map(([, r]) => r)),
     ];
   }
@@ -1014,7 +1026,7 @@ export class Circulation {
     for (const c of this.cars) if (c.floor === n && c.decl.clear) out.push(...c.decl.clear);
     for (const f of this.flights) {
       const d = f.decl;
-      if (d.from !== n && d.to !== n) continue;
+      if (d.from !== n && (d.link || d.to !== n)) continue;
       const [x0, z0, x1, z1] = d.zone!;
       const along = d.up === "+x" || d.up === "-x";
       const e = 0.35;
@@ -1047,7 +1059,7 @@ export class Circulation {
     const feet = this.host.walk.floor;
     let best: { f: Flight; g: number } | null = null;
     for (const f of this.flights) {
-      if (!fl.includes(f.decl.from) && !fl.includes(f.decl.to)) continue;
+      if (!this.touches(f, fl)) continue;
       const g = f.ground(x, z);
       if (g === undefined || Math.abs(g - feet) > 0.45) continue;
       if (!best || Math.abs(g - feet) < Math.abs(best.g - feet)) best = { f, g };
@@ -1060,7 +1072,7 @@ export class Circulation {
     const fl = this.groupOf(n);
     this.shownFloors = fl;
     for (const c of this.cars) c.group.visible = fl.includes(c.floor);
-    for (const f of this.flights) f.group.visible = fl.includes(f.decl.from) || fl.includes(f.decl.to);
+    for (const f of this.flights) f.group.visible = this.touches(f, fl);
   }
 
   /** The car the walker stands in, on the floor they are on. */
@@ -1158,7 +1170,7 @@ export class Circulation {
         W.shift(cx - p.x, 0, cz - p.z);
         if (!r.switched && k >= 0.5) {
           r.switched = true;
-          const to = this.carOf(c.shaft, r.to)!;
+          const to = this.carOf(c.shaft, r.to, c.slot)!;
           const [u, v] = c.local(p.x, p.z);
           const [x, z] = toWorld(to.spot, u, v);
           const dy = to.y - c.y;
@@ -1207,7 +1219,14 @@ export class Circulation {
       const d = on.f.decl;
       const { t } = on.f.t(p.x, p.z);
       drift = on.f.drift(p.x, p.z) ?? drift;
-      if (now === d.from && t > 0.85) {
+      if (d.link) {
+        // the head of a flight up to another space: arrive there
+        if (now === d.from && t > 0.96 && this.host.arrive) {
+          W.drift = null;
+          this.host.arrive(d.to, d.link.at);
+          return false;
+        }
+      } else if (now === d.from && t > 0.85) {
         this.host.switchFloor(d.to);
         this.show(d.to);
       } else if (now === d.to && t < 0.15) {

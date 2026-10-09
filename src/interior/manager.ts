@@ -145,6 +145,14 @@ export class InteriorManager {
         floor: () => this.floor,
         switchFloor: (n) => this.switchFloor(n),
         ding: () => this.ev.ding?.(),
+        arrive: (n, at) => {
+          this.ev.fade();
+          this.goTo(n);
+          if (at) {
+            const y = this.active!.floors[n].y;
+            this.walk.place(new THREE.Vector3(at.x, y, at.z), at.yaw, y);
+          }
+        },
       });
       if (c.problems.length) console.warn(`[lifts] ${i.key}: ${c.problems.join("; ")}`);
       this.circs.set(i, c);

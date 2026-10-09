@@ -522,7 +522,7 @@ export function buildBowl(scene: THREE.Scene): Bowl {
     }
   // TV gantry on the north stand's walkway
   for (const x of [-6, 0, 6]) {
-    const z = -(HZ + WALK.d0 + 1.0);
+    const z = -(HZ + WALK.d0 + 0.6);
     st.box(1.2, 0.9, 1.2, x, WALK.y, z, "#26252c");
     st.box(0.5, 0.45, 1.0, x, WALK.y + 1.2, z + 0.1, "#18171c");
     st.box(0.2, 0.2, 0.5, x, WALK.y + 1.32, z + 0.7, "#08080a");
@@ -636,23 +636,19 @@ export function buildBowl(scene: THREE.Scene): Bowl {
   void R;
 
   // ---- colliders ----------------------------------------------------------------------------
-  const zw0 = HZ + WALK.d0,
-    zw1 = HZ + WALK.d1;
-  const xEnd = HX - RC;
-  const walkRects: Rect[] = [
-    [-xEnd - 1, zw0 - 0.6, xEnd + 1, zw0 + 0.15],
-    [-xEnd - 1, zw1, xEnd + 1, zw1 + 0.5],
-    [-xEnd - 0.4, zw0 - 0.6, -xEnd + 0.2, zw1 + 0.5],
-    [xEnd - 0.2, zw0 - 0.6, xEnd + 0.4, zw1 + 0.5],
-    // the south walkway's gantries at the ends
-    ...VOMS.filter(([c, s]) => s > 0 && c !== 0).flatMap(([c]): Rect[] => [
-      [c - 2.6, zw1 - 0.05, c - 2.0, zw1 + 0.5],
-      [c + 2.0, zw1 - 0.05, c + 2.6, zw1 + 0.5],
-    ]),
-  ];
-  // gates at the ends of the walkway
-  for (const e of [-1, 1]) {
-    st.box(0.12, 1.1, zw1 - zw0, e * xEnd, WALK.y, (zw0 + zw1) / 2, steelL);
+  // the walkway runs all the way round the bowl: posts along its glass parapet (inner edge) and
+  // along the upper tier's LED riser (outer edge), close enough that nobody slips between them
+  const walkRects: Rect[] = [];
+  const edge = (d: number, half: number) =>
+    along(d, 0.35, (x, z) => {
+      walkRects.push([x - half, z - half, x + half, z + half]);
+    });
+  edge(WALK.d0 - 0.2, 0.3);
+  edge(WALK.d1 + 0.25, 0.3);
+  // the TV gantry on the north stand's walkway
+  for (const x of [-6, 0, 6]) {
+    const z = -(HZ + WALK.d0 + 0.6);
+    walkRects.push([x - 0.65, z - 0.65, x + 0.85, z + 0.6]);
   }
   const pitchRects: Rect[] = [
     [-BX - 0.3, BZ, -2.6, BZ + 0.4],
