@@ -113,7 +113,7 @@ float dtH = 0.0, dtFade = 0.0, dtRough = -1.0, dtBump = 0.004;
     // polished stone, lacquer: clouding in the depth, gloss that varies a touch
     float c = dtFbm(q * 1.6);
     float v = abs(sin((q.x * 0.7 + q.y * 1.1) * 2.6 + dtFbm(q * 0.9) * 6.0));
-    tint = (c - 0.5) * 0.08 * far - (1.0 - smoothstep(0.0, 0.06, v)) * 0.08 * far;
+    tint = (c - 0.5) * 0.05 * far - (1.0 - smoothstep(0.0, 0.04, v)) * 0.025 * far;
     dtH = c * 0.3;
     dtBump = 0.0008;
     dtRough = roughness * (0.75 + c * 0.5);

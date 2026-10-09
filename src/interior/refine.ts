@@ -27,7 +27,8 @@ function polishFloor(o: THREE.Mesh) {
   if (!textured && (hsl.l < 0.35 || hsl.s > 0.45)) return;
   if (m.roughness >= 0.9 && !textured) return;
   const woodish = hsl.h * 360 > 18 && hsl.h * 360 < 48 && hsl.s > 0.25 && hsl.l < 0.5;
-  m.roughness = Math.min(m.roughness, woodish ? 0.3 : 0.16);
+  // a satin polish: the hall reflects softly; mirror-hard floors turned every lamp into a glare
+  m.roughness = THREE.MathUtils.clamp(m.roughness, 0.5, woodish ? 0.6 : 0.55);
   m.userData.polished = true;
 }
 
