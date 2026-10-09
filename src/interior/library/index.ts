@@ -13,6 +13,7 @@ import { AUD_Y, G_Y, LEN, Level, READ_Y, SPHERE, T1_Y, T2_Y, TIERS, ZIP_Y, front
 import { buildReading } from "./reading";
 import { buildShelves, reserved } from "./shelves";
 import { buildSphere, porchBox } from "./sphere";
+import { buildStairs, LIB_STAIR } from "./stairs";
 import { buildZipArchive } from "./zips";
 
 /**
@@ -23,6 +24,7 @@ import { buildZipArchive } from "./zips";
  * second terrace: the papers behind Zcash, every ZIP (they open in the reader). 3 — the reading
  * room over the atrium: today's news. A — inside the sphere: the chain as a planetarium.
  * Z — the ZIP archive on the top floor: every ZIP as a numbered volume, by status, and the index.
+ * G, 1 and 2 are one space: besides the lifts, a white stair climbs from the floor to both terraces.
  */
 export function buildLibrary(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#e9e6df");
@@ -50,11 +52,17 @@ export function buildLibrary(ctx: InteriorContext): Interior {
   // parapets along the terraces' edges: a white wave with a warm line on top
   const para = new Quads(),
     paraLed = new Quads();
-  for (const ti of [4, 9]) {
+  // (open where the stairs' landing and bridge meet them)
+  for (const [ti, gap] of [
+    [4, LIB_STAIR.gapT1],
+    [9, LIB_STAIR.gapT2],
+  ] as const) {
     const t = TIERS[ti];
     const y = t.y0 + t.h;
-    for (let s = S0; s < LEN - S0 - 0.01; s += 0.5) {
-      const s2 = Math.min(LEN - S0, s + 0.5);
+    const cuts = [S0, gap[0], gap[1], LEN - S0];
+    for (let s = S0, s2 = S0; s < LEN - S0 - 0.01; s = s2) {
+      s2 = Math.min(LEN - S0, s + 0.5, cuts.find((c) => c > s + 0.001)!);
+      if (s >= gap[0] - 0.001 && s < gap[1] - 0.001) continue;
       const a = frontAt(t, s, 0.02),
         b = frontAt(t, s2, 0.02);
       const ai = frontAt(t, s, 0.16),
@@ -225,6 +233,8 @@ export function buildLibrary(ctx: InteriorContext): Interior {
     return x > px0 && x < px1 && z > pz0 && z < pz1;
   });
   G.rects = [...groundRects, ...G.rects];
+  // the stairs up to the terraces (walked: liftplan.ts), drawn with the atrium
+  G.rects.push(...buildStairs(atrium.group, atrium.ledMat));
 
   // ---- the reading room and the auditorium -------------------------------------------------------------------
   buildReading(RD);

@@ -7,6 +7,7 @@ import { box, glowMat, std } from "../kit";
 import * as H from "./furniture";
 import type { PickInfo } from "../types";
 import { HotelKit, LEVELS, carpet, makeCanvas, num, reward, usd } from "./kit";
+import { STAIR } from "./stair";
 
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 /** European wheel order. */
@@ -21,7 +22,7 @@ export function casino(k: HotelKit) {
     g = k.groups[f],
     y = LEVELS[f].y,
     h = LEVELS[f].h;
-  k.shell(f, new THREE.MeshStandardMaterial({ map: carpet("#4a0e1a", "#b8862a", 18, 13), roughness: 0.95 }), std("#120c10", 0.9), { panels: "none", wallMat: std("#2a1418", 0.7) });
+  k.shell(f, new THREE.MeshStandardMaterial({ map: carpet("#4a0e1a", "#b8862a", 18, 13), roughness: 0.95 }), std("#120c10", 0.9), { panels: "none", wallMat: std("#2a1418", 0.7), westDoor: STAIR.headDoor });
   k.lifts(f);
   // a coffered ceiling with gold trims and warm coves
   for (let x = -12; x <= 12; x += 4) box(g, 0.25, 0.35, 22, std("#2a1a14", 0.6), x, y + h - 0.35, -11);

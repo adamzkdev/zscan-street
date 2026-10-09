@@ -7,7 +7,7 @@ import { F, GOLD, LEVELS, marbleTex, MONO, PAL, paint, SERIF, type ArabKit } fro
 /**
  * The Royal Suite, a duplex on the 25th and 26th floors. Downstairs the salon: marble and gold,
  * a leopard-print carpet, the majlis by the glass, the dining table for ten, the bar and the
- * library, columns with gilt capitals; the spiral staircase in gold and red climbs to the
+ * library, columns with gilt capitals; the grand staircase in marble, gold and red climbs to the
  * bedroom: the canopy bed facing the city, a mirror in the ceiling, the mosaic jacuzzi, the
  * dressing room. Floor-to-ceiling glass on the city side shows ZStreet from 40 metres up.
  */
@@ -17,13 +17,43 @@ const X0 = -12,
   Z0 = -22,
   Z1 = 0;
 const H = 4.6;
-const STAIR = new THREE.Vector3(8, 0, -11);
+/**
+ * The grand staircase from the salon up to the bedroom: a straight flight along the east side,
+ * climbing north (−z) towards the glass, its well open in the bedroom floor (liftplan: arab).
+ */
+const STAIR = { x0: 8.5, x1: 9.9, z0: -11.5, z1: -5.0, steps: 25 };
+const WELL: [number, number, number, number] = [STAIR.x0, STAIR.z0, STAIR.x1, STAIR.z1];
 
-/** Walls, floor, coffered ceiling and the glass: the shell both levels share. */
-function shell(k: ArabKit, f: number, floorColor: string) {
+/**
+ * A floor or ceiling over the whole room (`rx` −π/2 faces up, π/2 down) with a rectangular opening
+ * (world x0, z0, x1, z1), mapped like a plane of that size.
+ */
+function slab(k: ArabKit, f: number, mat: THREE.Material, y: number, rx: number, hole: [number, number, number, number]) {
+  const w = X1 - X0,
+    d = Z1 - Z0,
+    cz = (Z0 + Z1) / 2;
+  // the plane's local y is world z (facing down) or −z (facing up)
+  const ly = (z: number) => (rx < 0 ? cz - z : z - cz);
+  const shape = new THREE.Shape([new THREE.Vector2(-w / 2, -d / 2), new THREE.Vector2(w / 2, -d / 2), new THREE.Vector2(w / 2, d / 2), new THREE.Vector2(-w / 2, d / 2)]);
+  const [hx0, hz0, hx1, hz1] = hole;
+  shape.holes.push(new THREE.Path([new THREE.Vector2(hx0, ly(hz0)), new THREE.Vector2(hx1, ly(hz0)), new THREE.Vector2(hx1, ly(hz1)), new THREE.Vector2(hx0, ly(hz1))]));
+  const g = new THREE.ShapeGeometry(shape);
+  const pos = g.attributes.position,
+    uv = g.attributes.uv;
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + w / 2) / w, (pos.getY(i) + d / 2) / d);
+  const m = new THREE.Mesh(g, mat);
+  m.position.set(0, k.y(f) + y, cz);
+  m.rotation.set(rx, 0, 0, "YXZ");
+  m.raycast = () => {};
+  k.groups[f].add(m);
+}
+
+/** Walls, floor, coffered ceiling and the glass: the shell both levels share (the stair's well cut through the salon's ceiling and the bedroom's floor). */
+function shell(k: ArabKit, f: number, floorColor: string, well: { floor?: boolean; ceiling?: boolean } = {}) {
   const g = k.groups[f];
   const floorMat = new THREE.MeshStandardMaterial({ map: marbleTex(k, floorColor, "#8a7450", 512, 4, 6, 6), roughness: 0.16, metalness: 0.05 });
-  k.flat(f, X1 - X0, Z1 - Z0, floorMat, 0, (Z0 + Z1) / 2, 0);
+  if (well.floor) slab(k, f, floorMat, 0, -Math.PI / 2, WELL);
+  else k.flat(f, X1 - X0, Z1 - Z0, floorMat, 0, (Z0 + Z1) / 2, 0);
   // a gold-and-blue border inlaid round the room
   const border = new THREE.MeshStandardMaterial({ color: "#1a3a8a", roughness: 0.2 });
   for (const [w, d, x, z] of [
@@ -34,10 +64,17 @@ function shell(k: ArabKit, f: number, floorColor: string) {
   ] as const)
     k.flat(f, w, d, border, x, z, 0.004);
   // the coffered ceiling: gold beams in a grid, cream panels, a lit cove
-  k.plane(f, X1 - X0, Z1 - Z0, new THREE.MeshStandardMaterial({ color: "#1a2a5a", roughness: 0.6 }), 0, H, (Z0 + Z1) / 2, Math.PI / 2);
-  for (let x = X0 + 3; x < X1; x += 3) k.box(f, 0.22, 0.3, Z1 - Z0, x, H - 0.3, (Z0 + Z1) / 2, PAL.gold, "metal");
-  for (let z = Z0 + 3; z < Z1; z += 3) k.box(f, X1 - X0, 0.3, 0.22, 0, H - 0.3, z, PAL.gold, "metal");
-  
+  const ceil = new THREE.MeshStandardMaterial({ color: "#1a2a5a", roughness: 0.6 });
+  if (well.ceiling) slab(k, f, ceil, H, Math.PI / 2, WELL);
+  else k.plane(f, X1 - X0, Z1 - Z0, ceil, 0, H, (Z0 + Z1) / 2, Math.PI / 2);
+  // the beams stop at the well's rim
+  const [wx0, wz0, wx1, wz1] = WELL;
+  const cut = (c: number, h0: number, h1: number) => !!well.ceiling && c > h0 - 0.11 && c < h1 + 0.11;
+  for (let x = X0 + 3; x < X1; x += 3)
+    for (const [a, b] of cut(x, wx0, wx1) ? [[Z0, wz0], [wz1, Z1]] : [[Z0, Z1]]) k.box(f, 0.22, 0.3, b - a, x, H - 0.3, (a + b) / 2, PAL.gold, "metal");
+  for (let z = Z0 + 3; z < Z1; z += 3)
+    for (const [a, b] of cut(z, wz0, wz1) ? [[X0, wx0], [wx1, X1]] : [[X0, X1]]) k.box(f, b - a, 0.3, 0.22, (a + b) / 2, H - 0.3, z, PAL.gold, "metal");
+
   // the city side (-z) and the west side: glass from floor to ceiling between gold mullions
   k.wall(f, X0, Z0, X1, Z0, H, "#a8c8e0", "glass", 0.06);
   k.wall(f, X0, Z0, X0, -8, H, "#a8c8e0", "glass", 0.06);
@@ -127,57 +164,74 @@ function sconce(k: ArabKit, f: number, x: number, z: number, ry: number) {
   k.cyl(f, 0.12, 0.08, 0.2, x + dx * 2, 2.6, z + dz * 2, "#ffe2b0", "glow", 10);
 }
 
-/** The gold spiral staircase with its red carpet: a click takes you up (or down). */
-function spiral(k: ArabKit, f: number, to: number, top: boolean) {
-  const { x, z } = STAIR;
-  const steps = 18;
-  const rise = H / steps;
-  const goldMat = PAL.gold;
-  k.cyl(f, 0.16, 0.16, top ? 1.2 : H, x, 0, z, goldMat, "metal", 16);
-  const n = top ? 4 : steps;
-  for (let i = 0; i < n; i++) {
-    const a = (i / steps) * Math.PI * 2 * 1.1;
-    const y = top ? 0 : i * rise;
-    const g1 = new THREE.BoxGeometry(1.15, 0.07, 0.42).translate(0.72, 0, 0).rotateY(-a).translate(x, y + rise - 0.035, z);
-    k.geo(f, g1, "#efe2c4", "polish");
-    const g2 = new THREE.BoxGeometry(1.0, 0.02, 0.36).translate(0.74, 0, 0).rotateY(-a).translate(x, y + rise + 0.01, z);
-    k.geo(f, g2, "#9a1424", "matte");
-    // a baluster at the outer end of each step
-    const px = x + Math.cos(-a) * 1.26,
-      pz = z - Math.sin(-a) * 1.26;
-    k.cyl(f, 0.025, 0.025, 0.95, px, y + rise, pz, goldMat, "metal", 6);
+/**
+ * The grand staircase, walked (liftplan: arab): marble steps on a solid base with a red runner held
+ * by gold stair rods, gilt balusters and handrails on both sides, newel posts at the foot. Upstairs
+ * its well is open in the bedroom floor behind a gilt balustrade, open at the head (north).
+ */
+function grandStair(k: ArabKit) {
+  const f = F.salon;
+  const { x0, x1, z0, z1, steps } = STAIR;
+  const xc = (x0 + x1) / 2,
+    w = x1 - x0;
+  const rise = (LEVELS[F.bedroom].y - LEVELS[f].y) / steps,
+    run = (z1 - z0) / steps;
+  for (let i = 0; i < steps; i++) {
+    const top = (i + 1) * rise;
+    const front = z1 - i * run;
+    k.box(f, w, top, run + 0.003, xc, 0, front - run / 2, "#efe2c4", "polish");
+    // the runner over the tread and down the riser, a rod in the step's corner
+    k.box(f, w - 0.5, 0.015, run, xc, top, front - run / 2, "#9a1424", "matte");
+    k.box(f, w - 0.5, rise, 0.015, xc, top - rise, front + 0.007, "#9a1424", "matte");
+    k.box(f, w - 0.42, 0.028, 0.028, xc, top + 0.006, front - run + 0.03, PAL.gold, "metal");
+    // a baluster on each side every other step
+    if (i % 2 === 0) for (const x of [x0 + 0.06, x1 - 0.06]) k.cyl(f, 0.022, 0.022, 0.92, x, top, front - run / 2, PAL.gold, "metal", 6);
   }
-  if (!top) {
-    // the helical handrail
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= 60; i++) {
-      const a = (i / 60) * Math.PI * 2 * 1.1 * ((steps - 1) / steps);
-      pts.push(new THREE.Vector3(x + Math.cos(-a) * 1.26, (i / 60) * (H - rise) + rise + 0.95, z - Math.sin(-a) * 1.26));
-    }
-    k.geo(f, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, 0.04, 6), goldMat, "metal");
-  } else {
-    // the stairwell's balustrade round the opening upstairs
-    k.geo(f, new THREE.TorusGeometry(1.5, 0.04, 6, 40, Math.PI * 1.5).rotateX(Math.PI / 2).rotateY(Math.PI * 0.25).translate(x, 1.0, z), goldMat, "metal");
-    for (let i = 0; i < 14; i++) {
-      const a = Math.PI * 0.25 + (i / 13) * Math.PI * 1.5;
-      k.cyl(f, 0.02, 0.02, 1.0, x + Math.cos(a) * 1.5, 0, z - Math.sin(a) * 1.5, goldMat, "metal", 6);
-    }
-    // the stairwell: a dark round hole with the steps going down
-    const hole = new THREE.Mesh(new THREE.CircleGeometry(1.45, 40), new THREE.MeshBasicMaterial({ color: "#1a1008" }));
-    hole.rotation.x = -Math.PI / 2;
-    hole.position.set(x, k.y(f) + 0.006, z);
-    hole.raycast = () => {};
-    k.groups[f].add(hole);
+  // handrails and gilt strings along both sides, on the pitch
+  const len = Math.hypot(z1 - z0, steps * rise);
+  const slope = Math.atan2(steps * rise, z1 - z0);
+  for (const x of [x0 + 0.06, x1 - 0.06]) {
+    // the handrail runs into the newels of the balustrade upstairs, at the well's corners
+    const ra = z1 + 0.05,
+      rb = z0 + 0.45;
+    const ry = (z: number) => ((z1 - z) / (z1 - z0)) * steps * rise + 0.95;
+    k.geo(f, new THREE.BoxGeometry(0.07, 0.07, Math.hypot(ra - rb, ry(rb) - ry(ra))).rotateX(slope).translate(x, (ry(ra) + ry(rb)) / 2, (ra + rb) / 2), PAL.gold, "metal");
+    k.geo(f, new THREE.BoxGeometry(0.04, 0.16, len).rotateX(slope).translate(x < xc ? x0 - 0.02 : x1 + 0.02, (steps * rise) / 2 - 0.02, (z0 + z1) / 2), PAL.gold, "metal");
+    k.box(f, 0.16, 1.15, 0.16, x, 0, z1 - 0.08, PAL.gold, "metal");
+    k.cyl(f, 0.1, 0.1, 0.12, x, 1.15, z1 - 0.08, "#ffe2b0", "glow", 12);
   }
-  // upstairs the balustrade is open on the east (+x) side, where the steps come out
-  // (the well itself stays closed: you step out at its rim)
-  if (top) {
-    k.ring(f, x, z, 1.5, Math.PI * 0.75, Math.PI * 2.25);
-    k.solid(f, x - 1.05, z - 1.05, x + 1.05, z + 1.05);
+  // the well's lining between the salon's ceiling and the bedroom's floor
+  for (const [bw, bd, bx, bz] of [
+    [w + 0.08, 0.04, xc, z0 - 0.02],
+    [w + 0.08, 0.04, xc, z1 + 0.02],
+    [0.04, z1 - z0, x0 - 0.02, (z0 + z1) / 2],
+    [0.04, z1 - z0, x1 + 0.02, (z0 + z1) / 2],
+  ] as const)
+    k.box(f, bw, LEVELS[F.bedroom].y - LEVELS[f].y - H + 0.02, bd, bx, H - 0.01, bz, PAL.gold, "metal");
+  k.hit(f, w, 1.2, 0.5, xc, 0, z1 + 0.1, `<b>The grand staircase</b><span>up to the bedroom</span>`, () => ({ eyebrow: "Royal Suite", title: "The grand staircase", stats: [["Steps", `${steps}`], ["Up to", `${LEVELS[F.bedroom].label} · bedroom`]] }));
+
+  // upstairs: the balustrade round the well, open at its head
+  const b = F.bedroom;
+  for (const [ax, az, bx2, bz2] of [
+    [x0 - 0.03, z0 + 0.45, x0 - 0.03, z1 + 0.03],
+    [x1 + 0.03, z0 + 0.45, x1 + 0.03, z1 + 0.03],
+    [x0 - 0.03, z1 + 0.03, x1 + 0.03, z1 + 0.03],
+  ] as const) {
+    const l = Math.hypot(bx2 - ax, bz2 - az);
+    const along = ax === bx2;
+    k.box(b, along ? 0.07 : l + 0.07, 0.07, along ? l + 0.07 : 0.07, (ax + bx2) / 2, 0.98, (az + bz2) / 2, PAL.gold, "metal");
+    k.box(b, along ? 0.1 : l + 0.1, 0.06, along ? l + 0.1 : 0.1, (ax + bx2) / 2, 0, (az + bz2) / 2, PAL.gold, "metal");
+    const n = Math.round(l / 0.24);
+    for (let i = 0; i <= n; i++) k.cyl(b, 0.02, 0.02, 0.98, ax + ((bx2 - ax) * i) / n, 0, az + ((bz2 - az) * i) / n, PAL.gold, "metal", 6);
   }
-  else k.ring(f, x, z, 1.5);
-  const L = LEVELS[to];
-  k.hit(f, 3, 2.4, 3, x, 0, z, `<b>Spiral staircase</b><span>${top ? "down to the salon" : "up to the bedroom"}</span>`, () => ({ eyebrow: "Royal Suite", title: top ? "Down to the salon" : "Up to the bedroom", floor: to, stats: [["Floor", L.label]] }));
+  for (const [px, pz] of [
+    [x0 - 0.03, z0 + 0.45],
+    [x1 + 0.03, z0 + 0.45],
+    [x0 - 0.03, z1 + 0.03],
+    [x1 + 0.03, z1 + 0.03],
+  ] as const)
+    k.box(b, 0.14, 1.08, 0.14, px, 0, pz, PAL.gold, "metal");
+  k.hit(b, w, 1.0, 0.4, xc, 0, z0 + 0.2, `<b>The grand staircase</b><span>down to the salon</span>`, () => ({ eyebrow: "Royal Suite", title: "The grand staircase", stats: [["Steps", `${steps}`], ["Down to", `${LEVELS[f].label} · salon`]] }));
 }
 
 /** A leopard-print carpet, the suite's famous touch. */
@@ -210,9 +264,9 @@ function leopard(k: ArabKit, f: number, w: number, d: number, x: number, z: numb
 
 export function salon(k: ArabKit) {
   const f = F.salon;
-  shell(k, f, "#f2ece0");
+  shell(k, f, "#f2ece0", { ceiling: true });
   k.lifts(f, 0, Z1 - 0.15, Math.PI);
-  spiral(k, f, F.bedroom, false);
+  grandStair(k);
 
   curtains(k, f);
   persian(k, f, 9, 5, -6.5, -5.5);
@@ -333,8 +387,7 @@ export function salon(k: ArabKit) {
 
 export function bedroom(k: ArabKit) {
   const f = F.bedroom;
-  shell(k, f, "#f4efe4");
-  spiral(k, f, F.salon, true);
+  shell(k, f, "#f4efe4", { floor: true });
 
   curtains(k, f);
   persian(k, f, 6, 4, 4, -5);

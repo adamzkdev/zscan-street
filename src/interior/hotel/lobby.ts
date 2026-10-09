@@ -7,6 +7,7 @@ import { box, glowMat, std } from "../kit";
 import * as H from "./furniture";
 import { pianist } from "../music/acts";
 import { HotelKit, LEVELS, LIFT_Z, makeCanvas, marble, num, reward, usd, water } from "./kit";
+import { STAIR } from "./stair";
 
 /** The piano's tune, played with the Web Audio API. */
 let audio: AudioContext | null = null;
@@ -80,7 +81,7 @@ export function lobby(k: HotelKit) {
     y = 0,
     h = LEVELS[f].h;
   const floor = new THREE.MeshStandardMaterial({ map: marble("#ece7de", "120,110,100", 12, 9), roughness: 0.12, metalness: 0.15 });
-  k.shell(f, floor, null, { door: true, wallMat: std("#3a2e28", 0.7), step: 3 });
+  k.shell(f, floor, null, { door: true, wallMat: std("#3a2e28", 0.7), step: 3, westDoor: STAIR.footDoor });
   k.lifts(f);
 
   // the leaning face of tower 1, east: rows of balconies rising over the atrium
@@ -341,7 +342,8 @@ export function lobby(k: HotelKit) {
   dir.position.set(LEVELS[f].x0 + 0.22, y + 1.9, LIFT_Z + 4.6);
   dir.rotation.y = Math.PI / 2;
   k.painting(f, 777, LEVELS[f].x0 + 0.22, 3.4, LIFT_Z - 6, Math.PI / 2, 1.8);
-  k.sconces(f, [LEVELS[f].x0 + 0.15, -20], [LEVELS[f].x0 + 0.15, -15], 3, Math.PI / 2, 3.4);
+  // (the grand staircase's doorway is in the corner behind the bar)
+  k.sconces(f, [LEVELS[f].x0 + 0.15, -18.5], [LEVELS[f].x0 + 0.15, -15.3], 2, Math.PI / 2, 3.4);
   k.sconces(f, [LEVELS[f].x0 + 0.15, -7.5], [LEVELS[f].x0 + 0.15, -1.5], 3, Math.PI / 2, 3.4);
   void k.person(f, 1212, [2, -6], "Guest", { wander: [[2, -6], [-3, -14], [6, -11], [0, -3], [8, -14], [-12, -11]] });
   void k.person(f, 1213, [-3, -5], "Guest", { wander: [[-3, -5], [4, -15], [-12, -10], [2, -3]] });

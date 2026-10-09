@@ -3,7 +3,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { C, hash, VoxelModel } from "../../scene/voxel/model";
 import type { Rect } from "../types";
 import { buildFans, crowdIds, type FanSeat, type Fans } from "../stadium/fans";
-import { AX, AZ, at, canvasTex, D_OUT, D_TOP, D_WALL, dOf, GATE_H, GATE_W, meshAt, one, patch, POD, radius, ROWS, VS, Y_ATTIC, Y_TOP } from "./geo";
+import { AX, AZ, at, canvasTex, CAVEA_STAIR, D_OUT, D_TOP, D_WALL, dOf, GATE_H, GATE_W, HYPO_STAIR, meshAt, one, patch, POD, radius, ROWS, VS, Y_ATTIC, Y_TOP } from "./geo";
 
 /**
  * The bowl in voxels (four a metre): the marble podium round the arena with its balustrade, the
@@ -70,8 +70,12 @@ export function buildBowl(): Bowl {
       if (d < 0 || d > D_OUT) continue;
       const gate = Math.abs(x) < GATE_W && Math.abs(z) > AZ - 1;
       const pulv = x < 0 && Math.abs(z) < PULV_Z && d < 3.6;
+      // the cavea stair: its slot open to the sky, the arched doorway from the sand to its foot
+      const S = CAVEA_STAIR;
+      const [dz0, dz1] = S.door;
+      const cut = x > S.x0 && x < S.x1 && z > S.z0 && z < S.z1 ? H : x > AX - 1 && x < S.x1 && z > dz0 && z < dz1 ? iy(2.2 + Math.sqrt(Math.max(0, ((dz1 - dz0) / 2) ** 2 - (z - (dz0 + dz1) / 2) ** 2))) : 0;
       const col = (y0: number, y1: number, c: (x: number, y: number, z: number) => number) => {
-        for (let y = iy(y0); y < iy(y1); y++) if (!(gate && y < iy(GATE_H))) m.set(ix, y, iz, c(ix, y, iz));
+        for (let y = iy(y0); y < iy(y1); y++) if (!(gate && y < iy(GATE_H)) && y >= cut) m.set(ix, y, iz, c(ix, y, iz));
       };
       if (d < 0.5) {
         // podium wall: dark plinth, marble with porphyry panels and serpentine roundels, cornice, balustrade
@@ -227,19 +231,38 @@ export function buildBowl(): Bowl {
   });
   const shape = new THREE.Shape();
   shape.absellipse(0, 0, AX + 0.05, AZ + 0.05, 0, Math.PI * 2, false, 0);
+  // the slot over the hypogeum's stair (shape y is −z), up to the podium wall
+  {
+    const { x0, x1, z0 } = HYPO_STAIR;
+    const edge = (x: number) => -(AZ + 0.02) * Math.sqrt(1 - (x / (AX + 0.05)) ** 2);
+    const slot = new THREE.Path();
+    slot.moveTo(x0, -z0);
+    slot.lineTo(x1, -z0);
+    for (let i = 0; i <= 4; i++) slot.lineTo(x1 + ((x0 - x1) * i) / 4, edge(x1 + ((x0 - x1) * i) / 4));
+    slot.lineTo(x0, -z0);
+    shape.holes.push(slot);
+  }
   const sg = new THREE.ShapeGeometry(shape, 96);
   const uv = sg.attributes.uv as THREE.BufferAttribute;
   const pos = sg.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + AZ) / (2 * AZ), (pos.getY(i) + AZ) / (2 * AZ));
   sg.rotateX(-Math.PI / 2);
-  const sand = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ map: sandTex.t, roughness: 1 }));
+  // (drawn over the hypogeum's ceiling, a centimetre under it, when that shows down the slot)
+  const sand = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ map: sandTex.t, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
   sand.position.y = 0.01;
   group.add(sand);
-  // the tunnel floor
-  const tf = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W * 2, 3.2), new THREE.MeshStandardMaterial({ color: "#8a7a62", roughness: 1 }));
-  tf.rotation.x = -Math.PI / 2;
-  tf.position.set(0, 0.012, AZ + 1);
-  group.add(tf);
+  // the tunnel floor, open over the stair's head; the floor of the cavea stair's doorway
+  const floorM = new THREE.MeshStandardMaterial({ color: "#8a7a62", roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const floorAt = (x0: number, z0: number, x1: number, z1: number, y = 0.012) => {
+    const tf = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), floorM);
+    tf.rotation.x = -Math.PI / 2;
+    tf.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
+    group.add(tf);
+  };
+  floorAt(HYPO_STAIR.x1, AZ - 0.6, GATE_W, AZ + 2.6);
+  floorAt(-GATE_W, HYPO_STAIR.z1, HYPO_STAIR.x1, AZ + 2.6);
+  floorAt(-GATE_W, AZ - 0.6, HYPO_STAIR.x0, HYPO_STAIR.z1);
+  floorAt(AX - 0.4, CAVEA_STAIR.door[0], CAVEA_STAIR.x1, CAVEA_STAIR.door[1], 0.004);
 
   // ---- braziers on the balustrade ----------------------------------------------------------------
   const flames: THREE.Object3D[] = [];

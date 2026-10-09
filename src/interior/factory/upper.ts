@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Rect } from "../types";
 import { Boxes, GLASS, GLOW, SOLID, voxObj } from "./batch";
 import { canvasTex, drawPlate, GOLD, JP, makeCanvas, MONO, neonSign } from "./canvas";
-import { CAT_Y, CTRL, EAVE, X0 } from "./layout";
+import { CAT_Y, CTRL, EAVE, STAIR, X0 } from "./layout";
 import { drawMonitor, drawWall, WALL_PX, type HallState, type MonitorKind } from "./screens";
 import { deskModel, elevatorModel, monitorStand } from "./voxels";
 
@@ -44,15 +44,20 @@ export function buildControl(root: THREE.Object3D, rects: Rect[], pickables: THR
   ceil.position.set(0, CTRL.top - 0.01, (CTRL.z0 + CTRL.z1) / 2);
   root.add(ceil);
   for (let x = CTRL.x0 + 2; x < CTRL.x1 - 1; x += 4) for (const z of [-7.5, -4.5, -1.5]) glow.add(new THREE.Color("#e8f0ff").multiplyScalar(1.3), 2.4, 0.03, 0.6, x + 1, CTRL.top - 0.05, z);
-  // walls: the sides and the back are solid; the front is glass over the hall
+  // walls: the sides and the back are solid (the east one with the stair door at its front end);
+  // the front is glass over the hall
   const wallM = new THREE.MeshStandardMaterial({ color: "#16151b", roughness: 0.8 });
-  for (const [w, d, x, z] of [
-    [0.3, CTRL.z1 - CTRL.z0, CTRL.x0, (CTRL.z0 + CTRL.z1) / 2],
-    [0.3, CTRL.z1 - CTRL.z0, CTRL.x1, (CTRL.z0 + CTRL.z1) / 2],
-    [CTRL.x1 - CTRL.x0, 0.3, 0, CTRL.z1 - 0.15],
-  ] as [number, number, number, number][]) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, CTRL.top - y, d), wallM);
-    m.position.set(x, (y + CTRL.top) / 2, z);
+  const [dz0, dz1] = STAIR.door;
+  const DOOR_H = 2.4;
+  for (const [w, h, d, x, yb, z] of [
+    [0.3, CTRL.top - y, CTRL.z1 - CTRL.z0, CTRL.x0, y, (CTRL.z0 + CTRL.z1) / 2],
+    [0.3, CTRL.top - y, CTRL.z1 - dz1, CTRL.x1, y, (dz1 + CTRL.z1) / 2],
+    [0.3, CTRL.top - y, dz0 - CTRL.z0, CTRL.x1, y, (CTRL.z0 + dz0) / 2],
+    [0.3, CTRL.top - y - DOOR_H, dz1 - dz0, CTRL.x1, y + DOOR_H, (dz0 + dz1) / 2],
+    [CTRL.x1 - CTRL.x0, CTRL.top - y, 0.3, 0, y, CTRL.z1 - 0.15],
+  ] as [number, number, number, number, number, number][]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallM);
+    m.position.set(x, yb + h / 2, z);
     root.add(m);
   }
   rects.push([CTRL.x0 - 0.2, CTRL.z0, CTRL.x0 + 0.25, CTRL.z1], [CTRL.x1 - 0.25, CTRL.z0, CTRL.x1 + 0.2, CTRL.z1], [CTRL.x0, CTRL.z1 - 0.35, CTRL.x1, CTRL.z1], [CTRL.x0, CTRL.z0 - 0.2, CTRL.x1, CTRL.z0 + 0.25]);
@@ -124,16 +129,17 @@ export function buildControl(root: THREE.Object3D, rects: Rect[], pickables: THR
   // the live walls on the sides of the room
   const wallCanvas = makeCanvas(WALL_PX.w, WALL_PX.h);
   const wallTex = canvasTex(wallCanvas.c);
-  const sideW = 8.6;
+  // (back from the front a little: the stair door is at the east wall's front end)
+  const sideW = 7.4;
   const side = new THREE.Mesh(new THREE.PlaneGeometry(sideW, (sideW * WALL_PX.h) / WALL_PX.w), new THREE.MeshBasicMaterial({ map: wallTex, toneMapped: false }));
   side.rotation.y = Math.PI / 2;
-  side.position.set(CTRL.x0 + 0.2, y + 2.2, -4.5);
+  side.position.set(CTRL.x0 + 0.2, y + 2.2, -4.0);
   side.userData.monitor = "network";
   root.add(side);
   pickables.push(side);
   const side2 = new THREE.Mesh(side.geometry, side.material);
   side2.rotation.y = -Math.PI / 2;
-  side2.position.set(CTRL.x1 - 0.2, y + 2.2, -4.5);
+  side2.position.set(CTRL.x1 - 0.2, y + 2.2, -4.0);
   side2.userData.monitor = "network";
   root.add(side2);
   pickables.push(side2);
@@ -217,7 +223,8 @@ export const WALKS: Rect[] = [
   [-60.2, -63.75, -8, -62.25],
   [8, -63.75, 40.3, -62.25],
   [-34.85, -63.75, -33.35, -11.75],
-  [32.35, -63.75, 33.85, -11.75],
+  // (carried on past the main aisle to the stair tower's head)
+  [32.35, -63.75, 33.85, STAIR.mid],
   [-61.95, -63.75, -60.2, -11.75],
 ];
 
@@ -233,7 +240,8 @@ function gratingTexture() {
   return t;
 }
 
-export function buildCatwalks(root: THREE.Object3D, rects: Rect[]) {
+/** `open`: where a walk meets a flight (no railing across it). */
+export function buildCatwalks(root: THREE.Object3D, rects: Rect[], open: Rect[] = []) {
   const y = CAT_Y;
   const st = new Boxes();
   const glow = new Boxes();
@@ -275,6 +283,7 @@ export function buildCatwalks(root: THREE.Object3D, rects: Rect[]) {
   for (const [x0, z0, x1, z1] of WALKS)
     for (let i = Math.round((x0 - gx0) / S); i < Math.round((x1 - gx0) / S); i++) for (let j = Math.round((z0 - gz0) / S); j < Math.round((z1 - gz0) / S); j++) ok[j * W + i] = 1;
   const free = (i: number, j: number) => i >= 0 && j >= 0 && i < W && j < H && ok[j * W + i] === 1;
+  const opened = (x: number, z: number) => open.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1);
   const rail = (ax: number, az: number, bx: number, bz: number) => {
     const alongX = Math.abs(az - bz) < 0.001;
     const len = alongX ? bx - ax : bz - az;
@@ -296,7 +305,7 @@ export function buildCatwalks(root: THREE.Object3D, rects: Rect[]) {
   for (let j = 0; j <= H; j++) {
     let run = -1;
     for (let i = 0; i <= W; i++) {
-      const edge = i < W && free(i, j) !== free(i, j - 1);
+      const edge = i < W && free(i, j) !== free(i, j - 1) && !opened(gx0 + (i + 0.5) * S, gz0 + j * S);
       if (edge && run < 0) run = i;
       if (!edge && run >= 0) {
         rail(gx0 + run * S, gz0 + j * S, gx0 + i * S, gz0 + j * S);
@@ -307,7 +316,7 @@ export function buildCatwalks(root: THREE.Object3D, rects: Rect[]) {
   for (let i = 0; i <= W; i++) {
     let run = -1;
     for (let j = 0; j <= H; j++) {
-      const edge = j < H && free(i, j) !== free(i - 1, j);
+      const edge = j < H && free(i, j) !== free(i - 1, j) && !opened(gx0 + i * S, gz0 + (j + 0.5) * S);
       if (edge && run < 0) run = j;
       if (!edge && run >= 0) {
         rail(gx0 + i * S, gz0 + run * S, gx0 + i * S, gz0 + j * S);
@@ -328,4 +337,75 @@ export function buildCatwalks(root: THREE.Object3D, rects: Rect[]) {
   }
   root.add(st.mesh(SOLID), glow.mesh(GLOW));
   return {};
+}
+
+// ---- the stair tower ----------------------------------------------------------------------------
+
+/**
+ * The steel stairs east of the control room (see STAIR): the landing outside its door, the flight
+ * down to the hall and the one up to the catwalks, open grating treads between steel stringers,
+ * yellow handrails like the catwalks'. Walked for real (liftplan.ts); the hall's colliders here are
+ * the landing's posts.
+ */
+export function buildStairs(root: THREE.Object3D, ground: Rect[]) {
+  const S = STAIR;
+  const st = new Boxes();
+  const glow = new Boxes();
+  const steel = "#3a3944",
+    tread = "#4a4855",
+    rail = "#e0a820";
+  /** A flight along x from (xa, ya) to (xb, yb) between z0 and z1: treads, stringers, handrails. */
+  const flight = (xa: number, ya: number, xb: number, yb: number, z0: number, z1: number) => {
+    const n = Math.max(2, Math.round(Math.abs(yb - ya) / 0.18));
+    const run = (xb - xa) / n,
+      rise = (yb - ya) / n;
+    const zc = (z0 + z1) / 2,
+      w = z1 - z0;
+    for (let i = 0; i < n; i++) {
+      const x = xa + run * (i + 0.5);
+      st.add(tread, Math.abs(run) + 0.02, 0.05, w - 0.16, x, ya + rise * (i + 1) - 0.05, zc);
+      // a gold nosing on every tread
+      glow.add(new THREE.Color(GOLD).multiplyScalar(0.9), 0.04, 0.015, w - 0.2, xa + run * i + Math.sign(run) * 0.02, ya + rise * (i + 1), zc);
+    }
+    for (const z of [z0 + 0.04, z1 - 0.04]) {
+      st.beam(steel, new THREE.Vector3(xa, ya - 0.12, z), new THREE.Vector3(xb, yb - 0.12, z), 0.32, 0.07);
+      st.beam(rail, new THREE.Vector3(xa, ya + 1.0, z), new THREE.Vector3(xb, yb + 1.0, z), 0.06, 0.06);
+      st.beam(rail, new THREE.Vector3(xa, ya + 0.5, z), new THREE.Vector3(xb, yb + 0.5, z), 0.04, 0.04);
+      const posts = Math.max(2, Math.round(Math.abs(xb - xa) / 1.6));
+      for (let k = 0; k <= posts; k++) {
+        const f = k / posts;
+        st.add(rail, 0.05, 1.02, 0.05, xa + f * (xb - xa), ya + f * (yb - ya), z);
+      }
+    }
+  };
+  // up from the hall (its foot by the workshop) to the landing, and on up to the catwalks
+  flight(S.foot, 0, S.x1, CTRL.y, S.mid, S.z1);
+  flight(S.x1, CTRL.y, S.head, CAT_Y, S.z0, S.mid);
+  // the landing: a grating deck on two posts, railed on its open sides
+  st.add(tread, S.x1 - S.x0, 0.12, S.z1 - S.z0, (S.x0 + S.x1) / 2, CTRL.y - 0.12, (S.z0 + S.z1) / 2);
+  for (const z of [S.z0, S.z1]) {
+    st.add(steel, S.x1 - S.x0, 0.25, 0.08, (S.x0 + S.x1) / 2, CTRL.y - 0.37, z);
+    st.add(steel, 0.25, CTRL.y - 0.12, 0.25, S.x1 - 0.15, 0, z + (z === S.z0 ? 0.15 : -0.15));
+    st.add("#e0a820", 0.3, 1.2, 0.3, S.x1 - 0.15, 0, z + (z === S.z0 ? 0.15 : -0.15));
+    ground.push([S.x1 - 0.35, z + (z === S.z0 ? 0 : -0.3), S.x1 + 0.05, z + (z === S.z0 ? 0.3 : 0)]);
+    st.add(rail, S.x1 - S.x0, 0.06, 0.05, (S.x0 + S.x1) / 2, CTRL.y + 1.0, z);
+    st.add(rail, S.x1 - S.x0, 0.04, 0.05, (S.x0 + S.x1) / 2, CTRL.y + 0.5, z);
+    for (const x of [S.x0 + 0.05, (S.x0 + S.x1) / 2, S.x1 - 0.05]) st.add(rail, 0.05, 1.02, 0.05, x, CTRL.y, z);
+    glow.add(new THREE.Color(GOLD).multiplyScalar(1.2), S.x1 - S.x0, 0.015, 0.05, (S.x0 + S.x1) / 2, CTRL.y + 1.04, z);
+  }
+  // the upper flight hangs from the roof at its head, like the catwalks
+  for (const z of [S.z0 + 0.04, S.mid - 0.04]) st.add("#2a2933", 0.04, EAVE - 1.6 - CAT_Y + 0.1, 0.04, S.head - 1.2, CAT_Y - 0.1, z);
+  // the door frame and the signs: over the door inside, at the foot of the stairs
+  const [dz0, dz1] = S.door;
+  for (const z of [dz0, dz1]) st.add(rail, 0.36, 2.4, 0.08, CTRL.x1, CTRL.y, z);
+  st.add(rail, 0.36, 0.08, dz1 - dz0 + 0.08, CTRL.x1, CTRL.y + 2.4, (dz0 + dz1) / 2);
+  const sign = (text: string, sub: string, x: number, y: number, z: number, ry: number) => {
+    const s = neonSign([{ text, font: JP(64, 900) }, { text: sub, font: MONO(36, 800), color: "#e8e0c8" }], { color: "#3ddc97", w: 2.2, h: 0.6 });
+    s.position.set(x, y, z);
+    s.rotation.y = ry;
+    root.add(s);
+  };
+  sign("階段 · STAIRS", "HALL ▼ · CATWALKS ▲", CTRL.x1 - 0.2, CTRL.y + 2.85, (dz0 + dz1) / 2, -Math.PI / 2);
+  sign("階段 · STAIRS", "CONTROL ROOM · CATWALKS ▲", S.foot + 0.6, 2.6, S.z1 + 0.06, 0);
+  root.add(st.mesh(SOLID), glow.mesh(GLOW));
 }

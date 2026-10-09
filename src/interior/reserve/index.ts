@@ -5,7 +5,8 @@ import { hall } from "./hall";
 import { trading } from "./trading";
 import { executive, museum, roof } from "./upper";
 import { deposit, vault } from "./vault";
-import { LEVELS, ReserveKit } from "./kit";
+import { F, LEVELS, ReserveKit } from "./kit";
+import { governorsStair, VAULT_STAIR } from "./stair";
 
 /**
  * The ZEC RESERVE (準備銀行) on Wall Street: the central bank and the stock exchange in one.
@@ -13,7 +14,8 @@ import { LEVELS, ReserveKit } from "./kit";
  * bell rings on every block; the museum of money; the executive floor with the boardroom and the
  * governor's office; the observation terrace on the tower; and underground the gold vault, one
  * cage per value pool sized by what the chain holds, and the safe deposit floor with the lockbox.
- * Only the floor you are on is drawn, lit and animated.
+ * Only the floor you are on is drawn, lit and animated (by the governors' stair between the hall and
+ * the vault, the floor at its other end is drawn too, unlit).
  */
 export function buildReserve(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#07060a");
@@ -29,11 +31,29 @@ export function buildReserve(ctx: InteriorContext): Interior {
   museum(k);
   executive(k);
   roof(k);
+  governorsStair(k);
   k.flush();
   k.padLights();
 
+  // each floor's lights: a floor drawn beside yours keeps them off (same light count, no recompile)
+  const lights = k.groups.map((g) => {
+    const out: THREE.Light[] = [];
+    g.traverse((o) => o instanceof THREE.Light && out.push(o));
+    return out;
+  });
+  let other = -1;
+  const showOther = (n: number) => {
+    if (n === other) return;
+    if (other >= 0 && other !== k.current) k.groups[other].visible = false;
+    other = n;
+    if (n < 0) return;
+    k.groups[n].visible = true;
+    for (const l of lights[n]) l.visible = false;
+  };
   const setFloor = (n: number) => {
+    other = -1;
     k.groups.forEach((g, i) => (g.visible = i === n));
+    for (const l of lights[n]) l.visible = true;
     const v = LEVELS[n].view;
     const bg = v != null ? ctx.cityView("reserve", v, 3) : null;
     scene.background = bg ?? new THREE.Color("#07060a");
@@ -65,6 +85,11 @@ export function buildReserve(ctx: InteriorContext): Interior {
     },
     update(dt, t, camera) {
       camera.getWorldPosition(k.eye);
+      // the stair hall is built with the banking hall: from the vault's north-west (where its doorway
+      // can be seen) the hall is drawn too, and the vault from the stair hall; each is sealed from the
+      // other (the hall's floor, the vault's ceiling), so neither shows anywhere else
+      const e = k.eye;
+      showOther(k.current === F.vault && (e.x < -12 || e.z < -34) ? F.hall : k.current === F.hall && e.x < VAULT_STAIR.east + 0.5 ? F.vault : -1);
       camera.getWorldQuaternion(camQuat);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
       for (const s of k.people[k.current]) s.update(dt, t, camQuat, camRight);

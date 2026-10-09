@@ -9,12 +9,12 @@ import type { Theme } from "../scene/theme";
 import { FLASH, TIME } from "./factory/batch";
 import { canvasTex, GOLD, makeCanvas, minerName, type Miners } from "./factory/canvas";
 import { Crew, crewId, LINES, type Person } from "./factory/crew";
-import { BACK_Z, CAT_Y, CTRL, LANES_X, MAIN_Z, MID_Z, Z0 } from "./factory/layout";
+import { BACK_Z, CAT_Y, CTRL, LANES_X, MAIN_Z, MID_Z, STAIR, Z0 } from "./factory/layout";
 import { buildLine, type BlockInfo, type Item } from "./factory/line";
 import { buildRacks } from "./factory/racks";
 import { drawWall, WALL_PX, type HallState, type MonitorKind } from "./factory/screens";
 import { buildShell } from "./factory/shell";
-import { buildCatwalks, buildControl } from "./factory/upper";
+import { buildCatwalks, buildControl, buildStairs } from "./factory/upper";
 import { buildFleet, forklift, scissorLift, setLift, tuggerCart, tuggerTractor, utilityCart, type Vehicle } from "./factory/vehicles";
 import { bezelModel } from "./factory/voxels";
 import { voxObj } from "./factory/batch";
@@ -27,7 +27,8 @@ import type { Interior, InteriorContext, PickInfo, Rect } from "./types";
  * blocks), the cooling wall, overhead cranes, and the line: every real block is stamped into a
  * crate by the press under the wall screen, rides the conveyor round the hall, is lifted by the
  * robot onto the AGV and shipped from the docks. Forklifts, tugger trains, carts and scissor
- * lifts work the aisles. Upstairs: the control room over the hall, and the catwalks under the roof.
+ * lifts work the aisles. Upstairs: the control room over the hall, and the catwalks under the roof,
+ * reached by the freight lift or on foot up the stair tower against the control room's east wall.
  */
 
 const fmt = (n: number, d = 0) => n.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -62,7 +63,9 @@ export function buildFactory(ctx: InteriorContext): Interior {
   const fleet = buildFleet(hall);
   const line = buildLine(hall, ground, fleet);
   const control = buildControl(hall, upper, pickables);
-  buildCatwalks(hall, cat);
+  // the stair tower's upper flight arrives on the east catwalk through its railing
+  buildCatwalks(hall, cat, [[STAIR.head - 0.3, STAIR.z0 - 0.1, STAIR.head + 0.2, STAIR.mid]]);
+  buildStairs(hall, ground);
   const crew = new Crew();
 
   // ---- lights: six point lights in all (the press and the robot cell are the line's) ----------

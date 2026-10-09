@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { makeScene } from "../kit";
 import type { Interior, InteriorContext } from "../types";
 import { atrium } from "./atrium";
-import { ArabKit, BACK, LEVELS } from "./kit";
+import { ArabKit, BACK, F, LEVELS } from "./kit";
 import { mahara } from "./mahara";
 import { bedroom, salon } from "./suite";
 import { helipad } from "./helipad";
@@ -10,8 +10,9 @@ import { helipad } from "./helipad";
 /**
  * BURJ AL ZEC, the sail hotel off the Palm: the Gold Atrium with its dancing fountain and
  * aquariums, Al Mahara (the restaurant round a great aquarium), the duplex Royal Suite (salon and
- * bedroom, joined by the spiral staircase) and the helipad up top, with its tennis court and golf
- * tee, the whole city and the bay around. Only the floor you are on is drawn, lit and animated.
+ * bedroom, joined by the grand staircase, walked) and the helipad up top, with its tennis court and
+ * golf tee, the whole city and the bay around. Only the floor you are on is drawn, lit and animated
+ * (the suite's two levels together).
  */
 export function buildArab(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#07060c");
@@ -38,10 +39,15 @@ export function buildArab(ctx: InteriorContext): Interior {
     takenAt = performance.now();
     stale = v != null && takenAt < 45_000;
   };
+  // the suite's two levels are one duplex, its staircase open between them: both drawn and alive
+  const SUITE: number[] = [F.salon, F.bedroom];
+  const shown = (n: number) => (SUITE.includes(n) ? SUITE : [n]);
   const setFloor = (n: number) => {
     current = n;
-    k.groups.forEach((g, i) => (g.visible = i === n));
+    const on = shown(n);
+    k.groups.forEach((g, i) => (g.visible = on.includes(i)));
     view(n);
+    for (const f of on) if (f !== n) k.enter(f);
     k.enter(n);
   };
   setFloor(0);
@@ -83,8 +89,10 @@ export function buildArab(ctx: InteriorContext): Interior {
       camera.getWorldPosition(k.eye);
       camera.getWorldQuaternion(camQuat);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
-      for (const s of k.people[k.current]) s.update(dt, t, camQuat, camRight);
-      for (const tick of k.ticks[k.current]) tick(dt, t);
+      for (const f of shown(k.current)) {
+        for (const s of k.people[f]) s.update(dt, t, camQuat, camRight);
+        for (const tick of k.ticks[f]) tick(dt, t);
+      }
       if (stale && performance.now() - takenAt > 61_000) view(current);
     },
   };

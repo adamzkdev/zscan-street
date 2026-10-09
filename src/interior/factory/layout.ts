@@ -25,6 +25,12 @@ export const EAVE = 14,
 export const CTRL = { y: 6, x0: -22, x1: 22, z0: -9.5, z1: 0, top: 10 };
 /** The catwalks over the hall (and the control room's roof). */
 export const CAT_Y = 10;
+/**
+ * The stair tower against the control room's east wall: a landing at CTRL.y (x0…x1, z0…z1) outside
+ * a door in that wall, a flight down to the hall beside it (z mid…z1, its foot at x = foot) and one
+ * up to the catwalks (z z0…mid, its head on the east catwalk, carried on to meet it at x = head).
+ */
+export const STAIR = { x0: CTRL.x1 + 0.2, x1: 25, z0: -9.2, mid: -8, z1: -6.8, foot: 35.4, head: 32.35, door: [-9.25, -7.65] as const };
 
 /** Cross aisles (centre z, half width). */
 export const MAIN_Z = -12.5,

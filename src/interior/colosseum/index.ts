@@ -1,10 +1,11 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Theme } from "../../scene/theme";
 import { makeScene } from "../kit";
-import type { Interior, InteriorContext, PickInfo, Rect } from "../types";
+import type { Interior, InteriorContext, PickInfo } from "../types";
 import { buildBowl } from "./bowl";
 import { ArenaCrowd } from "./crowd";
-import { at, AZ, canvasTex, HYPO, POD } from "./geo";
+import { AX, AZ, CAVEA_STAIR, canvasTex, HYPO, HYPO_STAIR, POD } from "./geo";
 import { buildHypogeum } from "./hypogeum";
 import { buildShow } from "./show";
 
@@ -47,61 +48,95 @@ export function buildColosseum(ctx: InteriorContext): Interior {
     arenaLights.push(l);
   }
 
-  // ---- ways between floors ----------------------------------------------------------------------
+  // ---- ways between floors: two stairs, walked (liftplan: colosseum) --------------------------------
   const extraPicks = new Map<THREE.Object3D, { info: PickInfo; hover: string; floor: number }>();
-  const doorMat = new THREE.MeshStandardMaterial({ color: "#5a3e28", roughness: 0.85 });
   const ironMat = new THREE.MeshStandardMaterial({ color: "#2a2830", roughness: 0.5, metalness: 0.7 });
-  // a door in the podium wall, right of the gate: the stair up to the cavea
+  const stoneMat = new THREE.MeshStandardMaterial({ color: "#d9cfb6", roughness: 0.85 });
+  const stoneD = new THREE.MeshStandardMaterial({ color: "#b5a787", roughness: 0.9 });
+  /** An iron railing from (x0, z0) to (x1, z1) standing at height y: posts and a top rail. */
+  const railing = (into: THREE.BufferGeometry[], x0: number, z0: number, x1: number, z1: number, y: number) => {
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    const ry = -Math.atan2(z1 - z0, x1 - x0);
+    into.push(new THREE.BoxGeometry(len + 0.06, 0.06, 0.06).rotateY(ry).translate((x0 + x1) / 2, y + 0.95, (z0 + z1) / 2));
+    into.push(new THREE.BoxGeometry(len, 0.04, 0.04).rotateY(ry).translate((x0 + x1) / 2, y + 0.5, (z0 + z1) / 2));
+    const n = Math.max(1, Math.round(len / 0.9));
+    for (let i = 0; i <= n; i++) into.push(new THREE.BoxGeometry(0.06, 0.95, 0.06).translate(x0 + ((x1 - x0) * i) / n, y + 0.475, z0 + ((z1 - z0) * i) / n));
+  };
+  const sign = (text: string, w: number) =>
+    new THREE.Mesh(
+      new THREE.PlaneGeometry(w, w / 4),
+      new THREE.MeshBasicMaterial({
+        map: canvasTex(256, 64, (g) => {
+          g.fillStyle = "#2a1e14";
+          g.fillRect(0, 0, 256, 64);
+          g.fillStyle = "#e6d6a8";
+          g.font = '700 30px "JetBrains Mono", monospace';
+          g.textAlign = "center";
+          g.fillText(text, 128, 43);
+        }).t,
+      }),
+    );
+  // the cavea stair: an arched doorway in the podium wall on the east side, the flight inside the
+  // podium climbing north in a slot open to the sky, iron railings round the slot on the terrace
   {
-    const ph = Math.PI / 2 - 0.42;
-    const p = at(ph, -0.03);
-    const q = at(ph + 0.01, -0.03);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.3, 0.08), doorMat);
-    door.position.set(p.x, 1.15, p.z);
-    door.rotation.y = -Math.atan2(q.z - p.z, q.x - p.x);
-    const sign = canvasTex(256, 64, (g) => {
-      g.fillStyle = "#2a1e14";
-      g.fillRect(0, 0, 256, 64);
-      g.fillStyle = "#e6d6a8";
-      g.font = '700 30px "JetBrains Mono", monospace';
-      g.textAlign = "center";
-      g.fillText("▲ CAVEA", 128, 43);
-    });
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), new THREE.MeshBasicMaterial({ map: sign.t }));
-    s.position.set(0, 1.35, 0.05);
-    door.add(s);
-    for (const dx of [-0.35, 0.35]) {
-      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.2, 0.1), ironMat);
-      strap.position.x = dx;
-      door.add(strap);
+    const S = CAVEA_STAIR;
+    const rise = POD / S.steps,
+      run = (S.z1 - S.z0) / S.steps;
+    const steps: THREE.BufferGeometry[] = [],
+      noses: THREE.BufferGeometry[] = [],
+      iron: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < S.steps; i++) {
+      const top = (i + 1) * rise;
+      const z = S.z1 - (i + 0.5) * run;
+      steps.push(new THREE.BoxGeometry(S.x1 - S.x0, top, run + 0.002).translate((S.x0 + S.x1) / 2, top / 2, z));
+      noses.push(new THREE.BoxGeometry(S.x1 - S.x0, 0.04, 0.05).translate((S.x0 + S.x1) / 2, top - 0.02, z - run / 2 + 0.025));
     }
-    bowl.group.add(door);
-    extraPicks.set(door, { info: { eyebrow: "Stairs", title: "▲ Cavea · emperor's box", floor: 2 }, hover: "<b>Stairs ▲ Cavea</b><span>the podium, the emperor's box</span>", floor: 0 });
+    // a handrail on each wall of the slot, along the pitch
+    const len = Math.hypot(S.z1 - S.z0, POD);
+    const slope = Math.atan2(POD, S.z1 - S.z0);
+    for (const x of [S.x0 + 0.05, S.x1 - 0.05]) iron.push(new THREE.CylinderGeometry(0.03, 0.03, len - 0.4, 6).rotateX(Math.PI / 2 + slope).translate(x, POD / 2 + 0.9, (S.z0 + S.z1) / 2));
+    // round the slot on the terrace: both sides (open at the head, north), across its foot
+    railing(iron, S.x0 - 0.03, S.z0 + 0.45, S.x0 - 0.03, S.z1 + 0.03, POD);
+    railing(iron, S.x1 + 0.03, S.z0 + 0.45, S.x1 + 0.03, S.z1 + 0.03, POD);
+    railing(iron, S.x0 - 0.03, S.z1 + 0.03, S.x1 + 0.03, S.z1 + 0.03, POD);
+    const flight = new THREE.Mesh(mergeGeometries(steps), stoneMat);
+    bowl.group.add(flight, new THREE.Mesh(mergeGeometries(noses), stoneD));
+    const rail = new THREE.Mesh(mergeGeometries(iron), ironMat);
+    bowl.group.add(rail);
+    // "▲ CAVEA" over the doorway, on the podium's face
+    const [d0, d1] = S.door;
+    const zc = (d0 + d1) / 2;
+    const s = sign("▲ CAVEA", 0.9);
+    s.position.set(AX * Math.sqrt(1 - (zc / AZ) ** 2) - 0.03, 3.05, zc);
+    s.rotation.y = -Math.PI / 2;
+    bowl.group.add(s);
+    extraPicks.set(s, { info: { eyebrow: "Stairs", title: "▲ Cavea · the senators' terrace", stats: [["Steps", `${S.steps}`], ["Rise", `${POD} m`]] }, hover: "<b>Stairs ▲ Cavea</b><span>through the doorway, up to the podium terrace</span>", floor: 0 });
+    extraPicks.set(rail, { info: { eyebrow: "Stairs", title: "▼ Arena" }, hover: "<b>Stairs ▼ Arena</b><span>down to the sand</span>", floor: 2 });
   }
-  // the stairhead on the terrace, back down to the sand
-  const stairRect: Rect = [-3.0, AZ + 1.85, -1.4, AZ + 2.95];
+  // the hypogeum stair's slot in the sand by the gate: a low stone parapet round it, open at its head
+  // (north); seen from afar it is a dark well, close by the hypogeum shows down it
+  const H = HYPO_STAIR;
+  const wellCap = new THREE.Mesh(new THREE.BoxGeometry(H.x1 - H.x0, 1.2, H.z1 - H.z0), new THREE.MeshBasicMaterial({ color: "#0c0a08", side: THREE.BackSide }));
+  wellCap.position.set((H.x0 + H.x1) / 2, -0.6, (H.z0 + H.z1) / 2);
+  wellCap.raycast = () => {};
+  bowl.group.add(wellCap);
   {
-    const g = new THREE.Group();
-    const hole = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.02, 1.0), new THREE.MeshBasicMaterial({ color: "#0c0a08" }));
-    hole.position.y = 0.01;
-    g.add(hole);
-    for (const [x, z, w, d] of [
-      [0, -0.5, 1.6, 0.06],
-      [-0.78, 0, 0.06, 1.0],
-      [0.78, 0, 0.06, 1.0],
-    ]) {
-      const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), ironMat);
-      r.position.set(x, 0.95, z);
-      g.add(r);
-      for (const k of [-1, 1]) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.95, 0.06), ironMat);
-        post.position.set(x + (w > 1 ? (k * w) / 2 : 0), 0.47, z + (d > 0.5 ? (k * d) / 2 : 0));
-        g.add(post);
-      }
-    }
-    g.position.set((stairRect[0] + stairRect[2]) / 2, POD, (stairRect[1] + stairRect[3]) / 2);
-    bowl.group.add(g);
-    g.traverse((o) => extraPicks.set(o, { info: { eyebrow: "Stairs", title: "▼ Arena", floor: 0 }, hover: "<b>Stairs ▼ Arena</b><span>down to the sand</span>", floor: 2 }));
+    const wall: THREE.BufferGeometry[] = [],
+      cope: THREE.BufferGeometry[] = [];
+    const run = (x0: number, z0: number, x1: number, z1: number) => {
+      wall.push(new THREE.BoxGeometry(x1 - x0, 0.85, z1 - z0).translate((x0 + x1) / 2, 0.425, (z0 + z1) / 2));
+      cope.push(new THREE.BoxGeometry(x1 - x0 + 0.06, 0.1, z1 - z0 + 0.06).translate((x0 + x1) / 2, 0.9, (z0 + z1) / 2));
+    };
+    run(H.x0 - 0.14, H.z0 + 0.45, H.x0, H.z1 + 0.14);
+    run(H.x1, H.z0 + 0.45, H.x1 + 0.14, H.z1 + 0.14);
+    run(H.x0, H.z1, H.x1, H.z1 + 0.14);
+    const parapet = new THREE.Mesh(mergeGeometries(wall), stoneD);
+    bowl.group.add(parapet, new THREE.Mesh(mergeGeometries(cope), stoneMat));
+    const s = sign("▼ HYPOGEUM", 0.9);
+    s.position.set(H.x1 + 0.15, 0.55, H.z0 + 1.2);
+    s.rotation.y = Math.PI / 2;
+    bowl.group.add(s);
+    for (const o of [parapet, s]) extraPicks.set(o, { info: { eyebrow: "Stairs", title: "▼ Hypogeum", stats: [["Steps", "24"], ["Down", "6 m"]] }, hover: "<b>Stairs ▼ Hypogeum</b><span>the lifts, the cages, the armoury</span>", floor: 0 });
   }
 
   // ---- floors -------------------------------------------------------------------------------------
@@ -123,10 +158,19 @@ export function buildColosseum(ctx: InteriorContext): Interior {
     hemi.intensity = current === 1 ? 0.22 : night ? 0.5 : 0.9;
     sky();
   };
+  // the floor you are on is drawn; near the hypogeum stair's slot, the one above or below it too
+  // (with its own lights off: the light count, and so the shaders, stay the same)
+  let nearWell = false;
+  const showFloors = () => {
+    bowl.group.visible = current !== 1 || nearWell;
+    hypo.group.visible = current === 1 || nearWell;
+    wellCap.visible = !hypo.group.visible;
+    for (const l of hypo.lights) l.visible = current === 1;
+    for (const l of arenaLights) l.visible = current !== 1;
+  };
   const setFloor = (f: number) => {
     current = f;
-    bowl.group.visible = f !== 1;
-    hypo.group.visible = f === 1;
+    showFloors();
     show.below = f === 1;
     setTheme(theme);
   };
@@ -134,7 +178,6 @@ export function buildColosseum(ctx: InteriorContext): Interior {
 
   const camQuat = new THREE.Quaternion();
   const camRight = new THREE.Vector3();
-  const terrace = [...bowl.terraceRects, stairRect];
   const flick = (fl: THREE.Object3D[], t: number) => {
     for (const f of fl) {
       const ph = f.userData.ph as number;
@@ -159,7 +202,7 @@ export function buildColosseum(ctx: InteriorContext): Interior {
       { label: "−1", name: "Hypogeum · lifts, cages, armoury", y: HYPO, spawn: new THREE.Vector3(0, HYPO, 14), yaw: 0 },
       { label: "1", name: "Podium · emperor's box", y: POD, spawn: new THREE.Vector3(0.6, POD, AZ + 1.7), yaw: 0 },
     ],
-    colliders: (f) => (f === 0 ? bowl.arenaRects : f === 1 ? hypo.rects : terrace),
+    colliders: (f) => (f === 0 ? bowl.arenaRects : f === 1 ? hypo.rects : bowl.terraceRects),
     setFloor,
     setTheme,
     pickables: () => {
@@ -177,6 +220,12 @@ export function buildColosseum(ctx: InteriorContext): Interior {
       return current === 1 ? hypo.hover(hit.object) : show.hover(hit.object);
     },
     update(dt, t, camera) {
+      const p = camera.position;
+      const near = Math.hypot(p.x - THREE.MathUtils.clamp(p.x, H.x0, H.x1), p.z - THREE.MathUtils.clamp(p.z, H.z0, H.z1)) < 12;
+      if (near !== nearWell) {
+        nearWell = near;
+        showFloors();
+      }
       camera.getWorldQuaternion(camQuat);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
       show.update(

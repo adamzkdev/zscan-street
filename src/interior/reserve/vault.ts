@@ -7,6 +7,7 @@ import type { PickInfo } from "../types";
 import { bankerLamp, desk } from "./arch";
 import { board, drawPoolPlate, poolInfo, POOL_COLOR, POOL_NAME, supplyInfo, type PoolKey } from "./data";
 import { C, F, GOLD, LEVELS, MONO, num, paint, SANS, SERIF, zec, type ReserveKit } from "./kit";
+import { VAULT_STAIR } from "./stair";
 
 /**
  * Underground. Minus one: the gold vault behind a round door three metres across that swings open
@@ -71,7 +72,11 @@ export function vault(k: ReserveKit) {
   for (let z = -13; z > -47; z -= 4) for (const x of [-12, 0, 12]) k.box(V, 0.2, 0.06, 2.4, x, H - 0.08, z, "#e8f2ff", "glow");
   const conc = "#4a4a50";
   k.wall(V, -22, -48, 22, -48, H, conc);
-  k.wall(V, -22, -48, -22, -11, H, conc);
+  // the west wall, with the doorway of the governors' stair in its north-west corner (stair.ts)
+  const [sd0, sd1, sdh] = VAULT_STAIR.vaultDoor;
+  k.wall(V, -22, -48, -22, sd0, H, conc);
+  k.wall(V, -22, sd1, -22, -11, H, conc);
+  k.box(V, 0.3, H - sdh, sd1 - sd0, -22, sdh, (sd0 + sd1) / 2, conc);
   k.wall(V, 22, -48, 22, -11, H, conc);
   // the lobby
   k.wall(V, -7, 0, 7, 0, H, "#55555c");

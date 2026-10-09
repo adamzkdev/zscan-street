@@ -8,12 +8,14 @@ import { restaurant } from "./restaurant";
 import { rooms } from "./rooms";
 import { skypark } from "./skypark";
 import { spa } from "./spa";
+import { grandStair, STAIR } from "./stair";
 import { suites } from "./suites";
 
 /**
  * MARINA ZEC HOTEL: a Marina Bay Sands on the river. The grand atrium under the leaning tower, the
  * casino, deluxe rooms and suites with bay windows onto the real city, the spa, the sky restaurant
- * and the SkyPark with its infinity pool at 57. Only the floor you are on is drawn, lit and animated.
+ * and the SkyPark with its infinity pool at 57. Only the floor you are on is drawn, lit and animated
+ * (in the grand staircase between G and the casino, the floor at its other end is drawn too, unlit).
  */
 export function buildHotel(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#07061a");
@@ -25,13 +27,31 @@ export function buildHotel(ctx: InteriorContext): Interior {
   spa(k);
   restaurant(k);
   skypark(k);
+  grandStair(k);
   k.padLights();
   // the walkers' router needs a bounded floor on every level
   k.rects.forEach((r, i) => r.length || r.push([LEVELS[i].x0, LEVELS[i].z0, LEVELS[i].x0 + 0.1, LEVELS[i].z0 + 0.1]));
 
+  // each floor's lights: a floor drawn beside yours keeps them off (same light count, no recompile)
+  const lights = k.groups.map((g) => {
+    const out: THREE.Light[] = [];
+    g.traverse((o) => o instanceof THREE.Light && out.push(o));
+    return out;
+  });
+  let other = -1;
+  const showOther = (n: number) => {
+    if (n === other) return;
+    if (other >= 0 && other !== k.current) k.groups[other].visible = false;
+    other = n;
+    if (n < 0) return;
+    k.groups[n].visible = true;
+    for (const l of lights[n]) l.visible = false;
+  };
   const setFloor = (n: number) => {
     k.current = n;
+    other = -1;
     k.groups.forEach((g, i) => (g.visible = i === n));
+    for (const l of lights[n]) l.visible = true;
     const view = ctx.cityView("hotel", LEVELS[n].y + 1.6, 3);
     if (view) scene.background = view;
   };
@@ -66,6 +86,12 @@ export function buildHotel(ctx: InteriorContext): Interior {
       return o ? (k.hovers.get(o) ?? null) : null;
     },
     update(dt, t, camera) {
+      // the stair hall is drawn with the atrium: from the casino's west half (where its portal can be
+      // seen) the atrium is drawn too, harmless under the casino's floor. From G the casino only once
+      // you are up the flight in the hall (over the atrium's glass roof it must not show)
+      const p = camera.position;
+      const inHall = p.x < STAIR.east - 0.05;
+      showOther(k.current === 1 && p.x < -4 ? 0 : inHall && k.current === 0 && p.y > 2.9 ? 1 : -1);
       camera.getWorldQuaternion(camQuat);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
       for (const s of k.people[k.current]) s.update(dt, t, camQuat, camRight);

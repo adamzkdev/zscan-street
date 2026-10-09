@@ -8,6 +8,7 @@ import type { PickInfo } from "../types";
 import { bankerLamp, bench, chandelier, clubChair, coffers, column, desk, pilaster, stanchion, urn } from "./arch";
 import { drawPools, drawPrice, drawSupply, drawTape, poolsInfo, priceInfo, supplyInfo, tape } from "./data";
 import { C, F, GOLD, JP, LEVELS, num, paint, SERIF, Surface, usd, zec, type ReserveKit } from "./kit";
+import { VAULT_STAIR } from "./stair";
 
 /**
  * Ground floor: the banking hall. 40 × 46 m under a 14 m coffered ceiling with a stained-glass
@@ -170,11 +171,22 @@ export function hall(k: ReserveKit) {
   const wallMat = (len: number) => new THREE.MeshStandardMaterial({ map: ashlar(len / 4, 12 / 4), roughness: 0.55 });
   k.plane(f, 40, 12, wallMat(40), 0, 6, -45.99);
   k.plane(f, 40, 12, wallMat(40), 0, 6, -0.01, 0, Math.PI);
-  k.plane(f, 46, 12, wallMat(46), -19.99, 6, -23, 0, Math.PI / 2);
+  // the west wall, round the doorway to the grand stair (its courses kept in line across the pieces)
+  const [dz0, dz1, dh] = VAULT_STAIR.hallDoor;
+  const westPiece = (za: number, zb: number, ya: number, yb: number) => {
+    const m = wallMat(zb - za);
+    m.map!.repeat.set((zb - za) / 4, (yb - ya) / 4);
+    m.map!.offset.set(-zb / 4, ya / 4);
+    k.plane(f, zb - za, yb - ya, m, -19.99, (ya + yb) / 2, (za + zb) / 2, 0, Math.PI / 2);
+  };
+  westPiece(-46, dz0, 0, 12);
+  westPiece(dz1, 0, 0, 12);
+  westPiece(dz0, dz1, dh, 12);
   k.plane(f, 46, 12, wallMat(46), 19.99, 6, -23, 0, -Math.PI / 2);
   k.solid(f, -21, -46.3, 21, -46);
   k.solid(f, -21, 0, 21, 0.3);
-  k.solid(f, -20.3, -46, -20, 0);
+  k.solid(f, -20.3, -46, -20, dz0);
+  k.solid(f, -20.3, dz1, -20, 0);
   k.solid(f, 20, -46, 20.3, 0);
   // the frieze (gilt letters on green) and the cornice above it
   const frieze = paint(2048, 64, (c, W, Hh) => {
@@ -209,7 +221,9 @@ export function hall(k: ReserveKit) {
     k.box(f, w, 0.4, d, x, 12.8, z, C.cream, "polish");
     k.box(f, w, 0.12, d * 1.3, x, 13.2, z, GOLD, "metal");
     k.box(f, w, 0.6, d * 0.5, x, 11.7, z, C.cream, "polish");
-    k.box(f, w, 0.35, d * 0.4, x, 0, z, C.greenMarble, "polish");
+    // (the west skirting stops at the stair's doorway)
+    if (x < 0 && d > 1) for (const [a, b] of [[z - d * 0.2, dz0], [dz1, z + d * 0.2]]) k.box(f, w, 0.35, b - a, x, 0, (a + b) / 2, C.greenMarble, "polish");
+    else k.box(f, w, 0.35, d * 0.4, x, 0, z, C.greenMarble, "polish");
   }
   // pilasters
   for (const z of [-4, -10, -18, -25, -32, -39, -44])
@@ -584,8 +598,9 @@ export function hall(k: ReserveKit) {
     banner(k, x, z, ry);
   // a board of the pools by the lifts, the supply opposite
   const pb = k.screen(f, 4.4, 2.6, (c, W, Hh) => drawPools(c, W, Hh), 6, 768);
-  k.add(f, pb, -19.85, 4.6, -21.5, Math.PI / 2);
-  k.box(f, 0.14, 2.9, 4.7, -19.92, 3.15, -21.5, "#16130e", "polish");
+  // (over the doorway down to the vault, where the pools' gold is)
+  k.add(f, pb, -19.85, 5.85, -21.5, Math.PI / 2);
+  k.box(f, 0.14, 2.9, 4.7, -19.92, 4.4, -21.5, "#16130e", "polish");
   k.pick(f, pb, "<b>Value pools</b><span>live</span>", poolsInfo);
   const sb = k.screen(f, 4.4, 2.6, (c, W, Hh) => drawSupply(c, W, Hh, k.height), 6, 768);
   k.add(f, sb, 19.85, 4.6, -32, -Math.PI / 2);
@@ -722,7 +737,7 @@ function cast(k: ReserveKit) {
   // guards at the arches
   P(2711, -5.4, -3.9, "Guard", { face: [0, 1], lines: ["Welcome to the ZEC Reserve.", "Through the arch, please.", "Viewing keys only. Spending keys stay home."] });
   P(2712, 5.4, -3.9, "Guard", { face: [0, 1], lines: ["Good day. Mind the step.", "No photos near the vault lift.", "Bags on the left, please."] });
-  P(2713, -18.2, -9.6, "Guard", { face: [1, 0], lines: ["Vault access by appointment.", "Lifts to the right."] });
+  P(2713, -18.2, -9.6, "Guard", { face: [1, 0], lines: ["Vault access by appointment.", "The grand stair goes down to the gold vault.", "Lifts to the right."] });
   // the booth
   P(3001, BOOTH.x, BOOTH.z - 0.6, "Concierge", { face: [0, 1], lines: [() => `Block ${num(k.height)}. All windows are open.`, "Trading floor on 2, museum on 3.", "The gold vault is on minus one.", price] });
   // tellers and clerks

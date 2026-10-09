@@ -103,14 +103,68 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
       1: [{ at: { x: 0, z: -1.42, yaw: 0 } }],
     }),
   },
-  // the freight lift at the "EV" doors on the control room's back wall, one shaft from the hall to the catwalks
-  factory: { style: "industrial", lifts: (n) => [{ name: "FREIGHT LIFT", at: { x: 16, z: -1.8, yaw: 0 } }] },
+  // the freight lift at the "EV" doors on the control room's back wall, one shaft from the hall to the catwalks;
+  // the stair tower against the control room's east wall (factory/layout.ts STAIR, upper.ts buildStairs):
+  // up from the hall by the workshop to the landing outside the room's east door, on up to the east catwalk
+  factory: {
+    style: "industrial",
+    lifts: (n) => [{ name: "FREIGHT LIFT", at: { x: 16, z: -1.8, yaw: 0 } }],
+    stairs: [
+      {
+        from: 0,
+        to: 1,
+        zone: [25, -8, 35.4, -6.8],
+        up: "-x",
+        // the door through the east wall; the landing fenced over the hall; nobody walks into the flight's head from under it
+        clearOn: [[1, [21.7, -9.25, 22.3, -7.65]]],
+        walls: [
+          [0, [24.9, -8.06, 25.6, -6.74]],
+          [1, [22, -9.3, 25.4, -9.2]],
+          [1, [22, -6.8, 25.7, -6.7]],
+        ],
+      },
+      // its head on the catwalk (no railing there): fenced the last bit past its rails
+      { from: 1, to: 2, zone: [25, -9.2, 32.35, -8], up: "+x", walls: [[2, [31.7, -9.3, 32.4, -9.2]], [2, [31.7, -8, 32.4, -7.9]]] },
+    ],
+  },
   // The Binhai atrium: every lift on the front wall at its east end, stepping out with the terraces:
   // the ground floor's bank of two in the corner by the glass, the terraces' cars at the end of their
   // walkway where their lift doors are; the reading room's bank in its back corner (not under the
-  // masthead), the ZIP Archive's on its two lift doors; the auditorium's narrow car against its back wall
+  // masthead), the ZIP Archive's on its two lift doors; the auditorium's narrow car against its back wall.
+  // The atrium's switchback (library/stairs.ts LIB_STAIR) in front of the left wall's steps: up from the
+  // floor to a landing carried over the steps to Terrace I, back up beside it to a bridge over to Terrace II
   library: {
     style: "wood",
+    stairs: [
+      {
+        from: 0,
+        to: 1,
+        zone: [-14.6, -31.4, -13.4, -21],
+        up: "-z",
+        // the landing opens the terrace's edge; fenced over the steps; nobody walks into the flight's head from under it
+        clearOn: [[1, [-19.2, -32.8, -13.4, -31.4]]],
+        walls: [
+          [0, [-14.6, -31.6, -13.4, -31.4]],
+          [1, [-18.6, -32.9, -13.3, -32.8]],
+          [1, [-13.4, -32.8, -13.3, -30.7]],
+          [1, [-18.6, -31.4, -15.8, -31.3]],
+        ],
+      },
+      {
+        from: 1,
+        to: 2,
+        zone: [-15.8, -31.4, -14.6, -21],
+        up: "+z",
+        // the bridge opens the upper terrace's edge; fenced over the void
+        clearOn: [[2, [-25.2, -21, -14.6, -19.6]]],
+        walls: [
+          [2, [-24.6, -19.6, -14.5, -19.5]],
+          [2, [-14.6, -21.7, -14.5, -19.5]],
+          [2, [-24.6, -21.1, -15.8, -21]],
+          [2, [-15.9, -21.7, -15.8, -21]],
+        ],
+      },
+    ],
     lifts: per({
       0: [{ at: { x: 14.6, z: -1.5, yaw: 0 }, bank: -1, wing: [0, 0.16] }],
       1: [{ at: { x: 20.4, z: -1.55, yaw: 0 } }],
@@ -145,9 +199,16 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
     style: "neon",
     lifts: per({ 0: [lobby(-14.8, -24, Math.PI / 2)], 1: [lobby(-17.8, -7, Math.PI / 2)], 2: [lobby(-13.7, -7, Math.PI / 2)], 3: [lobby(0, 1.68, Math.PI)] }),
   },
-  // the Napoleon hall: on the front wall right of the entrance; upstairs, on each floor's middle lift door
+  // the Napoleon hall: on the front wall right of the entrance; upstairs, on each floor's middle lift door.
+  // Its escalators (museum/hall.ts) climb to the wings' mezzanines and arrive in the wing they serve:
+  // Denon (west) the Grande Galerie, Richelieu (east) the apartments, Daru (north) the Salle des États
   museum: {
     style: "brass",
+    stairs: [
+      ...[-20.5, -18.6].map((z): StairDecl => ({ from: 0, to: 1, kind: "escalator", move: 1, zone: [-20.9, z - 0.55, -12.5, z + 0.55], up: "-x", link: { rise: 4.8 } })),
+      ...[-20.5, -18.6].map((z): StairDecl => ({ from: 0, to: 3, kind: "escalator", move: 1, zone: [12.5, z - 0.55, 20.9, z + 0.55], up: "+x", link: { rise: 4.8 } })),
+      ...[-0.95, 0.95].map((x): StairDecl => ({ from: 0, to: 2, kind: "escalator", move: 1, zone: [x - 0.55, -41.5, x + 0.55, -34.8], up: "-z", link: { rise: 4.8 * 0.62 } })),
+    ],
     lifts: per({
       0: [{ at: { x: 4.5, z: -1.42, yaw: 0 } }],
       1: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
@@ -183,7 +244,13 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
   mall: { style: "white", lifts: () => [{ at: { x: -22.7, z: -1.38, yaw: 0 }, bank: 1, pier: 1.92 }], stairs: mallEscalators() },
   // the lift wall on the west side of every floor (the SkyPark's further out): the car between its two
   // modelled doors (a bank of three), on the axis of the corridor that leads to it (the lobby is 4 m deep)
-  hotel: { style: "gold", lifts: (n) => [{ at: { x: (n === 6 ? -27 : -15) + 1.48, z: n === 6 ? -10.15 : -11, yaw: -Math.PI / 2 } }] },
+  // The grand staircase (hotel/stair.ts: STAIR.zone): a stair hall in the core behind the west wall,
+  // one straight flight from G (the doorway behind the Atrium Bar) up to the casino (the portal by the Lotus bar)
+  hotel: {
+    style: "gold",
+    lifts: (n) => [{ at: { x: (n === 6 ? -27 : -15) + 1.48, z: n === 6 ? -10.15 : -11, yaw: -Math.PI / 2 } }],
+    stairs: [{ from: 0, to: 1, zone: [-19.3, -19.3, -15.3, -3.3], up: "+z" }],
+  },
   // the lobby's lift wall: on the first two of its four doors; upstairs, the walk-in cabin cut into each floor's core (half-size c)
   needle: {
     style: "white",
@@ -195,15 +262,34 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
       4: [needleCar(3.0)],
     }),
   },
-  // the lift lobbies of the atrium, Al Mahara and the salon; in the bedroom against the wall by the
-  // spiral stair; on the helipad at the end of the gangway, at the door into the tower
+  // the lift lobbies of the atrium, Al Mahara and the salon; in the bedroom against its back wall by
+  // the stair's well; on the helipad at the end of the gangway, at the door into the tower. The
+  // suite's grand staircase (arab/suite.ts) climbs north from the salon to the bedroom: walled along
+  // its sides and head in the salon, its well railed on three sides upstairs (open at the head)
   arab: {
     style: "gold",
+    stairs: [
+      {
+        from: 2,
+        to: 3,
+        zone: [8.5, -11.5, 9.9, -5.0],
+        up: "-z",
+        rails: false,
+        walls: [
+          [2, [8.44, -11.56, 8.5, -5.3]],
+          [2, [9.9, -11.56, 9.96, -5.3]],
+          [2, [8.44, -11.56, 9.96, -11.5]],
+          [3, [8.44, -11.05, 8.5, -4.94]],
+          [3, [9.9, -11.05, 9.96, -4.94]],
+          [3, [8.44, -5.0, 9.96, -4.94]],
+        ],
+      },
+    ],
     lifts: per({
       0: [lobby(0, -33.8, 0)],
       1: [lobby(0, 0.3, Math.PI)],
       2: [lobby(0, -0.15, Math.PI)],
-      3: [{ at: { x: 9.6, z: -8.1, yaw: Math.PI } }],
+      3: [{ at: { x: 9.6, z: -1.4, yaw: 0 } }],
       // the rim's rail opens onto the gangway
       4: [{ at: { x: 13.3, z: -14, yaw: Math.PI / 2 }, clear: [[10.4, -15.35, 12.0, -12.65]] }],
     }),
@@ -220,6 +306,9 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
       5: [lobby(0, -0.16, Math.PI)],
       6: [lobby(-15.95, -15, Math.PI / 2)],
     }),
+    // the governors' stair (reserve/stair.ts: VAULT_STAIR.zone): a stair hall west of the banking hall,
+    // one straight flight from the vault's north-west doorway up to the hall's doorway under the pools board
+    stairs: [{ from: 5, to: 0, zone: [-26.2, -43.6, -22.2, -23.6], up: "+z" }],
   },
   // the foyer's "CONCERT HALL ▲" doors on its east wall; in the hall, the back wall's east corner
   opera: {
@@ -235,6 +324,45 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
       1: [{ at: { x: 3.95, z: 12.9, yaw: 0 } }],
       2: [{ narrow: true, at: { x: 1.33, z: 17.52, yaw: Math.PI / 2 } }],
     }),
+    // its two stairs (colosseum/geo.ts), both climbing north, each walled on the floor it doesn't
+    // land on (the slot's sides and far end above, the flight's sides and head below)
+    stairs: [
+      // the hypogeum's, from the end of its central corridor up to a slot in the sand by the gate
+      {
+        from: 1,
+        to: 0,
+        zone: [-1.5, 11.5, -0.5, 17.5],
+        up: "-z",
+        rails: false,
+        walls: [
+          [1, [-1.56, 11.44, -1.5, 17.05]],
+          [1, [-0.5, 11.44, -0.44, 17.05]],
+          [1, [-1.56, 11.44, -0.44, 11.5]],
+          [0, [-1.56, 11.95, -1.5, 17.56]],
+          [0, [-0.5, 11.95, -0.44, 17.56]],
+          [0, [-1.56, 17.5, -0.44, 17.56]],
+        ],
+      },
+      // the cavea's: through the doorway in the podium wall (east side), up inside the podium to the terrace
+      {
+        from: 0,
+        to: 2,
+        zone: [11.9, -2.1, 12.9, 1.9],
+        up: "-z",
+        rails: false,
+        clearOn: [[0, [9.3, 1.9, 10.6, 3.15]]],
+        walls: [
+          [0, [9.85, 1.84, 11.9, 1.9]],
+          [0, [9.85, 3.15, 12.96, 3.21]],
+          [0, [11.84, -2.16, 11.9, 1.9]],
+          [0, [12.9, -2.16, 12.96, 3.21]],
+          [0, [11.84, -2.16, 12.96, -2.1]],
+          [2, [11.84, -1.65, 11.9, 1.96]],
+          [2, [12.9, -1.65, 12.96, 1.96]],
+          [2, [11.84, 1.9, 12.96, 1.96]],
+        ],
+      },
+    ],
   },
   // the pillar lift at the Pilier Est's doors (esplanade, 1st, 2nd), the summit lift at the core's doors
   eiffel: {

@@ -386,7 +386,7 @@ export class HotelKit {
    * Floor slab, ceiling (with recessed panels unless `panels: "none"`), the core wall west, glass
    * on the three other sides with mullions. `door`: the entrance gap on the south side.
    */
-  shell(f: number, floorMat: THREE.Material, ceil: THREE.Material | null, o: { door?: boolean; wallMat?: THREE.Material; panels?: string; step?: number; open?: string; noFloor?: boolean } = {}) {
+  shell(f: number, floorMat: THREE.Material, ceil: THREE.Material | null, o: { door?: boolean; wallMat?: THREE.Material; panels?: string; step?: number; open?: string; noFloor?: boolean; westDoor?: [number, number, number] } = {}) {
     const { y, h, x0: X0, x1: X1, z0: Z0, z1: Z1 } = LEVELS[f];
     const g = this.groups[f];
     if (!o.noFloor) box(g, X1 - X0, 0.2, Z1 - Z0, floorMat, (X0 + X1) / 2, y - 0.2, (Z0 + Z1) / 2);
@@ -398,7 +398,14 @@ export class HotelKit {
       }
     }
     const H = h || 1.1;
-    this.rects[f].push(wall(g, X0, Z0, X0, Z1, H, o.wallMat ?? std("#2e2a36", 0.8), y));
+    const wm = o.wallMat ?? std("#2e2a36", 0.8);
+    // the core wall; `westDoor` [z0, z1, height]: a doorway through it (the grand staircase behind)
+    const wd = o.westDoor;
+    if (!wd) this.rects[f].push(wall(g, X0, Z0, X0, Z1, H, wm, y));
+    else {
+      this.rects[f].push(wall(g, X0, Z0, X0, wd[0], H, wm, y), wall(g, X0, wd[1], X0, Z1, H, wm, y));
+      box(g, 0.2, H - wd[2], wd[1] - wd[0], wm, X0, y + wd[2], (wd[0] + wd[1]) / 2);
+    }
     const pane = (x0: number, z0: number, x1: number, z1: number) => {
       const len = Math.hypot(x1 - x0, z1 - z0);
       const p = new THREE.Mesh(new THREE.PlaneGeometry(len, H), this.glass);

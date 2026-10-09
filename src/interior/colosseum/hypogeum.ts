@@ -4,7 +4,7 @@ import { Snark, loadArt } from "../../scene/snark";
 import { C, E, hash, VoxelModel } from "../../scene/voxel/model";
 import { place } from "../furniture";
 import type { PickInfo, Rect } from "../types";
-import { HYPO, meshAt, one, patch } from "./geo";
+import { HYPO, HYPO_STAIR, meshAt, one, patch } from "./geo";
 import { kit, LIFTS, TRAPS } from "./show";
 
 /**
@@ -17,6 +17,8 @@ export interface Hypogeum {
   group: THREE.Group;
   rects: Rect[];
   flames: THREE.Object3D[];
+  /** Its torches' light (off while it is only seen from the arena, down the stair's slot). */
+  lights: THREE.PointLight[];
   people: Snark[];
   pickables: THREE.Object3D[];
   pick(o: THREE.Object3D): PickInfo | null;
@@ -28,6 +30,8 @@ const HX = 12,
   HZ = 19,
   HH = 6;
 const V = 0.25;
+/** The stair up to the arena (geo.ts). */
+const STAIR = HYPO_STAIR;
 
 export function buildHypogeum(): Hypogeum {
   const group = new THREE.Group();
@@ -53,6 +57,7 @@ export function buildHypogeum(): Hypogeum {
   const beam = one("#3e2c1e");
   const iron = one("#26242a");
   const travD = one("#a89a7e");
+  const travL = one("#c4b79a");
 
   const holes: [number, number][] = [...LIFTS, ...TRAPS];
   const inHole = (x: number, z: number) => holes.some(([hx, hz]) => Math.abs(x - hx) < 0.8 && Math.abs(z - hz) < 0.8);
@@ -67,8 +72,9 @@ export function buildHypogeum(): Hypogeum {
       const ax = Math.abs(x);
       const e = (x / HX) ** 2 + (z / HZ) ** 2;
       m.set(ix, 0, iz, ax < 0.15 ? C("#3a3026") : earth(ix, 0, iz));
-      // ceiling: planks on beams, holes at the trapdoors
-      if (!inHole(x, z)) {
+      // ceiling: planks on beams, holes at the trapdoors and over the stair
+      const slot = x > STAIR.x0 && x < STAIR.x1 && z > STAIR.z0 && z < STAIR.z1;
+      if (!inHole(x, z) && !slot) {
         m.set(ix, H - 1, iz, plank(ix, 0, iz));
         if (iz % 4 === 0) m.set(ix, H - 2, iz, beam(ix, 0, iz));
       }
@@ -78,21 +84,21 @@ export function buildHypogeum(): Hypogeum {
       else if (e > 0.93) {
         solidTo = H - 1;
         mat = brick;
-      } else if (ax > 1.75 && ax < 2.25 && !door(z, [-12, -4, 4, 12]) && z > -15.5) solidTo = H - 1;
+      } else if (ax > 1.75 && ax < 2.25 && !door(z, x < 0 ? [-12, -4, 4] : [-12, -4, 4, 12]) && z > -15.5) solidTo = H - 1;
       else if (ax > 6.25 && ax < 6.75 && !door(z, [-11, -3, 3, 11])) solidTo = H - 1;
       else if (ax > BARS + 0.3 && CAGE_Z.some((c) => Math.abs(Math.abs(z - c) - 2.75) < 0.25)) solidTo = H - 1; // between cages
       else if (ax > BARS + 0.3 && Math.abs(z) > 9 && Math.abs(z) < 9.5) solidTo = H - 1;
-      // stair up at the +z end of the central corridor
-      if (ax < 1.75 && z > 15.4) {
-        const step = Math.min(H - 2, Math.floor((z - 15.4) / 0.3) + 1);
-        for (let y = 1; y < step; y++) m.set(ix, y, iz, travD(ix, y, iz));
+      // the stair up to the arena: solid to the floor, its last step level with the sand
+      if (x > STAIR.wall && x < STAIR.x1 && z > STAIR.z0 && z < STAIR.z1) {
+        const step = Math.floor((STAIR.z1 - z) / V);
+        for (let y = 1; y <= step; y++) m.set(ix, y, iz, (y === step ? travL : travD)(ix, y, iz));
       }
       for (let y = 1; y < solidTo; y++) {
         // arched doorways: the walls above the openings
         m.set(ix, y, iz, mat(ix, y, iz));
       }
       // lintels over doorways (2.5 m openings, arched)
-      if (ax > 1.75 && ax < 2.25 && z > -15.5) for (const c of [-12, -4, 4, 12]) if (Math.abs(z - c) < 1) for (let y = Math.round((2.5 + Math.sqrt(Math.max(0, 1 - (z - c) ** 2)) * 0.6) / V); y < H - 1; y++) m.set(ix, y, iz, tuff(ix, y, iz));
+      if (ax > 1.75 && ax < 2.25 && z > -15.5) for (const c of x < 0 ? [-12, -4, 4] : [-12, -4, 4, 12]) if (Math.abs(z - c) < 1) for (let y = Math.round((2.5 + Math.sqrt(Math.max(0, 1 - (z - c) ** 2)) * 0.6) / V); y < H - 1; y++) m.set(ix, y, iz, tuff(ix, y, iz));
       if (ax > 6.25 && ax < 6.75) for (const c of [-11, -3, 3, 11]) if (Math.abs(z - c) < 1) for (let y = Math.round((2.5 + Math.sqrt(Math.max(0, 1 - (z - c) ** 2)) * 0.6) / V); y < H - 1; y++) m.set(ix, y, iz, tuff(ix, y, iz));
       // cage bars: iron every 25 cm, a crossbar, a gate in each
       if (Math.abs(ax - BARS) < 0.13 && Math.abs(z) < 8.8 && e < 0.93) {
@@ -201,11 +207,13 @@ export function buildHypogeum(): Hypogeum {
 
   // ---- torches ---------------------------------------------------------------------------------------
   const flames: THREE.Object3D[] = [];
+  const lights: THREE.PointLight[] = [];
   const fireMat = new THREE.MeshBasicMaterial({ color: new THREE.Color("#ff8a2a").multiplyScalar(2.6), toneMapped: false });
   const fireCore = new THREE.MeshBasicMaterial({ color: new THREE.Color("#ffe08a").multiplyScalar(2.8), toneMapped: false });
   const bracket: THREE.BufferGeometry[] = [];
   const torchAt: [number, number, number][] = [];
-  for (const z of [-14, -8, 0, 8, 14]) for (const s of [-1, 1]) torchAt.push([s * 1.72, z, -s]);
+  // (none on the west wall over the stair)
+  for (const z of [-14, -8, 0, 8, 14]) for (const s of [-1, 1]) if (!(s < 0 && z > STAIR.z0)) torchAt.push([s * 1.72, z, -s]);
   for (const z of [-7, 7]) for (const s of [-1, 1]) torchAt.push([s * 6.24, z, -s]);
   for (const [x, z, dir] of torchAt) {
     bracket.push(new THREE.BoxGeometry(0.3, 0.06, 0.06).translate(x + dir * 0.15, HYPO + 2.3, z), new THREE.CylinderGeometry(0.05, 0.03, 0.5, 6).translate(x + dir * 0.3, HYPO + 2.45, z));
@@ -232,6 +240,7 @@ export function buildHypogeum(): Hypogeum {
     const l = new THREE.PointLight("#ff9a48", 16, 14, 1.5);
     l.position.set(x, HYPO + 2.8, z);
     group.add(l);
+    lights.push(l);
   }
 
   // ---- the beasts ---------------------------------------------------------------------------------------
@@ -264,14 +273,13 @@ export function buildHypogeum(): Hypogeum {
   place(group, "colosseum-rack", rack, 1.45, HYPO, -16.5, -Math.PI / 2);
   place(group, "colosseum-rack2", shieldRack, 0, HYPO, -17.6, 0);
   rects.push([-1.75, -17.7, -1.1, -15.4], [1.1, -17.7, 1.75, -15.4], [-1.2, -18.2, 1.2, -17.2]);
-  // stair: the last steps block
-  rects.push([-1.75, 16.2, 1.75, 18.9]);
-  const stairHit = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3, 0.2), new THREE.MeshBasicMaterial({ visible: false }));
-  stairHit.position.set(0, HYPO + 1.5, 15.6);
+  // the stair (walked: see STAIR); a click on its foot says where it goes
+  const stairHit = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.2), new THREE.MeshBasicMaterial({ visible: false }));
+  stairHit.position.set((STAIR.x0 + STAIR.x1) / 2, HYPO + 1.1, STAIR.z1 + 0.1);
   group.add(stairHit);
   pickables.push(stairHit);
-  hovers.set(stairHit, "<b>Stairs ▲ Arena</b><span>up to the sand</span>");
-  picks.set(stairHit, () => ({ eyebrow: "Stairs", title: "▲ Arena", floor: 0 }));
+  hovers.set(stairHit, "<b>Stairs ▲ Arena</b><span>up to the sand, by the Porta Triumphalis</span>");
+  picks.set(stairHit, () => ({ eyebrow: "Stairs", title: "▲ Arena", stats: [["Steps", "24"], ["Rise", "6 m"]] }));
   // the gladiator lifts take you up too
   platforms.slice(0, 2).forEach((p) => {
     pickables.push(p);
@@ -312,15 +320,16 @@ export function buildHypogeum(): Hypogeum {
     for (let iz = 0; iz < D; iz++) {
       const cur = new Map<string, Rect>();
       let ix = 0;
+      // the stair is walked (its flight's own walls): not a wall here
+      const solid = (i: number) => !!m.get(i, y, iz) && !(X(i) > STAIR.wall && X(i) < STAIR.x1 && Z(iz) > STAIR.z0 && Z(iz) < STAIR.z1);
       while (ix < W) {
-        const c = m.get(ix, y, iz);
-        // the cage bars are see-through but solid; the stair is handled above
-        if (!c) {
+        // the cage bars are see-through but solid
+        if (!solid(ix)) {
           ix++;
           continue;
         }
         let jx = ix;
-        while (jx < W && m.get(jx, y, iz)) jx++;
+        while (jx < W && solid(jx)) jx++;
         const key = `${ix}:${jx}`;
         const p = prev.get(key);
         const r: Rect = p ? p : [X(ix) - V / 2, Z(iz) - V / 2, X(jx - 1) + V / 2, 0];
@@ -331,7 +340,7 @@ export function buildHypogeum(): Hypogeum {
       }
       prev = cur;
     }
-    for (const r of runs.values()) if (!(Math.abs(r[0]) < 1.8 && r[1] > 15.3)) rects.push(r);
+    for (const r of runs.values()) rects.push(r);
   }
 
   for (const sx of [-1, 1]) rects.push([sx * BARS - 0.12, -8.8, sx * BARS + 0.12, 8.8]);
@@ -341,6 +350,7 @@ export function buildHypogeum(): Hypogeum {
     group,
     rects,
     flames,
+    lights,
     people,
     pickables,
     pick: (o) => picks.get(o)?.() ?? null,

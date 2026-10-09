@@ -20,6 +20,16 @@ export const VS = 0.25;
 export const GATE_W = 1.6,
   GATE_H = 3.2;
 
+/**
+ * The stairs walked between the floors (liftplan: colosseum). The hypogeum's: against the west wall
+ * of its central corridor, climbing north (−z) from the corridor's end to a slot in the sand by the
+ * Porta Triumphalis, a 25 cm step a voxel; `wall` is where its stone starts (a stringer against the
+ * corridor wall). The cavea's: inside the podium on the east side, a slot in the terrace from a
+ * doorway in the podium wall (`door`: its z span) up to the senators' terrace, climbing north too.
+ */
+export const HYPO_STAIR = { x0: -1.5, x1: -0.5, z0: 11.5, z1: 17.5, wall: -1.75 };
+export const CAVEA_STAIR = { x0: 11.9, x1: 12.9, z0: -2.1, z1: 1.9, door: [1.9, 3.15] as const, steps: 16 };
+
 /** Radius of an ellipse in the direction (c, s). */
 export const radius = (c: number, s: number, a: number, b: number) => 1 / Math.sqrt((c / a) ** 2 + (s / b) ** 2);
 /** Distance out from the arena edge, radially. */
