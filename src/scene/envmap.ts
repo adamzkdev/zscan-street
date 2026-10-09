@@ -11,7 +11,7 @@ function emissive(color: THREE.ColorRepresentation, k: number) {
 
 /**
  * The studio room the city has always been lit by (its soft, neutral fill is the look), with what
- * the city adds for the glossy things to catch: by day the sun; by night neon and lit windows all
+ * the city adds for the glossy things to catch: by night neon and lit windows all
  * round low down, and the warm pools of the street lamps.
  */
 function build(day: boolean) {
@@ -21,10 +21,8 @@ function build(day: boolean) {
     return () => ((a = (a * 16807) % 2147483647) / 2147483647);
   })();
   if (day) {
-    const sun = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 8), emissive("#fff3e2", 80));
-    sun.position.set(-18, 34, 22).setLength(13);
-    sun.position.y = Math.min(sun.position.y, 12);
-    s.add(sun);
+    // no sun in the reflections: the shadow light already gives every surface its highlight, and a
+    // second sun here put a hard white glint on everything glossy
   } else {
     const warm = emissive("#ffcf8a", 6);
     const cool = emissive("#a8d8ff", 5);

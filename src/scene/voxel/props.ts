@@ -1,4 +1,4 @@
-import { C, E, G, rand, shades, VoxelModel } from "./model";
+import { C, E, G, palette, rand, shades, VoxelModel, type Paint } from "./model";
 import { lantern, P } from "./parts";
 
 /** Street furniture and nature, each a small voxel model with its collision radius (metres). */
@@ -36,8 +36,10 @@ export function tree(kind: TreeKind, seed: number): Prop {
   m.box(cx - 1, 0, cz - 1, cx + 1, trunkH, cz + 1, P.trunk);
   m.box(cx - 2, 0, cz - 2, cx + 2, 1, cz + 2, P.trunk);
   if (kind === "pine") {
-    for (let k = 0; k < 5; k++) m.cylinder(cx, trunkH + k * 5, cz, 9 - k * 1.7, 5, leaves);
-    m.box(cx, trunkH + 25, cz, cx + 1, trunkH + 28, cz + 1, leaves);
+    // needles are foliage: meshed smooth
+    const soft: Paint = (x, y, z) => palette.leaf(typeof leaves === "number" ? leaves : leaves(x, y, z));
+    for (let k = 0; k < 5; k++) m.cylinder(cx, trunkH + k * 5, cz, 9 - k * 1.7, 5, soft);
+    m.box(cx, trunkH + 25, cz, cx + 1, trunkH + 28, cz + 1, soft);
     return { model: m, radius: 0.5, canopy: [cx, trunkH + 10, cz, 10] };
   }
   // branches

@@ -413,19 +413,20 @@ export class Cemetery {
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
     }
-    const disc = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color: new THREE.Color(1.6, 1.6, 1.45), toneMapped: false, fog: false, depthWrite: false }));
-    disc.scale.setScalar(12);
+    // bright, but not a light source: it no longer sets off the bloom like a second sun
+    const disc = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color: new THREE.Color(0.92, 0.92, 0.86), toneMapped: false, fog: false, depthWrite: false }));
+    disc.scale.setScalar(8);
     const h = document.createElement("canvas");
     h.width = h.height = 128;
     const hc = h.getContext("2d")!;
     const hg = hc.createRadialGradient(64, 64, 8, 64, 64, 64);
-    hg.addColorStop(0, "rgba(220,255,220,0.55)");
-    hg.addColorStop(0.35, "rgba(160,220,180,0.18)");
+    hg.addColorStop(0, "rgba(220,255,220,0.22)");
+    hg.addColorStop(0.35, "rgba(160,220,180,0.07)");
     hg.addColorStop(1, "rgba(120,200,160,0)");
     hc.fillStyle = hg;
     hc.fillRect(0, 0, 128, 128);
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(h), blending: THREE.AdditiveBlending, toneMapped: false, fog: false, depthWrite: false, transparent: true }));
-    halo.scale.setScalar(48);
+    halo.scale.setScalar(26);
     g.add(halo, disc);
     g.position.copy(this.W(CW * 0.62, 0, -260)).setY(46);
     g.visible = false;

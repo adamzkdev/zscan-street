@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { DETAIL_ON, MATERIALS, meshModel } from "../voxel/mesher";
 import { voxelSolid } from "../voxel/surface";
-import { C, half, hash, rand, VOX, VoxelModel, type Paint } from "../voxel/model";
+import { C, half, hash, palette, rand, VOX, VoxelModel, type Paint } from "../voxel/model";
 
 /**
  * The forest's plants as voxel models, instanced: coast redwoods (three heights), Douglas firs,
@@ -15,6 +15,8 @@ export type Species = "redwood" | "redwoodTall" | "redwoodGiant" | "fir" | "mapl
 
 const pick = (ids: number[]): Paint => (x, y, z) => ids[Math.floor(hash(x, y, z, 5) * ids.length)];
 const ids = (hexes: string[]) => hexes.map((h) => C(h));
+/** Foliage colours: meshed smooth (needles, leaves, fronds). */
+const leafIds = (hexes: string[]) => hexes.map((h) => palette.leaf(C(h)));
 
 /** Redwood bark: deep rust with vertical furrows. */
 function bark(seed: number): Paint {
@@ -36,7 +38,7 @@ function redwood(seed: number, H: number, R: number, trunkR: number): VoxelModel
     m.cylinder(cx, y, cz, rr, 1, b);
   }
   // dark blue-green sprays, lit tips; the crown is columnar and clumpy, the lower trunk bare
-  const leaf = ids(["#244a26", "#2b5529", "#1f4022", "#30602e", "#1a3a1e"]);
+  const leaf = leafIds(["#244a26", "#2b5529", "#1f4022", "#30602e", "#1a3a1e"]);
   const tip = ids(["#3e7434", "#467e38", "#386c32"]);
   const put = (x: number, y: number, z: number, lit: boolean) => {
     const p = lit ? tip : leaf;
@@ -88,7 +90,7 @@ function fir(seed: number, H: number, R: number): VoxelModel {
   const cx = W / 2,
     cz = W / 2;
   m.box(cx - 1, 0, cz - 1, cx + 1, H - 3, cz + 1, pick(ids(["#4a3428", "#55392a", "#3e2c22"])));
-  const leaf = ids(["#1f4436", "#26503e", "#1a3a2e", "#2c5a44"]);
+  const leaf = leafIds(["#1f4436", "#26503e", "#1a3a2e", "#2c5a44"]);
   const y0 = Math.floor(H * 0.18);
   for (let y = y0; y < H; y++) {
     const t = (y - y0) / (H - y0);
@@ -119,7 +121,7 @@ function broadleaf(seed: number, H: number, R: number, leaves: string[], trunk: 
     const a = r() * Math.PI * 2;
     for (let k = 0; k < R * 0.7; k++) m.set(cx + Math.cos(a) * k, trunkH - 2 + k * 0.8, cz + Math.sin(a) * k, tk);
   }
-  const lp = ids(leaves);
+  const lp = leafIds(leaves);
   const paint: Paint = (x, y, z) => lp[Math.floor(hash(Math.floor(x / 2), Math.floor(y / 2), Math.floor(z / 2), seed) * lp.length)];
   const top = trunkH + R * 0.55;
   m.blob(cx, top, cz, R * 0.75, paint, 0.3, seed);
@@ -150,7 +152,7 @@ function snag(seed: number, H: number): VoxelModel {
 function fern(seed: number, big: boolean): VoxelModel {
   const r = rand(seed);
   const m = new VoxelModel(16, 8, 16);
-  const g = ids(big ? ["#3c7a34", "#468a3a", "#33692c", "#55993f"] : ["#4a8a3a", "#5c9a40", "#3e7432", "#6aa646"]);
+  const g = leafIds(big ? ["#3c7a34", "#468a3a", "#33692c", "#55993f"] : ["#4a8a3a", "#5c9a40", "#3e7432", "#6aa646"]);
   const n = big ? 9 : 7;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + r() * 0.4;
@@ -171,7 +173,7 @@ function fern(seed: number, big: boolean): VoxelModel {
 function shrub(seed: number, berries: string, leaves: string[]): VoxelModel {
   const r = rand(seed);
   const m = new VoxelModel(16, 10, 16);
-  const lp = pick(ids(leaves));
+  const lp = pick(leafIds(leaves));
   m.blob(8, 3.5, 8, 4.5, lp, 0.35, seed);
   m.blob(5 + r() * 2, 3, 6 + r() * 4, 3.4, lp, 0.35, seed + 1);
   m.blob(10 + r() * 2, 2.5, 9 + r() * 3, 3, lp, 0.35, seed + 2);

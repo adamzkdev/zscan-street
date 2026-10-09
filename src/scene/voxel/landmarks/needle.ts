@@ -1,5 +1,5 @@
 import type { Built } from "../buildings";
-import { C, E, G, hash, rand, shades, VoxelModel, type Paint } from "../model";
+import { C, E, G, hash, palette, rand, shades, VoxelModel, type Paint } from "../model";
 import type { SignSpot } from "../parts";
 import type { LandmarkOpts } from "./index";
 import { lotSize } from "./lot";
@@ -29,7 +29,9 @@ export function palm(m: VoxelModel, x: number, y0: number, z: number, k: number,
   const cx = tx + tw / 2,
     cz = tz + tw / 2;
   m.box(cx - 1, cy - 1, cz - 1, cx + 1, cy + 1, cz + 1, C("#4a6a2a"));
-  const frond = shades(["#3d7a3a", "#2f6a30", "#4a8a40", "#2a5a2c"], 1, seed + 3);
+  const fr = shades(["#3d7a3a", "#2f6a30", "#4a8a40", "#2a5a2c"], 1, seed + 3);
+  // fronds are foliage: meshed smooth
+  const frond: Paint = (x, y, z) => palette.leaf(typeof fr === "number" ? fr : fr(x, y, z));
   const L = mv(3.2, k);
   const n = 9;
   for (let i = 0; i < n; i++) {

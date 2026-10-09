@@ -159,7 +159,7 @@ const FRAG_BUMP = /* glsl */ `
 }
 `;
 
-function hook(kind: Detail) {
+function hook(kind: Detail, spec: number) {
   return (sh: THREE.WebGLProgramParametersWithUniforms) => {
     sh.uniforms.uDetTime = DETAIL_TIME;
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + VERT_HEAD).replace("#include <project_vertex>", "#include <project_vertex>\n" + VERT_BODY);
@@ -167,7 +167,9 @@ function hook(kind: Detail) {
       .replace("#include <common>", `#include <common>\n#define DETAIL_KIND ${IDS[kind]}\n` + FRAG_HEAD)
       .replace("#include <color_fragment>", "#include <color_fragment>\n" + FRAG_COLOR)
       .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
-      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_BUMP);
+      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_BUMP)
+      // a softer highlight from the lamps (big floors under many lights glared)
+      .replace("#include <lights_fragment_end>", `#include <lights_fragment_end>\nreflectedLight.directSpecular *= ${spec.toFixed(2)};`);
   };
 }
 
@@ -175,15 +177,15 @@ function hook(kind: Detail) {
  * Give a standard material its detail. Leaves materials alone that already have their own shader
  * hook, a normal map or a bump map (they have their own relief), and those that are not standard.
  */
-export function addDetail<T extends THREE.Material>(m: T, kind: Detail): T {
+export function addDetail<T extends THREE.Material>(m: T, kind: Detail, spec = 1): T {
   const s = m as unknown as THREE.MeshStandardMaterial;
   if (!DETAIL_ENABLED) return m;
   if (!s.isMeshStandardMaterial || s.normalMap || s.bumpMap || m.userData.detail) return m;
   if (m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) return m;
   m.userData.detail = kind;
-  m.onBeforeCompile = hook(kind);
+  m.onBeforeCompile = hook(kind, spec);
   const base = m.customProgramCacheKey.bind(m);
-  m.customProgramCacheKey = () => `${base()}|detail-${kind}`;
+  m.customProgramCacheKey = () => `${base()}|detail-${kind}|${spec}`;
   return m;
 }
 

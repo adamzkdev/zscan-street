@@ -47,7 +47,8 @@ export function refine(root: THREE.Object3D) {
       done.add(m);
       const s = m as THREE.MeshStandardMaterial;
       for (const t of [s.map, s.emissiveMap, s.roughnessMap]) if (t && t.anisotropy < 8) (t.anisotropy = 8), (t.needsUpdate = true);
-      if (s.isMeshStandardMaterial && !s.transparent && !s.wireframe) addDetail(s, guessDetail(s));
+      // floors take the lamps' highlights at a grazing angle, right in the eye: a third of them
+      if (s.isMeshStandardMaterial && !s.transparent && !s.wireframe) addDetail(s, guessDetail(s), s.userData.polished ? 0.35 : 1);
     }
   });
 }

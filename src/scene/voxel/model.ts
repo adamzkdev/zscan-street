@@ -35,6 +35,8 @@ interface Entry {
   color: THREE.Color;
   kind: Kind;
   mat: Mat;
+  /** Foliage painted as such (blob canopies, bushes): meshed smooth. Green paint never is. */
+  soft?: boolean;
 }
 
 /**
@@ -49,10 +51,16 @@ class Palette {
   /** The same colour as foliage (a solid entry of material class 5). */
   leaf(id: number): number {
     const e = this.entries[id];
-    if (!id || !e || e.kind !== "solid" || e.mat === 5) return id;
+    if (!id || !e || e.kind !== "solid" || e.soft) return id;
     let l = this.leaves.get(id);
     if (l === undefined) {
       l = this.get("#" + e.color.getHexString(), "solid", 1, 5);
+      // its own entry, apart from the same colour painted as a wall
+      if (!this.entries[l].soft) {
+        const k = this.entries.length;
+        this.entries.push({ color: this.entries[l].color, kind: "solid", mat: 5, soft: true });
+        l = k;
+      }
       this.leaves.set(id, l);
     }
     return l;

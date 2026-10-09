@@ -234,6 +234,7 @@ function setTheme(t: Theme) {
   theme = t;
   applyTheme({ renderer, scene, hemi, sun: moon, bloom, lamps: lampLights, decor, city: city.group }, t);
   grade.setTheme(t === "day");
+  bloomThreshold = bloom.threshold;
   hud?.setNight(t === "night");
   weather(true);
   // the place you are in follows (its windows, its light); the others catch up when entered
@@ -242,6 +243,8 @@ function setTheme(t: Theme) {
   shibuyaNight?.(t === "night");
 }
 let shibuyaNight: ((night: boolean) => void) | null = null;
+/** The street's bloom threshold for the theme (raised indoors, see frame). */
+let bloomThreshold = 0.95;
 /** Set once the walk-in places exist (they are built further down). */
 let themeHook: ((t: Theme) => void) | null = null;
 /** The moon's shadow strength for the theme (shadows are faded out, never switched off: see frame). */
@@ -2430,6 +2433,9 @@ function frameBody(stepDt?: number) {
     renderPass.scene = interiors.active.scene;
     renderPass.camera = finish.camera = interiors.walk.camera;
     tilt.set(0);
+    // indoors only real light sources bloom (screens, neon, bulbs: HDR), never a white floor or
+    // wall under the lamps, which glared
+    bloom.threshold = Math.max(bloomThreshold, 1.35);
     // speech bubbles: only for speakers in sight, a steady size, kept apart and on screen
     bubbles.update(dt, interiors.walk.camera, window.innerWidth, window.innerHeight);
     // its shaders are still compiling: hold the last frame behind the entry fade, no stall
@@ -2447,6 +2453,7 @@ function frameBody(stepDt?: number) {
     return;
   }
   renderPass.scene = scene;
+  bloom.threshold = bloomThreshold;
   if (!walking) prompt(null);
   const mapOn = walking && !interiors.active;
   if (mapOn !== minimapOn) minimap.show((minimapOn = mapOn));

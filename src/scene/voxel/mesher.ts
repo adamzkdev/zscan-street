@@ -36,7 +36,7 @@ export function meshModel(m: VoxelModel) {
   const kinds = palette.entries.map((e) => e.kind);
   // foliage is meshed smooth (smooth.ts): left out here, and it hides no face of its neighbours
   // (the smooth surface sits half a voxel inside, a culled wall behind it would show a hole)
-  const soft = palette.entries.map((e) => e.kind === "solid" && e.mat === 5);
+  const soft = palette.entries.map((e) => !!e.soft);
   const hides = (x: number, y: number, z: number) => {
     const c = m.get(x, y, z);
     return c !== 0 && !soft[c];

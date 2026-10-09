@@ -62,24 +62,14 @@ function paint(day: boolean, sunDir: THREE.Vector3) {
 
   const [sx, sy] = toCanvas(sunDir);
   if (day) {
-    // the sun's glow, wide and soft, then the disc
-    for (const [rad, a] of [
-      [520, 0.22],
-      [220, 0.35],
-      [70, 0.7],
-    ] as const) {
-      for (const off of [-W, 0, W]) {
-        const sg = ctx.createRadialGradient(sx + off, sy, 0, sx + off, sy, rad);
-        sg.addColorStop(0, `rgba(255,246,226,${a})`);
-        sg.addColorStop(1, "rgba(255,246,226,0)");
-        ctx.fillStyle = sg;
-        ctx.fillRect(sx + off - rad, sy - rad, rad * 2, rad * 2);
-      }
+    // the sun: a small soft brightening of the sky where the shadows say it is, never a glare
+    for (const off of [-W, 0, W]) {
+      const sg = ctx.createRadialGradient(sx + off, sy, 0, sx + off, sy, 140);
+      sg.addColorStop(0, "rgba(255,248,232,0.4)");
+      sg.addColorStop(1, "rgba(255,248,232,0)");
+      ctx.fillStyle = sg;
+      ctx.fillRect(sx + off - 140, sy - 140, 280, 280);
     }
-    ctx.fillStyle = "#fffaf0";
-    ctx.beginPath();
-    ctx.arc(sx, sy, 9, 0, Math.PI * 2);
-    ctx.fill();
     // cumulus: clusters of soft puffs, flattened, thicker and smaller toward the horizon
     for (let k = 0; k < 46; k++) {
       const elev = 0.04 + Math.pow(r(), 1.6) * 0.55;
@@ -124,25 +114,7 @@ function paint(day: boolean, sunDir: THREE.Vector3) {
       const s = b > 0.985 ? 2.2 : b > 0.9 ? 1.5 : 1;
       ctx.fillRect(x, y, s, s);
     }
-    // the moon where the light comes from, with its halo
-    for (const off of [-W, 0, W]) {
-      const mg = ctx.createRadialGradient(sx + off, sy, 0, sx + off, sy, 160);
-      mg.addColorStop(0, "rgba(200,210,255,0.35)");
-      mg.addColorStop(1, "rgba(200,210,255,0)");
-      ctx.fillStyle = mg;
-      ctx.fillRect(sx + off - 160, sy - 160, 320, 320);
-    }
-    ctx.fillStyle = "#eef0ff";
-    ctx.beginPath();
-    ctx.arc(sx, sy, 11, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "rgba(170,175,200,0.35)";
-    for (const [dx, dy, rr] of [
-      [-3, -2, 3],
-      [3, 3, 2.2],
-      [2, -4, 1.6],
-    ])
-      ctx.beginPath(), ctx.arc(sx + dx, sy + dy, rr, 0, Math.PI * 2), ctx.fill();
+    // (the moon is the cemetery's, over its chapel: no second one here)
     // thin clouds lit from below by the city
     for (let k = 0; k < 30; k++) {
       const elev = 0.03 + Math.pow(r(), 2) * 0.3;
