@@ -11,7 +11,7 @@ p.on("console", (m) => m.type() === "error" && !m.text().includes("Failed to loa
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let reloaded = false;
 p.on("framenavigated", (f) => f === p.mainFrame() && (reloaded = true));
-await p.goto(`http://localhost:${process.env.PORT ?? 3007}/?debug&theme=${theme}&interior=${key}`);
+await p.goto(`${process.env.BASE ?? `http://localhost:${process.env.PORT ?? 3007}`}/?debug&theme=${theme}&interior=${key}`);
 async function ready() {
   for (let k = 0; k < 120; k++) {
     try {
