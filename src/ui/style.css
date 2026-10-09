@@ -5652,3 +5652,10 @@ a.srow:hover span {
   opacity: 0.45;
   cursor: default;
 }
+/* the NEWS mailbox stays out of the way on foot and inside the places, like the bottom strip */
+.walking .mailbtn,
+.walking .inbox,
+.indoors .mailbtn,
+.indoors .inbox {
+  display: none;
+}
