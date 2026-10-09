@@ -88,25 +88,37 @@ const FINISH = {
     // Screen-space curvature: ridges catch the light, creases go dark (a bevel on every voxel edge
     // and on every piece of furniture, without touching the geometry). Planes give zero: 1/z is
     // affine across the screen in perspective, z itself in orthographic.
+    // Rounded edges: how far the surface at this pixel stands out of (or sinks into) the plane
+    // through its neighbours a few centimetres away, in units of that distance. A plane gives 0
+    // at any slope (1/z is affine across the screen in perspective, z in orthographic); along a
+    // convex voxel edge it rises to about 0.5 over a band as wide as the bevel, which reads as a
+    // rounded corner catching the light; a crease gives the opposite.
+    float plane(float a, float b) {
+      return cavPersp > 0.5 ? 2.0 / (1.0 / a + 1.0 / b) : 0.5 * (a + b);
+    }
+    float axisK(float c, vec2 o, float R) {
+      float a = lin(vUv - o), b = lin(vUv + o);
+      float k = (plane(a, b) - c) / R;
+      // a silhouette, not a fold: leave it alone
+      return k * (1.0 - smoothstep(0.9, 1.6, abs(k)));
+    }
     float curvature(){
       float c = lin(vUv);
       if (c > cavFar * 0.98) return 0.0;
-      float l = lin(vUv - vec2(texel.x, 0.0)), r = lin(vUv + vec2(texel.x, 0.0));
-      float b = lin(vUv - vec2(0.0, texel.y)), u = lin(vUv + vec2(0.0, texel.y));
-      // a jump in depth is a silhouette, not a fold: leave it alone
-      float jump = max(max(abs(l - c), abs(r - c)), max(abs(b - c), abs(u - c)));
-      float k;
-      if (cavPersp > 0.5) k = (2.0 - c / l - c / r) + (2.0 - c / b - c / u);
-      else k = ((l + r - 2.0 * c) + (b + u - 2.0 * c));
-      k *= cavScale;
-      // a silhouette jumps by several pixel footprints at once (perspective: relative to the depth)
-      float steps = cavPersp > 0.5 ? jump / c * cavScale : jump * cavScale;
-      float fold = 1.0 - smoothstep(2.0, 5.0, steps);
-      // fades out with distance, where a voxel is a pixel or two
-      // below a threshold it is depth-buffer noise on a plane, and more so on a plane seen edge-on
-      float dead = 0.25 + 0.5 * steps;
-      k = sign(k) * smoothstep(dead, dead + 0.7, abs(k));
-      return k * fold * (1.0 - smoothstep(60.0, 140.0, c));
+      // metres per pixel at this depth, and the bevel in pixels
+      float mpp = cavPersp > 0.5 ? c * cavScale : cavScale;
+      float R = 0.05;
+      float px = clamp(R / mpp, 1.0, 16.0);
+      float Rm = px * mpp;
+      float k = 0.0;
+      for (int i = 1; i <= 2; i++) {
+        float f = float(i) * 0.5;
+        vec2 ox = vec2(texel.x * px * f, 0.0), oy = vec2(0.0, texel.y * px * f);
+        k += axisK(c, ox, Rm * f) + axisK(c, oy, Rm * f);
+      }
+      k *= 0.5;
+      // far away a voxel is a pixel or two: the effect hands over to the AO
+      return clamp(k, -1.0, 1.0) * (1.0 - smoothstep(50.0, 120.0, c));
     }
     void main(){
       vec4 t = texture2D(tDiffuse, vUv);
@@ -115,7 +127,7 @@ const FINISH = {
       if (cavity > 0.0) {
         float k = curvature();
         // (a ridge brightens, but never pushes a near-white into the bloom)
-        c *= 1.0 + cavity * (k > 0.0 ? k * 0.9 * (1.0 - smoothstep(0.5, 0.9, l0)) : k * 0.6);
+        c *= 1.0 + cavity * (k > 0.0 ? k * 1.1 * (1.0 - smoothstep(0.5, 0.9, l0)) : k * 0.9);
       }
       // occlusion darkens what is lit by the sky, not the lights themselves (neon, windows)
       float ao = texture2D(tAO, vUv).r;
@@ -357,19 +369,18 @@ export class FinishPass extends Pass {
     } else f.ssrOn.value = 0;
     const cam = this.camera as THREE.PerspectiveCamera & THREE.OrthographicCamera;
     if (this.ao && depth && this.cavity > 0) {
-      const px = 1.5;
       f.tDepth.value = depth;
       f.cavity.value = this.cavity;
       f.cavNear.value = cam.near;
       f.cavFar.value = cam.far;
-      f.texel.value.set(px / this.fw, px / this.fh);
+      f.texel.value.set(1 / this.fw, 1 / this.fh);
+      // metres per pixel: per metre of depth in perspective, flat in orthographic
       if (cam.isPerspectiveCamera) {
         f.cavPersp.value = 1;
-        // radians per sample step: the kink of a right angle reads about 1
-        f.cavScale.value = 1 / ((THREE.MathUtils.degToRad(cam.fov) / this.fh) * px * 2);
+        f.cavScale.value = (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) / this.fh;
       } else {
         f.cavPersp.value = 0;
-        f.cavScale.value = 1 / ((((cam.top - cam.bottom) / cam.zoom) / this.fh) * px * 2);
+        f.cavScale.value = (cam.top - cam.bottom) / cam.zoom / this.fh;
       }
     } else f.cavity.value = 0;
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);

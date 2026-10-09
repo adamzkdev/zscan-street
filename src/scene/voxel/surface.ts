@@ -15,18 +15,24 @@ varying float vMat;
 `;
 
 const VERT_NORMAL = /* glsl */ `
-vMat = 0.0;
+vMat = -1.0;
 {
   // a voxel face: one major axis, both minors equal to class × 2/127 (in proportion, should the
   // geometry have been rotated or scaled on the way)
   vec3 an = abs(objectNormal);
   float mj = max(an.x, max(an.y, an.z));
-  float mn = (an.x + an.y + an.z - mj) * 0.5;
-  if (mj > 0.85 && mn < mj * 0.12) {
-    vMat = floor(mn / mj * 63.5 + 0.5);
+  float lo = min(an.x, min(an.y, an.z));
+  float mid = an.x + an.y + an.z - mj - lo;
+  if (mj > 0.85 && mid < mj * 0.12 && mid - lo < mj * 0.01) {
+    vMat = floor(mid / mj * 63.5 + 0.5);
     objectNormal = sign(objectNormal) * step(vec3(mj), an);
   }
 }
+#ifdef USE_COLOR
+// a smooth surface (foliage, see smooth.ts): its material from its colour
+if (vMat < 0.0) vMat = (color.g > color.r * 1.08 && color.g > color.b * 1.02) ? 5.0 : 0.0;
+#endif
+if (vMat < 0.0) vMat = 0.0;
 vVoxN = objectNormal;
 `;
 

@@ -20,7 +20,8 @@ export function classify(color: THREE.Color): Mat {
   const h = _hsl.h * 360,
     s = _hsl.s,
     l = _hsl.l;
-  if (h >= 70 && h <= 170 && s > 0.22 && l > 0.12 && l < 0.75) return 5;
+  // natural greens (leaves, needles, lawn); bright or saturated green paint stays paint
+  if (h >= 75 && h <= 165 && s > 0.2 && s < 0.7 && l > 0.1 && l < 0.5) return 5;
   if (l < 0.15) return 6;
   if (s < 0.12 && l > 0.8) return 7;
   if (s < 0.2) return 3;
@@ -43,6 +44,19 @@ interface Entry {
 class Palette {
   readonly entries: Entry[] = [{ color: new THREE.Color(0, 0, 0), kind: "solid", mat: 0 }];
   private index = new Map<string, number>();
+
+  private leaves = new Map<number, number>();
+  /** The same colour as foliage (a solid entry of material class 5). */
+  leaf(id: number): number {
+    const e = this.entries[id];
+    if (!id || !e || e.kind !== "solid" || e.mat === 5) return id;
+    let l = this.leaves.get(id);
+    if (l === undefined) {
+      l = this.get("#" + e.color.getHexString(), "solid", 1, 5);
+      this.leaves.set(id, l);
+    }
+    return l;
+  }
 
   get(hex: string, kind: Kind = "solid", strength = 1, mat?: Mat): number {
     const key = `${hex}|${kind}|${strength}|${mat ?? ""}`;
@@ -166,7 +180,8 @@ export class VoxelModel {
       for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++)
         for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
           const dd = Math.sqrt((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 * 1.15 + (z + 0.5 - cz) ** 2);
-          if (dd <= r * (1 - rough * hash(x, y, z, seed))) this.set(x, y, z, c);
+          // what a blob paints is foliage (canopies, bushes, blossom): meshed smooth
+          if (dd <= r * (1 - rough * hash(x, y, z, seed))) this.set(x, y, z, palette.leaf(typeof c === "number" ? c : c(x, y, z)));
         }
   }
 
@@ -195,10 +210,32 @@ export class VoxelModel {
   }
 }
 
-/** Two or three close shades picked by position: the hand-painted look of voxel art. */
+/** Smooth value noise in [0,1) on a lattice of `cell` voxels. */
+function soft(x: number, y: number, z: number, cell: number, seed: number) {
+  const fx = x / cell,
+    fy = y / cell,
+    fz = z / cell;
+  const ix = Math.floor(fx),
+    iy = Math.floor(fy),
+    iz = Math.floor(fz);
+  const s = (t: number) => t * t * (3 - 2 * t);
+  const ux = s(fx - ix),
+    uy = s(fy - iy),
+    uz = s(fz - iz);
+  const l = (a: number, b: number, t: number) => a + (b - a) * t;
+  const h = (dx: number, dy: number, dz: number) => hash(ix + dx, iy + dy, iz + dz, seed);
+  return l(l(l(h(0, 0, 0), h(1, 0, 0), ux), l(h(0, 1, 0), h(1, 1, 0), ux), uy), l(l(h(0, 0, 1), h(1, 0, 1), ux), l(h(0, 1, 1), h(1, 1, 1), ux), uy), uz);
+}
+
+/**
+ * Two or three close shades, spread in soft patches a metre or two across (weathered stone,
+ * sun-faded paint, a lawn), not voxel by voxel: a per-voxel pick read as a checkerboard of
+ * pixels. The shader adds the fine grain (see surface.ts).
+ */
 export function shades(hexes: string[], scale = 1, seed = 0): Paint {
   const ids = hexes.map((h) => C(h));
-  return (x, y, z) => ids[Math.floor(hash(Math.floor(x / scale), Math.floor(y / scale), Math.floor(z / scale), seed) * ids.length)];
+  const cell = 9 * scale;
+  return (x, y, z) => ids[Math.min(ids.length - 1, Math.floor(soft(x, y, z, cell, seed) * ids.length))];
 }
 
 /**

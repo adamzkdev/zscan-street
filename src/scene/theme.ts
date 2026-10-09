@@ -4,6 +4,10 @@ import type { Decor } from "./decor";
 import type { LampLights } from "./post";
 import { MATERIALS } from "./voxel/mesher";
 import { cityEnvironment } from "./envmap";
+import { SKY_HORIZON, skyTexture } from "./skydome";
+
+/** Where the sun (by night the moon) stands, seen from the city: the shadow light's offset. */
+const SUN_DIR = new THREE.Vector3(-18, 34, 22);
 
 export type Theme = "day" | "night";
 
@@ -18,36 +22,6 @@ export interface ThemeTargets {
   city: THREE.Object3D;
 }
 
-function gradient(stops: [number, string][]) {
-  const c = document.createElement("canvas");
-  c.width = 4;
-  c.height = 256;
-  const ctx = c.getContext("2d")!;
-  const g = ctx.createLinearGradient(0, 0, 0, 256);
-  for (const [k, col] of stops) g.addColorStop(k, col);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 4, 256);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-const SKY = {
-  // a pale lavender studio sky, like a product render
-  day: gradient([
-    [0, "#f4f5fd"],
-    [0.6, "#e7e9f8"],
-    [1, "#d9dcf3"],
-  ]),
-  // a night sky that glows magenta toward the horizon, as over a city that never sleeps
-  night: gradient([
-    [0, "#05040a"],
-    [0.55, "#0d0820"],
-    [0.85, "#2a0e34"],
-    [1, "#3a1238"],
-  ]),
-};
-
 const EMIT_NIGHT = new THREE.Color(1, 1, 1);
 const EMIT_DAY = new THREE.Color(0.62, 0.62, 0.66);
 
@@ -58,8 +32,8 @@ const EMIT_DAY = new THREE.Color(0.62, 0.62, 0.66);
 export function applyTheme(t: ThemeTargets, theme: Theme) {
   const day = theme === "day";
   const { renderer, scene, hemi, sun, bloom } = t;
-  scene.background = SKY[theme];
-  scene.fog = day ? new THREE.Fog("#e4e6f6", 170, 360) : new THREE.Fog("#1a0c26", 150, 330);
+  scene.background = skyTexture(day, SUN_DIR);
+  scene.fog = day ? new THREE.Fog(SKY_HORIZON.day, 170, 360) : new THREE.Fog(SKY_HORIZON.night, 150, 330);
   scene.environment = cityEnvironment(renderer, day);
   scene.environmentIntensity = day ? 0.45 : 0.24;
   renderer.toneMappingExposure = day ? 0.92 : 1.05;

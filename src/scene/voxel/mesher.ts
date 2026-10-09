@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { palette, VOX, type Kind, type VoxelModel } from "./model";
 import { voxelGlass, voxelSolid } from "./surface";
+import { smoothPart } from "./smooth";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /**
  * Size of one material step in a voxel normal's minor components: 2/127, exact in the worker's
@@ -32,6 +34,13 @@ export function meshModel(m: VoxelModel) {
   const dims = [m.w, m.h, m.d];
   const solid = (x: number, y: number, z: number) => m.get(x, y, z) !== 0;
   const kinds = palette.entries.map((e) => e.kind);
+  // foliage is meshed smooth (smooth.ts): left out here, and it hides no face of its neighbours
+  // (the smooth surface sits half a voxel inside, a culled wall behind it would show a hole)
+  const soft = palette.entries.map((e) => e.kind === "solid" && e.mat === 5);
+  const hides = (x: number, y: number, z: number) => {
+    const c = m.get(x, y, z);
+    return c !== 0 && !soft[c];
+  };
 
   for (let d = 0; d < 3; d++) {
     const u = (d + 1) % 3,
@@ -52,7 +61,7 @@ export function meshModel(m: VoxelModel) {
             const nx = x[0] + (back ? -q[0] : q[0]),
               ny = x[1] + (back ? -q[1] : q[1]),
               nz = x[2] + (back ? -q[2] : q[2]);
-            if (!c || solid(nx, ny, nz)) {
+            if (!c || soft[c] || hides(nx, ny, nz)) {
               mask[n] = 0;
               continue;
             }
@@ -117,6 +126,14 @@ export function meshModel(m: VoxelModel) {
     g.computeBoundingSphere();
     g.computeBoundingBox();
     out[kind] = g;
+  }
+  const leaves = smoothPart(m, (c) => soft[c]);
+  if (leaves) {
+    leaves.computeBoundingSphere();
+    leaves.computeBoundingBox();
+    out.solid = out.solid ? mergeGeometries([out.solid, leaves], false) : leaves;
+    out.solid.computeBoundingSphere();
+    out.solid.computeBoundingBox();
   }
   return out;
 }

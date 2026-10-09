@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { FXAAPass } from "three/examples/jsm/postprocessing/FXAAPass.js";
+import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { connectFeed, ZScan } from "./data/zscan";
@@ -211,8 +211,8 @@ for (const p of tilt.passes) composer.addPass(p);
 const grade = new GradePass();
 composer.addPass(grade);
 composer.addPass(new OutputPass());
-const fxaa = new FXAAPass();
-composer.addPass(fxaa);
+const smaa = new SMAAPass();
+composer.addPass(smaa);
 
 /** Day, night, or "auto": follows the visitor's own clock (night from 19:00 to 7:00). */
 type ThemePref = Theme | "auto";
@@ -324,9 +324,9 @@ const quality = new Quality((q) => {
   tilt.allowed = q.tilt;
   finish.ao = q.ao;
   finish.ssr = q.ssr;
-  // antialiasing by FXAA after tone mapping (MSAA cost a third of the frame in the dense views);
+  // antialiasing by SMAA after tone mapping (MSAA cost a third of the frame in the dense views);
   // on a retina screen the pixels are their own antialiasing
-  fxaa.enabled = dpr < 1.75;
+  smaa.enabled = dpr < 1.75;
   finish.aoScale = dpr >= 1.5 ? 3 : 2;
   resize();
 });
