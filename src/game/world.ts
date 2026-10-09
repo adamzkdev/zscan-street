@@ -98,7 +98,8 @@ export class GameWorld {
   }
 
   private weather() {
-    const on = this.mempool >= STORM_MEMPOOL || this.bigBlock > 0;
+    // no storms: the city stays dry (no rain, no lightning)
+    const on = false && (this.mempool >= STORM_MEMPOOL || this.bigBlock > 0);
     if (on === this.stormy) return;
     this.stormy = on;
     this.hooks.storm(on);

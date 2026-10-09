@@ -285,9 +285,11 @@ let jobs: Jobs | null = null;
 /** The city's agents: the day's cast and everyone's persona (game/agents.ts). */
 let agents: Agents | null = null;
 const rainListeners: ((on: boolean) => void)[] = [];
+/** No rain in the city any more (the user's call): the weather stays dry whatever happens. */
+const RAIN = false;
 function weather(now = false) {
-  const raining = rainOn && ((theme === "night" && showering) || chainStorm);
-  setRainWanted(rainOn && (showering || chainStorm));
+  const raining = RAIN && rainOn && ((theme === "night" && showering) || chainStorm);
+  setRainWanted(RAIN && rainOn && (showering || chainStorm));
   decor.setRain(raining, now);
   sound.setRain(raining);
   for (const fn of rainListeners) fn(raining);
@@ -1527,20 +1529,7 @@ function highlight(key: Interior["key"] | null) {
   set(lit, false);
   set(key, true);
   lit = key;
-  // and a gold outline around it
-  const o = key && occluderOf(key);
-  outline.visible = !!o;
-  if (o) {
-    o.box.getCenter(outline.position);
-    o.box.getSize(outline.scale).addScalar(0.3);
-  }
 }
-const outline = new THREE.LineSegments(
-  new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
-  new THREE.LineBasicMaterial({ color: new THREE.Color("#f4b728").multiplyScalar(2.2), toneMapped: false, transparent: true, opacity: 0.9 }),
-);
-outline.visible = false;
-scene.add(outline);
 
 /** The walk-in place under the cursor: the MEMPOOL shop, the card shop, the bank, the factory. */
 function placeAt(x: number, y: number): Interior["key"] | null {

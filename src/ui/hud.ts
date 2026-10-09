@@ -237,8 +237,6 @@ export class Hud {
   private tv = false;
   private rain = true;
   private theme: Theme | "auto";
-  /** What is showing right now (on "auto" it depends on the hour). */
-  private night = false;
   private sig = "";
   private camOpen = false;
   private labels = new Map<string, HTMLElement>();
@@ -368,9 +366,8 @@ export class Hud {
     this.renderStrip(true);
   }
 
-  /** Night or day is showing (the rain switch only makes sense at night). */
-  setNight(on: boolean) {
-    this.night = on;
+  /** Night or day is showing. */
+  setNight(_on: boolean) {
     if (this.camOpen) this.renderCam();
   }
 
@@ -755,7 +752,7 @@ export class Hud {
     if (!showTag) this.tagHover = false;
     if (showTag)
       for (const p of this.places.filter((x) => x.key === hv.key))
-        want.set(`p${p.key}`, { at: p.at, cls: "placetag", html: `<button data-place="${p.key}"><b>${p.label}</b><span>${p.sub}</span><i>ENTER ▸</i></button>` });
+        want.set(`p${p.key}`, { at: p.at, cls: "placetag", html: `<button data-place="${p.key}"><b>${p.label}</b><i>ENTER ▸</i></button>` });
     for (const [k, el] of this.labels)
       if (!want.has(k)) {
         el.remove();
@@ -807,7 +804,7 @@ export class Hud {
       <div class="mh">Options</div>
       <div class="switch"><span>TV mode</span><button class="toggle ${this.tv ? "on" : ""}" data-act="tv" aria-label="Toggle TV mode"></button></div>
       <div class="switch"><span>Cut to the bus stop</span><button class="toggle ${this.auto ? "on" : ""}" data-act="auto" aria-label="Toggle cinematic cuts"></button></div>
-      ${this.night ? `<div class="switch"><span>Rain</span><button class="toggle ${this.rain ? "on" : ""}" data-act="rain" aria-label="Toggle rain"></button></div>` : ""}
+
       <div class="keys">drag move · right-drag turn · scroll zoom · WASD fly</div>`;
   }
 

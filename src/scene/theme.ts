@@ -75,7 +75,7 @@ export function applyTheme(t: ThemeTargets, theme: Theme) {
   document.documentElement.dataset.theme = theme;
 }
 
-let rainWanted = true;
+let rainWanted = false;
 export function setRainWanted(on: boolean) {
   rainWanted = on;
 }
