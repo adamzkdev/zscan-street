@@ -190,7 +190,7 @@ const GLASS = /* glsl */ `
   vec2 cell = floor(q / vec2(0.667, 0.833));
   vec3 t = vec3(vxHash(cell), vxHash(cell + 7.13), vxHash(cell + 3.71)) - 0.5;
   normal = normalize(normal + t * 0.07);
-  roughnessFactor = 0.05 + vxHash(cell + 1.9) * 0.1;
+  roughnessFactor = 0.24 + vxHash(cell + 1.9) * 0.14;
 }
 `;
 

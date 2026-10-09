@@ -106,7 +106,7 @@ export function planterBox(m: VoxelModel, x0: number, y0: number, z0: number, x1
 // ---- ZEC NEEDLE ----------------------------------------------------------------------------------
 
 /**
- * ZEC NEEDLE, the city's tallest tower (~160 m): a Burj-style Y plan whose three wings step back
+ * ZEC NEEDLE, the city's tallest tower (~280 m with its spire, well above every other): a Burj-style Y plan whose three wings step back
  * in a spiral as it rises, silver-blue glass between continuous vertical fins, a gold-lit
  * observation deck at two thirds of the height, a lit ZEC crown and a long spire with a red tip.
  * At its foot a grand lobby in the front wing and pools with fountain jets between the wings.
@@ -121,7 +121,9 @@ export function planterBox(m: VoxelModel, x0: number, y0: number, z0: number, x1
 export function needle(seed: number, o: LandmarkOpts): Built {
   const k = 2;
   const { W, D } = lotSize(o, k);
-  const H = 492;
+  // its height, stretched from the first design (glass top 360, deck 246) to stand over the skyline
+  const S = 1.7;
+  const H = Math.round(492 * S);
   const m = new VoxelModel(W, H, D);
   const r = rand(seed);
   const cx = W / 2,
@@ -144,16 +146,17 @@ export function needle(seed: number, o: LandmarkOpts): Built {
   // ---- the Y plan: three wings at 90° (front), 210°, 330°, each stepping back on its own beat
   const wingA = [Math.PI / 2, (Math.PI * 7) / 6, (Math.PI * 11) / 6];
   const wdir = wingA.map((a) => [Math.cos(a), Math.sin(a)]);
-  const top = 360; // top of the glass
+  const top = Math.round(360 * S); // top of the glass
   const L0 = 29;
   const wingLen = (i: number, y: number) => {
     // setbacks every 26 voxels, rotating round the wings: the Burj spiral
     let L = L0;
-    for (let s = 34 + i * 26; s < y; s += 78) L -= 4.2;
+    for (let s = (34 + i * 26) * S; s < y; s += 78 * S) L -= 4.2;
     return L;
   };
   const halfW = (y: number) => 7.2 - (y / top) * 2.6;
-  const coreR = (y: number) => (y < 300 ? 9.5 - (y / 300) * 2.5 : 7 - ((y - 300) / (top - 300)) * 3.2);
+  const C300 = 300 * S;
+  const coreR = (y: number) => (y < C300 ? 9.5 - (y / C300) * 2.5 : 7 - ((y - C300) / (top - C300)) * 3.2);
   const inside = (x: number, z: number, y: number, grow = 0) => {
     const dx = x + 0.5 - cx,
       dz = z + 0.5 - cz;
@@ -195,7 +198,7 @@ export function needle(seed: number, o: LandmarkOpts): Built {
   const warm = [E("#ffd08a", 1.1), E("#ffc070", 1.15)],
     cool = [E("#cfe8ff", 1.0), E("#a8dcff", 1.05)];
   const FL = 9; // a floor: 3 m
-  const deckY = 246;
+  const deckY = Math.round(246 * S);
 
   const gold = E("#f4b728", 2.4);
   const interior = C("#5a6478");

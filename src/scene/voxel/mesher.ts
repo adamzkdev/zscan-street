@@ -175,7 +175,8 @@ function emitQuad(bufs: Record<Kind, Buf>, d: number, u: number, v: number, s: n
 
 export const MATERIALS = {
   solid: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.02 }),
-  glass: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.12, metalness: 0.55 }),
+  // glass: a reflection that reads, never a mirror of the bright sky (whole towers glared)
+  glass: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.3, envMapIntensity: 0.7 }),
   emit: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
 };
 
