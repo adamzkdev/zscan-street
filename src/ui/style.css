@@ -5659,3 +5659,21 @@ a.srow:hover span {
 .indoors .inbox {
   display: none;
 }
+/* the info card of something clicked inside a place: nothing cut off (long verdicts, long names) */
+.panel[data-item="pick"] h2 {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.15;
+}
+.panel[data-item="pick"] .stats {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+.panel[data-item="pick"] .stats div {
+  padding-right: 6px;
+}
+.panel[data-item="pick"] .stats dd {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}

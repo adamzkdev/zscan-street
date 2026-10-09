@@ -1995,11 +1995,13 @@ window.addEventListener("keydown", (e) => {
   talkTo(talkNear);
 });
 visitors.onEvent((e) => {
-  if (e.k === "whale") whale.remote();
+  if (WHALE_ON && e.k === "whale") whale.remote();
   if (e.k === "egg" && e.n) eggs.taken(e.n);
 });
+/** The glass whale over the avenue: off (it glitched); big public amounts still ride a limousine. */
+const WHALE_ON = false;
 director.onTx((tx) => {
-  if (whale.active || tx.kind === "shielded" || (tx.visible ?? 0) < WHALE_ZAT) return;
+  if (!WHALE_ON || whale.active || tx.kind === "shielded" || (tx.visible ?? 0) < WHALE_ZAT) return;
   whale.spawn(tx, visitors.others_count);
   gameHud.mail("whale", "Whale alert", `${((tx.visible ?? 0) / 1e8).toLocaleString("en-US", { maximumFractionDigits: 0 })} ZEC moving in public over the avenue. Tap it to shield it.`, {
     label: "Go",
