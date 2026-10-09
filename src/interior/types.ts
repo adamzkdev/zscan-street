@@ -39,7 +39,9 @@ export interface PickInfo {
   /** Main link, e.g. to ZScan. */
   link?: { href: string; label: string };
   /** Opens one of the shop panels (the bank's terminals). */
-  panel?: "bank" | "cards";
+  panel?: "bank" | "cards" | "wallets" | "guestbook";
+  /** The wallet on show that was clicked (the hall's phones). */
+  wallet?: "zodl" | "vizor" | "noir";
   /** Starts a mini-game (the ZK TOWER's apartments). */
   game?: import("../ui/arcade").Game;
   /** Takes the elevator to this floor (clicking its doors). */

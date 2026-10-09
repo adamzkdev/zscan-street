@@ -5,6 +5,7 @@ import { hall } from "./hall";
 import { trading } from "./trading";
 import { executive, museum, roof } from "./upper";
 import { deposit, vault } from "./vault";
+import { wallets } from "./wallets";
 import { LEVELS, ReserveKit } from "./kit";
 
 /**
@@ -23,6 +24,7 @@ export function buildReserve(ctx: InteriorContext): Interior {
   });
   const k = new ReserveKit(ctx, scene);
   hall(k);
+  wallets(k);
   trading(k);
   vault(k);
   deposit(k);

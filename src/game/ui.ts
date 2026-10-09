@@ -2,7 +2,7 @@
 import { pix } from "../ui/hud";
 
 /** What kind of news a message is: its sign and colour in the inbox. */
-export type MailKind = "mayor" | "paper" | "power" | "storm" | "quake" | "whale" | "secret" | "event" | "city" | "works";
+export type MailKind = "mayor" | "paper" | "power" | "storm" | "quake" | "whale" | "secret" | "event" | "city" | "works" | "chain";
 const MAIL: Record<MailKind, { k: string; c: string }> = {
   mayor: { k: "令", c: "#f4b728" },
   paper: { k: "新", c: "#e8e4dc" },
@@ -14,6 +14,7 @@ const MAIL: Record<MailKind, { k: string; c: string }> = {
   event: { k: "祭", c: "#ff7aa8" },
   city: { k: "市", c: "#5fd7ff" },
   works: { k: "建", c: "#ffb347" },
+  chain: { k: "鎖", c: "#ff9a3c" },
 };
 interface Mail {
   kind: MailKind;

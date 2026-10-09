@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { PayEvent } from "../data/streetpay";
 import { API } from "../data/zscan";
 import { CURB } from "./city";
 import { loadArt, Snark } from "./snark";
@@ -56,6 +57,8 @@ export class Visitors {
   private eventFns: ((e: CityEvent) => void)[] = [];
   private plotFns: ((plot: number) => void)[] = [];
   private worksFns: (() => void)[] = [];
+  private payFns: ((e: PayEvent) => void)[] = [];
+  private markFns: ((e: { id: number; likes?: number; hidden?: boolean }) => void)[] = [];
   /** How many visitors are in each place (key → count), from the last list. */
   readonly places = new Map<string, number>();
 
@@ -96,6 +99,8 @@ export class Visitors {
           else if (msg.type === "event" && msg.id !== this.me) for (const fn of this.eventFns) fn(msg as CityEvent);
           else if (msg.type === "plot") for (const fn of this.plotFns) fn(msg.plot as number);
           else if (msg.type === "works") for (const fn of this.worksFns) fn();
+          else if (msg.type === "pay") for (const fn of this.payFns) fn(msg as PayEvent);
+          else if (msg.type === "mark") for (const fn of this.markFns) fn(msg);
         } catch {}
       };
       ws.onclose = () => {
@@ -115,6 +120,16 @@ export class Visitors {
   /** A player plot was rebuilt (somebody saved their building). */
   onPlot(fn: (plot: number) => void) {
     this.plotFns.push(fn);
+  }
+
+  /** A wallet payment played (a message sealed, a tip, a sealed vote). */
+  onPay(fn: (e: PayEvent) => void) {
+    this.payFns.push(fn);
+  }
+
+  /** A message on the ground was liked or hidden. */
+  onMark(fn: (e: { id: number; likes?: number; hidden?: boolean }) => void) {
+    this.markFns.push(fn);
   }
 
   /** The city works changed (a vote, a site opened). */

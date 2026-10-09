@@ -37,6 +37,8 @@ export interface Proposal {
 	plan: Plan;
 	backers: Who[];
 	votes: number;
+	/** Votes paid from a wallet (a shielded payment with the vote in its memo). */
+	sealed?: number;
 }
 export interface SiteRow {
 	site: number;
@@ -67,6 +69,8 @@ export interface WorksHooks {
 	go(x: number, z: number): void;
 	/** Where the visitor is (on foot or the camera's focus). */
 	near(): THREE.Vector3;
+	/** Vote with a wallet: a shielded payment carries the vote. */
+	sealedVote?(round: number, idx: number, name: string): void;
 }
 
 const SEEN = "street.works";
@@ -739,7 +743,7 @@ export class Works {
 		clock: ChainClock,
 		private hud: GameHud,
 		private decor: Decor,
-		private hooks: WorksHooks
+		readonly hooks: WorksHooks
 	) {
 		works = this;
 		scene.add(this.group, this.anchor);
@@ -752,6 +756,13 @@ export class Works {
 			if (!a) return;
 			if (a.dataset.a === "close") this.panel.classList.remove("open");
 			if (a.dataset.a === "vote") void this.vote(Number(a.dataset.i));
+			if (a.dataset.a === "seal" && this.state) {
+				const p = this.state.proposals.find((x) => x.idx === Number(a.dataset.i));
+				if (p) {
+					this.panel.classList.remove("open");
+					this.hooks.sealedVote?.(this.state.round, p.idx, p.name);
+				}
+			}
 			if (a.dataset.a === "go") {
 				const s = this.sites[Number(a.dataset.i)];
 				this.panel.classList.remove("open");
@@ -929,7 +940,7 @@ export class Works {
 		const mine = seen().vote;
 		const left = Math.max(0, s.end - (s.tip || 0));
 		const hours = (left * 75) / 3600;
-		const total = s.proposals.reduce((a, p) => a + p.votes, 0) || 1;
+		const total = s.proposals.reduce((a, p) => a + p.votes + (p.sealed ?? 0), 0) || 1;
 		const active = this.active;
 		const built = this.sites.filter((x) => x.done && x.row);
 		const focus = this.focus >= 0 ? this.sites[this.focus] : null;
@@ -955,10 +966,11 @@ export class Works {
 					  }</ul>`
 					: ""
 			}
-          <div class="bar"><i style="width:${Math.round((p.votes / total) * 100)}%"></i><span>${p.votes} vote${
+          <div class="bar"><i style="width:${Math.round(((p.votes + (p.sealed ?? 0)) / total) * 100)}%"></i><span>${p.votes} vote${
 				p.votes === 1 ? "" : "s"
-			}</span></div>
+			}${p.sealed ? ` · ${p.sealed} sealed` : ""}</span></div>
           <button data-a="vote" data-i="${p.idx}" ${voted ? "disabled" : ""}>${voted ? "Your vote ✓" : "Vote"}</button>
+          ${this.hooks.sealedVote ? `<button data-a="seal" data-i="${p.idx}" class="seal" title="Vote with a shielded payment from your wallet">Seal with wallet</button>` : ""}
         </div>
       </article>`;
 		};

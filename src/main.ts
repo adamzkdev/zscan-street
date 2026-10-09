@@ -118,6 +118,9 @@ import { Jobs } from "./game/jobs";
 import { Casino } from "./game/casino";
 import { TimeTravel } from "./game/timetravel";
 import { TUNNEL } from "./scene/city/plan";
+import { PayDesk } from "./ui/paydesk";
+import { Marks } from "./game/marks";
+import { myRefs, type PayEvent } from "./data/streetpay";
 
 // ---- renderer ----------------------------------------------------------------------------------
 // The API down or rate-limiting (a portrait, a block that won't load): whoever asked just goes
@@ -1183,6 +1186,7 @@ window.addEventListener("keydown", (e) => {
   if (arcade.open) arcade.close();
   else if (reader.open) reader.close();
   else if (venues.open) venues.close();
+  else if (payDesk.open) payDesk.close();
   else if (interiors.active) {
     if (document.querySelector("#ui .panel.open")) select(null);
     else interiors.exit();
@@ -1265,6 +1269,10 @@ canvas.addEventListener("pointerup", (e) => {
       );
     }
     const info = interiors.pickAt(e.clientX, e.clientY);
+    if (info?.panel === "wallets" || info?.panel === "guestbook") {
+      interiors.walk.enabled = false;
+      return info.panel === "wallets" ? payDesk.gallery(info.wallet ?? null) : payDesk.compose("guestbook");
+    }
     if (info?.panel) return venues.show(info.panel);
     // the tower: its elevator doors, its arcade games
     // old elevator doors, escalators: no teleport, the lift cars and the stairs are walked
@@ -1652,6 +1660,64 @@ const works = new Works(scene, document.getElementById("ui")!, renderer, chainCl
 });
 visitors.onWorks(() => works.changed());
 
+// the wallet layer: pay ZStreet from your own wallet (QR code, or address and memo copied) and the
+// memo plays for everyone once mined: a message on the ground, a guestbook line, a sealed vote, a tip
+/** Where the walker stands (feet), for a message left on the ground; null off foot. */
+function standing() {
+  if (interiors.active) {
+    const p = interiors.walk.camera.position;
+    return { place: interiors.active.key, floor: interiors.floor, x: p.x, y: p.y - 1.6, z: p.z };
+  }
+  if (!walking) return null;
+  const p = onFoot.camera.position;
+  return { place: "street", floor: 0, x: p.x, y: p.y - 1.6, z: p.z };
+}
+const payDesk = new PayDesk(document.getElementById("ui")!, {
+  here: standing,
+  closed: () => {
+    if (interiors.active) interiors.walk.enabled = true;
+  },
+});
+works.hooks.sealedVote = (round, idx, name) => payDesk.compose("vote", { round, idx, title: name });
+const marks = new Marks(scene, document.getElementById("ui")!, {
+  walker: () =>
+    interiors.active
+      ? { eye: interiors.walk.camera.position, place: interiors.active.key, floor: interiors.floor }
+      : walking
+        ? { eye: onFoot.camera.position, place: "street", floor: 0 }
+        : null,
+  placeScene: () => (interiors.active ? { key: interiors.active.key, scene: interiors.active.scene } : null),
+  read: (m) => {
+    if (interiors.active) interiors.walk.enabled = false;
+    payDesk.read(m);
+  },
+});
+// N on foot: leave a sealed message where you stand
+window.addEventListener("keydown", (e) => {
+  if (e.code !== "KeyN" || e.repeat || (!walking && !interiors.active) || payDesk.open || (e.target as HTMLElement).closest?.("input,textarea")) return;
+  e.preventDefault();
+  if (interiors.active) interiors.walk.enabled = false;
+  payDesk.compose("mark", { here: standing() });
+});
+visitors.onMark((e) => marks.onMark(e));
+function onPayEvent(e: PayEvent) {
+  marks.onPay(e);
+  const mine = !!e.ref && myRefs.has(e.ref);
+  if (e.action === "guestbook") window.dispatchEvent(new CustomEvent("zstreet:guestbook"));
+  if (e.action === "tip") {
+    nu7.party(e.sponsor ? 30 : 12);
+    decor.alert({ kind: "game", title: "THANK YOU  感謝", big: e.name ? e.name.toUpperCase() : "A SHIELDED TIP", line: `${e.amount ?? ""} ZEC · BLOCK ${e.height.toLocaleString("en-US")}`, color: "#ff9a3c" });
+  }
+  if (!mine) {
+    if (e.action === "mark" && e.place === "street") gameHud.mail("chain", "A new message on the ground", `“${(e.text ?? "").slice(0, 120)}” — sealed in block ${e.height.toLocaleString("en-US")}.`);
+    return;
+  }
+  const what =
+    e.action === "mark" ? "Your message glows where you stood." : e.action === "guestbook" ? "Your line is on the Reserve's guestbook wall." : e.action === "vote" ? "Your sealed vote counts in City Works." : "Thank you! Fireworks over the avenue.";
+  gameHud.mail("chain", `Sealed in block ${e.height.toLocaleString("en-US")}`, what);
+}
+visitors.onPay(onPayEvent);
+
 // the NU7 quarter: the NU7 Tower and the karting go up as NU7 gets closer
 const nu7Quarter = new Nu7Quarter(scene, gameHud, {
   go: (x, z, zoom = 0.4) => {
@@ -1954,6 +2020,9 @@ if (new URLSearchParams(location.search).has("debug")) {
         plots,
         works,
         nu7Quarter,
+        payDesk,
+        marks,
+        pay: onPayEvent,
         editor,
         factions: () => factions,
         quake: (d = 1) => disasters.quake(d),
@@ -2300,6 +2369,7 @@ function frameBody(stepDt?: number) {
     interiors.update(dt, t);
     if (!interiors.active) return again();
     updateMemes(dt, interiors.walk.camera, interiors.active.scene);
+    marks.update(dt);
     // near the way out (ground floor): say so
     const out = interiors.walk.exitAhead();
     // or at a lift's doors / a stairway's door: what it is
@@ -2460,6 +2530,7 @@ function frameBody(stepDt?: number) {
   nu7Quarter.update(dt);
   if (walking) mayor?.treasure.near(onFoot.camera.position);
   agents?.update(dt, focus);
+  marks.update(dt);
   if (walking && !interiors.active) talkUpdate(dt);
   else if (talkPrompt.classList.contains("on")) talkPrompt.classList.remove("on");
   npcs.update(dt);

@@ -9,9 +9,12 @@
     "preview": "vite preview --port 3007"
   },
   "dependencies": {
+    "@noir-wallet/sdk": "^0.1.9",
+    "qrcode": "^1.5.4",
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.5",
     "@types/three": "^0.186.0",
     "puppeteer-core": "^25.12.0",
     "typescript": "^7.0.2",

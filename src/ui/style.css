@@ -5412,3 +5412,239 @@ a.srow:hover span {
     transform: rotate(360deg);
   }
 }
+
+/* ---- the wallet desk: the wallets on show, payments from your own wallet ---- */
+.paydesk header .x + .grow {
+  margin-left: -4px;
+}
+.paydesk .wallets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.paydesk .wcard {
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--w);
+  background: var(--line);
+}
+.paydesk .wcard.on {
+  border-color: var(--w);
+  box-shadow: 0 0 0 1px var(--w) inset;
+}
+.paydesk .wname {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.paydesk .wname i {
+  width: 8px;
+  height: 8px;
+  background: var(--w);
+  display: inline-block;
+}
+.paydesk .wname b {
+  font-weight: 600;
+  font-size: 14px;
+}
+.paydesk .wname .muted {
+  font-size: 11px;
+}
+.paydesk .wcard p {
+  margin: 5px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.paydesk .lnk {
+  font-size: 11.5px;
+  color: var(--gold-ink);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.paydesk .lnk svg.i {
+  width: 12px;
+  height: 12px;
+}
+.paydesk .acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.paydesk .acts .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  height: auto;
+  padding: 8px 10px;
+  white-space: normal;
+}
+.paydesk .acts .btn span {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.paydesk .hint {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.paydesk kbd {
+  font: 11px var(--mono);
+  padding: 0 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+}
+.paydesk .noir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+}
+.paydesk .noir .mono {
+  color: var(--muted);
+}
+.paydesk .err {
+  color: var(--bad);
+  font-size: 12px;
+}
+.paydesk .small {
+  font-size: 11px;
+}
+.paydesk .count {
+  text-align: right;
+  margin-top: -4px;
+}
+.paydesk textarea {
+  font: 13px/1.4 var(--mono);
+  word-break: normal !important;
+}
+.paydesk .vote-for {
+  padding: 8px 10px;
+  background: var(--gold-soft);
+  border-left: 2px solid var(--gold);
+}
+.paydesk .qrwrap {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.paydesk canvas.qr {
+  width: 200px;
+  height: 200px;
+  flex: none;
+  image-rendering: pixelated;
+  border: 6px solid #f6efe0;
+  box-shadow: 0 0 0 1px var(--gold);
+}
+.paydesk .qrside {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.paydesk .qrside .big {
+  font-size: 22px;
+  color: var(--gold-ink);
+}
+.paydesk .qrside .big small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.paydesk .qrside .btn {
+  text-align: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.paydesk .status {
+  font-size: 12px;
+  padding: 8px 10px;
+  background: var(--line);
+  color: var(--muted);
+}
+.paydesk .status .ok {
+  color: var(--good);
+}
+.paydesk .status.confirmed {
+  border-left: 2px solid var(--good);
+}
+.paydesk .status .dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  margin-right: 4px;
+  animation: pd-blink 1.2s infinite;
+}
+@keyframes pd-blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+.paydesk .copyrow {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 11.5px;
+}
+.paydesk .copyrow .lbl {
+  color: var(--muted);
+}
+.paydesk .copyrow code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.paydesk .copyrow code.memo {
+  white-space: pre-wrap;
+  max-height: 3.2em;
+  overflow: auto;
+}
+.paydesk .copyrow .btn.done::after {
+  content: " ✓";
+}
+.paydesk .markq {
+  margin: 0;
+  padding: 14px 16px;
+  font: 15px/1.5 Georgia, serif;
+  color: #ffe2b0;
+  background: radial-gradient(ellipse at 50% 120%, rgba(255, 140, 40, 0.22), rgba(0, 0, 0, 0) 70%), var(--line);
+  border-left: 2px solid #ff9a3c;
+  text-shadow: 0 0 12px rgba(255, 150, 60, 0.45);
+  word-break: break-word;
+}
+.paydesk .row-acts {
+  display: flex;
+  gap: 6px;
+}
+.paydesk .row-acts .btn {
+  flex: 1;
+  justify-content: center;
+}
+.paydesk .row-acts .btn.on {
+  color: #ff9a3c;
+}
+/* the runes' prompt shows indoors too (the talk prompt doesn't) */
+.indoors .mark-prompt.on {
+  display: flex !important;
+}
+.mark-prompt {
+  box-shadow: inset 0 0 0 1px rgba(255, 154, 60, 0.5);
+}
+.mark-prompt q {
+  color: #ffd9a0;
+  max-width: 420px;
+}
+.works article button.seal {
+  margin-left: 6px;
+  background: transparent;
+  color: #ff9a3c;
+  box-shadow: inset 0 0 0 1px rgba(255, 154, 60, 0.6);
+}
