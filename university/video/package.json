@@ -1,0 +1,23 @@
+{
+  "name": "zk-university-video",
+  "private": true,
+  "description": "ZK UNIVERSITY course videos for ZStreet: renders ../courses/<slug>.json to ../../public/university/video/<slug>.mp4 (+ poster).",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "node scripts/render.mjs",
+    "still": "remotion still"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.529",
+    "@remotion/cli": "4.0.529",
+    "@remotion/google-fonts": "4.0.529",
+    "@remotion/renderer": "4.0.529",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

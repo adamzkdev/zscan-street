@@ -12,6 +12,11 @@ export interface Book {
   created: string | null;
   url: string;
   color: string;
+  /** The text itself (Markdown), for books that are not ZIPs (ZK UNIVERSITY's lessons). */
+  text?: string;
+  /** The cover's crest (default "ZIP n"), and the source line under it. */
+  crest?: string;
+  site?: string;
 }
 
 type Block = { kind: "h1" | "h2" | "h3" | "p" | "li" | "code" | "quote"; html: string };
@@ -212,11 +217,11 @@ export class Reader {
   async show(b: Book) {
     this.book = b;
     this.at = 0;
-    this.pages = [this.cover(b), `<div class="loadingp">Opening ZIP ${b.number ?? ""}…</div>`];
+    this.pages = [this.cover(b), `<div class="loadingp">Opening ${b.crest ? "the lesson" : `ZIP ${b.number ?? ""}`}…</div>`];
     this.el.style.setProperty("--c", b.color);
     this.el.classList.remove("hidden");
     this.render(true);
-    const src = await fetchZip(b.slug);
+    const src = b.text ?? (await fetchZip(b.slug));
     if (this.book !== b) return;
     const blocks = src ? parseZip(src) : [];
     this.pages = [this.cover(b), ...(blocks.length ? this.paginate(blocks) : [`<p>The text could not be loaded. <a href="${b.url}" target="_blank" rel="noopener">Read it on zips.z.cash ↗</a></p>`]), this.back(b)];
@@ -233,16 +238,17 @@ export class Reader {
 
   private cover(b: Book) {
     return `<div class="cover">
-      <div class="crest">${b.number != null ? `ZIP<b>${b.number}</b>` : "<b>DRAFT</b>"}</div>
+      <div class="crest">${b.crest ? `<b>${esc(b.crest)}</b>` : b.number != null ? `ZIP<b>${b.number}</b>` : "<b>DRAFT</b>"}</div>
       <h1>${esc(b.title)}</h1>
       <div class="cstatus">${esc(b.status)}</div>
       ${b.owners.length ? `<p class="by">${esc(b.owners.join(" · "))}</p>` : ""}
       ${b.created ? `<p class="by">Created ${esc(b.created)}</p>` : ""}
-      <p class="src"><a href="${b.url}" target="_blank" rel="noopener">zips.z.cash ↗</a></p>
+      <p class="src"><a href="${b.url}" target="_blank" rel="noopener">${esc(b.site ?? "zips.z.cash")} ↗</a></p>
     </div>`;
   }
 
   private back(b: Book) {
+    if (b.crest) return `<div class="cover end"><p>End of the lesson.</p><p class="src"><a href="${b.url}" target="_blank" rel="noopener">${esc(b.site ?? b.url)} ↗</a></p></div>`;
     return `<div class="cover end"><p>End of ${b.number != null ? `ZIP ${b.number}` : "this draft"}.</p><p class="src"><a href="${b.url}" target="_blank" rel="noopener">Full text, tables and references on zips.z.cash ↗</a></p><p class="src">github.com/zcash/zips</p></div>`;
   }
 

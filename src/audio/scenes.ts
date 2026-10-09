@@ -748,6 +748,8 @@ export function presetFor(key: string, floor: number, name: string): string {
       return "crypt";
     case "library":
       return has("press", "news") ? "press-room" : "stacks";
+    case "university":
+      return has("library") ? "stacks" : "quiet-hall";
     default:
       return "quiet-hall";
   }

@@ -1,0 +1,222 @@
+{
+  "slug": "tachyon-why-and-how",
+  "title": "Tachyon: why and how",
+  "subtitle": "Why private payments struggle to scale, and how Tachyon plans to fix it.",
+  "faculty": "tachyon",
+  "level": "core",
+  "minutes": 3,
+  "prof": {
+    "snark": 3620,
+    "name": "Prof. Ion Tachyon"
+  },
+  "created": "2026-10-09",
+  "status": "reviewed",
+  "summary": "The scaling problem of shielded payments (ever-growing nullifier sets, trial decryption), and Tachyon's answer: transactions about 100× smaller, oblivious synchronization, proof-carrying data built with Ragu, and where the proposal stands today.",
+  "text": "# Tachyon: why and how\n\n## The problem: privacy that has to scale\n\nZcash's shielded transactions offer very strong privacy. They achieve what the Tachyon team calls **ledger indistinguishability**: fully shielded transactions cannot be told apart from one another. In Sean Bowe's words, they look like random gibberish paired with a proof that it actually represents a valid payment.\n\nThat privacy has a cost. The Tachyon overview names two scaling limits:\n\n- **Shielded transactions are large and costly to verify**, which limits how many fit in the network.\n- **Validators must keep a state that keeps growing**, which raises the hardware requirements for full nodes and block producers.\n\nThe second problem comes from **nullifiers**. To prevent double spends, every shielded spend reveals a nullifier: a unique value that must never repeat. In today's protocol, every validator must store all revealed nullifiers forever. That adds up to gigabytes per day, even at modest transaction rates.\n\nWallets have their own bottleneck. Today, senders place encrypted payment information inside shielded transactions, and recipients find their incoming payments by trying to decrypt every transaction. As Sean Bowe puts it: \"This simply does not scale.\"\n\nBecause Zcash refuses to weaken privacy, many usual scaling tricks are off the table. Tachyon turns to more advanced cryptography instead.\n\n## What Tachyon proposes\n\nSean Bowe announced Tachyon on 2 April 2025 as a set of protocol changes that let Zcash scale while giving existing users and wallets a smooth transition. The project's own summary: Tachyon proposes a scalability upgrade that **shrinks transactions by two orders of magnitude** (about 100×) and **removes runaway state growth** for validators. As a side effect, it brings **full post-quantum privacy**.\n\nIt rests on a few ideas.\n\n### 1. Oblivious synchronization\n\nTachyon introduces **epochs**. A note's nullifier changes every epoch, and validators are only responsible for a small rolling window of recent history.\n\nBeyond that window, your wallet has to prove that none of its note's earlier nullifiers appeared on-chain in past epochs. A remote service, the **oblivious syncing service**, can build that proof for you, step by step. Crucially, the service never learns your actual nullifiers, because they evolve in an unlinkable way. Your wallet can also do the checks itself.\n\n### 2. Proof-carrying data (PCD)\n\nRoughly speaking, proof-carrying data lets data travel together with a proof of its own correctness. When it is combined with other proof-carrying data, the result inherits and extends the original proofs, and it does not need to grow in size. That is how a huge amount of checking can be \"compressed\".\n\nPCD was long a theoretical tool because it was too slow. That changed when the team at the Electric Coin Company discovered **Halo**, which made PCD practical without a trusted setup.\n\nIn Tachyon, PCD works at both ends: before a transaction (oblivious synchronization keeps validator state small) and after it (block producers can **aggregate shielded transactions without users coordinating**, cutting size and verification cost and boosting block capacity).\n\n### 3. Payments sent out of band\n\nTachyon's design assumes that sender and recipient exchange payment information through a separate channel: a merchant's web page, a payment terminal, or a chat between friends. The encrypted payment data can then be removed from the chain entirely, and wallets no longer need to trial-decrypt every transaction.\n\nThis has trade-offs that need extra infrastructure, for example recovering funds from a seed phrase, or posting a public donation address.\n\n### 4. Ragu\n\n**Ragu** is Tachyon's proof-carrying data library, written in Rust. It closely follows the original Halo construction, so it needs no trusted setup. To limit risk, it leans on tools Zcash already shipped in Orchard years ago: the **Pasta** elliptic curves and the **Poseidon** hash function.\n\n## Status (October 2026)\n\nTachyon is a **proposal**. As the project site says, all network upgrades require community approval before activation.\n\n- **Ragu** is still under construction, and will go through several rounds of optimization and auditing before it is ready for Zcash.\n- The **shielded protocol** will act as a new shielded pool, independent of the existing Orchard pool. After review it will be deployed on a test network first.\n- **Mainnet activation** comes only once community consensus is reached and the proposal meets Zcash's ZIP requirements.\n- In September 2026 the team began moving Tachyon's recursive proofs into **Zakura Common**, the fast cryptography stack behind the Zakura node, starting with a new crate called Udon.\n\n## Key takeaways\n\n- Today every validator stores every nullifier forever: gigabytes per day, even at modest rates.\n- Tachyon aims for transactions about 100× smaller and no runaway state growth.\n- Oblivious synchronization lets a service prove your funds are unspent without learning your nullifiers.\n- Proof-carrying data (built with Ragu) lets proofs be merged and compressed.\n- It is still a proposal: community approval comes before any activation.\n",
+  "sources": [
+    {
+      "title": "Project Tachyon: Encrypted Money at Planetary Scale",
+      "url": "https://tachyon.z.cash/",
+      "quote": "Tachyon proposes a scalability upgrade for Zcash that shrinks transactions by two orders of magnitude and removes runaway state growth for validators."
+    },
+    {
+      "title": "Tachyon Overview",
+      "url": "https://tachyon.z.cash/overview/",
+      "quote": "In today's protocol, every validator must store all revealed nullifiers forever, leading to runaway state growth: gigabytes per day even at modest TPS."
+    },
+    {
+      "title": "Tachyon Overview",
+      "url": "https://tachyon.z.cash/overview/",
+      "quote": "Tachyon solves this with oblivious synchronization: a remote service incrementally constructs a proof that your funds have not been spent."
+    },
+    {
+      "title": "Tachyon: Scaling Zcash with Oblivious Synchronization (Sean Bowe)",
+      "url": "https://seanbowe.com/blog/tachyon-scaling-zcash-oblivious-synchronization/",
+      "quote": "Crudely speaking, PCD allows data to live alongside proofs of its own correctness so that when it is combined with other (proof-carrying) data the mixture inherits and extends the original proofs of correctness."
+    },
+    {
+      "title": "Tachyon Roadmap",
+      "url": "https://tachyon.z.cash/roadmap/",
+      "quote": "Ragu is Tachyon's foundational proof-carrying data (PCD) scheme: a Rust library that closely follows the original Halo construction."
+    },
+    {
+      "title": "Folding Tachyon with Ragu: High Assurance Cryptography for Zcash",
+      "url": "https://tachyon.z.cash/blog/folding-tachyon-with-ragu/",
+      "quote": "In the spirit of risk aversion, Ragu leans heavily on tools we have already shipped in Zcash: the Pasta elliptic curve cycle, the original Poseidon algebraic hash function"
+    },
+    {
+      "title": "Building Tachyon's Proof Tree with Shared Evidence",
+      "url": "https://tachyon.z.cash/blog/building-tachyons-proof-tree-with-shared-evidence/",
+      "quote": "Tachyon shrinks the nullifier set validators must maintain, by introducing epochs."
+    },
+    {
+      "title": "Integrating Tachyon's Cryptography with Zakura Common",
+      "url": "https://tachyon.z.cash/blog/integrating-tachyon-with-zakura-common/",
+      "quote": "Today we are beginning the process of upstreaming Tachyon's recursive proofs into the core of Zakura Common."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "What does oblivious synchronization let a helper service do?",
+      "options": [
+        "Spend your coins for you",
+        "Prove your funds are unspent without learning your nullifiers",
+        "Publish your balance on-chain"
+      ],
+      "answer": 1,
+      "why": "The service incrementally builds a proof that your funds have not been spent, but never learns your actual nullifiers, because they evolve in an unlinkable way."
+    },
+    {
+      "q": "Why does validator state keep growing in today's Zcash?",
+      "options": [
+        "Validators must store every revealed nullifier forever",
+        "Blocks store every wallet's seed phrase",
+        "Every transaction includes a video"
+      ],
+      "answer": 0,
+      "why": "Nullifiers prevent double spends, so today every validator keeps all of them forever: gigabytes per day even at modest rates."
+    },
+    {
+      "q": "What is Ragu?",
+      "options": [
+        "A new coin",
+        "Tachyon's proof-carrying data library, written in Rust",
+        "A Zcash wallet"
+      ],
+      "answer": 1,
+      "why": "Ragu is Tachyon's foundational PCD scheme: a Rust library that closely follows the original Halo construction."
+    }
+  ],
+  "scenes": [
+    {
+      "kind": "title",
+      "kicker": "Tachyon Hall · Core",
+      "title": "Tachyon: why and how"
+    },
+    {
+      "kind": "say",
+      "text": "Zcash's shielded transactions are private. The next challenge: making them scale.",
+      "sub": "They are large and costly to verify, and validators must keep a state that never stops growing.",
+      "seconds": 9
+    },
+    {
+      "kind": "say",
+      "text": "To stop double spends, every shielded spend reveals a nullifier: a unique tag that must never repeat.",
+      "seconds": 8
+    },
+    {
+      "kind": "quote",
+      "source": 1,
+      "seconds": 10
+    },
+    {
+      "kind": "quote",
+      "source": 0,
+      "seconds": 10
+    },
+    {
+      "kind": "number",
+      "value": "~100×",
+      "label": "Smaller transactions: “two orders of magnitude”. Plus full post-quantum privacy, as a side effect.",
+      "source": 0,
+      "seconds": 7
+    },
+    {
+      "kind": "steps",
+      "title": "Idea 1 · Oblivious synchronization",
+      "steps": [
+        "Your note's nullifier changes every epoch",
+        "Validators keep only a small window of recent epochs",
+        "A sync service proves your note wasn't spent before",
+        "It never learns anything about your note",
+        "Your wallet can also do the checks itself"
+      ],
+      "seconds": 14
+    },
+    {
+      "kind": "quote",
+      "source": 2,
+      "seconds": 9
+    },
+    {
+      "kind": "analogy",
+      "title": "Idea 2 · Proof-carrying data",
+      "left": "A document with an official seal: you can trust it without redoing every check.",
+      "right": "Data travels with a proof that it is correct. Combine pieces, and the proof carries forward.",
+      "caption": "The combined result does not need to grow in size: lots of checking, compressed into one proof.",
+      "seconds": 13
+    },
+    {
+      "kind": "say",
+      "text": "With PCD, block producers can aggregate shielded transactions without users coordinating.",
+      "sub": "That cuts size and verification cost, and boosts block capacity.",
+      "seconds": 9
+    },
+    {
+      "kind": "compare",
+      "title": "Today vs Tachyon",
+      "a": {
+        "label": "Today",
+        "points": [
+          "Validators store every nullifier forever",
+          "Wallets trial-decrypt every transaction",
+          "Encrypted payment data sits on-chain"
+        ]
+      },
+      "b": {
+        "label": "Tachyon",
+        "points": [
+          "Validators keep a small rolling window",
+          "Payment info sent out of band",
+          "Blocks aggregate shielded transactions"
+        ]
+      },
+      "seconds": 13
+    },
+    {
+      "kind": "say",
+      "text": "Under the hood: Ragu, a Rust library for proof-carrying data, built on the original Halo design.",
+      "sub": "It reuses tools Zcash already shipped in Orchard: the Pasta curves and the Poseidon hash.",
+      "seconds": 11
+    },
+    {
+      "kind": "quote",
+      "source": 4,
+      "seconds": 8
+    },
+    {
+      "kind": "steps",
+      "title": "Status, October 2026",
+      "steps": [
+        "A proposal: upgrades need community approval",
+        "Ragu: still under construction, audits ahead",
+        "A new shielded pool, separate from Orchard",
+        "Test network first, mainnet after consensus",
+        "Recursive proofs moving into Zakura Common"
+      ],
+      "seconds": 14
+    },
+    {
+      "kind": "quiz",
+      "q": "What does oblivious synchronization let a helper service do?",
+      "options": [
+        "Spend your coins for you",
+        "Prove your funds are unspent without learning your nullifiers",
+        "Publish your balance on-chain"
+      ],
+      "answer": 1
+    },
+    {
+      "kind": "recap",
+      "points": [
+        "Today: every nullifier stored forever",
+        "Tachyon: ~100× smaller transactions, no runaway state",
+        "Oblivious sync + proof-carrying data (Ragu)",
+        "Bonus: full post-quantum privacy",
+        "Still a proposal: community approval first"
+      ]
+    }
+  ],
+  "video": "https://api.zscan.cash/media/university/tachyon-why-and-how.mp4",
+  "poster": "https://api.zscan.cash/media/university/tachyon-why-and-how.jpg"
+}

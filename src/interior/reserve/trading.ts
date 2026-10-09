@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Market } from "../../data/market";
 import type { Snark } from "../../scene/snark";
 import { balustrade, glassRail } from "./arch";
+import { snarkExchange } from "./snarks";
 import { board, chart, drawMarket, drawPools, drawPrice, drawSupply, drawTape, POOL_COLOR, poolsInfo, priceInfo, supplyInfo, tape } from "./data";
 import { big, C, F, GOLD, LEVELS, MONO, num, paint, SANS, SERIF, Surface, usd, zec, type ReserveKit } from "./kit";
 
@@ -237,7 +238,8 @@ export function trading(k: ReserveKit) {
   const GY = 4.6;
   k.box(f, 3.2, 0.35, 30, 20.4, GY - 0.35, -22, "#3a2416", "polish");
   k.box(f, 3.3, 0.08, 30.2, 20.4, GY - 0.43, -22, GOLD, "metal");
-  for (let z = -36; z <= -8; z += 7) k.box(f, 0.3, GY - 0.35, 0.3, 19.0, 0, z, "#3a2416", "polish");
+  // hung from the ceiling on bronze rods: nothing stands under it but the zkSNARKs exchange
+  for (let z = -36; z <= -8; z += 7) k.box(f, 0.06, H - GY, 0.06, 19.0, GY, z, "#8a6a3a", "metal");
   glassRail(k, f, 18.8, -37, 18.8, -7, GY, 1.05, false);
   k.label(f, "VISITORS' GALLERY", 18.78, GY + 1.4, -22, { h: 0.3, color: GOLD, font: `700 80px ${SERIF}`, ry: -Math.PI / 2 });
   for (let i = 0; i < 34; i++) crowdAt.push([19.5 + (i % 2) * 0.9 + k.rnd(i, 3) * 0.2, GY - 0.05 + (i % 2) * 0.1, -36 + (i / 34) * 28 + k.rnd(i, 4) * 0.4, 1 + ((i * 2741 + 77) % 10000), 0.95]);
@@ -246,6 +248,7 @@ export function trading(k: ReserveKit) {
   glassRail(k, f, -19.6, -41, -19.6, -23, GY, 1.05, false);
   for (let i = 0; i < 16; i++) crowdAt.push([-20.4 - (i % 2) * 0.7, GY - 0.05 + (i % 2) * 0.1, -40.5 + (i / 16) * 17, 1 + ((i * 1597 + 311) % 10000), 0.95]);
   const crowd = k.crowd(f, crowdAt);
+  snarkExchange(k, (n) => crowd.cheer(n));
 
   // ---- the lifts ----
   k.lifts(f, -21.75, L.spawn[1], Math.PI / 2);

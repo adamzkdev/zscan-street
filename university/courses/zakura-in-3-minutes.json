@@ -1,0 +1,220 @@
+{
+  "slug": "zakura-in-3-minutes",
+  "title": "Zakura in 3 minutes",
+  "subtitle": "The fast new Zcash full node: who builds it, what each release changed, and what it means for NU7.",
+  "faculty": "zakura",
+  "level": "intro",
+  "minutes": 3,
+  "prof": {
+    "snark": 4517,
+    "name": "Dr. Sakura Node"
+  },
+  "created": "2026-10-09",
+  "status": "reviewed",
+  "summary": "Zakura is a Zcash full node forked from Zebra, built by Valar Group and Project Tachyon. This course walks through releases 1.0 to 1.6 (faster sync, 2.5 s to 0.32 s full blocks, 21× faster mobile proving) and NU7's 25-second blocks.",
+  "text": "# Zakura in 3 minutes\n\n## What is Zakura?\n\nZakura is a **full node** for Zcash: the software that receives new blocks, verifies them (including their zk-SNARK proofs) and keeps a copy of the chain.\n\nZakura 1.0.0 came out on **15 July 2026**. It is free and open-source software, and it was **forked from Zebra**, an existing Zcash node. \"Consensus-compatible\" means it follows exactly the same rules as the rest of the network: it is a new engine, not a new coin.\n\nIts first release already brought:\n\n- **Faster sync:** nearly 5× faster than Zebra. In the team's test run, Zakura synced the chain in 4h 20m, against 20h 46m for Zebra.\n- **Pruning and snapshots:** a node can drop old block data to save disk space, and start from a snapshot the team publishes instead of downloading everything.\n- **zcashd compatibility mode:** software that still speaks to zcashd (the legacy Zcash node) keeps working.\n- **An experimental P2P layer**, off by default, aimed at very fast block propagation.\n\n## Who builds it?\n\nThe project is led by **Sean Bowe**, a cofounder of Zcash who leads Project Tachyon, and **Dev Ojha**, who cofounded Osmosis and leads Valar Group. Zakura is a collaboration between **Valar Group** and **Project Tachyon**, and both teams are funded by private ZEC donations.\n\n## Why fork?\n\nThe team's dream is for Zcash to support the world's payments. Mastercard and Visa handle more than 50,000 transactions per second, and the team calls that \"our floor\". With Zcash's existing cryptography, that volume would demand over 500 MB/s of throughput from a node.\n\nNew cryptography closes part of that gap: Tachyon's recursive proofs bring the requirement down to 100 MB/s. But cryptography is only part of the solution. Zcash also needs node software capable of high-performance networking at that scale. That is why they built Zakura, and why the team says Zcash's next-generation protocol \"lands first\" there.\n\n## Release by release\n\nZakura shipped fast. Here is what each release changed, from the project's announcements:\n\n- **1.0.0 (15 Jul):** first release, with the features above.\n- **1.0.1 (17 Jul):** fixes three security issues affecting Zakura 1.0.0 and upstream Zebra.\n- **1.0.2 (20 Jul):** makes zcashd compatibility mode substantially more reliable.\n- **1.0.3 (22 Jul):** hardens networking and marks zcashd compatibility mode as stable for Ironwood (NU6.3), Zcash's network upgrade of that month.\n- **1.0.4 (26 Jul):** block verification about 20% faster.\n- **1.0.5 (28 Jul):** fixes fresh-sync failures and refills depleted peer sets.\n- **1.1.1 (10 Aug):** closes block-propagation attacks that could isolate a syncing node or leave miners working from a stale tip.\n- **1.2.0 (14 Aug):** every proof was being verified twice, once when a transaction arrived in the mempool and again inside the block. Removing that duplicate work cut full block processing from **2.5 s to 0.32 s** on the team's benchmark machines.\n- **Zakura Common (29 Aug):** a new collection of faster cryptography libraries. Mobile proof generation became more than 14× faster, with no network upgrade needed.\n- **1.3.0 (31 Aug):** the node moves onto Common, plus security and stability work.\n- **1.4.0 (10 Sep):** includes Common 1.2.0. Proving on an iPhone 17 is now **21× faster** than before Zakura (3 s down to 142 ms).\n- **1.5.0 (24 Sep):** lower block commit latency, and miners keep getting work while the chain tip moves.\n- **1.6.0 (1 Oct):** ships the full **NU7** upgrade and activates it on Testnet. Blocks now verify 8× faster on average, 17× when full. Zakura's default fee falls from 5,000 to 400 zatoshis per logical action (a relay and mining policy, not a consensus rule).\n\n## What it means for Zcash and NU7\n\nZakura 1.6.0 contains the full implementation of NU7: **25-second blocks**, shielded action limits, and the Network Sustainability Mechanism. Today Zcash produces a block every 75 seconds, so NU7 would triple the rate.\n\nFaster blocks are only a security risk if more blocks get **orphaned**: when one miner finds a block, others keep working on the old tip until their node receives and verifies it, and a block found during that delay competes with one that already had a head start. That is why node speed matters so much.\n\nTo measure it, the team ran an 80-node test network spread across 11 regions, mining full 2 MB blocks every 25 seconds. It measured a **3.43% orphan rate**. For comparison, the same test network at today's 75-second spacing measured 1.57%.\n\n**Status:** NU7 activates on Testnet at height 4,465,026. Mainnet activation is not yet scheduled.\n\n## Key takeaways\n\n- Zakura is a fast, open-source Zcash full node, forked from Zebra and following the same consensus rules.\n- It is built by Valar Group and Project Tachyon, led by Sean Bowe and Dev Ojha.\n- From 1.0 to 1.6 in under three months: faster sync, 2.5 s to 0.32 s full blocks, 21× faster mobile proving.\n- Zakura 1.6.0 ships NU7 (25-second blocks) on Testnet. Mainnet activation is not scheduled yet.\n",
+  "sources": [
+    {
+      "title": "Introducing Zakura",
+      "url": "https://zakura.com/announcements/introducing-zakura/",
+      "quote": "Forked from Zebra, Zakura is a consensus-compatible Zcash full node."
+    },
+    {
+      "title": "Zakura: a fast Zcash full node built for scale",
+      "url": "https://zakura.com/",
+      "quote": "Our project is led by Sean Bowe, a cofounder of Zcash, and Dev Ojha."
+    },
+    {
+      "title": "Zakura announcements",
+      "url": "https://zakura.com/announcements/",
+      "quote": "Zakura 1.0.4 makes block verification about 20% faster, improves P2P v2, and further hardens legacy sync."
+    },
+    {
+      "title": "Release: Zakura 1.2.0, 87% faster full block processing",
+      "url": "https://zakura.com/announcements/zakura-1-2-0-orphan-rate/",
+      "quote": "On full Ironwood blocks with regular transactions, block processing time on our benchmark machines drops from 2.5 seconds to 0.32 seconds."
+    },
+    {
+      "title": "Zakura Common: High Performance Zcash Cryptography",
+      "url": "https://zakura.com/announcements/zakura-common/",
+      "quote": "Mobile proof generation is more than 14x faster."
+    },
+    {
+      "title": "Release: Zakura 1.4.0",
+      "url": "https://zakura.com/announcements/zakura-1-4-0/",
+      "quote": "The net impact is that proving on an iPhone 17 is now 21 times faster than it was before Zakura."
+    },
+    {
+      "title": "Release: Zakura 1.6.0",
+      "url": "https://zakura.com/announcements/zakura-1-6-0/",
+      "quote": "Zakura 1.6.0 includes the full implementation of the upcoming NU7 network upgrade: 25-second blocks, shielded action limits, and the Network Sustainability Mechanism."
+    },
+    {
+      "title": "Testing 25-Second Blocks for NU7",
+      "url": "https://zakura.com/engineering/25-second-block-time-update/",
+      "quote": "We are proposing to reduce Zcash's block spacing to 25 seconds in NU7, down from 75 seconds today."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "What is Zakura?",
+      "options": [
+        "A Zcash wallet app",
+        "A Zcash full node forked from Zebra",
+        "A new cryptocurrency"
+      ],
+      "answer": 1,
+      "why": "Zakura is a consensus-compatible Zcash full node, forked from Zebra. It follows the same rules as the rest of the network."
+    },
+    {
+      "q": "What block time does NU7 bring, as implemented in Zakura 1.6.0?",
+      "options": [
+        "75 seconds",
+        "25 seconds",
+        "2.5 seconds"
+      ],
+      "answer": 1,
+      "why": "NU7 includes 25-second blocks, down from 75 seconds today: three times the rate of block production."
+    },
+    {
+      "q": "What did Zakura 1.2.0 fix to make full blocks much faster?",
+      "options": [
+        "Every proof was being verified twice",
+        "Seed phrases were too long",
+        "Blocks were too small"
+      ],
+      "answer": 0,
+      "why": "Proofs were checked once in the mempool and again inside the block. Removing that duplicate work cut full block processing from 2.5 s to 0.32 s."
+    }
+  ],
+  "scenes": [
+    {
+      "kind": "title",
+      "kicker": "Zakura Hall · Intro",
+      "title": "Zakura in 3 minutes"
+    },
+    {
+      "kind": "say",
+      "text": "Zakura is a new Zcash full node: software that receives blocks, verifies them and keeps the chain.",
+      "sub": "Version 1.0.0 shipped on 15 July 2026. Free and open-source.",
+      "seconds": 10
+    },
+    {
+      "kind": "quote",
+      "source": 0,
+      "seconds": 7
+    },
+    {
+      "kind": "steps",
+      "title": "Who builds it",
+      "steps": [
+        "Led by Sean Bowe, a cofounder of Zcash, and Dev Ojha",
+        "A collaboration: Valar Group + Project Tachyon",
+        "Funded by private ZEC donations"
+      ],
+      "seconds": 9
+    },
+    {
+      "kind": "number",
+      "value": "4h 20m",
+      "label": "Zakura's full sync, versus 20h 46m for Zebra in the team's test run",
+      "source": 0
+    },
+    {
+      "kind": "say",
+      "text": "Why fork? The dream: a Zcash that supports the world's payments.",
+      "sub": "Mastercard and Visa handle more than 50k transactions per second. The team calls that “our floor”.",
+      "seconds": 9
+    },
+    {
+      "kind": "steps",
+      "title": "July: 1.0 → 1.0.5",
+      "steps": [
+        "1.0.0 · faster sync, pruning, zcashd mode",
+        "1.0.1 · fixes three security issues",
+        "1.0.2 / 1.0.3 · zcashd mode reliable, then stable",
+        "1.0.4 · block verification about 20% faster",
+        "1.0.5 · fixes fresh-sync failures"
+      ],
+      "seconds": 13
+    },
+    {
+      "kind": "steps",
+      "title": "August: 1.1 → 1.3",
+      "steps": [
+        "1.1.1 · closes block-propagation attacks",
+        "1.2.0 · stops verifying every proof twice",
+        "Zakura Common · much faster cryptography",
+        "1.3.0 · the node moves onto Common"
+      ],
+      "seconds": 11
+    },
+    {
+      "kind": "number",
+      "value": "2.5 s → 0.32 s",
+      "label": "Time to process a full block, before and after Zakura 1.2.0",
+      "source": 3
+    },
+    {
+      "kind": "steps",
+      "title": "September → October: 1.4 → 1.6",
+      "steps": [
+        "1.4.0 · mobile proving over 20× faster",
+        "1.5.0 · lower block commit latency",
+        "1.6.0 · NU7 on Testnet, fees down to 400 zatoshis per action"
+      ],
+      "seconds": 10
+    },
+    {
+      "kind": "number",
+      "value": "21×",
+      "label": "Faster proving on an iPhone 17 than before Zakura: 3 s down to 142 ms",
+      "source": 5
+    },
+    {
+      "kind": "quote",
+      "source": 6,
+      "seconds": 10
+    },
+    {
+      "kind": "number",
+      "value": "25 s",
+      "label": "NU7's block time, down from 75 seconds today: three times more blocks",
+      "source": 7
+    },
+    {
+      "kind": "say",
+      "text": "Faster blocks are only risky if more blocks get orphaned: blocks that lose the race to the network.",
+      "sub": "Zakura's 80-node test, across 11 regions, mining full 2 MB blocks every 25 s: a 3.43% orphan rate.",
+      "seconds": 11
+    },
+    {
+      "kind": "say",
+      "text": "Status: NU7 activates on Testnet at height 4,465,026. Mainnet activation is not yet scheduled.",
+      "sub": "Zakura is where Zcash's next-generation protocol lands first.",
+      "seconds": 9
+    },
+    {
+      "kind": "quiz",
+      "q": "What is Zakura?",
+      "options": [
+        "A Zcash wallet app",
+        "A Zcash full node forked from Zebra",
+        "A new cryptocurrency"
+      ],
+      "answer": 1
+    },
+    {
+      "kind": "recap",
+      "points": [
+        "A fast Zcash full node, forked from Zebra",
+        "Built by Valar Group + Project Tachyon",
+        "1.0 → 1.6 in under three months",
+        "Faster sync, faster blocks, 21× faster mobile proving",
+        "1.6.0 ships NU7 (25-second blocks) on Testnet"
+      ]
+    }
+  ],
+  "video": "https://api.zscan.cash/media/university/zakura-in-3-minutes.mp4",
+  "poster": "https://api.zscan.cash/media/university/zakura-in-3-minutes.jpg"
+}

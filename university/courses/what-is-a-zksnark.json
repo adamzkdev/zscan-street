@@ -1,0 +1,234 @@
+{
+  "slug": "what-is-a-zksnark",
+  "title": "What is a zk-SNARK?",
+  "subtitle": "Prove you know a secret without revealing it, and why Zcash relies on it.",
+  "faculty": "zksnarks",
+  "level": "intro",
+  "minutes": 3,
+  "prof": {
+    "snark": 3824,
+    "name": "Prof. Ada Proof"
+  },
+  "created": "2026-10-09",
+  "status": "reviewed",
+  "summary": "Zero-knowledge proofs in plain words: prover and verifier, statement and witness, what “succinct” and “non-interactive” mean, a toy example, and how Zcash uses zk-SNARKs to verify encrypted, shielded transactions.",
+  "text": "# What is a zk-SNARK?\n\n## A secret you can prove without saying it\n\nImagine you know a password and want to convince someone that you know it, without ever telling them the password. It sounds impossible. It is exactly what a **zero-knowledge proof** does.\n\nThe z.cash Learn page describes a zk-SNARK as a proof construction where one can prove possession of certain information, for example a secret key, *without revealing that information*, and without any back-and-forth between the two sides.\n\n## The cast: prover, verifier, statement, witness\n\nEvery zero-knowledge proof has two roles:\n\n- **The prover** knows something and wants to convince others.\n- **The verifier** checks the proof.\n\nAnd two ingredients:\n\n- **The statement** is the claim being proven, for example \"I know a number whose hash is this value\".\n- **The witness** is the secret information that makes the statement true.\n\nThe halo2 Book (the documentation of the proving system Zcash uses today) puts it this way: a prover creates a proof for a given statement and witness, and the proof convinces the verifier that a witness exists for which the statement holds. The verifier learns that the statement is true, and nothing more about the witness.\n\nz.cash gives a concrete example: given the hash of a random number, the prover can convince the verifier that a number with this hash really exists, without revealing what it is. A *proof of knowledge* goes one step further: it convinces the verifier that the prover actually **knows** such a number.\n\n## An everyday analogy\n\nPicture a friend who doubts that you have the key to your house. You don't hand over the key. You simply open the front door while they watch. Now they are convinced you have the key, but they never touched it and cannot copy it.\n\nA zero-knowledge proof plays a similar role for digital secrets: the verifier ends up convinced, and the secret never leaves the prover. Like every analogy it is not perfect. A real verifier doesn't watch a door; it runs a mathematical check on the proof.\n\n## A toy example: x + y = 7\n\nThe ECC blog series \"Explaining SNARKs\" starts with a tiny example. Alice wants to prove to Bob that she knows two numbers, x and y, that add up to 7.\n\nAlice sends Bob *hidden* versions of x and y, using a \"homomorphic hiding\": a way to hide a number while still allowing arithmetic on the hidden version. Bob combines the two hidden values, compares the result with a hidden 7, and accepts only if they match. He never sees x or y.\n\nThe author is careful to say this toy protocol is not fully zero-knowledge (Bob can still learn a little by guessing), and that it is only one ingredient of a real zk-SNARK. But it shows the core trick: checking a claim about numbers you cannot see.\n\n## What the letters mean\n\n**zk-SNARK** stands for **Z**ero-**K**nowledge **S**uccinct **N**on-Interactive **AR**gument of **K**nowledge.\n\n- **Zero-knowledge:** the proof reveals nothing beyond the fact that the statement is true.\n- **Succinct:** the proof is small and quick to check. According to z.cash, succinct proofs can be verified within a few milliseconds, with a proof length of only a few hundred bytes, even for statements about programs that are very large.\n- **Non-interactive:** in the first zero-knowledge protocols, prover and verifier had to talk back and forth for several rounds. In a non-interactive proof, the proof is a single message sent from prover to verifier.\n- **Argument of Knowledge:** the proof shows that the prover really knows a witness, not just that one exists.\n\nSmall and sent in one message: that is what makes a proof short enough to publish on a blockchain.\n\n## Why Zcash uses them\n\nZcash lets you choose. **Shielded** addresses keep your financial information private. **Transparent** addresses make it public, like most other blockchains.\n\nShielded transactions can be fully encrypted on the blockchain, yet still be verified as valid under the network's consensus rules, by using zk-SNARK proofs. The network checks the proof instead of reading the details. Zcash was the first widespread application of zk-SNARKs.\n\n## The trusted setup, and Halo 2\n\nOlder proof systems needed a setup phase that creates public parameters. ZIP 224 explains that Zcash's first two shielded protocols, Sprout and Sapling, use a proving system (Groth16) that requires a \"trusted setup\": parameters with a hidden structure that, if known, could be used to create fake proofs and counterfeit funds. Zcash generated these parameters through two elaborate multi-party ceremonies, one for Sprout and one for Sapling.\n\nWith Network Upgrade 5 (NU5) in May 2022, Zcash introduced the Orchard shielded protocol, which uses the **Halo 2** proving system. Halo removes the trusted setup while hitting performance targets, and supports a scalable architecture for private payments.\n\n## Key takeaways\n\n- A **prover** convinces a **verifier** that a **statement** is true, while the **witness** (the secret) stays hidden.\n- **Succinct** means tiny proofs (a few hundred bytes) checked in milliseconds.\n- **Non-interactive** means one message, short enough for a blockchain.\n- Zcash uses zk-SNARKs so that shielded, encrypted transactions can still be verified.\n- Since NU5 (May 2022), Orchard uses Halo 2, with no trusted setup.\n",
+  "sources": [
+    {
+      "title": "What are zk-SNARKs? (z.cash Learn)",
+      "url": "https://z.cash/learn/what-are-zk-snarks/",
+      "quote": "The acronym zk-SNARK stands for Zero-Knowledge Succinct Non-Interactive Argument of Knowledge and refers to a proof construction where one can prove possession of certain information, e.g., a secret key, without revealing that information, and without any interaction between the prover and verifier."
+    },
+    {
+      "title": "What are zk-SNARKs? (z.cash Learn)",
+      "url": "https://z.cash/learn/what-are-zk-snarks/",
+      "quote": "“Succinct” zero-knowledge proofs can be verified within a few milliseconds, with a proof length of only a few hundred bytes even for statements about programs that are very large."
+    },
+    {
+      "title": "The halo2 Book: Proof systems",
+      "url": "https://zcash.github.io/halo2/concepts/proofs.html",
+      "quote": "A Non-interactive Argument allows a prover to create a proof for a given statement and witness."
+    },
+    {
+      "title": "Explaining SNARKs Part I: Homomorphic Hidings (ECC blog)",
+      "url": "https://zodl.com/snark-explain/",
+      "quote": "Suppose Alice wants to prove to Bob she knows numbers x,y such that x+y=7"
+    },
+    {
+      "title": "What is the difference between shielded and transparent Zcash? (z.cash Learn)",
+      "url": "https://z.cash/learn/what-is-the-difference-between-shielded-and-transparent-zcash/",
+      "quote": "Shielded Zcash addresses keep your financial information private. Transparent addresses make that information public."
+    },
+    {
+      "title": "ZIP 224: Orchard Shielded Protocol",
+      "url": "https://zips.z.cash/zip-0224",
+      "quote": "the circuit parameters are a Structured Reference String (SRS) with hidden structure, that if known could be used to create fake proofs and thus counterfeit funds."
+    },
+    {
+      "title": "What are zk-SNARKs? (z.cash Learn)",
+      "url": "https://z.cash/learn/what-are-zk-snarks/",
+      "quote": "shielded transactions in Zcash can be fully encrypted on the blockchain, yet still be verified as valid under the network’s consensus rules by using zk-SNARK proofs."
+    }
+  ],
+  "quiz": [
+    {
+      "q": "In a zero-knowledge proof, what does the verifier learn?",
+      "options": [
+        "The secret (the witness)",
+        "Only that the statement is true",
+        "Half of the secret"
+      ],
+      "answer": 1,
+      "why": "Zero-knowledge means the proof reveals nothing beyond the fact that the statement is true. The witness stays with the prover."
+    },
+    {
+      "q": "What does “succinct” mean in zk-SNARK?",
+      "options": [
+        "The proof is small and quick to check",
+        "The proof is encrypted twice",
+        "The proof needs many rounds of messages"
+      ],
+      "answer": 0,
+      "why": "Succinct proofs are only a few hundred bytes and can be verified within a few milliseconds, even for very large programs."
+    },
+    {
+      "q": "What did Halo 2 (used by Orchard since NU5, May 2022) remove?",
+      "options": [
+        "Transparent addresses",
+        "The trusted setup",
+        "Shielded transactions"
+      ],
+      "answer": 1,
+      "why": "Sprout and Sapling relied on Groth16 and a trusted setup. Halo removes the trusted setup while hitting performance targets."
+    }
+  ],
+  "scenes": [
+    {
+      "kind": "title",
+      "kicker": "zkSNARKs · Intro",
+      "title": "What is a zk-SNARK?"
+    },
+    {
+      "kind": "say",
+      "text": "Imagine proving you know a secret, without ever saying the secret.",
+      "sub": "That is what a zero-knowledge proof does."
+    },
+    {
+      "kind": "quote",
+      "source": 0,
+      "seconds": 12
+    },
+    {
+      "kind": "steps",
+      "title": "The cast of every proof",
+      "steps": [
+        "Prover: knows the secret and makes the proof",
+        "Verifier: checks the proof",
+        "Statement: the claim being proven",
+        "Witness: the secret that makes the claim true"
+      ]
+    },
+    {
+      "kind": "quote",
+      "source": 2,
+      "seconds": 8
+    },
+    {
+      "kind": "analogy",
+      "title": "Proving you have the key",
+      "left": "You open your front door while a friend watches. They know you have the key, but never touch it.",
+      "right": "The verifier becomes convinced the statement is true, but never sees the witness.",
+      "caption": "Only an analogy: a real verifier runs a mathematical check, it doesn't watch a door.",
+      "seconds": 13
+    },
+    {
+      "kind": "say",
+      "text": "Toy example: Alice proves to Bob she knows two numbers that add up to 7, without telling him the numbers.",
+      "sub": "From the ECC series “Explaining SNARKs”. It shows one ingredient, not a full zk-SNARK.",
+      "seconds": 11
+    },
+    {
+      "kind": "steps",
+      "title": "zk-SNARK, letter by letter",
+      "steps": [
+        "zk · Zero-Knowledge: nothing leaks but “it's true”",
+        "S · Succinct: small and fast to check",
+        "N · Non-interactive: one single message",
+        "ARK · Argument of Knowledge: the prover really knows"
+      ]
+    },
+    {
+      "kind": "number",
+      "value": "100s of bytes",
+      "label": "Size of a succinct proof: “only a few hundred bytes”, even for very large programs",
+      "source": 1
+    },
+    {
+      "kind": "number",
+      "value": "milliseconds",
+      "label": "Time to verify it: “within a few milliseconds”",
+      "source": 1
+    },
+    {
+      "kind": "compare",
+      "title": "Interactive vs non-interactive",
+      "a": {
+        "label": "Early protocols",
+        "points": [
+          "Prover and verifier talk back and forth",
+          "Several rounds of messages"
+        ]
+      },
+      "b": {
+        "label": "Non-interactive",
+        "points": [
+          "The proof is one single message",
+          "Short enough to publish on a blockchain"
+        ]
+      }
+    },
+    {
+      "kind": "compare",
+      "title": "Zcash gives you the choice",
+      "a": {
+        "label": "Transparent",
+        "points": [
+          "Makes your financial information public",
+          "Like most other blockchains"
+        ]
+      },
+      "b": {
+        "label": "Shielded",
+        "points": [
+          "Keeps your financial information private",
+          "Encrypted, yet verified with zk-SNARKs"
+        ]
+      }
+    },
+    {
+      "kind": "quote",
+      "source": 6,
+      "seconds": 10
+    },
+    {
+      "kind": "say",
+      "text": "Zcash was the first widespread application of zk-SNARKs.",
+      "sub": "The network checks the proof instead of reading the details.",
+      "seconds": 7
+    },
+    {
+      "kind": "say",
+      "text": "Older Zcash proofs needed a “trusted setup”. If its hidden structure were known, someone could make fake proofs and counterfeit coins.",
+      "sub": "Zcash ran two multi-party ceremonies, for Sprout and Sapling, to generate those parameters.",
+      "seconds": 12
+    },
+    {
+      "kind": "say",
+      "text": "Since NU5 in May 2022, Orchard uses Halo 2, with no trusted setup.",
+      "sub": "Halo removes the trusted setup while hitting performance targets.",
+      "seconds": 9
+    },
+    {
+      "kind": "quiz",
+      "q": "In a zero-knowledge proof, what does the verifier learn?",
+      "options": [
+        "The secret (the witness)",
+        "Only that the statement is true",
+        "Half of the secret"
+      ],
+      "answer": 1
+    },
+    {
+      "kind": "recap",
+      "points": [
+        "A prover convinces a verifier that a statement is true",
+        "The witness, the secret, stays hidden",
+        "Succinct: tiny proofs, checked in milliseconds",
+        "Non-interactive: one message, fits on a blockchain",
+        "Zcash uses them to verify shielded transactions"
+      ]
+    }
+  ],
+  "video": "https://api.zscan.cash/media/university/what-is-a-zksnark.mp4",
+  "poster": "https://api.zscan.cash/media/university/what-is-a-zksnark.jpg"
+}

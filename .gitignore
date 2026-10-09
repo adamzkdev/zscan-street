@@ -10,3 +10,7 @@ captures/
 design*.png
 Diorama*.png
 shots/*/
+# course videos (rendered by university/video; hosted on the API server, not in git)
+public/university/video/
+university/video/node_modules
+university/video/out

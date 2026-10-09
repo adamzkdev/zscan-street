@@ -93,7 +93,7 @@ export const SHOTENGAI = { x: ST.shotengai, z0: -39.4 + 1, z1: 32 - 1, half: 4 +
  * The landmarks' lots: whole blocks (merged across the small streets inside them) kept for a
  * building of their own, placed like a city planner would.
  */
-export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "plots" | "works" | "nu7" | "zodl" | "vizor" | "noir";
+export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "plots" | "works" | "nu7" | "zodl" | "vizor" | "noir" | "university";
 /** A player plot: 32 × 32 voxels (5.3 m) of ground, its front centre and which way it faces. */
 export interface PlotSlot {
   id: number;
@@ -209,6 +209,8 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
   { kind: "plots", x0: 58, x1: 82, z0: 2.6, z1: 32 },
   // the agents' quarter on the park's east side: the city works, where the winning projects go up
   { kind: "works", x0: 58, x1: 82, z0: -116, z1: CORE.minZ - 8 },
+  // ZK UNIVERSITY next to it, its Oval on the street across from ZODL, the quad running north
+  { kind: "university", x0: 90, x1: 115, z0: -116, z1: CORE.minZ - 8 },
   // the NU7 quarter, the stadium's twin east of Midtown: the NU7 Tower and the karting, built by the upgrade
   { kind: "nu7", x0: 129, x1: 221, z0: -116, z1: CORE.minZ - 8 },
   // the Binhai Library on the south bank, facing the heart across the river and its footbridges
@@ -909,9 +911,9 @@ export function planCity() {
 
   // ---- the landmarks, each on its lot (or out on the water) ----
   /** Which way each lot's front faces (towards the street that matters). */
-  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e", zkorchard: "s", zksapling: "n", zkhalo: "s", binhai: "n", cemetery: "s", zodl: "s", vizor: "n", noir: "s" };
+  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e", zkorchard: "s", zksapling: "n", zkhalo: "s", binhai: "n", cemetery: "s", zodl: "s", vizor: "n", noir: "s", university: "s" };
   /** The landmarks you can walk into, and the place each one opens. */
-  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben", gardens: "gardens", zkorchard: "tower-orchard", zksapling: "tower-sapling", zkhalo: "tower-halo", binhai: "library", cemetery: "cemetery", zodl: "zodl", vizor: "vizor", noir: "noir" };
+  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben", gardens: "gardens", zkorchard: "tower-orchard", zksapling: "tower-sapling", zkhalo: "tower-halo", binhai: "library", cemetery: "cemetery", zodl: "zodl", vizor: "vizor", noir: "noir", university: "university" };
   const landmarkJob = (kind: string, x0: number, x1: number, z0: number, z1: number, face: BuildingJob["face"], venue?: string, dy?: number) => {
     const ns = face === "s" || face === "n";
     const w = ns ? x1 - x0 : z1 - z0,
