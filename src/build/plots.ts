@@ -52,10 +52,10 @@ function freeSign() {
   g.fillStyle = "#f4b728";
   g.font = "700 30px 'DotGothic16', monospace";
   g.textAlign = "center";
-  g.fillText("空き地 FREE", 128, 44);
+  g.fillText("建築 BUILDER", 128, 44);
   g.font = "400 20px 'DotGothic16', monospace";
   g.fillStyle = "#ffffff";
-  g.fillText("click to build", 128, 76);
+  g.fillText("coming soon", 128, 76);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -181,8 +181,8 @@ export class Plots {
         b
           ? `<h3>${esc(b.row.name)}</h3><p>${own ? "Your building." : "Built by a visitor."}</p>
              ${own ? `<button class="go" data-a="build" data-p="${id}">Rebuild in the workshop</button>` : `<button data-a="report" data-p="${id}">Report</button>`}`
-          : `<h3>Free plot</h3><p>32 × 32 voxels of ground, 48 high. Build anything; it stays in the city for everyone.</p>
-             <button class="go" data-a="build" data-p="${id}">Build here</button>`
+          : `<h3>Builder here</h3><p>Coming soon.</p>
+             <button class="go" disabled>Coming soon</button>`
       }`;
     this.panel.classList.add("open");
   }
@@ -190,7 +190,8 @@ export class Plots {
   private async build(id: number) {
     this.panel.classList.remove("open");
     const b = this.built.get(id);
-    if (b && !mine().includes(id)) return;
+    // free plots will be bought before they're built on: not open yet
+    if (!b || !mine().includes(id)) return;
     this.hooks.pause(true);
     const res = await this.editor.edit(b?.row.name ?? "", b ? decode(b.row.model) : null);
     this.hooks.pause(false);

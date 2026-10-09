@@ -5648,3 +5648,7 @@ a.srow:hover span {
   color: #ff9a3c;
   box-shadow: inset 0 0 0 1px rgba(255, 154, 60, 0.6);
 }
+.plotpanel button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
