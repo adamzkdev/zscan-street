@@ -30,6 +30,7 @@ import { buildPyramid } from "./interior/pyramid";
 import { buildEiffel } from "./interior/eiffel";
 import { buildColosseum } from "./interior/colosseum";
 import { buildReserve } from "./interior/reserve";
+import { buildWalletTower } from "./interior/wallettower";
 import { buildOpera } from "./interior/opera";
 import { buildBigBen } from "./interior/bigben";
 import { buildStatue } from "./interior/statue";
@@ -44,6 +45,7 @@ import { StadiumLive } from "./scene/stadium";
 import { type RideKind, Sky } from "./scene/sky";
 import { Shibuya } from "./scene/shibuya";
 import { GoldenGate } from "./scene/goldengate";
+import { WalletCrowns } from "./scene/walletcrowns";
 import { Forest } from "./scene/forest";
 import { Cemetery } from "./scene/cemetery";
 import { Chatter } from "./scene/chatter";
@@ -567,6 +569,8 @@ function skyAt(x: number, y: number) {
 }
 // the Golden Gate: traffic over it, and its deck to walk on
 const goldenGate = new GoldenGate(scene, city);
+// the ZODL and Vizor emblems turning over their towers
+const walletCrowns = new WalletCrowns(scene, city);
 // Shielded Woods: the redwood forest on the headland across the bridge, walkable off its deck
 const forest = new Forest(scene, city, director, (z) => goldenGate.deckAt(z));
 // the ZK Cemetery: zombie zkSNARKs rising from their graves (more of them at night)
@@ -599,6 +603,9 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
   "tower-orchard": "art deco · observatory",
   "tower-sapling": "sky gardens · infinity pool",
   "tower-halo": "trading floor · helipad",
+  zodl: "tweets · releases · the crown",
+  vizor: "tweets · releases · the crown",
+  noir: "tweets · releases · the crown",
   cemetery: "the crypt · zombies inside",
 };
 
@@ -620,6 +627,9 @@ const PLACE_ABOUT: Record<string, string> = {
   "tower-orchard": "ZK TOWER ORCHARD is the art-deco supertall of Midtown: a gold and black marble lobby, offices, a jazz club and an observatory deck with telescopes under its steel crown.",
   "tower-sapling": "ZK TOWER SAPLING is the green tower by the marina: sky gardens every few floors, flats, and an infinity pool with a rooftop bar.",
   "tower-halo": "ZK TOWER HALO is the twisted glass tower on Wall Street: a trading floor with live Zcash charts, a VIP lounge and a helipad on the roof.",
+  zodl: "The ZODL TOWER is the white tower of Zodl, the Zcash wallet (formerly Zashi) built by ZODL, across the avenue from the ZEC Reserve: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its black bird on white turning over the roof.",
+  noir: "The NOIR TOWER is the obsidian tower of Noir, the shielded Zcash wallet in your browser (a Chrome extension web pages can ask to pay or sign), next to the ZODL TOWER on the avenue: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver eclipse and green light turning over the roof.",
+  vizor: "The VIZOR TOWER is the crimson tower of Vizor, the Zcash wallet from the Keplr team, across the avenue from ZK TOWER HALO: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver knight's helmet turning over the roof.",
   cemetery: "The ZK Cemetery is the Père-Lachaise of ZStreet, on the hill at the north-east edge: crooked graves with epitaphs about lost seed phrases and transparent addresses, a chapel, and the CRYPT under the mausoleum, where Zcash buries what it retired (the Sprout pool, BCTV14, the trusted setup, the Founders' Reward). Only zombie zkSNARKs live here; more of them climb out at night.",
 };
 
@@ -749,6 +759,9 @@ const PLACES: Record<Interior["key"], string> = {
   "tower-sapling": "ZK TOWER SAPLING",
   "tower-halo": "ZK TOWER HALO",
   cemetery: "ZK CEMETERY",
+  zodl: "ZODL TOWER",
+  vizor: "VIZOR TOWER",
+  noir: "NOIR TOWER",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
@@ -865,6 +878,9 @@ const interiors = new InteriorManager(
     "tower-orchard": () => buildOrchard(ictx),
     "tower-sapling": () => buildSapling(ictx),
     "tower-halo": () => buildHalo(ictx),
+    zodl: () => buildWalletTower(ictx, "zodl"),
+    vizor: () => buildWalletTower(ictx, "vizor"),
+    noir: () => buildWalletTower(ictx, "noir"),
     cemetery: () => buildCemetery(ictx),
   },
   {
@@ -1713,7 +1729,7 @@ function onPayEvent(e: PayEvent) {
     return;
   }
   const what =
-    e.action === "mark" ? "Your message glows where you stood." : e.action === "guestbook" ? "Your line is on the Reserve's guestbook wall." : e.action === "vote" ? "Your sealed vote counts in City Works." : "Thank you! Fireworks over the avenue.";
+    e.action === "mark" ? "Your message glows where you stood." : e.action === "guestbook" ? "Your line is on the wallet towers' guestbook." : e.action === "vote" ? "Your sealed vote counts in City Works." : "Thank you! Fireworks over the avenue.";
   gameHud.mail("chain", `Sealed in block ${e.height.toLocaleString("en-US")}`, what);
 }
 visitors.onPay(onPayEvent);
@@ -1836,6 +1852,9 @@ const PLACE_ICON: Record<Interior["key"], string> = {
   "tower-sapling": "緑",
   "tower-halo": "環",
   cemetery: "霊",
+  zodl: "鳥",
+  vizor: "視",
+  noir: "黒",
 };
 const placeBlips: Blip[] = doors.map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));
 function mapBlips(): Blip[] {
@@ -2482,6 +2501,7 @@ function frameBody(stepDt?: number) {
   sky.update(t, sim, camQuat, camRight);
   if (!walking) sky.aim(rig.persp);
   goldenGate.update(sim);
+  walletCrowns.update(dt, t);
   forest.update(sim, t, cam, focus, theme === "night", walking, wide);
   cemetery.update(sim, t, cam, focus, theme === "night", walking, wide);
   // the ride is over (or the camera went elsewhere): back to the map

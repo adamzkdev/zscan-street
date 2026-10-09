@@ -136,6 +136,10 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
     style: "garden",
     lifts: per({ 0: [lobby(-5, -23.84, 0)], 1: [lobby(0, -9.84, 0)], 2: [lobby(-11.84, -12, Math.PI / 2)], 3: [lobby(-11.84, -12, Math.PI / 2)], 4: [lobby(-10.5, -22.84, 0)] }),
   },
+  // the wallet towers (interior/wallettower): the lobby's west wall, the floors' west walls, the roof's lift house
+  zodl: { style: "white", lifts: per({ 0: [lobby(-13.8, -21, Math.PI / 2)], 1: [lobby(-15.8, -6, Math.PI / 2)], 2: [lobby(-13.8, -6, Math.PI / 2)], 3: [lobby(0, -21.8, 0)] }) },
+  noir: { style: "steel", lifts: per({ 0: [lobby(-13.8, -21, Math.PI / 2)], 1: [lobby(-15.8, -6, Math.PI / 2)], 2: [lobby(-13.8, -6, Math.PI / 2)], 3: [lobby(0, -21.8, 0)] }) },
+  vizor: { style: "steel", lifts: per({ 0: [lobby(-13.8, -21, Math.PI / 2)], 1: [lobby(-15.8, -6, Math.PI / 2)], 2: [lobby(-13.8, -6, Math.PI / 2)], 3: [lobby(0, -21.8, 0)] }) },
   "tower-halo": {
     style: "neon",
     lifts: per({ 0: [lobby(-14.8, -24, Math.PI / 2)], 1: [lobby(-17.8, -7, Math.PI / 2)], 2: [lobby(-13.7, -7, Math.PI / 2)], 3: [lobby(0, 1.68, Math.PI)] }),

@@ -66,7 +66,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery";
+  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir";
   /** Shown top-left while inside ("MEMPOOL"). */
   readonly title: string;
   readonly scene: THREE.Scene;

@@ -8,11 +8,11 @@ const X = '<svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></
 const EXT = '<svg class="i" viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg>';
 const NOIR_STORE = "https://chromewebstore.google.com/detail/noir-wallet/mfoghjbpfanobmnoemoepenjjcmfpmdn";
 
-/** The wallets on show in the Reserve's hall (the phones and the terminal). */
+/** The wallets on show: Zodl and Vizor have their towers on the avenue; Noir pays from the browser. */
 export const WALLETS = [
-  { key: "zodl", name: "Zodl", kind: "Mobile · iOS & Android", color: "#f4b728", line: "Shielded by default, swaps through NEAR Intents, CrossPay, Keystone. Formerly Zashi.", url: "https://www.zodl.com/" },
-  { key: "vizor", name: "Vizor", kind: "Desktop & mobile", color: "#8f7bff", line: "From the team behind Keplr: shielded by default, Keystone and Ledger signing, open source.", url: "https://vizor.cash/" },
-  { key: "noir", name: "Noir", kind: "Browser extension", color: "#e8e4dc", line: "A shielded wallet in Chrome that web pages can ask to pay or to sign: one click instead of a QR code.", url: NOIR_STORE },
+  { key: "zodl", name: "Zodl", kind: "Mobile · iOS & Android", color: "#f5f4f2", line: "Shielded by default, swaps through NEAR Intents, CrossPay, Keystone. Formerly Zashi.", url: "https://www.zodl.com/" },
+  { key: "vizor", name: "Vizor", kind: "Desktop & mobile", color: "#e0306a", line: "From the team behind Keplr: shielded by default, Keystone and Ledger signing, open source.", url: "https://vizor.cash/" },
+  { key: "noir", name: "Noir", kind: "Browser extension", color: "#00d38c", line: "A shielded wallet in Chrome that web pages can ask to pay or to sign: one click instead of a QR code.", url: NOIR_STORE },
 ] as const;
 export type WalletKey = (typeof WALLETS)[number]["key"];
 
@@ -39,7 +39,7 @@ type View =
 
 const COPY: Record<PayAction, { eyebrow: string; title: string; sub: string; field: string; max: number; ph: string }> = {
   mark: { eyebrow: "On-chain message", title: "Leave a message here", sub: "Sealed in a shielded memo, it glows on the ground where you stand for everyone who passes.", field: "Your message", max: 300, ph: "Praise the block…" },
-  guestbook: { eyebrow: "ZEC Reserve", title: "Sign the guestbook", sub: "A line on the Reserve's gilded wall, sealed in a shielded memo.", field: "Your line", max: 300, ph: "Privacy is normal." },
+  guestbook: { eyebrow: "Wallet towers", title: "Sign the guestbook", sub: "A line on the guestbook in the ZODL and Vizor towers, sealed in a shielded memo.", field: "Your line", max: 300, ph: "Privacy is normal." },
   vote: { eyebrow: "City Works", title: "A sealed vote", sub: "Paid from your wallet, counted apart from the free votes: harder to fake.", field: "", max: 0, ph: "" },
   tip: { eyebrow: "ZStreet", title: "Tip the city", sub: "Fireworks over the avenue for everyone. From 0.1 ZEC your name rides the buses for a day.", field: "Name on the buses (optional)", max: 24, ph: "anon" },
 };
@@ -168,7 +168,7 @@ export class PayDesk {
     const r = await StreetPay.intent(view.action, {
       text,
       ...(view.action === "mark" && h ? { place: h.place, floor: h.floor, x: h.x, y: h.y, z: h.z } : {}),
-      ...(view.action === "guestbook" ? { place: "reserve" } : {}),
+      ...(view.action === "guestbook" ? { place: "wallets" } : {}),
       ...(view.action === "vote" ? { round: view.round, idx: view.idx } : {}),
     });
     this.busy = false;
@@ -270,7 +270,7 @@ export class PayDesk {
     const info = await StreetPay.info();
     const list = first ? [...WALLETS].sort((a, b) => (a.key === first ? -1 : b.key === first ? 1 : 0)) : WALLETS;
     const on = info?.enabled;
-    return `${this.head("ZEC Reserve · 財布", "Wallet gallery", "Your own wallet, in the city: scan a code, the memo plays for everyone.")}
+    return `${this.head("Wallet towers · 財布", "Your wallet", "Your own wallet, in the city: scan a code, the memo plays for everyone.")}
       <div class="wallets">${list
         .map(
           (w) => `<div class="wcard ${w.key === first ? "on" : ""}" style="--w:${w.color}">

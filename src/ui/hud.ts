@@ -157,6 +157,9 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   "tower-orchard": { icon: "tower", color: "#d9b25a" },
   "tower-sapling": { icon: "tower", color: "#5cff9a" },
   "tower-halo": { icon: "tower", color: "#3ef0ff" },
+  zodl: { icon: "tower", color: "#f5f4f2" },
+  vizor: { icon: "tower", color: "#e0306a" },
+  noir: { icon: "tower", color: "#00d38c" },
   cemetery: { icon: "vault", color: "#7dff9a" },
 };
 
