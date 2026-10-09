@@ -672,23 +672,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       washes.forEach((l, i) => (l.color = "#" + c.setHSL((t * 0.02 + i * 0.3) % 1, 0.55, 0.7).getHexString()));
     });
   }
-  // the Burj Al ZEC's sail: a column of light washing up it at night, slowly changing colour
-  const ba = landmarks.get("burjalarab");
-  if (ba?.points.sailFoot && ba.points.sailTop) {
-    const a = ba.points.sailFoot,
-      b = ba.points.sailTop;
-    const wash = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ color: "#ff66cc", transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
-    );
-    (wash.material as THREE.Material).userData.night = true;
-    wash.position.lerpVectors(a, b, 0.5).add(new THREE.Vector3(0, 0, 0.6).applyAxisAngle(Y, ba.yaw));
-    wash.rotation.y = ba.yaw;
-    wash.scale.set(Math.max(6, Math.abs(b.y - a.y) * 0.32), Math.abs(b.y - a.y), 1);
-    g.add(wash);
-    const c = new THREE.Color();
-    animated.push((t) => (wash.material as THREE.MeshBasicMaterial).color.copy(c.setHSL((t * 0.025) % 1, 0.8, 0.6)));
-  }
+  // (the Burj Al ZEC's sail lights up by its own seams at night: no flat wash plane in front of it)
   // Big Ben's four dials: live hands on London time
   const pa = landmarks.get("parliament");
   if (pa?.raw.clockR) {
