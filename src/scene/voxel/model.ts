@@ -5,9 +5,35 @@ export const VOX = 1 / 6;
 
 export type Kind = "solid" | "glass" | "emit";
 
+/**
+ * What a solid voxel is made of, guessed once from its colour (see `classify`): the shader gives
+ * each its own grain, gloss and relief (brick courses, stone joints, wood planks, leaves…).
+ * 0 plain paint · 1 brick / terracotta · 2 stone / stucco · 3 concrete · 4 wood · 5 foliage ·
+ * 6 dark metal / rubber · 7 white marble / enamel.
+ */
+export type Mat = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export const MAT = { paint: 0, brick: 1, stone: 2, concrete: 3, wood: 4, leaf: 5, metal: 6, marble: 7 } as const;
+
+const _hsl = { h: 0, s: 0, l: 0 };
+export function classify(color: THREE.Color): Mat {
+  color.getHSL(_hsl, THREE.SRGBColorSpace);
+  const h = _hsl.h * 360,
+    s = _hsl.s,
+    l = _hsl.l;
+  if (h >= 70 && h <= 170 && s > 0.22 && l > 0.12 && l < 0.75) return 5;
+  if (l < 0.15) return 6;
+  if (s < 0.12 && l > 0.8) return 7;
+  if (s < 0.2) return 3;
+  if ((h <= 18 || h >= 345) && s > 0.35 && l > 0.2 && l < 0.62) return 1;
+  if (h > 18 && h <= 48 && s > 0.25 && l >= 0.1 && l < 0.42) return 4;
+  if (h > 15 && h <= 60 && l >= 0.5 && l < 0.92) return 2;
+  return 0;
+}
+
 interface Entry {
   color: THREE.Color;
   kind: Kind;
+  mat: Mat;
 }
 
 /**
@@ -15,18 +41,18 @@ interface Entry {
  * models stay small (one byte per cell) and the mesher can merge faces of the same colour.
  */
 class Palette {
-  readonly entries: Entry[] = [{ color: new THREE.Color(0, 0, 0), kind: "solid" }];
+  readonly entries: Entry[] = [{ color: new THREE.Color(0, 0, 0), kind: "solid", mat: 0 }];
   private index = new Map<string, number>();
 
-  get(hex: string, kind: Kind = "solid", strength = 1): number {
-    const key = `${hex}|${kind}|${strength}`;
+  get(hex: string, kind: Kind = "solid", strength = 1, mat?: Mat): number {
+    const key = `${hex}|${kind}|${strength}|${mat ?? ""}`;
     let i = this.index.get(key);
     if (i === undefined) {
       if (this.entries.length >= 4095) throw new Error("voxel palette full");
       const color = new THREE.Color(hex);
       if (kind === "emit") color.multiplyScalar(strength);
       i = this.entries.length;
-      this.entries.push({ color, kind });
+      this.entries.push({ color, kind, mat: kind === "solid" ? (mat ?? classify(color)) : 0 });
       this.index.set(key, i);
     }
     return i;
@@ -34,8 +60,10 @@ class Palette {
 }
 export const palette = new Palette();
 
-/** Solid colour. */
+/** Solid colour (its material guessed from the colour). */
 export const C = (hex: string) => palette.get(hex);
+/** Solid colour of a given material (cars, signs: paint, whatever the colour says). */
+export const CM = (hex: string, mat: Mat) => palette.get(hex, "solid", 1, mat);
 /** Window glass (reflective). */
 export const G = (hex: string) => palette.get(hex, "glass");
 /** Light source: HDR so it blooms. */

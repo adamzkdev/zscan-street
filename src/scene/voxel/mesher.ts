@@ -1,5 +1,12 @@
 import * as THREE from "three";
 import { palette, VOX, type Kind, type VoxelModel } from "./model";
+import { voxelGlass, voxelSolid } from "./surface";
+
+/**
+ * Size of one material step in a voxel normal's minor components: 2/127, exact in the worker's
+ * signed-byte normals. The shader reads the class back and snaps the normal to its axis.
+ */
+export const MAT_NORMAL = 2 / 127;
 
 /** Brightness per ambient-occlusion level (0 = corner fully enclosed). */
 const AO = [0.52, 0.68, 0.84, 1];
@@ -128,8 +135,11 @@ function emitQuad(bufs: Record<Kind, Buf>, d: number, u: number, v: number, s: n
     return p;
   };
   const verts = [corner(0, 0), corner(w, 0), corner(w, h), corner(0, h)];
+  // the voxel's material rides in the normal's two zero components (see MAT_NORMAL): no extra
+  // attribute, so the worker's packing, the city cache and the batches stay as they are
   const normal = [0, 0, 0];
   normal[d] = back ? -1 : 1;
+  normal[u] = normal[v] = entry.mat * MAT_NORMAL;
   const base = b.pos.length / 3;
   verts.forEach((p, k) => {
     b.pos.push(p[0], p[1], p[2]);
@@ -151,6 +161,13 @@ export const MATERIALS = {
   glass: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.12, metalness: 0.55 }),
   emit: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
 };
+
+/** `?detail=0`: the plain look (a kill switch, and a baseline for measuring). */
+export const DETAIL_ON = typeof location === "undefined" || new URLSearchParams(location.search).get("detail") !== "0";
+if (DETAIL_ON) {
+  MATERIALS.solid.onBeforeCompile = voxelSolid;
+  MATERIALS.glass.onBeforeCompile = voxelGlass;
+}
 
 /** Seconds, advanced by the decor each frame: drives the lit windows and the neon below. */
 export const EMIT_TIME = { value: 0 };

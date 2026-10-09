@@ -1,7 +1,6 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { FXAAPass } from "three/examples/jsm/postprocessing/FXAAPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { connectFeed, ZScan } from "./data/zscan";
@@ -17,6 +16,8 @@ import { Soundscape } from "./audio";
 import { memeStats, posterHit, updateMemes } from "./scene/memes";
 import { cityMemes } from "./scene/memewalls";
 import { LampLights, tiltShift } from "./scene/post";
+import { FinishPass, GradePass, ScenePass } from "./scene/finish";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { applyTheme, setRainWanted, type Theme } from "./scene/theme";
 import type { Snark } from "./scene/snark";
 import { Overlays } from "./ui/overlays";
@@ -198,13 +199,20 @@ const rig = new CameraRig(canvas, {
 });
 rig.canopies = city.canopies;
 const composer = new EffectComposer(renderer);
-const renderPass = new RenderPass(scene, rig.camera);
+// the scene, multisampled in its own target; then AO and curvature, before the bloom
+const renderPass = new ScenePass(scene, rig.camera, 0);
 composer.addPass(renderPass);
+const finish = new FinishPass(rig.camera, renderPass);
+composer.addPass(finish);
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.38, 0.4, 0.95);
 composer.addPass(bloom);
 const tilt = tiltShift();
 for (const p of tilt.passes) composer.addPass(p);
+const grade = new GradePass();
+composer.addPass(grade);
 composer.addPass(new OutputPass());
+const fxaa = new FXAAPass();
+composer.addPass(fxaa);
 
 /** Day, night, or "auto": follows the visitor's own clock (night from 19:00 to 7:00). */
 type ThemePref = Theme | "auto";
@@ -225,6 +233,7 @@ let theme: Theme = themePref === "auto" ? clockTheme() : themePref;
 function setTheme(t: Theme) {
   theme = t;
   applyTheme({ renderer, scene, hemi, sun: moon, bloom, lamps: lampLights, decor, city: city.group }, t);
+  grade.setTheme(t === "day");
   hud?.setNight(t === "night");
   weather(true);
   // the place you are in follows (its windows, its light); the others catch up when entered
@@ -313,6 +322,12 @@ const quality = new Quality((q) => {
   }
   bloom.enabled = q.bloom;
   tilt.allowed = q.tilt;
+  finish.ao = q.ao;
+  finish.ssr = q.ssr;
+  // antialiasing by FXAA after tone mapping (MSAA cost a third of the frame in the dense views);
+  // on a retina screen the pixels are their own antialiasing
+  fxaa.enabled = dpr < 1.75;
+  finish.aoScale = dpr >= 1.5 ? 3 : 2;
   resize();
 });
 window.addEventListener("resize", resize);
@@ -915,7 +930,7 @@ const interiors = new InteriorManager(
 );
 // phones and modest machines keep fewer walk-in places on the GPU at once
 interiors.keep = quality.level >= 2 ? 3 : 8;
-warmTarget(() => composer.readBuffer);
+warmTarget(() => renderPass.rt);
 interiors.compile = (s, c) => warm(renderer, s, c);
 // frames during an entry, a camera flight or right after a tier change say nothing about the device
 // (and neither do the boot screen's, while the city warms up and places are built ahead)
@@ -2023,6 +2038,11 @@ connectFeed({
 if (new URLSearchParams(location.search).has("debug")) {
   Object.assign(window, {
     street: {
+      finish,
+      grade,
+      scene3: scene,
+      composer,
+      setSamples: (n: number) => renderPass.setSamples(n),
       /** The game layer: feed a made-up block (n transactions, "shielded" kind), cut the power… */
       game: {
         clock: chainClock,
@@ -2408,7 +2428,7 @@ function frameBody(stepDt?: number) {
     sound.setScene(interiors.active.key, interiors.floor, { name: interiors.active.floors[interiors.floor]?.name ?? "", night: theme === "night", ear: interiors.walk.camera });
     joystick.sync(interiors.walk);
     renderPass.scene = interiors.active.scene;
-    renderPass.camera = interiors.walk.camera;
+    renderPass.camera = finish.camera = interiors.walk.camera;
     tilt.set(0);
     // speech bubbles: only for speakers in sight, a steady size, kept apart and on screen
     bubbles.update(dt, interiors.walk.camera, window.innerWidth, window.innerHeight);
@@ -2456,7 +2476,7 @@ function frameBody(stepDt?: number) {
     scene.fog.near = (theme === "day" ? 170 : 150) + (iso ? 260 : 0) + up;
     scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 : 0) + up * 1.6;
   }
-  renderPass.camera = cam;
+  renderPass.camera = finish.camera = cam;
   updateMemes(dt, cam, scene);
   cam.getWorldQuaternion(camQuat);
   camRight.set(1, 0, 0).applyQuaternion(camQuat);

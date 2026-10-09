@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Nav } from "../nav";
+import { addDetail } from "../detail";
 import { blobTexture, concreteTexture, grassTexture, neonTexture, pavingTexture, roadTexture, waterTexture } from "../textures";
 import { MATERIALS, ownMaterial, toObject } from "../voxel/mesher";
 import { C, E, G, VOX, VoxelModel, type Kind } from "../voxel/model";
@@ -846,7 +847,7 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   const cz = (C.maxZ + C.minZ) / 2;
   // diorama base: layered stone like a cut-away model
   // (cut where the river runs: its bed sits lower)
-  const strata = new THREE.MeshStandardMaterial({ map: strataTexture(W, depth), roughness: 0.95 });
+  const strata = addDetail(new THREE.MeshStandardMaterial({ map: strataTexture(W, depth), roughness: 0.95 }), "concrete");
   box(g, W + 0.6, 3.2, RIVER.z0 - C.minZ + 0.3, strata, 0, -3.2, (C.minZ - 0.3 + RIVER.z0) / 2);
   box(g, W + 0.6, 3.2, BAY.z0 - RIVER.z1, strata, 0, -3.2, (RIVER.z1 + BAY.z0) / 2);
   box(g, W + 0.6, 3.2 + RIVER.bed, RIVER.z1 - RIVER.z0, strata, 0, -3.2, (RIVER.z0 + RIVER.z1) / 2);
@@ -938,7 +939,7 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
     d.repeat.set(14, 7);
     return d;
   }), 0, CURB, 21.5);
-  const waterMat = new THREE.MeshStandardMaterial({ map: waterTexture(), color: "#5aaac0", roughness: 0.04, metalness: 0.35, emissive: "#0a4a5a", emissiveIntensity: 0.9 });
+  const waterMat = addDetail(new THREE.MeshStandardMaterial({ map: waterTexture(), color: "#5aaac0", roughness: 0.04, metalness: 0.35, emissive: "#0a4a5a", emissiveIntensity: 0.9 }), "water");
   for (const [r, y] of [
     [3.35, 0.68],
     [1.5, 1.95],
@@ -955,17 +956,17 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   // Orchard: grass under the orchard and the park, a path, the pond
   const grass = grassTexture(4);
   grass.repeat.set(10, 6);
-  flat(g, 22, 13, new THREE.MeshStandardMaterial({ map: grass, roughness: 0.95 }), -38.5, CURB + 0.004, nz(-27.5), 0);
+  flat(g, 22, 13, addDetail(new THREE.MeshStandardMaterial({ map: grass, roughness: 0.95 }), "grass"), -38.5, CURB + 0.004, nz(-27.5), 0);
   const parkGrass = grassTexture(5);
   parkGrass.repeat.set(10, 10);
-  flat(g, 20.5, 23, new THREE.MeshStandardMaterial({ map: parkGrass, roughness: 0.95 }), -38.6, CURB + 0.004, 19.5, 0);
+  flat(g, 20.5, 23, addDetail(new THREE.MeshStandardMaterial({ map: parkGrass, roughness: 0.95 }), "grass"), -38.6, CURB + 0.004, 19.5, 0);
   // the koi pond: a stone rim, dark water, lily pads; the koi themselves swim in decor.ts
   const rim = new THREE.Mesh(new THREE.RingGeometry(2.45, 2.75, 40), mat("#7a766e"));
   rim.rotation.x = -Math.PI / 2;
   rim.scale.set(1.75, 1.2, 1);
   rim.position.set(-37.5, CURB + 0.03, 21);
   g.add(rim);
-  const pond = new THREE.Mesh(new THREE.CircleGeometry(2.5, 40), new THREE.MeshStandardMaterial({ map: waterTexture(), color: "#4a8aa0", roughness: 0.04, metalness: 0.35, emissive: "#06303a", emissiveIntensity: 0.8 }));
+  const pond = new THREE.Mesh(new THREE.CircleGeometry(2.5, 40), addDetail(new THREE.MeshStandardMaterial({ map: waterTexture(), color: "#4a8aa0", roughness: 0.04, metalness: 0.35, emissive: "#06303a", emissiveIntensity: 0.8 }), "water"));
   pond.rotation.x = -Math.PI / 2;
   pond.scale.set(1.75, 1.2, 1);
   pond.position.set(-37.5, CURB + 0.02, 21);
@@ -986,7 +987,7 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   // Ironwood yard
   const yard = concreteTexture(17, "#2a2832");
   yard.repeat.set(8, 8);
-  flat(g, 20.5, 23, new THREE.MeshStandardMaterial({ map: yard, roughness: 0.55, metalness: 0.12 }), 38.6, CURB + 0.004, 19.5, 0);
+  flat(g, 20.5, 23, addDetail(new THREE.MeshStandardMaterial({ map: yard, roughness: 0.55, metalness: 0.12 }), "concrete"), 38.6, CURB + 0.004, 19.5, 0);
 }
 
 /** Geometry gathered per material and merged into one mesh each at the end (one draw call). */
@@ -1084,10 +1085,10 @@ function extension(g: THREE.Group, nav: Nav) {
   curbM.userData.dayColor = "#e9e7f2";
   const lawnT = grassTexture(12);
   lawnT.wrapS = lawnT.wrapT = THREE.RepeatWrapping;
-  const lawn = new THREE.MeshStandardMaterial({ map: lawnT, roughness: 0.95 });
+  const lawn = addDetail(new THREE.MeshStandardMaterial({ map: lawnT, roughness: 0.95 }), "grass");
   const slab = concreteTexture(23, "#4a4652");
   slab.wrapS = slab.wrapT = THREE.RepeatWrapping;
-  const concrete = new THREE.MeshStandardMaterial({ map: slab, roughness: 0.6, metalness: 0.1 });
+  const concrete = addDetail(new THREE.MeshStandardMaterial({ map: slab, roughness: 0.6, metalness: 0.1 }), "concrete");
   concrete.userData.dayColor = "#cfcad6";
   const blocks = new Batch();
   const P = pavingMats();
@@ -1122,7 +1123,7 @@ function river(g: THREE.Group, nav: Nav, animated: ((t: number, dt: number) => v
   const wt = waterTexture();
   wt.wrapS = wt.wrapT = THREE.RepeatWrapping;
   wt.repeat.set(W / 6, (R.z1 - R.z0) / 6);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(W, R.z1 - R.z0), new THREE.MeshStandardMaterial({ map: wt, color: "#3f86a0", roughness: 0.2, metalness: 0.2, emissive: "#062a36", emissiveIntensity: 0.7 }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(W, R.z1 - R.z0), addDetail(new THREE.MeshStandardMaterial({ map: wt, color: "#3f86a0", roughness: 0.2, metalness: 0.2, emissive: "#062a36", emissiveIntensity: 0.7 }), "water"));
   water.rotation.x = -Math.PI / 2;
   water.position.set(0, R.water, cz);
   water.receiveShadow = true;
@@ -1266,7 +1267,7 @@ function bay(g: THREE.Group, nav: Nav, animated: ((t: number, dt: number) => voi
   const wt = waterTexture();
   wt.wrapS = wt.wrapT = THREE.RepeatWrapping;
   wt.repeat.set(W / 8, depth / 8);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(W, depth), new THREE.MeshStandardMaterial({ map: wt, color: "#3a7f9c", roughness: 0.16, metalness: 0.25, emissive: "#062a36", emissiveIntensity: 0.7 }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(W, depth), addDetail(new THREE.MeshStandardMaterial({ map: wt, color: "#3a7f9c", roughness: 0.16, metalness: 0.25, emissive: "#062a36", emissiveIntensity: 0.7 }), "water"));
   water.rotation.x = -Math.PI / 2;
   water.position.set(0, BAY.water, cz);
   water.receiveShadow = true;
@@ -1485,7 +1486,7 @@ function park(g: THREE.Group, nav: Nav, c: { x0: number; x1: number; z0: number;
   rim.scale.set(L.rx, L.rz, 1);
   rim.position.set(L.x, CURB + 0.03, L.z);
   g.add(rim);
-  const water = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ map: waterTexture(), color: "#4a8aa0", roughness: 0.06, metalness: 0.3, emissive: "#06303a", emissiveIntensity: 0.8 }));
+  const water = new THREE.Mesh(new THREE.CircleGeometry(1, 64), addDetail(new THREE.MeshStandardMaterial({ map: waterTexture(), color: "#4a8aa0", roughness: 0.06, metalness: 0.3, emissive: "#06303a", emissiveIntensity: 0.8 }), "water"));
   water.rotation.x = -Math.PI / 2;
   water.scale.set(L.rx, L.rz, 1);
   water.position.set(L.x, CURB + 0.02, L.z);
@@ -1630,11 +1631,13 @@ function reflection(g: THREE.Group, at: THREE.Vector3, width: number, color: str
 /** Wet asphalt at night, dry and light by day (see theme.ts). */
 export function wet(m: THREE.MeshStandardMaterial, dayMap: () => THREE.Texture) {
   m.userData.wet = true;
+  addDetail(m, "asphalt");
   return dayAlt(m, dayMap);
 }
 
 /** A lighter texture for the day theme, made the first time it is needed. */
 function dayAlt(m: THREE.MeshStandardMaterial, dayMap: () => THREE.Texture) {
+  addDetail(m, "paving");
   m.userData.nightMap = m.map;
   m.userData.dayMap = dayMap;
   return m;

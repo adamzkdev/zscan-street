@@ -23,6 +23,7 @@ async function ready() {
 }
 await ready();
 await wait(3000);
+if (process.env.EVAL) await p.evaluate(process.env.EVAL);
 const views = viewsArg.split("|").map((v) => {
   const [name, rest] = v.split(":");
   const [x, z, yaw, floor, pitch] = rest.split(",").map(Number);

@@ -29,7 +29,7 @@ function tex(c: HTMLCanvasElement, opts: { repeat?: [number, number]; srgb?: boo
     t.magFilter = THREE.NearestFilter;
     t.minFilter = THREE.NearestMipmapLinearFilter;
   }
-  t.anisotropy = 4;
+  t.anisotropy = 8;
   return t;
 }
 

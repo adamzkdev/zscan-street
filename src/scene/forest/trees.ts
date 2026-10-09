@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { MATERIALS, meshModel } from "../voxel/mesher";
+import { DETAIL_ON, MATERIALS, meshModel } from "../voxel/mesher";
+import { voxelSolid } from "../voxel/surface";
 import { C, half, hash, rand, VOX, VoxelModel, type Paint } from "../voxel/model";
 
 /**
@@ -279,6 +280,7 @@ export const WIND = { value: 0 };
 function swayMaterial() {
   const m = MATERIALS.solid.clone();
   m.onBeforeCompile = (sh) => {
+    if (DETAIL_ON) voxelSolid(sh);
     sh.uniforms.uWind = WIND;
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uWind;\nattribute float aSway;").replace(
       "#include <begin_vertex>",

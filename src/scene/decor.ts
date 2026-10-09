@@ -1,4 +1,5 @@
 import { filmAd } from "./films";
+import { DETAIL_TIME } from "./detail";
 import { memeAd } from "./memes";
 import * as THREE from "three";
 import type { City, Facade } from "./city";
@@ -72,7 +73,7 @@ export function buildDecor(scene: THREE.Scene, city: City): Decor {
   spray(scene, ticks);
   return {
     update(t, dt, focus, camPos) {
-      EMIT_TIME.value = t;
+      EMIT_TIME.value = DETAIL_TIME.value = t;
       for (const k of ticks) k(t, dt, focus, camPos);
     },
     setLive(d) {

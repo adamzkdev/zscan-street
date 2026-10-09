@@ -16,14 +16,18 @@ export interface Tier {
   shadow: number;
   bloom: boolean;
   tilt: boolean;
+  /** Screen-space ambient occlusion. */
+  ao: boolean;
+  /** Screen-space reflections. */
+  ssr: boolean;
 }
 
 export const TIERS: Tier[] = [
-  { dpr: 2, shadow: 4096, bloom: true, tilt: true },
-  { dpr: 1.5, shadow: 2048, bloom: true, tilt: true },
-  { dpr: 1, shadow: 2048, bloom: true, tilt: false },
-  { dpr: 1, shadow: 1024, bloom: false, tilt: false },
-  { dpr: 0.75, shadow: 0, bloom: false, tilt: false },
+  { dpr: 2, shadow: 4096, bloom: true, tilt: true, ao: true, ssr: true },
+  { dpr: 1.5, shadow: 2048, bloom: true, tilt: true, ao: true, ssr: true },
+  { dpr: 1, shadow: 2048, bloom: true, tilt: false, ao: false, ssr: false },
+  { dpr: 1, shadow: 1024, bloom: false, tilt: false, ao: false, ssr: false },
+  { dpr: 0.75, shadow: 0, bloom: false, tilt: false, ao: false, ssr: false },
 ];
 
 const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;

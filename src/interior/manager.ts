@@ -6,6 +6,7 @@ import { Circulation } from "./lift";
 import { PLANS } from "./liftplan";
 import type { Snark } from "../scene/snark";
 import { posterHit } from "../scene/memes";
+import { refine } from "./refine";
 
 type Key = Interior["key"];
 
@@ -90,6 +91,7 @@ export class InteriorManager {
     if (this.cache.has(key) || !this.build[key]) return null;
     const i = this.build[key]();
     exitSign(i);
+    refine(i.scene);
     const rest = [...this.cache];
     this.cache.clear();
     this.cache.set(key, i);
@@ -104,6 +106,7 @@ export class InteriorManager {
       i = this.build[key]();
       this.cache.set(key, i);
       exitSign(i);
+      refine(i.scene);
     } else {
       // most recently visited last
       this.cache.delete(key);
@@ -189,6 +192,7 @@ export class InteriorManager {
     this.floor = THREE.MathUtils.clamp(floor, 0, i.floors.length - 1);
     const f = i.floors[this.floor];
     i.setFloor?.(this.floor);
+    refine(i.scene);
     const n = this.floor;
     // above the ground floor you arrive in the lift car, if the floor has one
     const arr = n > 0 ? this.circ?.arrival(n) : null;
@@ -219,6 +223,7 @@ export class InteriorManager {
     const f = i.floors[n];
     if (!silent) {
       i.setFloor?.(n);
+      refine(i.scene);
       this.walk.ground = this.groundOf(n);
       this.wallsFor(n);
       this.walk.setBase(f.y);

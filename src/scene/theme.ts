@@ -3,6 +3,7 @@ import type { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBl
 import type { Decor } from "./decor";
 import type { LampLights } from "./post";
 import { MATERIALS } from "./voxel/mesher";
+import { cityEnvironment } from "./envmap";
 
 export type Theme = "day" | "night";
 
@@ -59,15 +60,17 @@ export function applyTheme(t: ThemeTargets, theme: Theme) {
   const { renderer, scene, hemi, sun, bloom } = t;
   scene.background = SKY[theme];
   scene.fog = day ? new THREE.Fog("#e4e6f6", 170, 360) : new THREE.Fog("#1a0c26", 150, 330);
-  scene.environmentIntensity = day ? 0.45 : 0.22;
-  renderer.toneMappingExposure = day ? 0.95 : 1.05;
+  scene.environment = cityEnvironment(renderer, day);
+  scene.environmentIntensity = day ? 0.45 : 0.24;
+  renderer.toneMappingExposure = day ? 0.92 : 1.05;
   hemi.color.set(day ? "#ffffff" : "#6a64a8");
-  hemi.groundColor.set(day ? "#bdb8d6" : "#1a1420");
-  hemi.intensity = day ? 1.05 : 1.5;
-  sun.color.set(day ? "#fff3e2" : "#9fb0ff");
-  sun.intensity = day ? 3.3 : 0.9;
+  hemi.groundColor.set(day ? "#aaa4cc" : "#1a1420");
+  // by day a warmer sun and a softer, cooler fill: the shadows read, the city gets its depth
+  hemi.intensity = day ? 0.85 : 1.5;
+  sun.color.set(day ? "#ffefd6" : "#9fb0ff");
+  sun.intensity = day ? 3.6 : 0.9;
   sun.shadow.radius = day ? 3 : 1;
-  sun.shadow.intensity = day ? 0.62 : 1;
+  sun.shadow.intensity = day ? 0.72 : 1;
   bloom.strength = day ? 0.08 : 0.38;
   bloom.threshold = day ? 1.2 : 0.95;
   t.lamps.scale = day ? 0 : 1;
@@ -81,7 +84,7 @@ export function applyTheme(t: ThemeTargets, theme: Theme) {
       if (m.userData.night) o.visible = !day;
       const s = m as THREE.MeshStandardMaterial;
       if (m.userData.wet) {
-        s.roughness = day ? 0.92 : 0.34;
+        s.roughness = day ? 0.92 : 0.24;
         s.metalness = day ? 0 : 0.22;
       }
       if (m.userData.dayMap) {
