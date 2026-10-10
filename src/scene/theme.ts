@@ -57,9 +57,10 @@ export function applyTheme(t: ThemeTargets, theme: Theme) {
     for (const m of Array.isArray(mats) ? mats : [mats]) {
       if (m.userData.night) o.visible = !day;
       const s = m as THREE.MeshStandardMaterial;
+      // the roads are dry tarmac, day and night (no wet sheen)
       if (m.userData.wet) {
-        s.roughness = day ? 0.92 : 0.24;
-        s.metalness = day ? 0 : 0.22;
+        s.roughness = 0.92;
+        s.metalness = 0;
       }
       if (m.userData.dayMap) {
         if (day && !(m.userData.dayTex instanceof THREE.Texture)) m.userData.dayTex = m.userData.dayMap();

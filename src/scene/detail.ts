@@ -70,7 +70,7 @@ float dtH = 0.0, dtFade = 0.0, dtRough = -1.0, dtBump = 0.004;
   if (k == 0) {
     // asphalt: aggregate, and where the camber holds water a darker, glossier film
     float agg = dtNoise(q * 38.0);
-    float film = smoothstep(0.55, 0.75, dtFbm(q * 0.35));
+    float film = 0.0; // dry tarmac: no wet film
     tint = (agg - 0.5) * 0.12 * dtFade - film * 0.12 * far * step(roughness, 0.6);
     dtH = agg;
     // (only on wet nights: dry tarmac by day stays matte)

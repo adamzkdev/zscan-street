@@ -839,11 +839,11 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   box(g, W + 0.6, 3.2 + BAY.bed, C.maxZ - BAY.z0 + 0.3, strata, 0, -3.2, (BAY.z0 + C.maxZ + 0.3) / 2);
   box(g, W + 1.0, 0.2, depth + 1.0, mat("#141219"), 0, -3.4, cz);
   const B = CORE;
-  const roadMat = (len: number, width: number, cross: number[]) => wet(new THREE.MeshStandardMaterial({ map: roadTexture(len, width, cross), roughness: 0.34, metalness: 0.22 }), () => roadTexture(len, width, cross, 2, true));
+  const roadMat = (len: number, width: number, cross: number[]) => wet(new THREE.MeshStandardMaterial({ map: roadTexture(len, width, cross), roughness: 0.92, metalness: 0 }), () => roadTexture(len, width, cross, 2, true));
   const avW = C.road.z1 - C.road.z0;
   // the heart's stretch of the avenue, with its zebra (the rest is tiled, in extension())
   const AW = AVENUE_CORE * 2;
-  flat(g, AW, avW, wet(new THREE.MeshStandardMaterial({ map: roadTexture(AW, avW, [DISTRICTS[0].crossX + AVENUE_CORE], 4), roughness: 0.34, metalness: 0.22 }), () => roadTexture(AW, avW, [DISTRICTS[0].crossX + AVENUE_CORE], 4, true)), 0, 0.01, (C.road.z0 + C.road.z1) / 2, 0);
+  flat(g, AW, avW, wet(new THREE.MeshStandardMaterial({ map: roadTexture(AW, avW, [DISTRICTS[0].crossX + AVENUE_CORE], 4), roughness: 0.92, metalness: 0 }), () => roadTexture(AW, avW, [DISTRICTS[0].crossX + AVENUE_CORE], 4, true)), 0, 0.01, (C.road.z0 + C.road.z1) / 2, 0);
   for (const x of C.cross)
     for (const [z0, z1] of [
       [B.minZ, C.road.z0],
@@ -852,19 +852,6 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
       const len = z1 - z0;
       flat(g, len, C.crossHalf * 2, roadMat(len, C.crossHalf * 2, [z0 < 0 ? len - 2.2 : 2.2]), x, 0.012, (z0 + z1) / 2, Math.PI / 2);
     }
-  // puddles: glossy patches that catch the neon
-  const puddle = new THREE.MeshStandardMaterial({ color: "#24222c", roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.9 });
-  puddle.userData.night = true;
-  for (let i = 0; i < 30; i++) {
-    const r = (k: number) => Math.sin(i * 91.7 + k * 13.3) * 0.5 + 0.5;
-    const onCross = i % 3 === 0;
-    const p = new THREE.Mesh(new THREE.CircleGeometry(0.35 + r(1) * 0.6, 16), puddle);
-    p.rotation.x = -Math.PI / 2;
-    p.scale.set(1.7, 1, 1);
-    p.position.set(onCross ? C.cross[i % 2] + (r(2) - 0.5) * 2.5 : (r(3) - 0.5) * (B.maxX - B.minX - 6), 0.016, onCross ? (r(4) - 0.5) * 50 : C.road.z0 + 0.6 + r(5) * (avW - 1.2));
-    p.receiveShadow = true;
-    g.add(p);
-  }
   for (const [mx, mz] of [
     [-11, 0.2],
     [3, -0.6],
@@ -1010,7 +997,7 @@ function tarmacMat(width: number) {
   const lanes = width >= 12 ? 4 : 2;
   const t = roadTexture(16, width, [], lanes);
   t.wrapS = THREE.RepeatWrapping;
-  m = wet(new THREE.MeshStandardMaterial({ map: t, roughness: 0.34, metalness: 0.22 }), () => {
+  m = wet(new THREE.MeshStandardMaterial({ map: t, roughness: 0.92, metalness: 0 }), () => {
     const d = roadTexture(16, width, [], lanes, true);
     d.wrapS = THREE.RepeatWrapping;
     return d;
