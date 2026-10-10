@@ -723,6 +723,8 @@ let works: Works | null = null;
  * adding concrete with every mined block (an empty block stops them, a packed one counts double),
  * a crane swinging loads up, until it opens.
  */
+const WORKS_PANEL = false;
+
 export class Works {
 	state: WorksState | null = null;
 	readonly group = new THREE.Group();
@@ -823,15 +825,8 @@ export class Works {
 	/** What's new since this browser last looked: the inbox gets it. */
 	private news(s: WorksState) {
 		const k = seen();
-		if (s.round !== k.round && s.proposals.length) {
-			this.hud.mail(
-				"works",
-				"City works: vote",
-				s.proposals.map((p) => `${p.name} (${p.architect.name})`).join(" · "),
-				{ label: "Vote", fn: () => this.open() }
-			);
-			k.round = s.round;
-		}
+		// (no "vote" mail: the voting window is closed to visitors)
+		if (s.round !== k.round && s.proposals.length) k.round = s.round;
 		for (const r of s.sites) {
 			const site = this.sites[r.site];
 			const done = r.work >= r.need;
@@ -913,9 +908,9 @@ export class Works {
 			this.sites.map((s) => s.hit),
 			false
 		)[0];
-		if (!hit) return false;
-		this.open(hit.object.userData.site as number);
-		return true;
+		// the sites are scenery now: no voting window
+		void hit;
+		return false;
 	}
 
 	/** For the minimap: the site going up. */
@@ -924,7 +919,9 @@ export class Works {
 		return a ? { x: a.at.cx, z: a.at.cz, label: a.row ? a.row.name : "City works" } : null;
 	}
 
+	/** The voting window: closed to visitors (the user's call); the agents' buildings still go up. */
 	open(site = -1) {
+		if (!WORKS_PANEL) return;
 		this.focus = site;
 		this.panel.classList.add("open");
 		this.render();
