@@ -551,6 +551,10 @@ class Air implements AlivePart {
     for (const im of [this.rotors, this.tails]) {
       im.frustumCulled = false;
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      // hidden until their helicopter is placed (an unset instance sat at the origin: a black
+      // rotor lying on the avenue's zebra crossing)
+      for (let i = 0; i < im.count; i++) im.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
+      im.instanceMatrix.needsUpdate = true;
       g.add(im);
     }
     const hp = ctx.city.landmarks.get("burjalarab")?.points.helipad;

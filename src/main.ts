@@ -2035,6 +2035,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       finish,
       grade,
       scene3: scene,
+      ray,
       composer,
       setSamples: (n: number) => renderPass.setSamples(n),
       /** The game layer: feed a made-up block (n transactions, "shielded" kind), cut the power… */

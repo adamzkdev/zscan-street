@@ -165,7 +165,12 @@ export class Wildlife {
       frames.forEach((f) => root.add(f));
       root.scale.setScalar(1.6);
       this.group.add(root);
-      this.birds.push({ root, frames, kind: "raven", cx: rand(150, 220), cz: rand(200, 228), r: rand(14, 26), y: rand(32, 44), a: rand(0, 6.28), w: rand(0.18, 0.3) * (i % 2 ? 1 : -1), from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, dur: 1 });
+      const b: Bird = { root, frames, kind: "raven", cx: rand(150, 220), cz: rand(200, 228), r: rand(14, 26), y: rand(32, 44), a: rand(0, 6.28), w: rand(0.18, 0.3) * (i % 2 ? 1 : -1), from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, dur: 1 };
+      // on its circle over the forest from the start: the forest's life only runs near it, and an
+      // unplaced raven sat at the city's origin, on the avenue's zebra crossing
+      root.position.set(b.cx + Math.cos(b.a) * b.r, b.y, b.cz + Math.sin(b.a) * b.r);
+      frames[1].visible = false;
+      this.birds.push(b);
     }
     for (let i = 0; i < 14; i++) {
       const col = ["#c84a2a", "#3a5aa8", "#7a6a4a", "#e8c040"][i % 4];
