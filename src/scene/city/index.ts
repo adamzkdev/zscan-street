@@ -23,6 +23,18 @@ export interface Lamp {
   intensity?: number;
 }
 
+
+/**
+ * Phones (and ?lite): the bigger city and the landmarks are built a level coarser (half-resolution
+ * voxels where a desktop gets full ones). A phone's screen can't show the difference, and the full
+ * city's geometry (≈700 MB in memory) made mobile browsers slow to open and reload the page.
+ * `?lite=0` forces the full city.
+ */
+const LITE = (() => {
+  const q = typeof location !== "undefined" ? new URLSearchParams(location.search).get("lite") : null;
+  if (q !== null) return q !== "0";
+  return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+})();
 /**
  * A building that can drop to its ground floor when it stands between the camera and the street
  * ("walls down", as in The Sims): the full model and a cut model share one footprint.
@@ -340,7 +352,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   for (const [x, z, r] of circles) nav.addCircle(x, z, r);
   const byId = new Map(jobs.map((j) => [j.id, j]));
   // one worker job per distinct variant; the copies are placed from the same result
-  const variantKey = (j: BuildingJob) => `${j.type}|${j.seed}|${j.width}|${JSON.stringify(j.opts)}`;
+  const variantKey = (j: BuildingJob) => `${j.type}|${j.seed}|${j.width}|${JSON.stringify(j.opts)}${LITE ? "|lite" : ""}`;
   const copies = new Map<string, BuildingJob[]>();
   for (const j of jobs) {
     const k = variantKey(j);
@@ -547,7 +559,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       const [fx, fz] = j.face === "s" || j.face === "n" ? [j.along, j.front] : [j.front, j.along];
       return new THREE.Matrix4().compose(new THREE.Vector3(fx - fc.x, CURB, fz - fc.z), new THREE.Quaternion().setFromAxisAngle(Y, rot), new THREE.Vector3(1, 1, 1));
     });
-    lods.push({ mats, levels: [r.full, r.lod, r.lod2], at: mats.map((mx) => new THREE.Vector3().setFromMatrixPosition(mx)), ids: [] });
+    lods.push({ mats, levels: [r.full, r.lod, r.lod2 ?? r.lod], at: mats.map((mx) => new THREE.Vector3().setFromMatrixPosition(mx)), ids: [] });
     lodDirty = true;
     list.forEach((j, i) => {
       const mx = mats[i];
@@ -619,7 +631,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
             console.error("city worker failed", err.message);
             resolve();
           };
-          w.postMessage({ kind: "buildings", jobs: queues[i] });
+          w.postMessage({ kind: "buildings", jobs: queues[i], lite: LITE });
         }),
     ),
     new Promise<void>((resolve) => {

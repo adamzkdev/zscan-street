@@ -73,9 +73,10 @@ function scaled(geos: Partial<Record<Kind, THREE.BufferGeometry>>, k: number) {
 const SOLID = new Set(["bench", "shelter", "stall", "container", "greenhouse", "vending", "bicycle", "crates", "trashBags", "planter", "fence", "mailbox", "barrel"]);
 
 self.onmessage = (e: MessageEvent) => {
-  const msg = e.data as { kind: "buildings"; jobs: BuildingJob[] } | { kind: "props"; props: PropJob[] };
+  const msg = e.data as { kind: "buildings"; jobs: BuildingJob[]; lite?: boolean } | { kind: "props"; props: PropJob[] };
   const transfer: Transferable[] = [];
   if (msg.kind === "buildings") {
+    const lite = !!msg.lite;
     // one broken building (a builder throwing) must not take the whole queue, or the city, with it
     const results = msg.jobs.flatMap((j) => {
       const t0 = performance.now();
@@ -98,10 +99,11 @@ self.onmessage = (e: MessageEvent) => {
         const v = (n: number) => n * k;
         return {
           id: j.id,
-          full: pack(scaled(meshModel(m), k), transfer),
+          // (on a phone, a level coarser all round)
+          full: lite ? pack(scaled(meshModel(half(m)), k * 2), transfer) : pack(scaled(meshModel(m), k), transfer),
           cut: {},
           // seen from afar: half resolution
-          lod: pack(scaled(meshModel(half(m)), k * 2), transfer),
+          lod: lite ? pack(scaled(meshModel(half(half(m))), k * 4), transfer) : pack(scaled(meshModel(half(m)), k * 2), transfer),
           meta: {
             w: m.w * k,
             h: m.h * k,
@@ -115,6 +117,16 @@ self.onmessage = (e: MessageEvent) => {
           },
         };
       }
+      if (lite && j.ext)
+        // a phone: the bigger city a level coarser (half resolution near, a quarter beyond)
+        return {
+          id: j.id,
+          full: pack(scaled(meshModel(half(m)), 2), transfer),
+          cut: {},
+          lod: pack(scaled(meshModel(half(half(m))), 4), transfer),
+          lod2: undefined,
+          meta: { w: m.w, h: m.h, d: m.d, signs: b.signs, door: b.door, body: b.body, lights: b.lights, walls: b.walls, points: b.points },
+        };
       return {
         id: j.id,
         full: pack(meshModel(m), transfer),
