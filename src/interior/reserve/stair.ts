@@ -36,7 +36,6 @@ export function governorsStair(k: ReserveKit) {
   const N = 67;
   const rise = drop / N,
     go = run / N;
-  const slope = Math.atan2(drop, run);
   const pitch = (z: number) => low + THREE.MathUtils.clamp((z - z0) / run, 0, 1) * drop;
   const cx = (W + E) / 2,
     wide = E - W,
@@ -143,14 +142,19 @@ export function governorsStair(k: ReserveKit) {
   }
 
   // ---- along both walls: a green marble dado with a gilt cap, a bronze handrail on brackets ----
-  const len = Math.hypot(run, drop);
-  const along = (geo: THREE.BufferGeometry, x: number, y: number, z: number) => geo.rotateX(-slope).translate(x, y, z);
+  /** A prism in the y–z plane (points [z, y]) `t` thick, centred on x: a sloped run with plumb ends. */
+  const prism = (pts: [number, number][], x: number, t: number) =>
+    new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([z, y]) => new THREE.Vector2(z, y))), { depth: t, bevelEnabled: false }).rotateY(-Math.PI / 2).translate(x + t / 2, 0, 0);
+  /** A bronze rail from (za, ya) to (zb, yb) at x. */
+  const tube = (x: number, za: number, ya: number, zb: number, yb: number) =>
+    k.geo(f, new THREE.CylinderGeometry(0.04, 0.04, Math.hypot(zb - za, yb - ya), 12).rotateX(Math.PI / 2 - Math.atan2(yb - ya, zb - za)).translate(x, (ya + yb) / 2, (za + zb) / 2), C.bronze, "metal");
   for (const [x, nx] of [
     [W + 0.03, 1],
     [E - 0.19, -1],
   ] as const) {
-    k.geo(f, along(new THREE.BoxGeometry(0.06, 1.5 * Math.cos(slope), len), x, (low + 0) / 2 + 0.45, (z0 + z1) / 2), C.greenMarble, "polish");
-    k.geo(f, along(new THREE.BoxGeometry(0.1, 0.07, len), x + nx * 0.02, low / 2 + 1.2, (z0 + z1) / 2), GOLD, "metal");
+    // the sloped dado and its cap, meeting the landings' flat runs plumb at the foot and the head
+    k.geo(f, prism([[z0, low - 0.3], [z0, low + 1.2], [z1, 1.2], [z1, -0.3]], x, 0.06), C.greenMarble, "polish");
+    k.geo(f, prism([[z0, low + 1.2], [z0, low + 1.27], [z1, 1.27], [z1, 1.2]], x + nx * 0.02, 0.1), GOLD, "metal");
     // the landings' dado runs flat
     for (const [za, zb, y] of [
       [Nz, z0, low],
@@ -164,8 +168,24 @@ export function governorsStair(k: ReserveKit) {
           k.box(f, 0.1, 0.07, b - a, x + nx * 0.02, y + 1.2, (a + b) / 2, GOLD, "metal");
         }
     }
+    // the handrail, 0.95 m over the ramp, running on level a little onto each landing and returning into the wall
     const hx = x + nx * 0.15;
-    k.geo(f, new THREE.CylinderGeometry(0.04, 0.04, len + 0.5, 12).rotateX(Math.PI / 2 - slope).translate(hx, low / 2 + 0.95, (z0 + z1) / 2), C.bronze, "metal");
+    const e = 0.18;
+    tube(hx, z0, low + 0.95, z1, 0.95);
+    tube(hx, z0 - e, low + 0.95, z0, low + 0.95);
+    tube(hx, z1, 0.95, z1 + e, 0.95);
+    for (const [zz, yy] of [
+      [z0, low + 0.95],
+      [z1, 0.95],
+      [z0 - e, low + 0.95],
+      [z1 + e, 0.95],
+    ] as const)
+      k.geo(f, new THREE.SphereGeometry(0.04, 12, 8).translate(hx, yy, zz), C.bronze, "metal");
+    for (const [zz, yy] of [
+      [z0 - e, low + 0.95],
+      [z1 + e, 0.95],
+    ] as const)
+      k.geo(f, new THREE.CylinderGeometry(0.04, 0.04, 0.15, 12).rotateZ(Math.PI / 2).translate((x + hx) / 2, yy, zz), C.bronze, "metal");
     for (let t = 0.03; t < 1; t += 0.1) {
       const zz = z0 + t * run;
       k.box(f, 0.16, 0.035, 0.035, (x + hx) / 2, pitch(zz) + 0.88, zz, C.bronze, "metal");

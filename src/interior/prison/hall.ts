@@ -332,6 +332,9 @@ function furnish(k: PrisonKit, m: THREE.Matrix4, hw: number, seed: number, blank
   box(k.darkSteel, 0.14, 0.04, 0.14, 0, CELL_H - 0.04, -1.9);
 }
 
+/** The catwalk from the second tier to the gun gallery: its x span (the flight is drawn by lift.ts). */
+const CATWALK = [14.4, 15.4] as const;
+
 /** Steel walkways on the upper tiers, wrapping each block; bridges over the aisles; railings. */
 function walkways(k: PrisonKit) {
   const { b } = k;
@@ -371,7 +374,10 @@ function walkways(k: PrisonKit) {
     const gap = t === 1 ? 8.6 : 2.6,
       gap2 = t === 1 ? 9.4 : 3.4;
     const list: [number, number, number, number][] = [...rails];
-    list.push([HALL.x0 + 0.3, S + WALK, -gap2, S + WALK], [-gap, S + WALK, gap, S + WALK], [gap2, S + WALK, HALL.x1 - 0.3, S + WALK]);
+    list.push([HALL.x0 + 0.3, S + WALK, -gap2, S + WALK], [-gap, S + WALK, gap, S + WALK]);
+    // the second tier's opens where the catwalk to the gun gallery leaves it (liftplan: prison, x 14.4–15.4)
+    if (t === 1) list.push([gap2, S + WALK, CATWALK[0], S + WALK], [CATWALK[1], S + WALK, HALL.x1 - 0.3, S + WALK]);
+    else list.push([gap2, S + WALK, HALL.x1 - 0.3, S + WALK]);
     list.push([HALL.x0 + 0.3, N - WALK, 10.3, N - WALK], [10.3, N - WALK, 10.3, N], [11.9, -30 - WALK, HALL.x1 - 0.3, -30 - WALK], [11.9, -30 - WALK, 11.9, -30]);
     for (const [a, c] of [[-1.9, 1.9], [-11.9, -10.3], [10.3, 11.9]]) {
       list.push([a, S, c, S]);
@@ -396,33 +402,65 @@ function walkways(k: PrisonKit) {
   void b;
 }
 
-/** Steel stairs at the south end of B and C blocks: ground to tier 2, tier 2 to tier 3. */
+/**
+ * Steel stairs at the south end of B and C blocks: ground to tier 2, tier 2 to tier 3, side by side
+ * (a scissor pair, each in its own 0.8 m lane): grating treads on angles between channel stringers
+ * cut level on the floor and plumb at the landings, a balustrade on every side with a drop, the
+ * landings propped on a column.
+ */
 function stairs(k: PrisonKit) {
   const { b } = k;
-  const flight = (xa: number, xb: number, za: number, zb: number, y0: number, y1: number) => {
+  /** A flight from (xa, y0) up to (xb, y1) in the lane za..zb; `guard`: rail its low (za) and high (zb) sides up to that far (0..1). */
+  const flight = (xa: number, xb: number, za: number, zb: number, y0: number, y1: number, guard: [number, number]) => {
     const n = Math.round((y1 - y0) / 0.2);
-    const run = (xb - xa) / n;
+    const len = Math.abs(xb - xa),
+      dy = y1 - y0,
+      sg = Math.sign(xb - xa);
+    const rise = dy / n,
+      run = len / n,
+      kk = dy / len;
+    const X = (a: number) => xa + sg * a;
+    // treads, each on a carrier angle, the stringers' webs inside the lane
+    const za2 = za + 0.055,
+      zb2 = zb - 0.055;
     for (let s = 0; s < n; s++) {
-      const x = xa + run * (s + 0.5);
-      b.box(k.deck, Math.abs(run) + 0.02, 0.05, zb - za - 0.06, x, y0 + ((s + 1) * (y1 - y0)) / n - 0.05, (za + zb) / 2, undefined, 1);
+      const y = (s + 1) * rise;
+      b.box(k.deck, run + 0.01, 0.04, zb2 - za2, X((s + 0.5) * run), y0 + y - 0.04, (za + zb) / 2, undefined, 1);
+      b.box(k.darkSteel, run - 0.04, 0.04, zb2 - za2, X((s + 0.5) * run), y0 + y - 0.08, (za + zb) / 2);
     }
-    const len = Math.hypot(xb - xa, y1 - y0);
-    const ang = Math.atan2(y1 - y0, xb - xa);
-    for (const z of [za, zb]) {
-      const g = new THREE.BoxGeometry(len, 0.18, 0.05);
-      g.rotateZ(ang);
-      g.translate((xa + xb) / 2, (y0 + y1) / 2 - 0.05, z);
-      b.geo(k.darkSteel, g);
-      k.bars.bar(xa, y0 + 0.95, z, xb, y1 + 0.95, z, 1.4);
-      k.posts.put(xa, y0 + 0.48, z, 1, 0.95);
-      k.posts.put(xb, y1 + 0.48, z, 1, 0.95);
+    // stringers: a profile along the climb, extruded across the lane's edge
+    const t = rise + 0.03,
+      d = 0.22;
+    const prof = [[0, 0], [d / kk, 0], [len, dy - d], [len, dy], [len - t / kk, dy], [0, t]].map(([a, y]) => new THREE.Vector2(X(a), y0 + y));
+    for (const z of [za + 0.005, zb - 0.055]) b.geo(k.darkSteel, new THREE.ExtrudeGeometry(new THREE.Shape(prof), { depth: 0.05, bevelEnabled: false }).translate(0, 0, z));
+    // the balustrade: stanchions on the stringers' outer faces, a handrail 0.9 m over the nosings, a mid rail
+    const top = (a: number) => y0 + Math.min(kk * a + t, dy);
+    const rail = (a: number, h: number) => y0 + kk * a + rise + h;
+    for (const [z, to] of [[za - 0.02, guard[0]], [zb + 0.02, guard[1]]] as const) {
+      if (to <= 0) continue;
+      const end = len * to - 0.05;
+      const np = Math.max(1, Math.ceil(end / 1.1));
+      for (let q = 0; q <= np; q++) {
+        const a = 0.05 + ((end - 0.05) * q) / np;
+        const y = top(a) - 0.15;
+        k.posts.put(X(a), (y + rail(a, 0.92)) / 2, z, 1, rail(a, 0.92) - y);
+      }
+      k.bars.bar(X(0.02), rail(0.02, 0.92), z, X(end + 0.03), rail(end + 0.03, 0.92), z, 1.6);
+      k.bars.bar(X(0.05), rail(0.05, 0.47), z, X(end), rail(end, 0.47), z, 1);
     }
   };
   const S = BLOCK_Z1 + WALK;
   for (const s of [-1, 1]) {
-    flight(s * 3.4, s * 8.6, S, -6.1, 0, TIER);
-    flight(s * 8.6, s * 3.4, -6.1, -5.3, TIER, 2 * TIER);
+    // up from the floor beside the walkway's edge (its railing guards the last of it), then back up over it
+    flight(s * 3.4, s * 8.6, S, -6.1, 0, TIER, [0.6, 1]);
+    flight(s * 8.6, s * 3.4, -6.1, -5.3, TIER, 2 * TIER, [1, 1]);
     k.solid[0].push([Math.min(s * 3.2, s * 9.4), S, Math.max(s * 3.2, s * 9.4), -5.3]);
+    // columns under the landings' outer corners
+    for (const [x, y] of [[s * 9.34, TIER], [s * 2.66, 2 * TIER]]) {
+      b.box(k.darkSteel, 0.12, y - 0.18, 0.12, x, 0, -5.36);
+      b.box(k.darkSteel, 0.24, 0.02, 0.24, x, 0, -5.36);
+      k.solid[0].push([x - 0.1, -5.46, x + 0.1, -5.26]);
+    }
     // clicking a flight climbs it (or goes back down)
     k.hit(5.2, 2.4, 0.8, s * 6, 0, -6.5, "<b>Stairs</b><span>ground ↔ second tier</span>", () => ({ eyebrow: "Stairs", title: k.current === 0 ? "Second tier" : "Broadway", floor: k.current === 0 ? 1 : 0 }));
     k.hit(5.2, 2.4, 0.8, s * 6, TIER + 0.2, -5.7, "<b>Stairs</b><span>second ↔ third tier</span>", () => ({ eyebrow: "Stairs", title: k.current === 1 ? "Third tier" : "Second tier", floor: k.current === 1 ? 2 : 1 }));
@@ -437,12 +475,24 @@ function gunGallery(k: PrisonKit) {
     cx = (G.x0 + G.x1) / 2;
   b.box(k.darkSteel, w, 0.2, G.z1 - G.z0 + 0.1, cx, G.y - 0.2, (G.z0 + G.z1) / 2);
   b.box(k.deck, w, 0.02, G.z1 - G.z0, cx, G.y, (G.z0 + G.z1) / 2, undefined, 1);
-  b.box(k.darkSteel, w, 0.6, 0.06, cx, G.y - 0.2, G.z0);
+  // the cage's front, with a gateway at its east end where the catwalk from the second tier comes in
+  const g0 = CATWALK[0] - 0.06,
+    g1 = CATWALK[1] + 0.06;
+  b.box(k.darkSteel, w, 0.2, 0.06, cx, G.y - 0.2, G.z0);
+  for (const [x0, x1] of [[G.x0, g0], [g1, G.x1]]) b.box(k.darkSteel, x1 - x0, 0.4, 0.06, (x0 + x1) / 2, G.y, G.z0);
   b.box(k.deck, w, 0.06, G.z1 - G.z0, cx, G.y + 2.4, (G.z0 + G.z1) / 2, undefined, 1);
   b.box(k.darkSteel, w, 0.08, G.z1 - G.z0, cx, G.y + 4.6, (G.z0 + G.z1) / 2);
-  for (let x = G.x0; x <= G.x1 + 0.01; x += 0.13) k.bars.bar(x, G.y + 0.4, G.z0, x, G.y + 4.6, G.z0, 1.2);
-  for (const y of [G.y + 0.4, G.y + 1.4, G.y + 2.4, G.y + 3.5, G.y + 4.6]) k.flats.put(cx, y, G.z0, w, 0.06, 0.05);
+  for (let x = G.x0; x <= G.x1 + 0.01; x += 0.13) {
+    const gate = x > g0 - 0.02 && x < g1 + 0.02;
+    k.bars.bar(x, gate ? G.y + 2.4 : G.y + 0.4, G.z0, x, G.y + 4.6, G.z0, 1.2);
+  }
+  for (const y of [G.y + 0.4, G.y + 1.4]) for (const [x0, x1] of [[G.x0, g0], [g1, G.x1]]) k.flats.put((x0 + x1) / 2, y, G.z0, x1 - x0, 0.06, 0.05);
+  for (const y of [G.y + 2.4, G.y + 3.5, G.y + 4.6]) k.flats.put(cx, y, G.z0, w, 0.06, 0.05);
   for (let x = G.x0; x <= G.x1; x += 2.6) k.flats.put(x, G.y + 2.5, G.z0, 0.1, 4.2, 0.08);
+  // the gateway's jambs and its threshold plate, flush with the catwalk's head
+  for (const x of [g0, g1]) k.flats.put(x, G.y + 1.2, G.z0, 0.1, 2.4, 0.1);
+  b.box(k.darkSteel, g1 - g0, 0.02, 0.2, (g0 + g1) / 2, G.y - 0.01, G.z0);
+  k.label("GUN GALLERY", (g0 + g1) / 2, G.y + 2.62, G.z0 - 0.06, { h: 0.12, color: "#e8e4d4", rot: Math.PI });
   for (const x of [G.x0, G.x1]) b.box(k.darkSteel, 0.1, 4.8, G.z1 - G.z0, x, G.y - 0.2, (G.z0 + G.z1) / 2);
   // the brackets holding it to the wall
   for (let x = G.x0 + 1; x < G.x1; x += 3) b.box(k.darkSteel, 0.1, 0.6, G.z1 - G.z0, x, G.y - 0.8, (G.z0 + G.z1) / 2);

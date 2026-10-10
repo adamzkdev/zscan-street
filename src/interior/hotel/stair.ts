@@ -34,10 +34,21 @@ export function grandStair(k: HotelKit) {
   const N = 53;
   const rise = top / N,
     go = run / N;
-  const slope = Math.atan2(top, run);
   const pitch = (z: number) => THREE.MathUtils.clamp((z - z0) / run, 0, 1) * top;
   const mid = (x0 + x1) / 2,
     wide = E - W;
+  /** A prism in the y–z plane (points [z, y]) `t` thick, centred on x: a sloped run with plumb ends. */
+  const prism = (pts: [number, number][], x: number, t: number) =>
+    new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([z, y]) => new THREE.Vector2(z, y))), { depth: t, bevelEnabled: false }).rotateY(-Math.PI / 2).translate(x + t / 2, 0, 0);
+  /** A brass rail from (za, ya) to (zb, yb) at x. */
+  const tube = (x: number, za: number, ya: number, zb: number, yb: number) => {
+    const l = Math.hypot(zb - za, yb - ya);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, l, 12).rotateX(Math.PI / 2), brass);
+    m.rotation.x = -Math.atan2(yb - ya, zb - za);
+    m.position.set(x, (ya + yb) / 2, (za + zb) / 2);
+    return m;
+  };
+
   const cx = (W + E) / 2;
 
   // ---- materials ----
@@ -170,11 +181,6 @@ export function grandStair(k: HotelKit) {
   for (const s of [-1, 1]) inst(new THREE.SphereGeometry(0.03, 8, 6), brass, (i) => [mid + s * 1.42, i * rise + 0.035, front(i) - 0.03]);
 
   // ---- both walls: a walnut dado following the stair, its gold cap, a brass handrail on brackets ----
-  const tilt = (mesh: THREE.Mesh) => {
-    mesh.rotation.x = -slope;
-    return mesh;
-  };
-  const len = Math.hypot(run, top);
   for (const [x, nx, doors] of [
     [W + 0.03, 1, [] as [number, number, number][]],
     [E - 0.13, -1, [[fd0, fd1, 0], [hd0, hd1, top]] as [number, number, number][]],
@@ -193,19 +199,30 @@ export function grandStair(k: HotelKit) {
       }
     }
     const za = Math.max(z0, nx < 0 ? fd1 : z0);
-    const l = Math.hypot(z1 - za, pitch(z1) - pitch(za));
-    const zm = (za + z1) / 2;
-    const dado = tilt(new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.4 * Math.cos(slope), l), walnut));
-    dado.position.set(x, pitch(zm) + 0.4, zm);
-    const cap = tilt(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, l), k.gold));
-    cap.position.set(x + nx * 0.02, pitch(zm) + 1.1, zm);
+    // the sloped dado and its cap meet the flat runs plumb at the foot and the head
+    const dado = new THREE.Mesh(prism([[za, pitch(za) - 0.3], [za, pitch(za) + 1.1], [z1, top + 1.1], [z1, top - 0.3]], x, 0.06), walnut);
+    const cap = new THREE.Mesh(prism([[za, pitch(za) + 1.1], [za, pitch(za) + 1.16], [z1, top + 1.16], [z1, top + 1.1]], x + nx * 0.02, 0.1), k.gold);
     g.add(dado, cap);
-    // the handrail, 0.95 m over the nosings
+    // the handrail, 0.95 m over the ramp, from newel to newel (where the foot's doorway leaves no
+    // room for one, it turns level and returns into the wall)
     const hx = x + nx * 0.14;
-    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len + 0.6, 12), brass);
-    rail.rotation.x = Math.PI / 2 - slope;
-    rail.position.set(hx, top / 2 + 0.95, (z0 + z1) / 2);
-    g.add(rail);
+    const footNewel = !(nx < 0 && z0 - 0.12 > fd0 - 0.2 && z0 - 0.12 < fd1 + 0.2);
+    g.add(tube(hx, z0, 0.95, z1, top + 0.95), tube(hx, z1, top + 0.95, z1 + 0.12, top + 0.95), tube(hx, z0, 0.95, z0 - (footNewel ? 0.12 : 0.08), 0.95));
+    if (!footNewel) {
+      const ret = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.14, 12).rotateZ(Math.PI / 2), brass);
+      ret.position.set((x + hx) / 2, 0.95, z0 - 0.08);
+      const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), brass);
+      elbow.position.set(hx, 0.95, z0 - 0.08);
+      g.add(ret, elbow);
+    }
+    for (const [zz, yy] of [
+      [z0, 0.95],
+      [z1, top + 0.95],
+    ] as const) {
+      const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), brass);
+      elbow.position.set(hx, yy, zz);
+      g.add(elbow);
+    }
     for (let t = 0.04; t < 1; t += 0.12) {
       const zz = z0 + t * run;
       box(g, 0.14, 0.03, 0.03, brass, (x + hx) / 2, pitch(zz) + 0.9, zz);

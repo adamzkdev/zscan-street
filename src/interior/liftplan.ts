@@ -9,7 +9,8 @@ import type { Interior, Rect } from "./types";
 
 /**
  * The mall's escalators (mall/atrium.ts): two lanes each (up, down) between consecutive levels over
- * the void, landing on slab tongues ("piers") reached through gaps in the void's railing.
+ * the void, landing on slab tongues ("piers") reached through gaps in the void's railing; the feet
+ * are at the void's ends, walked onto head-on through the end railing.
  */
 function mallEscalators(): StairDecl[] {
   const out: StairDecl[] = [];
@@ -17,29 +18,46 @@ function mallEscalators(): StairDecl[] {
   for (let f = 0; f < 4; f++)
     for (const sx of [-1, 1]) {
       const even = (f + (sx > 0 ? 1 : 0)) % 2 === 0;
-      const zb = even ? -16.2 : -31.8,
+      const zb = even ? -15.2 : -32.8,
         dir = even ? -1 : 1;
       const top = zb + dir * L;
       const lanes = [sx * 8.4 - 0.62, sx * 8.4 + 0.62];
       const xa = Math.min(sx * 6.8, sx * 10),
         xb = Math.max(sx * 6.8, sx * 10);
       // the piers: at the foot on floor f, at the head on floor f + 1
-      const pier = (z: number): Rect => [xa, Math.min(z, z - dir * 1.6 * (z === zb ? 1 : -1)), xb, Math.max(z, z - dir * 1.6 * (z === zb ? 1 : -1))];
+      const pier = (z: number): Rect => [xa, Math.min(z, z - dir * 1.25 * (z === zb ? 1 : -1)), xb, Math.max(z, z - dir * 1.25 * (z === zb ? 1 : -1))];
       const foot = pier(zb),
         head = pier(top);
       const railX = (n: number) => sx * (n ? 10.7 : 10);
+      // the foot is at an end of the void, walked onto head-on through that end's railing
+      const endZ = dir < 0 ? (f ? -13.3 : -14) : f ? -34.7 : -34;
+      const approach: Rect = [lanes[0] - 0.62, Math.min(foot[1], foot[3], endZ) - 0.15, lanes[1] + 0.62, Math.max(foot[1], foot[3], endZ) + 0.15];
       const gap = (n: number, r: Rect): Rect => [railX(n) - 0.25, r[1], railX(n) + 0.25, r[3]];
       // fences round a pier over the void (upper floors): its inner side, its far end, beside the lanes
-      const fences = (n: number, r: Rect, nearZ: number): [number, Rect][] => {
+      const fences = (n: number, r: Rect, nearZ: number, head = false): ([number, Rect] | [number, Rect, number])[] => {
         if (n === 0) return [];
         const farZ = Math.abs(r[1] - nearZ) < 0.01 ? r[3] : r[1];
         const ix = sx > 0 ? xa : xb;
-        const w: [number, Rect][] = [[n, [ix - 0.05, r[1], ix + 0.05, r[3]]]];
+        const w: ([number, Rect] | [number, Rect, number])[] = [[n, [ix - 0.05, r[1], ix + 0.05, r[3]]]];
         // across both ends, except where lanes run on (this escalator's, or the next one's passing over)
         const edges = [xa, ...lanes.flatMap((x) => [x - 0.5, x + 0.5]).sort((a, b) => a - b), xb];
         for (const ez of [nearZ, farZ]) for (let k = 0; k < edges.length; k += 2) if (edges[k + 1] - edges[k] > 0.02) w.push([n, [edges[k], ez - 0.05, edges[k + 1], ez + 0.05]]);
+        // a head pier's far end, under the next escalator's lanes: closed at the pier's level only
+        // (its riders pass over it metres up, on the same floor)
+        if (head) for (const lx of lanes) w.push([n, [lx - 0.5, farZ - 0.05, lx + 0.5, farZ + 0.05], 1.2]);
         return w;
       };
+      // the lanes' side rails (instead of the flights' own): open where they pass over the head pier
+      // of the escalator below (same side, one level down), which is left sideways under them
+      const below = f > 0 ? (() => {
+        const ev = (f - 1 + (sx > 0 ? 1 : 0)) % 2 === 0;
+        const t = (ev ? -15.2 : -32.8) + (ev ? -1 : 1) * L;
+        return [Math.min(t, t + (ev ? -1 : 1) * 1.25) - 0.35, Math.max(t, t + (ev ? -1 : 1) * 1.25) + 0.35];
+      })() : null;
+      const rz0 = Math.min(zb, top) + (dir < 0 ? 0.6 : 0.25),
+        rz1 = Math.max(zb, top) - (dir < 0 ? 0.25 : 0.6);
+      const spans: [number, number][] = below ? [[rz0, below[0]], [below[1], rz1]].filter(([a, b]) => b - a > 0.05) as [number, number][] : [[rz0, rz1]];
+      const rails: [number, Rect][] = [f, f + 1].flatMap((n) => lanes.flatMap((lx) => spans.flatMap(([a, b]): [number, Rect][] => [[n, [lx - 0.56, a, lx - 0.5, b]], [n, [lx + 0.5, a, lx + 0.56, b]]])));
       lanes.forEach((lx, k) =>
         out.push({
           from: f,
@@ -48,14 +66,16 @@ function mallEscalators(): StairDecl[] {
           move: k === 0 ? 1 : -1,
           zone: [lx - 0.5, Math.min(zb, top), lx + 0.5, Math.max(zb, top)],
           up: dir < 0 ? "-z" : "+z",
+          rails: false,
           // the piers and the railing gaps are walked onto from the floor; the first lane carries them
           clearOn: k ? [] : [
             [f, foot],
             [f, gap(f, foot)],
+            [f, approach],
             [f + 1, head],
             [f + 1, gap(f + 1, head)],
           ],
-          walls: k ? [] : [...fences(f, foot, zb), ...fences(f + 1, head, top)],
+          walls: k ? [] : [...fences(f, foot, zb), ...fences(f + 1, head, top, true), ...rails],
         }),
       );
     }
@@ -200,14 +220,15 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
     lifts: per({ 0: [lobby(-14.8, -24, Math.PI / 2)], 1: [lobby(-17.8, -7, Math.PI / 2)], 2: [lobby(-13.7, -7, Math.PI / 2)], 3: [lobby(0, 1.68, Math.PI)] }),
   },
   // the Napoleon hall: on the front wall right of the entrance; upstairs, on each floor's middle lift door.
-  // Its escalators (museum/hall.ts) climb to the wings' mezzanines and arrive in the wing they serve:
-  // Denon (west) the Grande Galerie, Richelieu (east) the apartments, Daru (north) the Salle des États
+  // Its escalators (museum/hall.ts: wing()) climb onto the wings' landings and arrive in the wing they
+  // serve: Denon (west) the Grande Galerie, Richelieu (east) the apartments, Daru (north) the Salle des
+  // États. Each zone runs from the foot plate (0.7 m on) to just past the landing's edge, where the head arrives
   museum: {
     style: "brass",
     stairs: [
-      ...[-20.5, -18.6].map((z): StairDecl => ({ from: 0, to: 1, kind: "escalator", move: 1, zone: [-20.9, z - 0.55, -12.5, z + 0.55], up: "-x", link: { rise: 4.8 } })),
-      ...[-20.5, -18.6].map((z): StairDecl => ({ from: 0, to: 3, kind: "escalator", move: 1, zone: [12.5, z - 0.55, 20.9, z + 0.55], up: "+x", link: { rise: 4.8 } })),
-      ...[-0.95, 0.95].map((x): StairDecl => ({ from: 0, to: 2, kind: "escalator", move: 1, zone: [x - 0.55, -41.5, x + 0.55, -34.8], up: "-z", link: { rise: 4.8 * 0.62 } })),
+      ...[-20.5, -18.6].map((z): StairDecl => ({ from: 0, to: 1, kind: "escalator", move: 1, zone: [-18.3, z - 0.55, -11.0, z + 0.55], up: "-x", link: { rise: 4.8 } })),
+      ...[-20.5, -18.6].map((z): StairDecl => ({ from: 0, to: 3, kind: "escalator", move: 1, zone: [11.0, z - 0.55, 18.3, z + 0.55], up: "+x", link: { rise: 4.8 } })),
+      ...[-0.95, 0.95].map((x): StairDecl => ({ from: 0, to: 2, kind: "escalator", move: 1, zone: [x - 0.55, -38.5, x + 0.55, -33.1], up: "-z", link: { rise: 4.8 * 0.62 } })),
     ],
     lifts: per({
       0: [{ at: { x: 4.5, z: -1.42, yaw: 0 } }],

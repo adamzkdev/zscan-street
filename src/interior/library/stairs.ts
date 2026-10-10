@@ -34,7 +34,8 @@ export function buildStairs(parent: THREE.Object3D, ledMat: THREE.Material): Rec
   const white = std("#f6f3ee", 0.55),
     soffit = std("#ebe7e0", 0.7),
     oak = std("#b08a5a", 0.5),
-    rod = std("#3a3632", 0.4, 0.6);
+    rod = std("#3a3632", 0.4, 0.6),
+    glass = std("#e4eef2", 0.08, 0.1, { transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide });
   /** A parallelogram panel in the y–z plane at x (thickness along −x): from (za, ya) to (zb, yb), `lo` below and `hi` above that line. */
   const panel = (mat: THREE.Material, x: number, za: number, ya: number, zb: number, yb: number, lo: number, hi: number, t: number) => {
     const sh = new THREE.Shape();
@@ -49,24 +50,35 @@ export function buildStairs(parent: THREE.Object3D, ledMat: THREE.Material): Rec
     g.translate(x, 0, 0);
     m.add(mat, g);
   };
-  /** A flight along z between x0 and x1, from (za, ya) to (zb, yb): white steps with oak treads, solid white balustrades lit along the top. */
+  /**
+   * A flight along z between x0 and x1, from (za, ya) to (zb, yb): white steps with oak treads, a white
+   * stringer either side carrying a frameless glass balustrade, an oak handrail with a warm light under it.
+   */
   const flight = (x0: number, x1: number, za: number, ya: number, zb: number, yb: number) => {
     const n = Math.max(2, Math.round(Math.abs(yb - ya) / 0.18));
     const run = (zb - za) / n,
       rise = (yb - ya) / n;
     const xc = (x0 + x1) / 2,
       w = x1 - x0;
-    for (let i = 0; i < n; i++) {
-      const z = za + run * (i + 0.5);
-      const top = ya + rise * (i + 1);
-      m.box(white, w - 0.12, 0.34, Math.abs(run) + 0.01, xc, top - 0.37, z);
-      m.box(oak, w - 0.12, 0.04, Math.abs(run) + 0.02, xc, top - 0.04, z);
+    // the treads centred on the walk's ramp (full risers, the first half a tread in from the foot,
+    // the last half tread level with the head): the feet never more than half a riser off a tread
+    for (let i = -1; i < n; i++) {
+      if (i < 0 && ya === G_Y) continue;
+      const top = ya + rise * (i + 1),
+        a = i < 0 ? 0 : run * (i + 0.5),
+        b = i === n - 1 ? zb - za : run * (i + 1.5);
+      const z = za + (a + b) / 2,
+        d = Math.abs(b - a);
+      m.box(white, w - 0.12, 0.34, d + 0.01, xc, top - 0.37, z);
+      m.box(oak, w - 0.12, 0.04, d + 0.02, xc, top - 0.04, z);
     }
     // the sloped soffit under the steps, the balustrades either side (a lit lip on top)
     panel(soffit, x1 - 0.06, za, ya, zb, yb, 0.5, -0.3, w - 0.12);
     for (const x of [x0 + 0.06, x1]) {
-      panel(white, x, za, ya, zb, yb, 0.5, 1.0, 0.06);
-      panel(ledMat, x + 0.005, za, ya, zb, yb, -1.0, 1.015, 0.07);
+      panel(white, x, za, ya, zb, yb, 0.5, 0.14, 0.06);
+      panel(glass, x - 0.02, za, ya, zb, yb, -0.14, 0.96, 0.02);
+      panel(oak, x + 0.01, za, ya, zb, yb, -0.96, 1.02, 0.08);
+      panel(ledMat, x - 0.005, za, ya, zb, yb, -0.945, 0.958, 0.05);
     }
   };
   /** A slab with its top at y, and a lit parapet along the given edges ([x0, z0, x1, z1] lines). */
@@ -77,8 +89,13 @@ export function buildStairs(parent: THREE.Object3D, ledMat: THREE.Material): Rec
     for (const [ax, az, bx, bz] of edges) {
       const alongX = Math.abs(az - bz) < 0.001;
       const len = alongX ? bx - ax : bz - az;
-      m.box(white, alongX ? len : 0.08, 1.0, alongX ? 0.08 : len, (ax + bx) / 2, y, (az + bz) / 2);
-      m.box(ledMat, alongX ? len : 0.09, 0.015, alongX ? 0.09 : len, (ax + bx) / 2, y + 1.0, (az + bz) / 2);
+      // the flights' balustrade, level: a white curb, glass, the oak handrail with its light under it
+      const cx = (ax + bx) / 2,
+        cz = (az + bz) / 2;
+      m.box(white, alongX ? len : 0.08, 0.14, alongX ? 0.08 : len, cx, y, cz);
+      m.box(glass, alongX ? len : 0.02, 0.82, alongX ? 0.02 : len, cx, y + 0.14, cz);
+      m.box(oak, alongX ? len + 0.04 : 0.08, 0.06, alongX ? 0.08 : len + 0.04, cx, y + 0.96, cz);
+      m.box(ledMat, alongX ? len : 0.05, 0.012, alongX ? 0.05 : len, cx, y + 0.945, cz);
     }
   };
 

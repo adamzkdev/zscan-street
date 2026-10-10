@@ -354,21 +354,49 @@ export function buildStairs(root: THREE.Object3D, ground: Rect[]) {
   const steel = "#3a3944",
     tread = "#4a4855",
     rail = "#e0a820";
-  /** A flight along x from (xa, ya) to (xb, yb) between z0 and z1: treads, stringers, handrails. */
-  const flight = (xa: number, ya: number, xb: number, yb: number, z0: number, z1: number) => {
+  /**
+   * A flight along x from (xa, ya) to (xb, yb) between z0 and z1: treads, channel stringers, handrails.
+   * The stringers' heads are cut plumb against the edge beam they land on (down to its underside);
+   * `footOn`: their feet stand on the "floor" (cut level) or on a "beam" the same way.
+   */
+  const flight = (xa: number, ya: number, xb: number, yb: number, z0: number, z1: number, footOn: "floor" | "beam") => {
     const n = Math.max(2, Math.round(Math.abs(yb - ya) / 0.18));
     const run = (xb - xa) / n,
       rise = (yb - ya) / n;
     const zc = (z0 + z1) / 2,
       w = z1 - z0;
+    const sg = Math.sign(run),
+      len = Math.abs(xb - xa),
+      tan = rise / Math.abs(run);
+    // the treads centred on the walk's ramp (full risers, the first half a tread in from the foot,
+    // the last half tread level with the head): the feet never more than half a riser off a tread
     for (let i = 0; i < n; i++) {
-      const x = xa + run * (i + 0.5);
-      st.add(tread, Math.abs(run) + 0.02, 0.05, w - 0.16, x, ya + rise * (i + 1) - 0.05, zc);
-      // a gold nosing on every tread
-      glow.add(new THREE.Color(GOLD).multiplyScalar(0.9), 0.04, 0.015, w - 0.2, xa + run * i + Math.sign(run) * 0.02, ya + rise * (i + 1), zc);
+      const top = ya + rise * (i + 1),
+        a = run * (i + 0.5),
+        b = i === n - 1 ? xb - xa : run * (i + 1.5);
+      st.add(tread, Math.abs(b - a) + 0.02, 0.05, w - 0.16, xa + (a + b) / 2, top - 0.05, zc);
+      // a chequer-plate nosing angle and a gold anti-slip strip on every tread
+      st.add(steel, 0.05, 0.08, w - 0.16, xa + a + sg * 0.025, top - 0.08, zc);
+      glow.add(new THREE.Color(GOLD).multiplyScalar(0.9), 0.04, 0.015, w - 0.2, xa + a + sg * 0.03, top, zc);
+    }
+    // the stringers: steel channels along the nosings' line (T), cut where they meet the floor or the beams
+    const T = (u: number) => ya + rise / 2 + u * tan;
+    const X = (u: number) => xa + sg * u;
+    const pts: [number, number][] = [];
+    if (footOn === "floor") pts.push([0, ya], [0, T(0) + 0.1]);
+    else pts.push([0, ya - 0.37], [0, T(0) + 0.1]);
+    pts.push([(yb - 0.1 - ya - rise / 2) / tan, yb], [len, yb], [len, yb - 0.37]);
+    const u1 = (yb - 0.37 + 0.25 - ya - rise / 2) / tan;
+    if (u1 < len) pts.push([u1, yb - 0.37]);
+    // (against a beam the channel's underside already meets the beam's at the plumb cut)
+    if (footOn === "floor") pts.push([(0.25 - rise / 2) / tan, ya]);
+    const sh = new THREE.Shape(pts.map(([u, y]) => new THREE.Vector2(X(u), y)));
+    for (const z of [z0 + 0.04, z1 - 0.04]) {
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.07, bevelEnabled: false });
+      g.translate(0, 0, z - 0.035);
+      st.geo(g, steel);
     }
     for (const z of [z0 + 0.04, z1 - 0.04]) {
-      st.beam(steel, new THREE.Vector3(xa, ya - 0.12, z), new THREE.Vector3(xb, yb - 0.12, z), 0.32, 0.07);
       st.beam(rail, new THREE.Vector3(xa, ya + 1.0, z), new THREE.Vector3(xb, yb + 1.0, z), 0.06, 0.06);
       st.beam(rail, new THREE.Vector3(xa, ya + 0.5, z), new THREE.Vector3(xb, yb + 0.5, z), 0.04, 0.04);
       const posts = Math.max(2, Math.round(Math.abs(xb - xa) / 1.6));
@@ -376,13 +404,22 @@ export function buildStairs(root: THREE.Object3D, ground: Rect[]) {
         const f = k / posts;
         st.add(rail, 0.05, 1.02, 0.05, xa + f * (xb - xa), ya + f * (yb - ya), z);
       }
+      // at a foot on the floor, the handrail runs on level a step's length past the last post
+      if (footOn === "floor") {
+        st.add(rail, 0.36, 0.06, 0.06, xa - sg * 0.15, ya + 0.97, z);
+        st.add(rail, 0.05, 1.02, 0.05, xa - sg * 0.3, ya, z);
+        st.add(rail, 0.18, 0.012, 0.18, xa - sg * 0.3, ya, z);
+      }
     }
   };
   // up from the hall (its foot by the workshop) to the landing, and on up to the catwalks
-  flight(S.foot, 0, S.x1, CTRL.y, S.mid, S.z1);
-  flight(S.x1, CTRL.y, S.head, CAT_Y, S.z0, S.mid);
+  flight(S.foot, 0, S.x1, CTRL.y, S.mid, S.z1, "floor");
+  flight(S.x1, CTRL.y, S.head, CAT_Y, S.z0, S.mid, "beam");
   // the landing: a grating deck on two posts, railed on its open sides
   st.add(tread, S.x1 - S.x0, 0.12, S.z1 - S.z0, (S.x0 + S.x1) / 2, CTRL.y - 0.12, (S.z0 + S.z1) / 2);
+  // its edge beam where both flights meet it, a cross beam under its middle, a brace to each post
+  st.add(steel, 0.14, 0.37, S.z1 - S.z0, S.x1 - 0.07, CTRL.y - 0.37, (S.z0 + S.z1) / 2);
+  st.add(steel, 0.12, 0.25, S.z1 - S.z0, (S.x0 + S.x1) / 2, CTRL.y - 0.37, (S.z0 + S.z1) / 2);
   for (const z of [S.z0, S.z1]) {
     st.add(steel, S.x1 - S.x0, 0.25, 0.08, (S.x0 + S.x1) / 2, CTRL.y - 0.37, z);
     st.add(steel, 0.25, CTRL.y - 0.12, 0.25, S.x1 - 0.15, 0, z + (z === S.z0 ? 0.15 : -0.15));

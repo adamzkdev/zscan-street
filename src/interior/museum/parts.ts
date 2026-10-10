@@ -46,61 +46,98 @@ export function column(k: MuseumKit, f: number, x: number, z: number, h: number,
   k.solid(f, x - r * 1.3, z - r * 1.3, x + r * 1.3, z + r * 1.3);
 }
 
+/** Step treads and the yellow demarcation of the escalators (shared by every floor). */
+const treadMat = new THREE.MeshStandardMaterial({ color: "#45484e", roughness: 0.42, metalness: 0.75 });
+const markMat = new THREE.MeshStandardMaterial({ color: "#e2b52a", roughness: 0.55 });
+/** Brushed stainless for the truss and the decks (a soft sheen: polished, it shimmers). */
+const cladMat = new THREE.MeshStandardMaterial({ color: "#aeb2b8", roughness: 0.55, metalness: 0.6 });
+const skirtGlow = new WeakMap<MuseumKit, THREE.Material>();
+
 /**
  * An escalator from (x, z) on the floor rising `rise` metres over `run` metres along `dir`
- * (unit vector), `w` wide: steps, glass balustrades, black handrails, chrome combs. Clickable.
+ * (unit vector), `w` wide: a stainless truss, ribbed steps with yellow edges, frameless glass
+ * balustrades with black handrails looping round at both ends, yellow combs. Its landing plates
+ * sit flush in the floor at the foot and in the upper landing (top at `rise`) for its last 1.2 m,
+ * so the upper floor's edge is where the incline ends. Clickable.
  */
 export function escalator(k: MuseumKit, f: number, x: number, z: number, dir: [number, number], run: number, rise: number, w = 1.2) {
   const parts: THREE.BufferGeometry[] = [],
+    marks: THREE.BufferGeometry[] = [],
+    plates: THREE.BufferGeometry[] = [],
     glass: THREE.BufferGeometry[] = [],
     rails: THREE.BufferGeometry[] = [],
-    steel: THREE.BufferGeometry[] = [];
+    steel: THREE.BufferGeometry[] = [],
+    glow: THREE.BufferGeometry[] = [];
   const flat = 1.2;
   const n = Math.round(rise / 0.2);
   const slope = run - 2 * flat;
+  const sd = slope / n,
+    sh = rise / n;
   // in a local frame: along = +z' (towards the top), across = x'
   for (let i = 0; i < n; i++) {
-    const t0 = flat + (slope * i) / n;
-    parts.push(boxGeo(w - 0.1, 0.06, slope / n, 0, (rise * i) / n + 0.14, t0 + slope / n / 2));
+    const t0 = flat + sd * i,
+      y = sh * (i + 0.5);
+    // a step: its tread at y, its riser down to the one below; yellow on its sides and back edge
+    parts.push(boxGeo(w - 0.12, sh + 0.02, sd - 0.012, 0, y - sh - 0.02, t0 + sd / 2));
+    for (const s of [-1, 1]) marks.push(boxGeo(0.035, 0.008, sd - 0.03, s * (w / 2 - 0.08), y, t0 + sd / 2));
+    marks.push(boxGeo(w - 0.12, 0.008, 0.035, 0, y, t0 + sd - 0.03));
   }
-  steel.push(boxGeo(w, 0.15, flat, 0, 0, flat / 2), boxGeo(w, 0.15, flat, 0, rise, run - flat / 2));
-  // the truss under the steps: a sloped box
-  const a = new THREE.Vector3(0, -0.3, flat),
-    b = new THREE.Vector3(0, rise - 0.3, run - flat);
-  steel.push(beamGeo(a, b, w + 0.25, 0.7));
+  // the landing plates, flush (tops at 0 and at the rise), with their yellow combs
+  plates.push(boxGeo(w + 0.02, 0.15, flat, 0, -0.14, flat / 2), boxGeo(w + 0.02, 0.15, flat, 0, rise - 0.14, run - flat / 2));
+  marks.push(boxGeo(w - 0.12, 0.03, 0.14, 0, 0, flat - 0.07), boxGeo(w - 0.12, 0.03, 0.14, 0, rise, run - flat + 0.07));
+  for (const t of [0.35, 0.7]) plates.push(boxGeo(w - 0.2, 0.004, 0.02, 0, 0.01, t), boxGeo(w - 0.2, 0.004, 0.02, 0, rise + 0.01, run - t));
+  // the truss under the steps: a stainless box along the incline, its head buried in the landing's edge
+  const a = new THREE.Vector3(0, -0.4, flat),
+    b = new THREE.Vector3(0, rise - 0.4, run - flat);
+  steel.push(beamGeo(a, b, w + 0.26, 0.8));
   for (const s of [-1, 1]) {
     const ox = (s * (w + 0.1)) / 2;
-    // balustrade: glass panels along the slope, handrail on top, a steel skirt below
-    const pa = new THREE.Vector3(ox, 0.15, 0),
-      pb = new THREE.Vector3(ox, 0.15, flat),
-      pc = new THREE.Vector3(ox, rise + 0.15, run - flat),
-      pd = new THREE.Vector3(ox, rise + 0.15, run);
+    // balustrade: a deck, frameless glass and a handrail along the flat, the incline and the flat
+    const pa = new THREE.Vector3(ox, 0, 0),
+      pb = new THREE.Vector3(ox, 0, flat),
+      pc = new THREE.Vector3(ox, rise, run - flat),
+      pd = new THREE.Vector3(ox, rise, run);
+    const up = (p: THREE.Vector3, dy: number) => p.clone().setY(p.y + dy);
     for (const [p, q] of [
       [pa, pb],
       [pb, pc],
       [pc, pd],
     ]) {
-      glass.push(beamGeo(p.clone().setY(p.y + 0.5), q.clone().setY(q.y + 0.5), 0.03, 0.9));
-      rails.push(beamGeo(p.clone().setY(p.y + 1.0), q.clone().setY(q.y + 1.0), 0.09, 0.1));
-      steel.push(beamGeo(p.clone().setY(p.y), q.clone().setY(q.y), 0.12, 0.25));
+      steel.push(beamGeo(up(p, 0.13), up(q, 0.13), 0.16, 0.26));
+      glass.push(beamGeo(up(p, 0.66), up(q, 0.66), 0.024, 0.8));
+      rails.push(beamGeo(up(p, 1.08), up(q, 1.08), 0.08, 0.09));
     }
-    // a lit skirt line along the steps
-    rails.push(beamGeo(pb.clone().setX(ox * 0.92).setY(0.3), pc.clone().setX(ox * 0.92).setY(rise + 0.3), 0.02, 0.03));
+    // the handrail loops down round both ends (newels), onto a stainless base past the glass
+    const R = 0.27;
+    steel.push(boxGeo(0.16, 1.08 - 2 * R + 0.02, R + 0.06, ox, 0, -R / 2 + 0.03), boxGeo(0.16, 1.08 - 2 * R + 0.02, R + 0.06, ox, rise, run + R / 2 - 0.03));
+    glass.push(new THREE.CircleGeometry(R, 14, 0, Math.PI).rotateZ(-Math.PI / 2).rotateY(Math.PI / 2).translate(ox, 1.08 - R, 0));
+    glass.push(new THREE.CircleGeometry(R, 14, 0, Math.PI).rotateZ(-Math.PI / 2).rotateY(-Math.PI / 2).translate(ox, rise + 1.08 - R, run));
+    rails.push(new THREE.TorusGeometry(R, 0.045, 8, 14, Math.PI).rotateZ(-Math.PI / 2).rotateY(Math.PI / 2).translate(ox, 1.08 - R, 0));
+    rails.push(new THREE.TorusGeometry(R, 0.045, 8, 14, Math.PI).rotateZ(-Math.PI / 2).rotateY(-Math.PI / 2).translate(ox, rise + 1.08 - R, run));
+    // a lit line down the skirt, by the steps
+    glow.push(beamGeo(new THREE.Vector3(ox * 0.9, 0.26, flat), new THREE.Vector3(ox * 0.9, rise + 0.26, run - flat), 0.015, 0.025));
   }
   const yaw = Math.atan2(dir[0], dir[1]);
   const m = new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z);
   const add = (list: THREE.BufferGeometry[], mat: THREE.Material) => list.forEach((g) => k.geo(f, mat, g.applyMatrix4(m)));
-  add(parts, k.steel);
-  add(steel, k.chrome);
+  let lit = skirtGlow.get(k);
+  if (!lit) skirtGlow.set(k, (lit = k.lit("#e6f4ff", 1.3)));
+  add(parts, treadMat);
+  add(marks, markMat);
+  add(plates, k.steel);
+  add(steel, cladMat);
   add(glass, k.glass);
   add(rails, k.black);
-  // footprint
+  add(glow, lit);
+  // footprint (the first 0.7 m of the foot plate left free: it is floor, walked onto from any side)
   const ex = x + dir[0] * run,
     ez = z + dir[1] * run;
+  const sx = x + dir[0] * 0.7,
+    sz = z + dir[1] * 0.7;
   const hw = (w + 0.4) / 2;
   const px = Math.abs(dir[1]) * hw,
     pz = Math.abs(dir[0]) * hw;
-  k.solid(f, Math.min(x, ex) - px, Math.min(z, ez) - pz, Math.max(x, ex) + px, Math.max(z, ez) + pz);
+  k.solid(f, Math.min(sx, ex) - px, Math.min(sz, ez) - pz, Math.max(sx, ex) + px, Math.max(sz, ez) + pz);
   // an invisible hit box over it, for the click
   const hit = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, rise + 1.2, run), new THREE.MeshBasicMaterial({ visible: false }));
   hit.position.set((x + ex) / 2, (rise + 1.2) / 2, (z + ez) / 2);

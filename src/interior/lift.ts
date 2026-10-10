@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Floor, Interior, Rect } from "./types";
 import type { WalkControls } from "./walk";
 
@@ -81,8 +82,12 @@ export interface StairDecl {
   clear?: Rect[];
   /** Place colliders to ignore on one floor: [floor, rect]. */
   clearOn?: [number, Rect][];
-  /** Extra walls on one floor (fences round a landing over a void): [floor, rect]. */
-  walls?: [number, Rect][];
+  /**
+   * Extra walls on one floor (fences round a landing over a void): [floor, rect], or [floor, rect,
+   * reach]: a fence at that floor's level only, in the way while the walker's feet are less than
+   * `reach` metres over it (another flight passing over it on the same floor is walked unhindered).
+   */
+  walls?: ([number, Rect] | [number, Rect, number])[];
   kind?: "stairs" | "escalator";
   /** Escalators: 1 runs up, -1 down. */
   move?: 1 | -1;
@@ -569,55 +574,102 @@ class Flight {
     const up = this.decl.up ?? "+z";
     return up === "+x" ? [v, 0] : up === "-x" ? [-v, 0] : up === "+z" ? [0, v] : [0, -v];
   }
-  /** Steps, stringers and handrails, for places that have no flight of their own. */
+  /**
+   * The flight drawn, for places that have no flight of their own: a steel stair (open treads with
+   * nosings, carried by stringers cut level at the floor and plumb at the landing) or, when it
+   * barely climbs, a catwalk (a sloped deck on edge channels, bearers under it); a balustrade on
+   * both sides either way (stanchions on the stringers, top and mid rails).
+   */
   private draw(st: Style) {
     const [x0, z0, x1, z1] = this.decl.zone!;
-    const up = this.decl.up ?? "+z";
+    let up = this.decl.up ?? "+z";
+    let yLo = this.yA,
+      dy = this.yB - this.yA;
+    // drawn from its low end, whichever way the walker calls "up"
+    if (dy < 0) {
+      up = ((up[0] === "+" ? "-" : "+") + up[1]) as typeof up;
+      yLo = this.yB;
+      dy = -dy;
+    }
     const along = up === "+x" || up === "-x";
     const len = along ? x1 - x0 : z1 - z0;
     const wid = along ? z1 - z0 : x1 - x0;
-    const dy = this.yB - this.yA;
-    const n = Math.max(2, Math.round(Math.abs(dy) / 0.18));
-    const stepM = lit(st.floor, 0.1, 0.8),
-      sideM = lit(st.shell, 0.3, 0.6),
+    const k = dy / len;
+    const ramp = k < 0.12;
+    const stepM = lit(st.floor, Math.max(0.3, st.metal), 0.6),
+      noseM = lit(st.accent, 0.3, 0.5),
+      sideM = lit(st.shell, Math.max(0.4, st.metal), 0.5),
       railM = lit(st.trim, st.metal, 0.35);
-    // local frame: climbing along +a, across b; mapped to world
-    const put = (mesh: THREE.Mesh, a: number, y: number, b: number, rotY = 0) => {
-      const sgn = up === "+x" || up === "+z" ? 1 : -1;
-      const aw = sgn > 0 ? (along ? x0 : z0) + a : (along ? x1 : z1) - a;
-      const bw = (along ? z0 : x0) + b;
-      if (along) mesh.position.set(aw, y, bw);
-      else mesh.position.set(bw, y, aw);
-      mesh.rotation.y = rotY;
-      this.group.add(mesh);
+    // built in the flight's own frame: a along the climb (0 at the foot), y up from its foot, b across
+    const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const add = (m: THREE.Material, g: THREE.BufferGeometry) => {
+      const g2 = g.index ? g.toNonIndexed() : g;
+      for (const key of Object.keys(g2.attributes)) if (key !== "position" && key !== "normal") g2.deleteAttribute(key);
+      (parts.get(m) ?? parts.set(m, []).get(m)!).push(g2);
     };
-    const run = len / n;
-    for (let i = 0; i < n; i++) {
-      const top = this.yA + ((i + 1) * dy) / n;
-      const h = Math.max(0.12, top - this.yA);
-      const g = along ? new THREE.BoxGeometry(run + 0.01, h, wid - 0.1) : new THREE.BoxGeometry(wid - 0.1, h, run + 0.01);
-      put(new THREE.Mesh(g, stepM), run * (i + 0.5), top - h / 2, wid / 2);
+    const box = (m: THREE.Material, a0: number, a1: number, y0: number, y1: number, b0: number, b1: number) => add(m, new THREE.BoxGeometry(a1 - a0, y1 - y0, b1 - b0).translate((a0 + a1) / 2, (y0 + y1) / 2, (b0 + b1) / 2));
+    /** A profile in (a, y), extruded across from b0 to b1. */
+    const prism = (m: THREE.Material, pts: [number, number][], b0: number, b1: number) => add(m, new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([a, y]) => new THREE.Vector2(a, y))), { depth: b1 - b0, bevelEnabled: false }).translate(0, 0, b0));
+    /** A bar along the pitch from a0 to a1, `h` over it. */
+    const pitched = (m: THREE.Material, a0: number, a1: number, h: number, b: number, r: number) => {
+      const s = Math.atan(k);
+      const l = (a1 - a0) / Math.cos(s);
+      add(m, new THREE.CylinderGeometry(r, r, l, 8).rotateZ(-Math.PI / 2 + s).translate((a0 + a1) / 2, k * ((a0 + a1) / 2) + h, b));
+    };
+    const post = (a: number, y0: number, y1: number, b: number) => add(railM, new THREE.CylinderGeometry(0.022, 0.022, y1 - y0, 8).translate(a, (y0 + y1) / 2, b));
+
+    let top: (a: number) => number;
+    if (ramp) {
+      // the deck, its edge channels (a kick plate standing proud of it), bearers under it
+      prism(stepM, [[0, -0.05], [len, dy - 0.05], [len, dy], [0, 0]], 0.06, wid - 0.06);
+      for (const [b0, b1] of [[-0.02, 0.06], [wid - 0.06, wid + 0.02]]) prism(sideM, [[0, -0.22], [len, dy - 0.22], [len, dy + 0.1], [0, 0.1]], b0, b1);
+      const nb = Math.max(1, Math.round(len / 1.2));
+      for (let i = 0; i <= nb; i++) {
+        const a = THREE.MathUtils.clamp((len * i) / nb, 0.04, len - 0.04);
+        box(sideM, a - 0.04, a + 0.04, k * a - 0.17, k * a - 0.05, 0.06, wid - 0.06);
+      }
+      top = (a) => k * a + 0.1;
+    } else {
+      const n = Math.max(2, Math.round(dy / 0.18));
+      const rise = dy / n,
+        run = len / n;
+      // open treads, the last one level with the landing, a nosing on each
+      for (let i = 0; i < n; i++) {
+        const y = (i + 1) * rise;
+        box(stepM, i * run, (i + 1) * run + 0.01, y - 0.045, y, 0.06, wid - 0.06);
+        box(noseM, i * run, i * run + 0.035, y - 0.05, y + 0.002, 0.07, wid - 0.07);
+        // the angle under it, bolted to both stringers
+        box(sideM, i * run + 0.02, (i + 1) * run - 0.02, y - 0.09, y - 0.045, 0.06, wid - 0.06);
+      }
+      // stringers: their top edge just over the nosings, cut level on the floor and plumb at the landing
+      const t = rise + 0.03,
+        d = 0.18;
+      const head = len - (t / k);
+      for (const [b0, b1] of [[-0.01, 0.06], [wid - 0.06, wid + 0.01]])
+        prism(sideM, [[0, 0], [d / k, 0], [len, dy - d], [len, dy], [head, dy], [0, t]], b0, b1);
+      top = (a) => Math.min(k * a + t, dy);
     }
-    const slope = Math.atan2(dy, len);
-    for (const b of [0.03, wid - 0.03]) {
-      const sg = along ? new THREE.BoxGeometry(Math.hypot(len, dy), 0.32, 0.06) : new THREE.BoxGeometry(0.06, 0.32, Math.hypot(len, dy));
-      const m = new THREE.Mesh(sg, sideM);
-      const rail = new THREE.Mesh(along ? new THREE.BoxGeometry(Math.hypot(len, dy), 0.05, 0.05) : new THREE.BoxGeometry(0.05, 0.05, Math.hypot(len, dy)), railM);
-      const sgn = up === "+x" || up === "+z" ? 1 : -1;
-      // tilt along the climb
-      if (along) {
-        m.rotation.z = sgn * slope;
-        rail.rotation.z = sgn * slope;
-      } else {
-        m.rotation.x = -sgn * slope;
-        rail.rotation.x = -sgn * slope;
+    // the balustrade: stanchions on the stringers' outer faces, a top rail ~0.9 m over the nosings, a mid rail
+    const rail = ramp ? 1.0 : 0.9 + (dy / Math.max(2, Math.round(dy / 0.18)));
+    const np = Math.max(2, Math.ceil(len / 1.1));
+    for (const b of [-0.04, wid + 0.04]) {
+      for (let i = 0; i <= np; i++) {
+        const a = THREE.MathUtils.lerp(0.06, len - 0.06, i / np);
+        post(a, top(a) - 0.12, k * a + rail, b);
       }
-      put(m, len / 2, this.yA + dy / 2, b, 0);
-      put(rail, len / 2, this.yA + dy / 2 + 0.95, b, 0);
-      for (const a of [0.05, len - 0.05]) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.0, 0.05), railM);
-        put(post, a, this.yA + (a / len) * dy + 0.5, b);
-      }
+      pitched(railM, 0.02, len - 0.02, rail, b, 0.028);
+      pitched(railM, 0.06, len - 0.06, rail * 0.5 + (ramp ? 0.05 : 0.15), b, 0.015);
+    }
+    // into the place: the frame turned so a runs up the flight
+    const th = up === "+x" ? 0 : up === "-x" ? Math.PI : up === "+z" ? -Math.PI / 2 : Math.PI / 2;
+    const o = up === "+x" ? [x0, z0] : up === "-x" ? [x1, z1] : up === "+z" ? [x1, z0] : [x0, z1];
+    const mtx = new THREE.Matrix4().makeTranslation(o[0], yLo, o[1]).multiply(new THREE.Matrix4().makeRotationY(th));
+    for (const [m, list] of parts) {
+      const g = mergeGeometries(list, false);
+      for (const x of list) x.dispose();
+      if (!g) continue;
+      g.applyMatrix4(mtx);
+      this.group.add(new THREE.Mesh(g, m));
     }
   }
 }
@@ -876,6 +928,9 @@ export class Circulation {
   /** Trying to walk in an open car without getting anywhere: how long, and from where. */
   private stuck = { t: 0, x: 0, z: 0 };
   private shownFloors: number[] = [];
+  /** The floor and low fences last handed to the walker (see `lowWalls`). */
+  private lowKey = "";
+  private lowArr: Rect[] | null = null;
   private panel: HTMLElement | null = null;
   private panelKey = "";
   private layerOnly = false;
@@ -1016,8 +1071,15 @@ export class Circulation {
     return [
       ...this.cars.filter((c) => fl.includes(c.floor)).flatMap((c) => c.rects),
       ...this.flights.filter((f) => this.touches(f, fl)).flatMap((f) => f.rects),
-      ...this.flights.flatMap((f) => (f.decl.walls ?? []).filter(([k]) => fl.includes(k)).map(([, r]) => r)),
+      ...this.flights.flatMap((f) => (f.decl.walls ?? []).filter((w) => fl.includes(w[0]) && w[2] === undefined).map((w) => w[1])),
     ];
+  }
+
+  /** The fences of floor `n`'s space that stand at a floor's level only (see StairDecl.walls), in the way of feet at `feet`. */
+  private lowWalls(n: number, feet: number): Rect[] {
+    const fl = this.groupOf(n);
+    const F = this.place.floors;
+    return this.flights.flatMap((f) => (f.decl.walls ?? []).filter((w) => w[2] !== undefined && fl.includes(w[0]) && feet - F[w[0]].y < w[2]).map((w) => w[1]));
   }
 
   /** Where the place's own colliders give way on floor `n`: its flights (a little past both ends). */
@@ -1072,7 +1134,8 @@ export class Circulation {
     const fl = this.groupOf(n);
     this.shownFloors = fl;
     for (const c of this.cars) c.group.visible = fl.includes(c.floor);
-    for (const f of this.flights) f.group.visible = this.touches(f, fl);
+    // a flight drawn here stands in the shared space: seen from every floor of it (the catwalk from the hall)
+    for (const f of this.flights) f.group.visible = (f.decl.build && !f.decl.link) || this.touches(f, fl);
   }
 
   /** The car the walker stands in, on the floor they are on. */
@@ -1133,6 +1196,14 @@ export class Circulation {
     const F = this.place.floors;
     const now = this.host.floor();
     if (!this.shownFloors.includes(now)) this.show(now);
+    // the fences at a floor's level: the walker's walls with those in the way of their feet now
+    const low = this.lowWalls(now, W.floor);
+    const key = `${now}:${low.length}:${low.map((r) => r[0] + r[1]).join()}`;
+    if (key !== this.lowKey || (this.lowArr && W.extra !== this.lowArr)) {
+      this.lowKey = key;
+      W.extra = low.length ? [...this.rects(now), ...low] : this.rects(now);
+      this.lowArr = low.length ? W.extra : null;
+    }
     // ---- cars
     const r = this.ride;
     for (const c of this.cars) {

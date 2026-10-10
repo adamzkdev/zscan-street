@@ -179,45 +179,125 @@ function mist(k: MallKit) {
   return mat;
 }
 
-/** Escalator lanes between level f and f + 1, rising along z in direction `dir` from zb. */
+/** How far the escalators' piers (slab tongues) run on past both ends of the lanes. */
+const PIER = 1.25;
+
+/**
+ * Escalator lanes between level f and f + 1, rising along z in direction `dir` from zb: a stainless
+ * truss whose ends run level into the piers' slabs, 30 grooved steps on the incline (their tops on
+ * the walk's ramp) with yellow demarcation, floor plates and yellow combs flush with the piers,
+ * frameless glass balustrades on stainless decks with lit skirts, and black handrails that loop
+ * round the rounded newel ends.
+ */
 function escalator(k: MallKit, f: number, x: number, zb: number, dir: 1 | -1) {
   const L = 10.4,
     H = FH,
-    ang = Math.atan2(H, L),
+    tan = H / L,
     len = Math.hypot(L, H);
   const y0 = LEVELS[f].y,
+    yT = y0 + H,
     zm = zb + (dir * L) / 2,
-    rx = -dir * ang;
+    rx = -dir * Math.atan2(H, L);
+  /** The step line (the walk's ramp) at s along the climb, level past both ends. */
+  const line = (s: number) => y0 + THREE.MathUtils.clamp(s, 0, L) * tan;
+  const zAt = (s: number) => zb + dir * s;
+  /** A profile in the climb's vertical plane (points [s, y]), `t` thick across x, centred on cx. */
+  const side = (mat: THREE.Material, color: string, pts: [number, number][], cx: number, t: number, kk = 1) => {
+    const sh = new THREE.Shape(pts.map(([s, y]) => new THREE.Vector2(zAt(s), y)));
+    const g = new THREE.ExtrudeGeometry(sh, { depth: t, bevelEnabled: false, curveSegments: 1 });
+    // shape x → world z, extrusion → world −x
+    g.rotateY(-Math.PI / 2);
+    g.translate(cx + t / 2, 0, 0);
+    k.geo(mat, color, g, undefined, kk);
+  };
+  /** A band following the step line from sa to sb, between `lo` and `hi` above it. */
+  const band = (sa: number, sb: number, lo: number, hi: number): [number, number][] => {
+    const ss = [sa, ...[0, L].filter((s) => s > sa && s < sb), sb];
+    return [...ss.map((s): [number, number] => [s, line(s) + lo]), ...ss.reverse().map((s): [number, number] => [s, line(s) + hi])];
+  };
+  const E = 0.95, // the newels: how far the balustrades run on level past the incline
+    PL = PIER - 0.1; // the floor plates' depth on the piers
+  const steel = "#c3c7cd",
+    n = 30,
+    run = L / n;
   k.at(null);
   for (const [lx, up] of [
     [x - 0.62, true],
     [x + 0.62, false],
   ] as const) {
-    // the truss, clad in brushed steel, the step band on it
-    k.boxR(k.paint, "#8a8276", 1.2, 0.9, len, lx, y0 + H / 2 - 0.5, zm, rx, 0);
-    k.boxR(k.paint, "#2a2a30", 1.0, 0.05, len, lx, y0 + H / 2 - 0.04, zm, rx, 0);
-    const n = 30;
+    // the truss: clad in brushed stainless, level into the slab at both ends (its underside the slab's)
+    const s0 = 0.5 / tan;
+    side(k.metal, steel, [
+      [-PL, y0 - 0.03],
+      [0.33, y0 - 0.03],
+      [L + 0.33, yT - 0.03],
+      [L + PL, yT - 0.03],
+      [L + PL, yT - 0.45],
+      [L + s0, yT - 0.45],
+      [s0, y0 - 0.45],
+      [-PL, y0 - 0.45],
+    ], lx, 1.24);
+    // a shadow line and a thin lit reveal along the underside's outer edges
+    for (const sd of [-1, 1]) side(k.glow, up ? "#8ae8ff" : "#ffb070", band(s0 + 0.2, L, -0.95, -0.93), lx + sd * 0.621, 0.004, 0.8);
+    // the steps: grooved aluminium, tops on the ramp, yellow demarcation on three sides
     for (let i = 0; i < n; i++) {
-      const s = ((i + 0.5) / n) * L;
-      k.box(k.metal, "#8a8e96", 1.0, 0.16, L / n - 0.02, lx, y0 + (s * H) / L - 0.16, zb + dir * s);
-      k.box(k.glow, "#ffd06a", 1.0, 0.012, 0.03, lx, y0 + (s * H) / L, zb + dir * (s + L / n / 2 - 0.02), 0, 0.9);
+      const s = (i + 0.5) * run,
+        top = y0 + s * tan;
+      k.box(k.metal, "#9aa0a8", 1.0, 0.32, run - 0.012, lx, top - 0.32, zAt(s));
+      for (let g = -0.4; g <= 0.41; g += 0.1) k.box(k.paint, "#3a3c42", 0.012, 0.004, run - 0.07, lx + g, top, zAt(s) + dir * 0.02);
+      k.box(k.paint, "#f2c200", 1.0, 0.006, 0.04, lx, top, zAt(s - run / 2 + 0.026));
+      for (const sd of [-1, 1]) k.box(k.paint, "#f2c200", 0.04, 0.006, run - 0.012, lx + sd * 0.48, top, zAt(s));
     }
-    // landings
-    k.box(k.metal, "#9a9ea6", 1.2, 0.08, 1.4, lx, y0, zb - dir * 0.7);
-    k.box(k.metal, "#9a9ea6", 1.2, 0.08, 1.4, lx, y0 + H, zb + dir * (L + 0.7));
-    // glass balustrades, black handrails, lit skirts
-    for (const side of [-0.56, 0.56]) {
-      k.boxR(k.glass, "#ffffff", 0.03, 0.95, len + 0.6, lx + side, y0 + H / 2 + 0.5, zm, rx, 0);
-      k.boxR(k.paint, "#141418", 0.08, 0.1, len + 0.8, lx + side, y0 + H / 2 + 1.02, zm, rx, 0);
-      k.boxR(k.glow, up ? "#8ae8ff" : "#ffb070", 0.03, 0.03, len, lx + side * 0.92, y0 + H / 2 + 0.05, zm, rx, 0, 0, 1.4);
+    // floor plates flush on the piers, yellow comb plates where the steps run under them
+    for (const [sp, yy] of [
+      [-PL / 2, y0],
+      [L + PL / 2, yT],
+    ]) {
+      k.box(k.metal, "#b9bdc4", 1.0, 0.012, PL, lx, yy, zAt(sp));
+      for (let g = 0.15; g < PL - 0.1; g += 0.12) k.box(k.paint, "#5a5e66", 1.0, 0.004, 0.014, lx, yy + 0.012, zAt(sp - PL / 2 + g));
+    }
+    k.box(k.paint, "#f2c200", 1.0, 0.03, 0.09, lx, y0, zAt(-0.045));
+    k.box(k.paint, "#f2c200", 1.0, 0.03, 0.09, lx, yT - 0.015, zAt(L + 0.045));
+    for (const sd of [-1, 1]) {
+      const bx = lx + sd * 0.56;
+      // the deck: a stainless band the glass stands in, from newel to newel, a lit skirt inside it
+      side(k.metal, steel, band(-E, L + E, -0.3, 0.14), bx, 0.12);
+      side(k.glow, up ? "#8ae8ff" : "#ffb070", band(-E + 0.05, L + E - 0.05, 0.03, 0.05), lx + sd * 0.4995, 0.004, 1.4);
+      // the glass, rounded at both newels
+      const r = 0.39,
+        yc = 0.14 + r;
+      const glass: [number, number][] = [];
+      const arc = (sc: number, yy: number, a0: number, a1: number, out: [number, number][]) => {
+        for (let j = 0; j <= 12; j++) {
+          const a = a0 + ((a1 - a0) * j) / 12;
+          out.push([sc + Math.cos(a) * r, yy + Math.sin(a) * r]);
+        }
+      };
+      glass.push([-E, y0 + 0.14], [0, y0 + 0.14], [L, yT + 0.14], [L + E, yT + 0.14]);
+      arc(L + E, yT + yc, -Math.PI / 2, Math.PI / 2, glass);
+      glass.push([L, yT + yc + r], [0, y0 + yc + r]);
+      arc(-E, y0 + yc, Math.PI / 2, (3 * Math.PI) / 2, glass);
+      side(k.glass, "#ffffff", glass, bx, 0.02);
+      // the handrail: one black loop over the glass, round both newels and back into the deck
+      const R = r + 0.035;
+      const pts: THREE.Vector3[] = [];
+      const P = (s: number, y: number) => pts.push(new THREE.Vector3(bx, y, zAt(s)));
+      for (let j = 0; j <= 10; j++) {
+        const a = (3 * Math.PI) / 2 - (Math.PI * j) / 10;
+        P(-E + Math.cos(a) * R, y0 + yc + Math.sin(a) * R);
+      }
+      for (let j = 1; j <= 40; j++) {
+        const s = -E + ((L + 2 * E) * j) / 40;
+        P(s, line(s) + yc + R);
+      }
+      for (let j = 1; j <= 10; j++) {
+        const a = Math.PI / 2 - (Math.PI * j) / 10;
+        P(L + E + Math.cos(a) * R, yT + yc + Math.sin(a) * R);
+      }
+      const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "centripetal"), 160, 0.04, 6, false);
+      k.geo(k.gloss, "#121216", tube);
     }
   }
-  // the newel ends: rounded black handrail returns, lit arrows
-  for (const [zz, yy] of [
-    [zb - dir * 0.9, y0],
-    [zb + dir * (L + 0.9), y0 + H],
-  ])
-    for (const side of [-1.18, -0.06, 0.06, 1.18]) k.box(k.paint, "#141418", 0.08, 1.0, 0.5, x + side, yy, zz);
   // click: ride it to the other end
   const hover = (to: number) => `<b>Escalator</b><span>${LEVELS[to].label} · ${LEVELS[to].name}</span>`;
   for (const [on, to] of [
@@ -418,14 +498,16 @@ export function atrium(k: MallKit): Atrium {
       [1, 1],
     ])
       for (let i = 0; i < 4; i++) {
-        const x = cx * (8.4 - hash(i, cx, 1, 2) * 1.6) + (i === 3 ? -cx * 2.2 : 0),
+        // (in from the sides: the escalators climb over the valley's east and west rims, x ±7.2…9.6)
+        const x = cx * (5.0 - hash(i, cx, 1, 2) * 1.2) + (i === 3 ? -cx * 1.6 : 0),
           z = CZ + cz * (8.4 - hash(i, cz, 2, 2) * 1.6) + (i === 2 ? -cz * 2.2 : 0);
-        tree(k, x, -0.6, z, cz > 0 ? 2.4 + hash(i, cx, cz, 3) * 1.4 : 4.5 + hash(i, cx, cz, 3) * 4.5, seed++); // low on the entrance side: the view stays open
+        tree(k, x, -0.6, z, cz > 0 ? 2.4 + hash(i, cx, cz, 3) * 1.4 : 4.2 + hash(i, cx, cz, 3) * 2.2, seed++); // low on the entrance side: the view stays open
         bush(k, x + 0.6, -0.6, z + 0.4, 1, seed++);
       }
     for (let i = 0; i < 7; i++) {
       const a = gap + 0.5 + (i / 7) * (Math.PI * 2 - 2 * gap - 1);
-      tree(k, Math.sin(a) * 8, -1.2, CZ + Math.cos(a) * 8, Math.cos(a) > 0 ? 2.6 + hash(i, 5, 5, 5) : 3.5 + hash(i, 5, 5, 5) * 3, seed++);
+      const x = THREE.MathUtils.clamp(Math.sin(a) * 8, -5.2, 5.2);
+      tree(k, x, -1.2, CZ + Math.cos(a) * 8, Math.cos(a) > 0 ? 2.6 + hash(i, 5, 5, 5) : Math.abs(x) > 4 ? 3.6 + hash(i, 5, 5, 5) * 1.2 : 3.5 + hash(i, 5, 5, 5) * 3, seed++);
     }
     // the boardwalk out over the terraces to a round deck above the pool
     k.box(deckMat, "#ffffff", 2.4, 0.18, 4.0, 0, -0.18, VZ1 - 2.0);
@@ -448,17 +530,18 @@ export function atrium(k: MallKit): Atrium {
   }
 
   // ---- balustrades round the void, planters spilling vines ---------------------------------------
-  /** Escalator piers: [level, side x sign, z0, z1]. */
-  const piers: [number, number, number, number][] = [];
+  /** Escalator piers: [level, side x sign, z0, z1, the end the lanes run onto, a foot (at an end of the void)]. */
+  const piers: [number, number, number, number, number, boolean][] = [];
   // west side rises to −z on even levels, east side the other way: the lanes cross in the void
   for (let f = 0; f < LEVELS.length - 1; f++)
     for (const sx of [-1, 1]) {
       const even = (f + (sx > 0 ? 1 : 0)) % 2 === 0;
-      const zb = even ? -16.2 : -31.8,
+      // feet at the void's ends, so the next one up clears the head's pier by a storey's headroom
+      const zb = even ? -15.2 : -32.8,
         dir = even ? -1 : 1;
       const { top } = escalator(k, f, sx * 8.4, zb, dir as 1 | -1);
-      piers.push([f, sx, Math.min(zb, zb - dir * 1.6), Math.max(zb, zb - dir * 1.6)]);
-      piers.push([f + 1, sx, Math.min(top, top + dir * 1.6), Math.max(top, top + dir * 1.6)]);
+      piers.push([f, sx, Math.min(zb, zb - dir * PIER), Math.max(zb, zb - dir * PIER), zb, true]);
+      piers.push([f + 1, sx, Math.min(top, top + dir * PIER), Math.max(top, top + dir * PIER), top, false]);
     }
   k.at(null);
   LEVELS.forEach((L, f) => {
@@ -490,8 +573,10 @@ export function atrium(k: MallKit): Atrium {
       }
     };
     const sideGaps = (sx: number) => myPiers.filter((p) => p[1] === sx).map((p) => [p[2], p[3]] as [number, number]);
-    run(-rx, zn, rx, zn, []);
-    run(-rx, zs, rx, zs, f ? [] : [[-1.2, 1.2]]);
+    // the feet are walked onto head-on: the void's end railing (and planter) open across their lanes
+    const endGaps = (north: boolean) => myPiers.filter((p) => p[5] && p[2] < p[4] === north).map((p) => [p[1] * 8.4 - 1.24, p[1] * 8.4 + 1.24] as [number, number]);
+    run(-rx, zn, rx, zn, endGaps(true));
+    run(-rx, zs, rx, zs, [...(f ? [] : [[-1.2, 1.2] as [number, number]]), ...endGaps(false)]);
     run(-rx, zn, -rx, zs, sideGaps(-1));
     run(rx, zn, rx, zs, sideGaps(1));
     // walkers stop at the glass (the boardwalk gap on the ground floor stays open)
@@ -500,9 +585,26 @@ export function atrium(k: MallKit): Atrium {
     else
       k.rects[f].push([-rx, zs - 0.12, -1.25, zs + 0.12], [1.25, zs - 0.12, rx, zs + 0.12], [-VX, VZ0, VX, -20.9], [-VX, -20.9, -1.75, -17.6], [1.75, -20.9, VX, -17.6], [-VX, -17.6, -1.3, VZ1], [1.3, -17.6, VX, VZ1]);
     // escalator piers: a slab tongue out to the lanes
-    for (const [, sx, z0, z1] of myPiers) {
-      k.box(floorMat, "#ffffff", 3.2, 0.45, z1 - z0, sx * (VX - 1.6 + (f ? 0 : 0)), y - 0.45, (z0 + z1) / 2);
-      if (!f) k.box(k.paint, "#cfc6b6", 3.2, 0.62, z1 - z0, sx * (VX - 1.6), -1.07, (z0 + z1) / 2);
+    for (const [, sx, z0, z1, near, foot] of myPiers) {
+      k.box(floorMat, "#ffffff", 3.2, 0.45, z1 - z0, sx * (VX - 1.6), y - 0.45, (z0 + z1) / 2);
+      if (!f) {
+        k.box(k.paint, "#cfc6b6", 3.2, 0.62, z1 - z0, sx * (VX - 1.6), -1.07, (z0 + z1) / 2);
+        continue;
+      }
+      // over the void: a stainless fascia round its free edges with a warm line under it, and the
+      // void's glass on its inner side and across its far end (open only where the lanes run on)
+      const ix = sx * (VX - 3.2),
+        far = Math.abs(z0 - near) < 0.01 ? z1 : z0;
+      k.box(k.metal, "#c3c7cd", 0.03, 0.47, z1 - z0 + 0.03, ix - sx * 0.015, y - 0.46, (z0 + z1) / 2);
+      // (a foot's far end runs onto the slab, open)
+      if (!foot) k.box(k.metal, "#c3c7cd", 3.2, 0.47, 0.03, sx * (VX - 1.6), y - 0.46, far + Math.sign(far - near) * 0.015);
+      k.box(k.glow, "#ffd9a0", 0.02, 0.02, z1 - z0, ix - sx * 0.02, y - 0.47, (z0 + z1) / 2, 0, 1.2);
+      if (!foot) k.box(k.glow, "#ffd9a0", 3.2, 0.02, 0.02, sx * (VX - 1.6), y - 0.47, far + Math.sign(far - near) * 0.02, 0, 1.2);
+      const lane0 = sx * 8.4 - 1.24,
+        lane1 = sx * 8.4 + 1.24;
+      run(ix, z0, ix, z1, []);
+      if (!foot) run(Math.min(ix, sx * VX), far, Math.max(ix, sx * VX), far, []);
+      run(Math.min(ix, sx * VX), near, Math.max(ix, sx * VX), near, [[lane0, lane1]]);
     }
     if (!f) return;
     // planter troughs between the slab edge and the glass, vines down the ribbon
@@ -520,8 +622,14 @@ export function atrium(k: MallKit): Atrium {
         if (hash(s * 10, f, 2, 7) > 0.35) vine(k, px + nx * 0.36, y + 0.5, pz + nz * 0.36, 0.8 + hash(s * 10, f, 3, 7) * 2.4, seed++, nx, nz);
       }
     };
-    trough(-RAIL + 0.05, VZ0 - 0.7, RAIL - 0.05, VZ0, 0, 1);
-    trough(-RAIL + 0.05, VZ1, RAIL - 0.05, VZ1 + 0.7, 0, -1);
+    for (const [north, z0, z1] of [
+      [true, VZ0 - 0.7, VZ0],
+      [false, VZ1, VZ1 + 0.7],
+    ] as const) {
+      let segs: [number, number][] = [[-RAIL + 0.05, RAIL - 0.05]];
+      for (const [g0, g1] of endGaps(north)) segs = segs.flatMap(([s, e]) => (g1 <= s || g0 >= e ? [[s, e]] : ([[s, g0], [g1, e]] as [number, number][]).filter(([p, q]) => q - p > 0.3)));
+      for (const [s, e] of segs) trough(s, z0, e, z1, 0, north ? 1 : -1);
+    }
     const westCuts = sideGaps(-1),
       eastCuts = sideGaps(1);
     for (const [sx, cuts] of [

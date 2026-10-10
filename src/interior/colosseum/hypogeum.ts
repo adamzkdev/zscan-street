@@ -74,9 +74,12 @@ export function buildHypogeum(): Hypogeum {
       m.set(ix, 0, iz, ax < 0.15 ? C("#3a3026") : earth(ix, 0, iz));
       // ceiling: planks on beams, holes at the trapdoors and over the stair
       const slot = x > STAIR.x0 && x < STAIR.x1 && z > STAIR.z0 && z < STAIR.z1;
+      // the slot's rim: a travertine trimmer frame round it, not the planks' and beams' raw ends
+      const rim = !slot && x > STAIR.x0 - 0.3 && x < STAIR.x1 + 0.3 && z > STAIR.z0 - 0.3 && z < STAIR.z1;
       if (!inHole(x, z) && !slot) {
-        m.set(ix, H - 1, iz, plank(ix, 0, iz));
-        if (iz % 4 === 0) m.set(ix, H - 2, iz, beam(ix, 0, iz));
+        m.set(ix, H - 1, iz, rim ? travL(ix, H - 1, iz) : plank(ix, 0, iz));
+        if (rim) m.set(ix, H - 2, iz, travD(ix, H - 2, iz));
+        else if (iz % 4 === 0) m.set(ix, H - 2, iz, beam(ix, 0, iz));
       }
       let solidTo = 0;
       let mat: (a: number, b: number, c: number) => number = tuff;
@@ -92,6 +95,13 @@ export function buildHypogeum(): Hypogeum {
       if (x > STAIR.wall && x < STAIR.x1 && z > STAIR.z0 && z < STAIR.z1) {
         const step = Math.floor((STAIR.z1 - z) / V);
         for (let y = 1; y <= step; y++) m.set(ix, y, iz, (y === step ? travL : travD)(ix, y, iz));
+      }
+      // its open side on the corridor: a parapet raking up with it (the voxels its core and its
+      // collider; its dressed faces and coping below), a newel at its foot, up into the slot's lining
+      if (x > STAIR.x1 && x < STAIR.x1 + V && z > STAIR.z0 - V && z < STAIR.z1 + V) {
+        const step = Math.max(0, Math.floor((STAIR.z1 - z) / V));
+        const top = Math.min(H - 2, step + 3 + (z > STAIR.z1 - V ? 1 : 0));
+        for (let y = 1; y <= top; y++) m.set(ix, y, iz, tuff(ix, y, iz));
       }
       for (let y = 1; y < solidTo; y++) {
         // arched doorways: the walls above the openings
@@ -110,6 +120,31 @@ export function buildHypogeum(): Hypogeum {
       if (ax > BARS + 0.2 && Math.abs(z) < 8.6 && e < 0.93 && hash(ix >> 1, 3, iz >> 1, 4) < 0.5) m.set(ix, 1, iz, C("#b89a50"));
     }
   group.add(meshAt(m, -HX, HYPO, -HZ, V));
+  // the stair's parapet, dressed: a smooth raking wall over its stepped core, a travertine coping
+  // 0.9 m over the nosings, a newel at the foot, the wall carried up to the ceiling past its head
+  {
+    const { x1, z0, z1 } = STAIR;
+    const rake = (z: number) => HYPO + (z1 - z) + 1.15;
+    /** A profile in (z, y), from x0 to x1. */
+    const prism = (pts: [number, number][], xa: number, xb: number, mat: THREE.Material) => {
+      const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([z, y]) => new THREE.Vector2(-z, y))), { depth: xb - xa, bevelEnabled: false });
+      g.rotateY(Math.PI / 2).translate(xa, 0, 0);
+      group.add(new THREE.Mesh(g, mat));
+    };
+    const wallM = new THREE.MeshStandardMaterial({ color: "#a89a7e", roughness: 0.9 });
+    const copeM = new THREE.MeshStandardMaterial({ color: "#c9bc9f", roughness: 0.8 });
+    const ceil = HYPO + (H - 2) * V;
+    // where the coping meets the ceiling (its rim's underside)
+    const zTop = z1 + 1.15 + HYPO - ceil;
+    prism([[z1 - V, HYPO], [z1 - V, rake(z1 - V) - 0.1], [zTop, ceil], [z0 - V, ceil], [z0 - V, HYPO]], x1 - 0.005, x1 + V + 0.005, wallM);
+    prism([[z1 - V, rake(z1 - V) - 0.1], [z1 - V, rake(z1 - V)], [zTop, rake(zTop)], [zTop, ceil]], x1 - 0.02, x1 + V + 0.02, copeM);
+    // the newel: a block a little proud of the wall, capped
+    const newel = new THREE.Mesh(new THREE.BoxGeometry(V + 0.06, 1.3, 0.56), wallM);
+    newel.position.set(x1 + V / 2, HYPO + 0.65, z1 + 0.02);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(V + 0.1, 0.1, 0.62), copeM);
+    cap.position.set(x1 + V / 2, HYPO + 1.35, z1 + 0.02);
+    group.add(newel, cap);
+  }
   // the cage bars, thin iron rods
   {
     const zs: number[] = [];

@@ -5,9 +5,9 @@ import type { Rect } from "../types";
 import type { Collection } from "./data";
 import { num, zec } from "./data";
 import { boxGeo, canvasTex, FACE, type MuseumKit } from "./kit";
-import { coffers, limestone, stoneFloor } from "./look";
+import { coffers, damask, goldMosaic, limestone, paintedCeiling, skylight, stoneFloor, versailles } from "./look";
 import { bandTexture, beamGeo, escalator, lifts, rodGeo, SANS, wayfinding } from "./parts";
-import { banquette, bust, stonePyramid, ticketMachine } from "./voxels";
+import { banquette, bust, stonePyramid, ticketMachine, wingedVictory } from "./voxels";
 import { memePoster } from "../../scene/memes";
 import { nextMeme } from "../../scene/memewalls";
 
@@ -27,6 +27,12 @@ const PX = 0,
   PZ = -19,
   PB = 11,
   PH = 14.5;
+/** The wings' doorways up on their landings: Denon west, Richelieu east (centred on z = WZ), Daru north. */
+const WZ = -19.55,
+  MZ = 4.8,
+  DY = MZ * 0.62,
+  DW = 1.7,
+  DWD = 1.8;
 
 export function hall(k: MuseumKit, data: Collection) {
   const f = 0;
@@ -41,10 +47,16 @@ export function hall(k: MuseumKit, data: Collection) {
   // ---- shell ---------------------------------------------------------------------------------
   k.plane(f, floorMat, 2 * X, -Z1, 0, 0, Z1 / 2);
   // walls (the west wall has the Carrousel passage at z −8…−4)
+  // (the doorways of the three wings are left open here: wing() fills round them)
   k.wall(f, stone, -X, 0, X, 0, H, 0.6, 4);
-  k.wall(f, stone, -X, Z1, X, Z1, H, 0.6, 4);
-  k.wall(f, stone, X, 0, X, Z1, H, 0.6, 4);
-  k.wall(f, stone, -X, Z1, -X, -8.5, H, 0.6, 4);
+  const span = (mat: THREE.Material, alongX: boolean, at: number, a0: number, a1: number) =>
+    k.box(f, mat, alongX ? a1 - a0 : 0.6, H, alongX ? 0.6 : a1 - a0, alongX ? (a0 + a1) / 2 : at, 0, alongX ? at : (a0 + a1) / 2, { solid: true, uv: 4 });
+  span(stone, true, Z1, -X - 0.3, -DWD);
+  span(stone, true, Z1, DWD, X + 0.3);
+  span(stone, false, X, Z1 - 0.3, WZ - DW);
+  span(stone, false, X, WZ + DW, 0.3);
+  span(stone, false, -X, Z1 - 0.3, WZ - DW);
+  span(stone, false, -X, WZ + DW, -8.2);
   k.wall(f, stone, -X, -3.5, -X, 0, H, 0.6, 4);
   k.box(f, stone, 0.6, H - 4, 5, -X, 4, -6, { uv: 4 });
   // ceiling with the square opening under the pyramid; its deep stone rim
@@ -68,15 +80,24 @@ export function hall(k: MuseumKit, data: Collection) {
     k.box(f, k.steel, w, 0.08, d + 0.04, x, H + T, z);
   }
   // a bronze skirting and a stone string course round the hall
-  for (const [x0, z0, x1, z1] of [
-    [-X + 0.3, -0.3, X - 0.3, -0.3],
-    [-X + 0.3, Z1 + 0.3, X - 0.3, Z1 + 0.3],
-    [X - 0.3, 0, X - 0.3, Z1],
+  // (the course stops either side of the Richelieu and Daru doorways' bronze frames)
+  for (const [x0, z0, x1, z1, gap0, gap1] of [
+    [-X + 0.3, -0.3, X - 0.3, -0.3, 0, 0],
+    [-X + 0.3, Z1 + 0.3, X - 0.3, Z1 + 0.3, -DWD - 0.3, DWD + 0.3],
+    [X - 0.3, 0, X - 0.3, Z1, WZ + DW + 0.3, WZ - DW - 0.3],
   ]) {
     const alongX = z0 === z1;
     const len = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
     k.box(f, k.brass, alongX ? len : 0.08, 0.2, alongX ? 0.08 : len, (x0 + x1) / 2, 0, (z0 + z1) / 2);
-    k.box(f, stoneDark, alongX ? len : 0.14, 0.18, alongX ? 0.14 : len, (x0 + x1) / 2, 6.2, (z0 + z1) / 2);
+    const a0 = alongX ? x0 : z0,
+      a1 = alongX ? x1 : z1;
+    for (const [p, q] of gap0 === gap1 ? [[a0, a1]] : [
+        [a0, gap0],
+        [gap1, a1],
+      ]) {
+      const l = Math.abs(q - p);
+      k.box(f, stoneDark, alongX ? l : 0.14, 0.18, alongX ? 0.14 : l, alongX ? (p + q) / 2 : x0, 6.2, alongX ? z0 : (p + q) / 2);
+    }
   }
 
   // ---- the glass pyramid -----------------------------------------------------------------------
@@ -141,7 +162,7 @@ export function hall(k: MuseumKit, data: Collection) {
   k.pool(f, DX, DZ, 4.5, "#fff2d8", 0.012, 0.8);
 
   // ---- ticket control: a line of gates, ticket machines on both walls -------------------------
-  const TZ = -33.5;
+  const TZ = -30.5;
   for (let x = -9; x <= 9; x += 1.15) {
     k.vox(f, "turnstile", turnstile, x, 0, TZ, 0, 0.5);
     k.solid(f, x - 0.12, TZ - 0.55, x + 0.12, TZ + 0.55);
@@ -164,62 +185,20 @@ export function hall(k: MuseumKit, data: Collection) {
   k.box(f, k.steel, 0.1, 3.0, 0.1, -1.6, 0, TZ - 0.05);
   k.box(f, k.steel, 0.1, 3.0, 0.1, 1.6, 0, TZ - 0.05);
 
-  // ---- the escalators to the wings ------------------------------------------------------------
-  const MZ = 4.8; // mezzanine height
-  // west: DENON (Grande Galerie)
-  const denon = escalator(k, f, -12.5, -20.5, [-1, 0], 8.6, MZ, 1.2);
-  escalator(k, f, -12.5, -18.6, [-1, 0], 8.6, MZ, 1.2);
-  // east: RICHELIEU (Napoleon III apartments)
-  const rich = escalator(k, f, 12.5, -20.5, [1, 0], 8.6, MZ, 1.2);
-  escalator(k, f, 12.5, -18.6, [1, 0], 8.6, MZ, 1.2);
-  // north, past the ticket gates: DARU (the Victory, the Salle des États)
-  const daru = escalator(k, f, -0.95, -34.8, [0, -1], 6.9, MZ * 0.62, 1.2);
-  escalator(k, f, 0.95, -34.8, [0, -1], 6.9, MZ * 0.62, 1.2);
-  for (const [hit, to] of [
-    [denon, 1],
-    [rich, 3],
-    [daru, 2],
-  ] as const) {
-    const names = ["", "DENON · Grande Galerie", "DARU · Victoire, Salle des États", "RICHELIEU · Appartements Napoléon III"];
-    k.pick(f, hit, `<b>${names[to]}</b><span>escalator</span>`, () => ({ eyebrow: "Escalator", title: names[to], floor: to }));
-  }
-  // mezzanine landings with their portals and wing signs
-  const mezz = (x0: number, z0: number, x1: number, z1: number, y: number) => {
-    k.box(f, stoneDark, x1 - x0, 0.4, z1 - z0, (x0 + x1) / 2, y - 0.4, (z0 + z1) / 2, { uv: 4 });
-    k.solid(f, x0, z0, x1, z1);
-  };
-  mezz(-X, -24, -X + 1.6, -15, MZ);
-  mezz(X - 1.6, -24, X, -15, MZ);
-  mezz(-3, Z1, 3, Z1 + 1.4, MZ * 0.62);
-  const portal = (x: number, y: number, z: number, yaw: number, w: number, h: number) => {
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), k.lit("#ffe9c4", 1.3));
-    p.position.set(x, y + h / 2, z);
-    p.rotation.y = yaw;
-    g.add(p);
-    // a bronze frame
-    const nx = Math.sin(yaw),
-      nz = Math.cos(yaw);
-    const rx = Math.cos(yaw),
-      rz = -Math.sin(yaw);
-    for (const s of [-1, 1]) k.box(f, k.brass, Math.abs(rz) * 0.2 + Math.abs(nz) * 0.0 + 0.2 * Math.abs(rx), h, 0.2, x + rx * s * (w / 2 + 0.1) + nx * 0.05, y, z + rz * s * (w / 2 + 0.1) + nz * 0.05);
-    k.box(f, k.brass, Math.abs(rx) * (w + 0.4) + 0.2 * Math.abs(rz), 0.25, Math.abs(rz) * (w + 0.4) + 0.2 * Math.abs(rx), x + nx * 0.05, y + h, z + nz * 0.05);
-  };
-  portal(-X + 0.4, MZ, -19.5, FACE.px, 3.4, 3.2);
-  portal(X - 0.4, MZ, -19.5, FACE.nx, 3.4, 3.2);
-  portal(0, MZ * 0.62, Z1 + 0.4, FACE.pz, 4, 3.4);
-  const wd = wayfinding(k, f, "DENON", "Grande Galerie · Joconde · Victoire", "#e8453c", 4.2);
-  wd.position.set(-X + 0.4, MZ + 4.0, -19.5);
-  wd.rotation.y = FACE.px;
-  const wr = wayfinding(k, f, "RICHELIEU", "Appartements Napoléon III", "#3a9a5a", 4.2);
-  wr.position.set(X - 0.4, MZ + 4.0, -19.5);
-  wr.rotation.y = FACE.nx;
-  const wy = wayfinding(k, f, "DARU", "Victoire · Salle des États", "#4a7ad8", 4.2);
-  wy.position.set(0, MZ * 0.62 + 4.0, Z1 + 0.4);
-  // glass balustrades along the mezzanines
-  for (const s of [-1, 1]) {
-    k.box(f, k.glass, 0.04, 1.0, 9, s * (X - 1.6), MZ, -19.5);
-    k.box(f, k.chrome, 0.06, 0.05, 9, s * (X - 1.6), MZ + 1.0, -19.5);
-  }
+  // ---- the escalators up to the wings, each pair onto a stone landing before the wing's doorway ----
+  const landing = new THREE.MeshStandardMaterial({ map: stoneFloor("#d6cab2"), roughness: 0.4, metalness: 0.05, envMapIntensity: 0.9 });
+  (landing.map as THREE.Texture).repeat.set(2.5, 1.3);
+  const wings: [Wing, number][] = [
+    // west: DENON (Grande Galerie)
+    [{ x: -X, z: WZ, out: [-1, 0], y: MZ, run: 8.6, deep: 4, door: [DW, 2.85], sign: ["DENON", "Grande Galerie · Joconde · Victoire", "#e8453c"], room: "galerie", ranks: [1, 2, 3, 4] }, 1],
+    // east: RICHELIEU (Napoleon III apartments)
+    [{ x: X, z: WZ, out: [1, 0], y: MZ, run: 8.6, deep: 4, door: [DW, 2.85], sign: ["RICHELIEU", "Appartements Napoléon III", "#3a9a5a"], room: "salon", ranks: [79, 80, 81, 82] }, 3],
+    // north, past the ticket gates: DARU (the Victory, the Salle des États)
+    [{ x: 0, z: Z1, out: [0, -1], y: DY, run: 6.7, deep: 3.8, door: [DWD, 3.4], sign: ["DARU", "Victoire · Salle des États", "#4a7ad8"], room: "daru", ranks: [] }, 2],
+  ];
+  const names = ["", "DENON · Grande Galerie", "DARU · Victoire, Salle des États", "RICHELIEU · Appartements Napoléon III"];
+  for (const [w, to] of wings)
+    for (const hit of wing(k, f, w, stone, landing)) k.pick(f, hit, `<b>${names[to]}</b><span>escalator</span>`, () => ({ eyebrow: "Escalator", title: names[to], floor: to }));
 
   // ---- the lifts, by the entrance -------------------------------------------------------------
   lifts(k, f, 14, -0.32, FACE.nz, 2.3);
@@ -292,6 +271,7 @@ export function hall(k: MuseumKit, data: Collection) {
   k.light(f, -38, 5, -6, "#ffe0b0", 30, 18);
   // wall washes
   for (let z = -4; z > Z1; z -= 4) {
+    if (Math.abs(z - WZ) < 3) continue;
     k.wash(f, -X + 0.31, z, FACE.px, 3.2, 4.5, H - 0.1, "#fff0d8");
     k.wash(f, X - 0.31, z, FACE.nx, 3.2, 4.5, H - 0.1, "#fff0d8");
   }
@@ -740,3 +720,247 @@ function carrousel(k: MuseumKit, f: number, stone: THREE.Material, stoneDark: TH
 
 const SERIF = '"Times New Roman", Georgia, serif';
 void boxGeo;
+
+/** A wing's way up from the hall: its doorway in the hall's wall, its landing, the room beyond. */
+interface Wing {
+  /** The wall's centre line at the doorway, and the way into the wing (axis-aligned). */
+  x: number;
+  z: number;
+  out: [number, number];
+  /** The landing's height, the escalators' run, the landing's depth off the wall. */
+  y: number;
+  run: number;
+  deep: number;
+  /** The doorway: half width, height. */
+  door: [number, number];
+  sign: [string, string, string];
+  room: "galerie" | "salon" | "daru";
+  ranks: number[];
+}
+
+/**
+ * A pair of escalators up to a wing, as in the Hall Napoléon: they arrive on a pale stone landing
+ * 4 m deep against the wall (a downstand round its finished soffit, downlights, two stone columns
+ * under its front corners), frameless glass with a bronze handrail round its open sides; behind it
+ * the wing's doorway in a bronze frame under its sign, and through it the first room of the wing,
+ * lit, going away. Everything in a frame where d runs into the wing from the wall's centre line
+ * (the hall side is d < −0.3) and a across it. Returns what clicks through to the wing.
+ */
+function wing(k: MuseumKit, f: number, w: Wing, stone: THREE.Material, landing: THREE.Material) {
+  const g = k.groups[f];
+  const yaw = Math.atan2(w.out[0], w.out[1]);
+  const M = new THREE.Matrix4().makeRotationY(yaw).setPosition(w.x, 0, w.z);
+  const at = (a: number, y: number, d: number) => new THREE.Vector3(a, y, d).applyMatrix4(M);
+  const put = (mat: THREE.Material, geo: THREE.BufferGeometry, uv?: number) => k.geo(f, mat, geo.applyMatrix4(M), uv);
+  const box = (mat: THREE.Material, wa: number, h: number, dd: number, a: number, y: number, d: number, uv?: number) => put(mat, boxGeo(wa, h, dd, a, y, d), uv);
+  const solid = (a0: number, d0: number, a1: number, d1: number) => {
+    const p = at(a0, 0, d0),
+      q = at(a1, 0, d1);
+    k.solid(f, p.x, p.z, q.x, q.z);
+  };
+  const place = (m: THREE.Object3D, a: number, y: number, d: number, ry = 0) => {
+    m.position.copy(at(a, y, d));
+    m.rotation.y = yaw + ry;
+    g.add(m);
+    return m;
+  };
+  /** The world yaw of a direction given in the frame (a, d). */
+  const yawOf = (a: number, d: number) => {
+    const v = new THREE.Vector3(a, 0, d).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    return Math.atan2(v.x, v.z);
+  };
+  const Y = w.y,
+    [DW, DH] = w.door,
+    SP = 3.8,
+    edge = -0.3 - w.deep;
+  const LANE = 0.95,
+    ESC = 1.2;
+  const outer = LANE + (ESC + 0.1) / 2 + 0.03,
+    inner = LANE - (ESC + 0.1) / 2 - 0.03;
+
+  // ---- the wall round the doorway: under it, over it; the reveal lined in bronze ----------------
+  box(stone, 2 * DW, Y, 0.6, 0, 0, 0, 4);
+  solid(-DW, -0.3, DW, 0.3);
+  box(stone, 2 * DW, H - Y - DH, 0.6, 0, Y + DH, 0, 4);
+  for (const s of [-1, 1]) box(k.brass, 0.03, DH, 0.6, s * (DW - 0.015), Y, 0);
+  box(k.brass, 2 * DW, 0.03, 0.6, 0, Y + DH - 0.03, 0);
+  box(k.brass, 2 * DW, 0.02, 0.6, 0, Y, 0);
+  // the bronze frame on the hall side, the sign over it
+  for (const s of [-1, 1]) box(k.brass, 0.18, DH + 0.18, 0.07, s * (DW + 0.09), Y, -0.33);
+  box(k.brass, 2 * DW + 0.36, 0.18, 0.07, 0, Y + DH, -0.33);
+  const signW = 3.5;
+  const sg = wayfinding(k, f, w.sign[0], w.sign[1], w.sign[2], signW);
+  place(sg, 0, Y + DH + 0.28 + (signW * 300) / 1024 / 2, -0.34, Math.PI);
+
+  // ---- the landing -------------------------------------------------------------------------------
+  // the slab (its floor flush with the escalators' top plates), a downstand round its soffit
+  box(stone, 2 * SP, 0.55, w.deep, 0, Y - 0.55, edge + w.deep / 2, 4);
+  box(stone, 2 * SP, 0.3, 0.45, 0, Y - 0.85, edge + 0.225, 4);
+  for (const s of [-1, 1]) box(stone, 0.45, 0.3, w.deep - 0.45, s * (SP - 0.225), Y - 0.85, edge + 0.45 + (w.deep - 0.45) / 2, 4);
+  k.plane(f, landing, 2 * SP, w.deep, at(0, 0, edge + w.deep / 2).x, Y + 0.003, at(0, 0, edge + w.deep / 2).z, -Math.PI / 2, yaw);
+  // the bronze nosing along its open edges (not where the escalators come in)
+  const front: [number, number][] = [
+    [-SP, -outer],
+    [-inner, inner],
+    [outer, SP],
+  ];
+  for (const [a0, a1] of front) box(k.brass, a1 - a0, 0.08, 0.05, (a0 + a1) / 2, Y - 0.08, edge - 0.02);
+  for (const s of [-1, 1]) box(k.brass, 0.05, 0.08, w.deep, s * (SP + 0.02), Y - 0.08, edge + w.deep / 2);
+  // the soffit's downlights, and their light on the floor below
+  const down = k.lit("#fff3dc", 2.2);
+  for (const a of [-2.6, -0.9, 0.9, 2.6])
+    for (const d of [edge + 1.35, edge + 2.95]) {
+      put(down, new THREE.CircleGeometry(0.09, 16).rotateX(Math.PI / 2).translate(a, Y - 0.553, d));
+      put(k.brass, new THREE.RingGeometry(0.09, 0.13, 16).rotateX(Math.PI / 2).translate(a, Y - 0.552, d));
+      const p = at(a, 0, d);
+      k.pool(f, p.x, p.z, 1.1, "#fff0d4", 0.012, 0.55);
+    }
+  // two stone columns under its front corners, bronze at foot and head
+  for (const s of [-1, 1]) {
+    const a = s * (SP - 0.4),
+      d = edge + 0.4;
+    const h = Y - 0.85;
+    put(stone, new THREE.CylinderGeometry(0.22, 0.24, h, 20).translate(a, h / 2, d), 2);
+    put(k.brass, new THREE.CylinderGeometry(0.27, 0.27, 0.14, 20).translate(a, 0.07, d));
+    put(k.brass, new THREE.CylinderGeometry(0.3, 0.25, 0.08, 20).translate(a, h - 0.04, d));
+    const p = at(a, 0, d);
+    k.solid(f, p.x - 0.3, p.z - 0.3, p.x + 0.3, p.z + 0.3);
+  }
+  // nobody walks under it from the hall
+  solid(-SP, edge, SP, -0.3);
+  // frameless glass round its open sides in a bronze shoe, a round bronze handrail on top
+  const runs: [number, number, number, number][] = [
+    ...front.map(([a0, a1]): [number, number, number, number] => [a0 === -SP ? -SP + 0.1 : a0, edge + 0.1, a1 === SP ? SP - 0.1 : a1, edge + 0.1]),
+    [-SP + 0.1, edge + 0.1, -SP + 0.1, -0.32],
+    [SP - 0.1, edge + 0.1, SP - 0.1, -0.32],
+  ];
+  for (const [a0, d0, a1, d1] of runs) {
+    const along = Math.abs(a1 - a0) > Math.abs(d1 - d0);
+    const l = along ? a1 - a0 : d1 - d0;
+    const [ca, cd] = [(a0 + a1) / 2, (d0 + d1) / 2];
+    box(k.brass, along ? l : 0.09, 0.1, along ? 0.09 : l, ca, Y, cd);
+    box(k.glass, along ? l : 0.02, 1.0, along ? 0.02 : l, ca, Y + 0.1, cd);
+    put(k.brass, rodGeo(new THREE.Vector3(a0, Y + 1.12, d0), new THREE.Vector3(a1, Y + 1.12, d1), 0.032, 10));
+    // the handrail's posts: little bronze clamps on the glass
+    for (const t of along ? [0.06, 0.94] : [0.06, 0.5, 0.94]) box(k.brass, 0.04, 0.06, 0.04, a0 + (a1 - a0) * t, Y + 1.06, d0 + (d1 - d0) * t);
+  }
+  // a bench against the wall either side of the doorway
+  for (const s of [-1, 1]) {
+    const p = at(s * 2.65, 0, -0.75);
+    k.vox(f, "banq16", () => banquette(1.6), p.x, Y, p.z, yaw, 0.5);
+  }
+
+  // ---- the escalators: their heads on the landing, the incline ending at its edge ---------------
+  const hits: THREE.Object3D[] = [];
+  for (const s of [-1, 1]) {
+    const p = at(s * LANE, 0, edge + 1.2 - w.run);
+    hits.push(escalator(k, f, p.x, p.z, w.out, w.run, Y, ESC));
+  }
+
+  // ---- the doorway clicks through too ------------------------------------------------------------
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(2 * DW, DH), new THREE.MeshBasicMaterial({ visible: false }));
+  hits.push(place(door, 0, Y + DH / 2, -0.32, Math.PI));
+
+  // ---- the room beyond: the first of the wing, lit, going away -----------------------------------
+  const RW = w.room === "daru" ? 3.4 : 3.2,
+    RL = 11,
+    RH = w.room === "daru" ? 5.6 : 4.1,
+    D0 = 0.3,
+    D1 = D0 + RL,
+    mid = (D0 + D1) / 2;
+  const wallMat =
+    w.room === "galerie"
+      ? new THREE.MeshStandardMaterial({ color: "#8a3426", roughness: 0.92 })
+      : w.room === "salon"
+        ? new THREE.MeshStandardMaterial({ map: damask(), roughness: 0.85 })
+        : new THREE.MeshStandardMaterial({ map: limestone("#a49e92"), roughness: 0.85 });
+  const cream = new THREE.MeshStandardMaterial({ color: "#e6d8b8", roughness: 0.7 });
+  // floor: Versailles parquet in the galleries, grey stone up the Daru
+  const ft = w.room === "daru" ? stoneFloor("#a8a298") : versailles(w.room === "salon" ? "#6a4428" : "#9a6a3c");
+  ft.repeat.set(w.room === "daru" ? (2 * RW) / 3 : RW, w.room === "daru" ? RL / 3 : RL / 2);
+  const fc = at(0, 0, mid);
+  k.plane(f, new THREE.MeshStandardMaterial({ map: ft, roughness: 0.38, envMapIntensity: 0.8 }), 2 * RW, RL, fc.x, Y + 0.002, fc.z, -Math.PI / 2, yaw);
+  // walls, the end wall with its doorway on, the ceiling
+  for (const s of [-1, 1]) box(wallMat, 0.2, RH, RL, s * (RW + 0.1), Y, mid, w.room === "galerie" ? undefined : 2);
+  const ED = 1.3,
+    EH = w.room === "daru" ? 3.6 : 3.0;
+  for (const s of [-1, 1]) box(wallMat, RW - ED, RH, 0.2, s * (ED + (RW - ED) / 2), Y, D1 + 0.1, w.room === "galerie" ? undefined : 2);
+  box(wallMat, 2 * ED, RH - EH, 0.2, 0, Y + EH, D1 + 0.1, w.room === "galerie" ? undefined : 2);
+  box(cream, 2 * RW + 0.4, 0.25, RL + 0.4, 0, Y + RH, mid);
+  // through the far doorway: the next room, bright
+  const beyond = new THREE.Mesh(new THREE.PlaneGeometry(2 * ED + 1, EH + 0.5), k.lit(w.room === "daru" ? "#f2ead8" : "#fff0d8", 1.15));
+  place(beyond, 0, Y + (EH + 0.5) / 2, D1 + 1.6, Math.PI);
+  for (const s of [-1, 1]) box(wallMat, 0.1, EH + 0.5, 1.4, s * (ED + 0.55), Y, D1 + 0.9);
+  box(cream, 2 * ED + 1.2, 0.1, 1.4, 0, Y + EH, D1 + 0.9);
+  // the door's frame
+  const trim = w.room === "daru" ? cream : k.gold;
+  for (const s of [-1, 1]) box(trim, 0.16, EH, 0.08, s * (ED + 0.08), Y, D1 - 0.02);
+  box(trim, 2 * ED + 0.32, 0.18, 0.08, 0, Y + EH, D1 - 0.02);
+  // light: washes down the side walls, pools on the floor
+  for (const s of [-1, 1])
+    for (let d = D0 + 1.8; d < D1 - 0.5; d += 3) {
+      const p = at(s * (RW - 0.01), 0, d);
+      k.wash(f, p.x, p.z, yawOf(-s, 0), 2.8, RH - 0.6, Y + RH - 0.3, w.room === "daru" ? "#fff4e4" : "#ffe6c0");
+    }
+  for (let d = D0 + 1.5; d < D1; d += 3.2) {
+    const p = at(0, 0, d);
+    k.pool(f, p.x, p.z, 2.4, "#fff2dc", Y + 0.012, 0.9);
+  }
+  // paintings on both walls
+  w.ranks.forEach((rank, i) => {
+    const s = i % 2 ? 1 : -1,
+      d = D0 + 3.2 + Math.floor(i / 2) * 4.6;
+    const p = at(s * RW, 0, d);
+    k.hang(f, { x: p.x, y: Y + 2.0, z: p.z, yaw: yawOf(-s, 0), s: 1.5, rank, tone: w.room === "salon" ? 1 : 0 });
+  });
+
+  if (w.room === "galerie") {
+    // the Grande Galerie's dress: oak dado, cream cornice, a skylight down the crown
+    const oak = new THREE.MeshStandardMaterial({ color: "#5a3820", roughness: 0.55 });
+    for (const s of [-1, 1]) {
+      box(oak, 0.05, 0.95, RL, s * (RW - 0.025), Y, mid);
+      box(cream, 0.08, 0.06, RL, s * (RW - 0.04), Y + 0.95, mid);
+      box(k.black, 0.07, 0.14, RL, s * (RW - 0.035), Y, mid);
+      box(cream, 0.3, 0.4, RL, s * (RW - 0.15), Y + RH - 0.4, mid);
+    }
+    const sky = skylight();
+    sky.repeat.set(1, (RL - 1) / 2);
+    put(k.lit("#ffffff", 1.05, "sky", sky), new THREE.PlaneGeometry(2, RL - 1).rotateX(Math.PI / 2).translate(0, Y + RH - 0.01, mid));
+    const pk = at(0, 0, D0 + 5.5);
+    k.vox(f, "banq", () => banquette(2.4), pk.x, Y, pk.z, yaw + Math.PI / 2, 0.5);
+  } else if (w.room === "salon") {
+    // Napoleon III: gilt pilasters with sconces, a gilt cornice, a painted ceiling
+    for (const s of [-1, 1]) {
+      box(cream, 0.06, 0.9, RL, s * (RW - 0.03), Y, mid);
+      box(k.gold, 0.08, 0.05, RL, s * (RW - 0.04), Y + 0.9, mid);
+      box(k.gold, 0.3, 0.35, RL, s * (RW - 0.15), Y + RH - 0.35, mid);
+      for (let d = D0 + 1.0; d < D1; d += 2.3) {
+        box(k.gold, 0.08, RH - 0.35, 0.34, s * (RW - 0.04), Y, d);
+        put(k.lit("#ffe0a8", 1.6), new THREE.SphereGeometry(0.07, 10, 8).translate(s * (RW - 0.2), Y + 2.7, d));
+        box(k.gold, 0.12, 0.04, 0.12, s * (RW - 0.16), Y + 2.6, d);
+      }
+    }
+    const ct = paintedCeiling(2 * RW, RL);
+    put(new THREE.MeshStandardMaterial({ map: ct, roughness: 0.8 }), new THREE.PlaneGeometry(2 * RW, RL).rotateX(Math.PI / 2).translate(0, Y + RH - 0.36, mid));
+  } else {
+    // up the Daru: a broad grey stair to the landing where the Victory stands on her prow
+    const stepMat = new THREE.MeshStandardMaterial({ color: "#a8a298", roughness: 0.6 });
+    const N = 9,
+      R = 0.17,
+      T = 0.42,
+      S0 = D0 + 2.2;
+    for (let i = 0; i < N; i++) box(stepMat, 2 * RW, R * (i + 1), T, 0, Y, S0 + T * (i + 0.5));
+    const top = Y + R * N,
+      L0 = S0 + T * N;
+    box(stepMat, 2 * RW, R * N, D1 - L0, 0, Y, (L0 + D1) / 2);
+    const v = at(0, 0, L0 + 3.2);
+    k.vox(f, "victory", wingedVictory, v.x, top, v.z, yaw + Math.PI, 0.5);
+    const mos = goldMosaic();
+    mos.repeat.set(RW, RL / 2);
+    put(new THREE.MeshStandardMaterial({ map: mos, roughness: 0.35, metalness: 0.6, envMapIntensity: 1.3 }), new THREE.PlaneGeometry(2 * RW, RL).rotateX(Math.PI / 2).translate(0, Y + RH - 0.01, mid));
+    for (const s of [-1, 1]) box(cream, 0.3, 0.4, RL, s * (RW - 0.15), Y + RH - 0.4, mid);
+    const lp = at(0, 0, L0 + 3.2);
+    k.pool(f, lp.x, lp.z, 3, "#fff6e6", top + 0.012, 1.1);
+  }
+  return hits;
+}

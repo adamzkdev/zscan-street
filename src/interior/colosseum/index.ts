@@ -91,10 +91,18 @@ export function buildColosseum(ctx: InteriorContext): Interior {
       steps.push(new THREE.BoxGeometry(S.x1 - S.x0, top, run + 0.002).translate((S.x0 + S.x1) / 2, top / 2, z));
       noses.push(new THREE.BoxGeometry(S.x1 - S.x0, 0.04, 0.05).translate((S.x0 + S.x1) / 2, top - 0.02, z - run / 2 + 0.025));
     }
-    // a handrail on each wall of the slot, along the pitch
-    const len = Math.hypot(S.z1 - S.z0, POD);
+    // a handrail on each wall of the slot, 0.9 m over the nosings on brackets, from the foot to the
+    // last step under the terrace (where the railing round the slot takes over), its ends returned to the wall
     const slope = Math.atan2(POD, S.z1 - S.z0);
-    for (const x of [S.x0 + 0.05, S.x1 - 0.05]) iron.push(new THREE.CylinderGeometry(0.03, 0.03, len - 0.4, 6).rotateX(Math.PI / 2 + slope).translate(x, POD / 2 + 0.9, (S.z0 + S.z1) / 2));
+    const pitch = (z: number) => ((S.z1 - z) / (S.z1 - S.z0)) * POD + rise + 0.9;
+    const za = S.z1 - 0.25,
+      zb = S.z0 + 1.3;
+    for (const [x, wx] of [[S.x0 + 0.07, S.x0], [S.x1 - 0.07, S.x1]]) {
+      const len = (za - zb) / Math.cos(slope);
+      iron.push(new THREE.CylinderGeometry(0.025, 0.025, len, 8).rotateX(Math.PI / 2 + slope).translate(x, (pitch(za) + pitch(zb)) / 2, (za + zb) / 2));
+      for (const z of [za, zb]) iron.push(new THREE.BoxGeometry(Math.abs(x - wx), 0.04, 0.04).translate((x + wx) / 2, pitch(z), z));
+      for (let z = za - 0.6; z > zb + 0.3; z -= 1.1) iron.push(new THREE.BoxGeometry(Math.abs(x - wx), 0.025, 0.025).translate((x + wx) / 2, pitch(z) - 0.06, z), new THREE.BoxGeometry(0.02, 0.06, 0.02).translate(x, pitch(z) - 0.04, z));
+    }
     // round the slot on the terrace: both sides (open at the head, north), across its foot
     railing(iron, S.x0 - 0.03, S.z0 + 0.45, S.x0 - 0.03, S.z1 + 0.03, POD);
     railing(iron, S.x1 + 0.03, S.z0 + 0.45, S.x1 + 0.03, S.z1 + 0.03, POD);

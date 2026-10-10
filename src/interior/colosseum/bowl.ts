@@ -229,18 +229,17 @@ export function buildBowl(): Bowl {
       g.restore();
     }
   });
+  // the sand: the ellipse with a notch cut in from its rim for the hypogeum stair's slot (shape y is
+  // −z), so no sliver of sand is left across the slot at the podium wall
   const shape = new THREE.Shape();
-  shape.absellipse(0, 0, AX + 0.05, AZ + 0.05, 0, Math.PI * 2, false, 0);
-  // the slot over the hypogeum's stair (shape y is −z), up to the podium wall
   {
     const { x0, x1, z0 } = HYPO_STAIR;
-    const edge = (x: number) => -(AZ + 0.02) * Math.sqrt(1 - (x / (AX + 0.05)) ** 2);
-    const slot = new THREE.Path();
-    slot.moveTo(x0, -z0);
-    slot.lineTo(x1, -z0);
-    for (let i = 0; i <= 4; i++) slot.lineTo(x1 + ((x0 - x1) * i) / 4, edge(x1 + ((x0 - x1) * i) / 4));
-    slot.lineTo(x0, -z0);
-    shape.holes.push(slot);
+    const ea = AX + 0.05,
+      eb = AZ + 0.05;
+    const ang = (x: number) => Math.atan2(-Math.sqrt(1 - (x / ea) ** 2), x / ea);
+    shape.absellipse(0, 0, ea, eb, ang(x1), ang(x0) + Math.PI * 2, false, 0);
+    shape.lineTo(x0, -z0);
+    shape.lineTo(x1, -z0);
   }
   const sg = new THREE.ShapeGeometry(shape, 96);
   const uv = sg.attributes.uv as THREE.BufferAttribute;
