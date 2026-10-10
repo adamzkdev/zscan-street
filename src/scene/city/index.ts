@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Nav } from "../nav";
 import { addDetail } from "../detail";
-import { blobTexture, concreteTexture, grassTexture, neonTexture, pavingTexture, roadTexture, waterTexture } from "../textures";
+import { blobTexture, concreteTexture, grassTexture, neonTexture, pavingTexture, releaseAfterUpload, roadTexture, waterTexture } from "../textures";
 import { MATERIALS, ownMaterial, toObject } from "../voxel/mesher";
 import { C, E, G, VOX, VoxelModel, type Kind } from "../voxel/model";
 import type { SignSpot } from "../voxel/parts";
@@ -30,7 +30,7 @@ export interface Lamp {
  * city's geometry (≈700 MB in memory) made mobile browsers slow to open and reload the page.
  * `?lite=0` forces the full city.
  */
-const LITE = (() => {
+export const LITE = (() => {
   const q = typeof location !== "undefined" ? new URLSearchParams(location.search).get("lite") : null;
   if (q !== null) return q !== "0";
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
@@ -366,7 +366,12 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   const cache = new CityCache(import.meta.env.PROD && !LITE ? new URL(import.meta.url).pathname : null);
   const cached = await cache.getAll([...copies.keys()]);
   const unique = [...copies.entries()].filter(([k]) => !cached.has(k)).map(([, l]) => l[0]);
-  const n = unique.length ? Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 4) - 1)) : 0;
+  // (a phone: three at most. Every worker carries its own copy of the builders, the palette and its
+  // results until it posts them: seven of them at once added ~300 MB to the boot's memory peak,
+  // three cost about what two do and open the city a little sooner)
+  // (`?workers=n` to measure)
+  const asked = Number(new URLSearchParams(location.search).get("workers")) || 0;
+  const n = unique.length ? asked || Math.max(2, Math.min(LITE ? 3 : 8, (navigator.hardwareConcurrency || 4) - 1)) : 0;
   // (Vite only bundles the worker when the URL is written inline, like this)
   const spawn = () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
   const workers = Array.from({ length: n }, spawn);
@@ -626,11 +631,14 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
             }
             void cache.put(fresh);
             progress(done / total);
+            // its job is done: its memory goes now, not once the slowest worker is through
+            w.terminate();
             resolve();
           };
           // a worker that dies (out of memory, a script error) leaves gaps, not a city that never opens
           w.onerror = (err) => {
             console.error("city worker failed", err.message);
+            w.terminate();
             resolve();
           };
           w.postMessage({ kind: "buildings", jobs: queues[i], lite: LITE });
@@ -652,6 +660,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       };
       w.onerror = (err) => {
         console.error("city props worker failed", err.message);
+        w.terminate();
         resolve();
       };
       w.postMessage({ kind: "props", props });
@@ -660,6 +669,9 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   for (const w of workers) w.terminate();
   extBatch(g, lods);
   extBatch(g, propChunks, true);
+  // the batches hold their own copy of every level: the workers' arrays (~85 MB on a phone) were
+  // kept alive for nothing by these lists (lod() only needs the ids and positions)
+  for (const l of [...lods, ...propChunks]) l.levels = [];
   if (location.search.includes("timings")) {
     const per = workers.map((_, i) => timings.filter((t) => t[2] === i).reduce((a, t) => a + t[0], 0));
     console.log(`workers ${workers.length}: ${per.join(" ")} ms; variants ${unique.length}; slowest: ${timings.sort((a, b) => b[0] - a[0]).slice(0, 12).map((t) => `${t[1]} ${t[0]}`).join(", ")}`);
@@ -1702,8 +1714,25 @@ function freeSign(text: string, color: string): SignSpot {
 }
 
 /** Neon text mounted on a sign spot: front fascia, billboard, or both faces of a blade sign. */
+/**
+ * The city's neon, one texture per text and colour (the bigger city repeats its variants: the same
+ * sign was drawn and uploaded again for every copy). On a phone at half resolution, and its canvas
+ * let go once uploaded (see releaseAfterUpload): the city's signs are never disposed.
+ */
+const neonCache = new Map<string, ReturnType<typeof neonTexture>>();
+function cityNeon(text: string, color: string, vertical?: boolean) {
+  const key = `${text}|${color}|${vertical ? 1 : 0}`;
+  let n = neonCache.get(key);
+  if (!n) {
+    n = neonTexture(text, color, { vertical, scale: LITE ? 0.5 : 1 });
+    if (LITE) releaseAfterUpload(n.texture);
+    neonCache.set(key, n);
+  }
+  return n;
+}
+
 function signPlane(parent: THREE.Object3D, s: SignSpot, toWorld: (x: number, y: number, z: number) => THREE.Vector3, yaw: number, flicker: Flicker[], size?: { w: number; h: number }) {
-  const { texture, aspect } = neonTexture(s.text, s.color, { vertical: s.vertical });
+  const { texture, aspect } = cityNeon(s.text, s.color, s.vertical);
   const maxW = size?.w ?? (s.facing === "side" ? 5.4 : s.w) * VOX;
   const maxH = size?.h ?? s.h * VOX;
   let w = maxW,

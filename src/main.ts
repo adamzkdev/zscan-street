@@ -7,7 +7,7 @@ import { connectFeed, ZScan } from "./data/zscan";
 import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
-import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
+import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, LITE, type Occluder } from "./scene/city";
 import { RIVER, ST } from "./scene/city/plan";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
@@ -69,7 +69,7 @@ import { Arcade } from "./ui/arcade";
 import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";
 import { Joystick } from "./ui/joystick";
-import { Quality, TOUCH } from "./scene/quality";
+import { bootSurvived, Quality, SAFE, TOUCH } from "./scene/quality";
 import { warm, idle, warmTarget } from "./scene/warm";
 import { pxPerMetre } from "./scene/farview";
 import { LightBudget } from "./scene/lights";
@@ -157,6 +157,18 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
+// A lost context on a phone is a page to reload: its city let the CPU copies of the signs go once
+// uploaded (releaseAfterUpload), so there is nothing to restore them from, and a phone loses it
+// for want of memory, which a reload in safe mode answers. A desktop gets a few seconds to restore
+// it (three.js re-uploads the rest), then the same message instead of a dead canvas.
+let contextBack: ReturnType<typeof setTimeout> | undefined;
+canvas.addEventListener("webglcontextlost", (e) => {
+  e.preventDefault();
+  console.warn("WebGL context lost");
+  const halt = (window as unknown as { __streetHalt?: (kind: string) => void }).__streetHalt;
+  if (TOUCH || LITE) halt?.("gpu");
+  else contextBack = setTimeout(() => halt?.("gpu"), 6000);
+});
 
 const scene = new THREE.Scene();
 // A dim studio environment: soft fill on every surface and something for wet asphalt to reflect.
@@ -333,7 +345,7 @@ function resize() {
  * on a desktop; on a phone always a light world, whatever its sharp image tier (memory, not pixels,
  * is what a phone runs out of).
  */
-const worldLevel = () => (TOUCH ? 3 : quality.level);
+const worldLevel = () => (TOUCH ? (SAFE ? 4 : 3) : quality.level);
 const quality = new Quality((q) => {
   const dpr = Math.min(window.devicePixelRatio, q.dpr);
   renderer.setPixelRatio(dpr);
@@ -819,6 +831,7 @@ const shownView = new Map<string, { up: number; back: number; tex: THREE.Texture
 // textures by itself, but rendered panoramas come back empty, so they are all taken again (the one
 // on screen right away, the others when their place asks).
 canvas.addEventListener("webglcontextrestored", () => {
+  clearTimeout(contextBack);
   for (const e of views.values()) e.at = -Infinity;
   const i = interiors?.active;
   const s = i && shownView.get(i.key);
@@ -2182,6 +2195,8 @@ if (new URLSearchParams(location.search).has("debug")) {
       interiors,
       enter: (k: string) => enterPlace(k),
       hud,
+      // the other HUD pieces, to open each panel from a test script
+      ui: { talk: () => talk, tracker, gameHud, minimap, reader, arcade, plots, payDesk },
       follow: (s: Snark) => {
         select(s);
         rig.follow(s);
@@ -2617,16 +2632,22 @@ function frameBody(stepDt?: number) {
   hud.frame(project);
   again();
 }
+// the loop runs: whatever fails from here on is not a city that could not open (index.html)
+(window as unknown as { __streetUp?: boolean }).__streetUp = true;
 frame();
+setTimeout(bootSurvived, 30_000);
 // Shaders of the whole city (every district, the night-only lights, the rides' cabins) compile
 // while the boot screen is up, so the first flight to a district no longer stalls on them; then
 // the most visited places are built ahead (only behind the boot screen or in a hidden tab: a
 // build is a 0.1–0.3 s task that would show as a hitch in the live city).
 idle(() => {
   const t0 = performance.now();
-  warm(renderer, scene, rig.camera).then(() => console.info(`shaders warmed in ${Math.round(performance.now() - t0)} ms (${renderer.info.programs?.length ?? 0} programs)`));
-  // and the variant without the lamps' lights (the whole-city map)
-  lampLights.warmOff(() => warm(renderer, scene, rig.camera));
+  // (not in safe mode: compiling every program of the city at once is a peak of its own)
+  if (!SAFE) {
+    warm(renderer, scene, rig.camera).then(() => console.info(`shaders warmed in ${Math.round(performance.now() - t0)} ms (${renderer.info.programs?.length ?? 0} programs)`));
+    // and the variant without the lamps' lights (the whole-city map)
+    lampLights.warmOff(() => warm(renderer, scene, rig.camera));
+  }
   const ahead: Interior["key"][] = worldLevel() >= 2 ? [] : ["tower", "mempool", "factory"];
   const unseen = () => document.hidden || bootUp();
   const next = () => {

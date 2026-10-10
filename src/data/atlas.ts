@@ -34,9 +34,63 @@ export function atlasBlob(): Promise<Blob> {
   return blob;
 }
 
-/** A decoded copy for cutting portraits out of; close() it when done (41 MB each). */
+/**
+ * A decoded copy for cutting portraits out of; close() it when done. The street's crowds, the
+ * rides and the Shibuya crowd all ask for it while the city opens: they share one decode (41 MB)
+ * instead of one each at the same moment, and it goes when the last of them has closed it.
+ */
+type Decoded = { bmp: Promise<ImageBitmap>; users: number };
+let decoded: Decoded | null = null;
 export async function atlasBitmap(): Promise<ImageBitmap> {
-  return createImageBitmap(await atlasBlob());
+  if (!decoded) {
+    const d: Decoded = {
+      users: 0,
+      bmp: atlasBlob()
+        .then((b) => createImageBitmap(b))
+        .then((bmp) => {
+          const close = bmp.close.bind(bmp);
+          // each user's close() lets go of its share; the last one frees the pixels
+          bmp.close = () => {
+            if (--d.users > 0) return;
+            if (decoded === d) decoded = null;
+            close();
+          };
+          return bmp;
+        }),
+    };
+    d.bmp.catch(() => decoded === d && (decoded = null));
+    decoded = d;
+  }
+  const d = decoded;
+  d.users++;
+  try {
+    return await d.bmp;
+  } catch (e) {
+    d.users--;
+    throw e;
+  }
+}
+
+const PHONE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+/**
+ * A phone gets the atlas at half size (16 px per item): the full one is 41 MB decoded and 55 MB on
+ * the GPU with its mipmaps, for portraits a few pixels tall on a phone's screen. The layout (100
+ * per row) is the same, so every shader's lookup still lands on its item.
+ */
+async function halved() {
+  const bmp = await atlasBitmap();
+  try {
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width / 2);
+    c.height = Math.round(bmp.height / 2);
+    const g = c.getContext("2d");
+    if (!g) throw new Error("atlas: no 2D context");
+    g.imageSmoothingQuality = "high";
+    g.drawImage(bmp, 0, 0, c.width, c.height);
+    return c;
+  } finally {
+    bmp.close();
+  }
 }
 
 let tex: THREE.Texture | null = null;
@@ -49,6 +103,14 @@ export function sharedAtlasTexture(): THREE.Texture {
   t.minFilter = THREE.LinearMipmapLinearFilter;
   t.anisotropy = 8;
   const load = (attempt: number): void => {
+    // (a phone: drawn at half size from the decode the crowds share)
+    if (PHONE)
+      return void halved()
+        .then((c) => {
+          t.image = c;
+          t.needsUpdate = true;
+        })
+        .catch(() => attempt < 4 && setTimeout(() => load(attempt + 1), 60_000));
     void atlasBlob()
       .then((b) => {
         const url = URL.createObjectURL(b);

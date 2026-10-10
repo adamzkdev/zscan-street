@@ -46,6 +46,32 @@ const PHONE: Tier[] = [
 ];
 if (TOUCH) TIERS.splice(0, TIERS.length, ...PHONE);
 
+/**
+ * Safe mode, for a phone whose last opening of the city did not get through (iOS kills a tab that
+ * runs out of memory and reloads it): the plainest tier from the start, the lightest world, no
+ * shader warm-up. `boot` is marked at the start and cleared once the city has run a while
+ * (bootSurvived), so a leftover mark means the previous try died on the way. `?safe` forces it.
+ * Kept for the browser tab's session only.
+ */
+export const SAFE = (() => {
+  if (typeof location === "undefined") return false;
+  if (new URLSearchParams(location.search).has("safe")) return true;
+  if (!TOUCH) return false;
+  try {
+    const died = sessionStorage.getItem("street.boot") !== null || sessionStorage.getItem("street.safe") !== null;
+    sessionStorage.setItem("street.boot", String(Date.now()));
+    return died;
+  } catch {
+    return false;
+  }
+})();
+/** The city has been up long enough: the next load is a normal one. */
+export function bootSurvived() {
+  try {
+    sessionStorage.removeItem("street.boot");
+  } catch {}
+}
+
 /** Length of one measuring window (s). */
 const WINDOW = 2.5;
 /** Easy windows in a row before trying the richer tier (24 × 2.5 s = a minute). */
@@ -76,7 +102,7 @@ export class Quality {
   constructor(private apply: (t: Tier) => void) {
     const q = new URLSearchParams(location.search).get("quality");
     this.fixed = q !== null;
-    this.level = q !== null ? Math.max(0, Math.min(TIERS.length - 1, Number(q) || 0)) : TOUCH ? 1 : 0;
+    this.level = q !== null ? Math.max(0, Math.min(TIERS.length - 1, Number(q) || 0)) : SAFE ? TIERS.length - 1 : TOUCH ? 1 : 0;
     apply(TIERS[this.level]);
   }
 

@@ -419,6 +419,7 @@ export class Hud {
   showBlock(b: BlockSummary) {
     this.selected = null;
     const panel = this.$(".panel");
+    panel.scrollTop = 0;
     const txs = Math.max(0, b.tx_count - 1);
     const draw = (detail: Block | null, flow: BlockFlow | null) => {
       if (this.selected || panel.dataset.item !== `b${b.height}`) return;
@@ -460,6 +461,7 @@ export class Hud {
     this.selected = null;
     const panel = this.$(".panel");
     const carrier = this.director.snarkOf(t.txid);
+    panel.scrollTop = 0;
     panel.dataset.item = `t${t.txid}`;
     panel.innerHTML = `
       <header>
@@ -485,7 +487,10 @@ export class Hud {
 
   open(s: Snark) {
     delete this.$(".panel").dataset.item;
-    if (this.selected !== s) this.tab = s.txs.length ? "txs" : "traits";
+    if (this.selected !== s) {
+      this.tab = s.txs.length ? "txs" : "traits";
+      this.$(".panel").scrollTop = 0;
+    }
     this.selected = s;
     this.renderPanel();
     this.$(".panel").classList.add("open");
@@ -700,6 +705,7 @@ export class Hud {
     this.selected = null;
     const panel = this.$(".panel");
     panel.dataset.item = "pick";
+    panel.scrollTop = 0;
     panel.innerHTML = `
       <header>
         ${p.image ? `<img class="thumb" src="${p.image}" alt="" />` : `<span class="thumb blockthumb">${icon("block")}</span>`}

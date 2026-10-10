@@ -3872,6 +3872,68 @@ a.srow:hover span {
   border-color: transparent;
 }
 
+/* touch screens: the game's keys as a pad beside the cabinet (arcade.ts) */
+.arcade:has(.arcpad) {
+  grid-auto-flow: column;
+  gap: 18px;
+  justify-content: center;
+}
+.arcpad {
+  display: grid;
+  grid-template-columns: repeat(3, 54px);
+  grid-template-rows: repeat(3, 54px);
+  gap: 4px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.arcpad button {
+  all: unset;
+  display: grid;
+  place-items: center;
+  font: 400 20px var(--pixel);
+  cursor: pointer;
+  color: #f1ead8;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 45%, transparent);
+  clip-path: var(--step);
+}
+.arcpad svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+.arcpad button.on {
+  background: var(--c);
+  color: #0d0d0d;
+}
+.arcpad .k-up {
+  grid-area: 1 / 2;
+}
+.arcpad .k-left {
+  grid-area: 2 / 1;
+}
+.arcpad .k-right {
+  grid-area: 2 / 3;
+}
+.arcpad .k-down {
+  grid-area: 3 / 2;
+}
+.arcpad .fire {
+  grid-area: 3 / 3;
+  border-radius: 50%;
+  clip-path: none;
+  font-size: 22px;
+  color: var(--c);
+}
+.arcpad .fire:only-child {
+  grid-area: 2 / 2;
+  width: 76px;
+  height: 76px;
+  justify-self: center;
+  align-self: center;
+}
+
 /* ---- lift car panel: only while you stand in a lift car (interior/lift.ts) ---- */
 .carpanel {
   position: absolute;
@@ -5753,9 +5815,9 @@ a.srow:hover span {
   .strip {
     display: block !important;
     bottom: calc(8px + env(safe-area-inset-bottom));
-    transform: translateX(-50%) scale(0.8);
+    transform: translateX(-50%) scale(0.86);
     transform-origin: 50% 100%;
-    max-width: calc((100vw - 160px) / 0.8);
+    max-width: calc((100vw - 150px) / 0.86);
   }
   /* (still hidden on foot and inside the places, like on a desktop) */
   .indoors .strip,
@@ -5800,5 +5862,415 @@ a.srow:hover span {
   .mailbtn svg.px {
     width: 24px;
     height: 18px;
+  }
+}
+
+/* ---- phones in landscape, the windows: each one fits the 390 px of height, scrolls inside
+   itself, keeps its close button in reach and its labels readable ---- */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  #ui {
+    --st: env(safe-area-inset-top);
+    --sb: env(safe-area-inset-bottom);
+    --sl: env(safe-area-inset-left);
+    --sr: env(safe-area-inset-right);
+    /* below the top buttons, above the bottom edge */
+    --sheet-top: calc(52px + var(--st));
+    --sheet-h: calc(100% - 60px - var(--st) - var(--sb));
+  }
+  /* buttons a thumb can hit */
+  .hbtn,
+  .hbtn.sound {
+    width: 40px;
+    height: 40px;
+  }
+  .seg button {
+    width: 38px;
+    height: 34px;
+  }
+  .rail {
+    top: calc(56px + var(--st));
+  }
+  .rail > button {
+    width: 40px;
+    height: 34px;
+  }
+  /* labels stay readable */
+  .eyebrow,
+  .stats dt,
+  .mh,
+  .inbox li time,
+  .note {
+    font-size: 12px;
+  }
+  .panel .x,
+  .venue .x {
+    width: 40px;
+    height: 40px;
+    margin: -10px -10px 0 0;
+    padding: 0;
+    place-items: center;
+  }
+  /* the bottom strip makes room for any open window */
+  .inspecting .strip,
+  .letterbox .strip,
+  #ui:has(.venue.open) .strip,
+  #ui:has(.talk.on) .strip,
+  #ui:has(.campop:not(.hidden)) .strip,
+  #ui:has(.track-card.on) .strip,
+  .inspecting .sdetails {
+    display: none !important;
+  }
+
+  /* the zkSNARK card (and what is tapped inside a place): a sheet down the right side, left of
+     the camera rail; it scrolls as one, Talk / Follow stay pinned at its foot */
+  .panel {
+    top: var(--sheet-top);
+    right: calc(60px + var(--sr));
+    bottom: auto;
+    left: auto;
+    width: 340px;
+    max-height: var(--sheet-h);
+    padding: 12px 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+  .indoors .panel {
+    top: var(--sheet-top);
+    right: calc(10px + var(--sr));
+    max-height: var(--sheet-h);
+  }
+  .panel .pbody {
+    flex: none;
+    min-height: auto;
+    overflow: visible;
+  }
+  .panel .portrait {
+    width: 60px;
+    height: 60px;
+  }
+  .panel .hero h2 {
+    font-size: 19px;
+  }
+  .panel .state {
+    margin: 10px 0 8px;
+  }
+  .panel .tabs button {
+    min-height: 36px;
+  }
+  .panel .actions {
+    position: sticky;
+    bottom: -12px;
+    margin: 10px -14px -12px;
+    padding: 8px 14px 12px;
+    background: var(--hud-solid);
+    border-top: 1px solid var(--line);
+  }
+  .panel .actions .btn {
+    min-height: 40px;
+    box-sizing: border-box;
+  }
+  .panel[data-item="pick"] .stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .panel[data-item="pick"] .stats div:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  /* talking: the conversation alone, at the top (the keyboard comes up from below) */
+  #ui:has(.talk.on) .panel {
+    display: none;
+  }
+
+  /* shops, the bank, the pay desk: the same sheet, on the left */
+  .venue {
+    top: var(--sheet-top);
+    left: calc(10px + var(--sl));
+    width: 400px;
+    max-height: var(--sheet-h);
+    padding: 12px 14px;
+    overscroll-behavior: contain;
+  }
+
+  /* the camera menu: opens down from the rail's top, scrolls if long */
+  .campop {
+    top: 0;
+    bottom: auto;
+    max-height: calc(100vh - 64px - var(--st) - var(--sb));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .campop .row {
+    min-height: 40px;
+  }
+  .campop .keys {
+    display: none;
+  }
+
+  /* the conversation */
+  .talk {
+    top: calc(8px + var(--st));
+    bottom: auto;
+    left: calc(10px + var(--sl));
+    transform: none;
+    width: min(540px, calc(100vw - 290px - var(--sl)));
+    padding: 10px;
+    gap: 6px;
+  }
+  .tk-face {
+    width: 36px;
+    height: 36px;
+  }
+  .tk-x {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+  }
+  .tk-log {
+    max-height: calc(100vh - 210px);
+  }
+  .tk-form input {
+    height: 40px;
+    font-size: 16px;
+  }
+  .tk-form .tk-mic {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* the inbox: above the mailbox, under the top buttons; an opened mail covers it */
+  .inbox {
+    top: var(--sheet-top);
+    bottom: auto;
+    right: calc(10px + var(--sr));
+    max-height: calc(100% - 120px - var(--st) - var(--sb));
+    padding: 8px 12px 10px;
+    font-size: 13px;
+  }
+  .inbox header button,
+  .mailread header button {
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    text-align: center;
+  }
+  .inbox li p {
+    font-size: 12px;
+  }
+  #ui:has(.mailread.open) .inbox {
+    display: none;
+  }
+  .mailread {
+    max-height: calc(100% - 24px - var(--st) - var(--sb));
+    padding: 8px 18px 16px;
+    gap: 10px;
+  }
+  .mailread .go,
+  .inbox li button {
+    min-height: 40px;
+  }
+
+  /* following a transaction: the card, the camera shots clear of the mailbox */
+  .track-card {
+    left: calc(10px + var(--sl));
+    bottom: calc(10px + var(--sb));
+    width: min(380px, calc(100vw - 440px));
+    padding: 10px 12px;
+  }
+  .track-card .x {
+    top: 2px;
+    right: 2px;
+    width: 40px;
+    height: 40px;
+  }
+  .tc-actions button,
+  .tc-actions a {
+    height: 38px;
+  }
+  .shots {
+    right: calc(64px + var(--sr));
+    bottom: calc(10px + var(--sb));
+  }
+  .shots button {
+    min-height: 34px;
+  }
+  .followhead {
+    top: calc(10px + var(--st));
+    left: calc(10px + var(--sl));
+  }
+  .track-pop {
+    top: calc(52px + var(--st));
+  }
+  .track-pop input,
+  .track-pop .go {
+    height: 40px;
+    font-size: 16px;
+  }
+
+  /* the lift car's floor buttons: two columns, every floor in sight */
+  .carpanel {
+    top: var(--sheet-top);
+    right: calc(10px + var(--sr));
+    transform: none;
+    max-height: var(--sheet-h);
+    max-width: none;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    padding: 6px;
+  }
+  .carpanel .cph,
+  .carpanel .cpf {
+    grid-column: 1 / -1;
+  }
+  .carpanel .cph {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .carpanel .cph b,
+  .carpanel .cph span,
+  .carpanel .cpf {
+    font-size: 12px;
+  }
+  .carpanel .cpf {
+    display: none;
+  }
+  .carpanel button {
+    grid-template-columns: 30px 1fr;
+    min-height: 40px;
+    padding: 2px 6px 2px 4px;
+    box-sizing: border-box;
+  }
+  .carpanel button strong {
+    max-width: 110px;
+    font-size: 13px;
+  }
+  .carpanel button small,
+  .carpanel button kbd {
+    display: none;
+  }
+
+  /* prompts on foot: a real button to tap */
+  .talk-prompt {
+    min-height: 40px;
+    padding: 6px 16px;
+    justify-content: center;
+  }
+  .door-prompt {
+    bottom: 26%;
+  }
+
+  /* the arcade cabinet: as tall as the screen allows, the touch pad beside it */
+  .cab {
+    width: calc(100vh - 92px - var(--st) - var(--sb));
+    padding: 8px 10px;
+  }
+  .cabtop b {
+    font-size: 17px;
+    white-space: nowrap;
+  }
+  .cabtop i,
+  .cabtop .score {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .cabtop .score {
+    flex: none;
+  }
+  .cabtop button {
+    flex: none;
+    min-width: 40px;
+    height: 36px;
+    text-align: center;
+    padding: 0;
+    line-height: 36px;
+  }
+  .screen {
+    margin-top: 6px;
+  }
+  .cabfoot {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .cabfoot > span:first-child {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-width: 0;
+    line-height: 1.25;
+  }
+  /* the quiz reads better wide than square */
+  .cab:has(.quiz) {
+    width: min(600px, calc(100vw - 40px - var(--sl) - var(--sr)));
+  }
+  .screen:has(.quiz) {
+    aspect-ratio: auto;
+    height: calc(100vh - 110px - var(--st) - var(--sb));
+  }
+  .quiz {
+    padding: 12px 16px;
+    gap: 8px;
+    overflow-y: auto;
+  }
+  .quiz .q {
+    font-size: 16px;
+    margin: 0;
+  }
+  .quiz .opts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .quiz .opts button {
+    min-height: 40px;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  /* the ZIP reader: page turns a thumb can hit */
+  .reader .nav button,
+  .reader .spine-top button {
+    min-width: 44px;
+    height: 40px;
+  }
+  .venue .pager button {
+    min-width: 40px;
+    height: 40px;
+  }
+  /* the small print, readable */
+  .steps small,
+  .tx .sub,
+  .tag,
+  .rank,
+  .tc-eyebrow,
+  .tk-eyebrow,
+  .tc-kind,
+  .carpanel button i,
+  .ihead em {
+    font-size: 12px;
+  }
+  .cid,
+  .crank {
+    font-size: 11px;
+  }
+
+  /* the stadium's question and the photo bar */
+  .choice {
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
+  }
+  .choice button {
+    min-height: 40px;
+  }
+  .photo-bar button {
+    min-height: 40px;
   }
 }

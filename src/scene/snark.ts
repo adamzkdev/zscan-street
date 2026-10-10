@@ -79,6 +79,10 @@ export function loadArt(id: number): Promise<Art> {
           sg.fillStyle = `rgba(${img.data[k]},${img.data[k + 1]},${img.data[k + 2]},${a / 255})`;
           sg.fillRect(q * 4, r * 4, 4, 4);
         }
+      // the full-size canvas is done with: let its memory go now, not whenever the collector
+      // gets to it (iOS caps the memory of all canvases together, and a street full of new
+      // people left a hundred of these lying about during the boot)
+      c.width = c.height = 0;
       const texture = new THREE.CanvasTexture(small);
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.magFilter = THREE.NearestFilter;

@@ -31,6 +31,48 @@
     <div id="boot"><div><svg class="mark" viewBox="0 0 32 32"><path d="M16 2.5 27.5 7v8.6c0 7-4.8 11.9-11.5 13.9C9.3 27.5 4.5 22.6 4.5 15.6V7L16 2.5Z" fill="none" stroke="#f4b728" stroke-width="2" stroke-linejoin="round"/><path d="M11 11h10l-10 10h10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 16h17" stroke="#1baf7a" stroke-width="1.2" stroke-dasharray="2 2" opacity=".85"/></svg><p>BUILDING THE CITY</p><b><i></i></b></div></div>
     <div id="ui"></div>
     <div id="rotate" aria-live="polite"><div><svg viewBox="0 0 64 64" aria-hidden="true"><rect class="ph" x="20" y="8" width="24" height="44" rx="4"/><rect class="sc" x="23" y="13" width="18" height="32" rx="1"/><path class="ar" d="M50 30a18 18 0 0 1-8 15m0 0h6m-6 0v-6"/></svg><b>横向き · TURN YOUR PHONE</b><p>ZStreet is played in landscape</p></div></div>
-    <script type="module" src="/src/main.ts"></script>
+    <style>
+      /* the city could not open, or lost its GPU: a way back instead of a frozen screen */
+      #halt { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px; background: var(--bg, #0d0d0d); color: var(--faint, #737373); font: 500 11px var(--mono, ui-monospace, monospace); letter-spacing: 0.2em; text-align: center; }
+      #halt div { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 420px; }
+      #halt b { color: var(--gold-ink, #f4b728); font-weight: 700; }
+      #halt p { margin: 0; letter-spacing: 0.04em; line-height: 1.6; font-size: 12px; }
+      #halt button { margin-top: 6px; padding: 12px 22px; border: 1px solid var(--gold, #f4b728); border-radius: 2px; background: transparent; color: var(--gold-ink, #f4b728); font: 700 11px var(--mono, ui-monospace, monospace); letter-spacing: 0.2em; cursor: pointer; }
+    </style>
+    <script>
+      // One way back for a city that could not open (the app's script failed or ran out of memory
+      // while building) or that lost its GPU (main.ts): the message in the boot screen's style
+      // and a button to reload. A phone reloads in safe mode (see SAFE in scene/quality.ts).
+      window.__streetHalt = function (kind) {
+        if (document.getElementById("halt")) return;
+        var gpu = kind === "gpu";
+        var phone = false;
+        try {
+          phone = matchMedia("(pointer: coarse)").matches;
+          if (phone) sessionStorage.setItem("street.safe", "1");
+        } catch (e) {}
+        var el = document.createElement("div");
+        el.id = "halt";
+        el.innerHTML =
+          '<div><svg width="46" height="46" viewBox="0 0 32 32"><path d="M16 2.5 27.5 7v8.6c0 7-4.8 11.9-11.5 13.9C9.3 27.5 4.5 22.6 4.5 15.6V7L16 2.5Z" fill="none" stroke="#f4b728" stroke-width="2" stroke-linejoin="round"/><path d="M11 11h10l-10 10h10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+          "<b>" + (gpu ? "THE CITY WENT DARK" : "THE CITY COULD NOT OPEN") + "</b>" +
+          "<p>" + (gpu ? "The browser took the graphics memory back (low memory, or the tab was in the background)." : "The device ran short of memory, or the connection dropped while it loaded.") + (phone ? " A lighter city opens on the next try." : "") + "</p>" +
+          '<button type="button">' + (gpu ? "TAP TO RELOAD" : "TAP TO RETRY") + "</button></div>";
+        el.querySelector("button").addEventListener("click", function () {
+          location.reload();
+        });
+        document.body.appendChild(el);
+        var boot = document.getElementById("boot");
+        if (boot) boot.remove();
+      };
+    </script>
+    <script type="module">
+      // the app, loaded so that a failure on the way (a script error, the build throwing, a chunk
+      // that did not download) is caught; once its frame loop runs (__streetUp) the city is open
+      import("/src/main.ts").catch(function (e) {
+        console.error("the city could not open", e);
+        if (!window.__streetUp) window.__streetHalt("boot");
+      });
+    </script>
   </body>
 </html>

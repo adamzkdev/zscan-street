@@ -247,7 +247,7 @@ export class Minimap {
     root.append(this.el);
     this.bigEl = document.createElement("div");
     this.bigEl.className = "bigmap hud";
-    this.bigEl.innerHTML = `<header><label>地図 · MAP</label><span>M or click to close</span></header><canvas></canvas>`;
+    this.bigEl.innerHTML = `<header><label>地図 · MAP</label><span>${matchMedia("(pointer: coarse)").matches ? "tap to close" : "M or click to close"}</span></header><canvas></canvas>`;
     this.bigCv = this.bigEl.querySelector("canvas")!;
     root.append(this.bigEl);
     this.el.addEventListener("click", () => this.toggle());

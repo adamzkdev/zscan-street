@@ -52,6 +52,20 @@ interface Zip {
   status: string;
 }
 
+/** On a touch screen, the keys a game needs, as buttons beside the cabinet (arrows, and Space as "A"). */
+const PAD: Partial<Record<Game, string[]>> = {
+  snake: ["ArrowUp", "ArrowLeft", "ArrowRight", "ArrowDown"],
+  kart: ["ArrowUp", "ArrowLeft", "ArrowRight", "ArrowDown"],
+  invaders: ["ArrowLeft", "ArrowRight", " "],
+  hockey: ["ArrowLeft", "ArrowRight"],
+  karaoke: ["ArrowUp", "ArrowLeft", "ArrowRight"],
+  dance: ["ArrowUp", "ArrowLeft", "ArrowRight", "ArrowDown"],
+  bowling: [" "],
+  stacker: [" "],
+};
+const tri = (d: string) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+const ARROW: Record<string, string> = { ArrowUp: tri("M12 5 21 18H3z"), ArrowLeft: tri("M5 12 18 3v18z"), ArrowRight: tri("M19 12 6 21V3z"), ArrowDown: tri("M12 19 3 6h18z"), " ": "A" };
+
 export class Arcade {
   private el: HTMLElement;
   private game: Game | null = null;
@@ -98,6 +112,8 @@ export class Arcade {
         <div class="screen"></div>
         <div class="cabfoot"><span>${t.help}</span><span class="best">BEST ${best(g) || "—"}</span></div>
       </div>`;
+    const pad = PAD[g];
+    if (pad && matchMedia("(pointer: coarse)").matches) this.pad(pad);
     const screen = this.el.querySelector<HTMLElement>(".screen")!;
     const score = (s: string) => (this.el.querySelector<HTMLElement>("[data-a=score]")!.textContent = s);
     this.stop =
@@ -126,6 +142,31 @@ export class Arcade {
                             : g === "billiards"
                               ? billiards(screen, score, (n) => this.over(g, n, `${n} shots`, true))
                       : quiz(screen, score, (n) => this.over(g, n, `${n} / 10`));
+  }
+
+  /** Touch buttons that press the game's keys (held while the finger stays down). */
+  private pad(keys: string[]) {
+    const el = document.createElement("div");
+    el.className = "arcpad";
+    el.innerHTML = keys.map((k) => `<button data-k="${k}" aria-label="${k === " " ? "Space" : k}" class="${k === " " ? "fire" : `k-${k.slice(5).toLowerCase()}`}">${ARROW[k]}</button>`).join("");
+    const send = (type: "keydown" | "keyup", k: string) => window.dispatchEvent(new KeyboardEvent(type, { key: k, bubbles: true }));
+    el.addEventListener("pointerdown", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-k]");
+      if (!b) return;
+      e.preventDefault();
+      b.setPointerCapture(e.pointerId);
+      b.classList.add("on");
+      send("keydown", b.dataset.k!);
+    });
+    const up = (e: PointerEvent) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-k]");
+      if (!b?.classList.contains("on")) return;
+      b.classList.remove("on");
+      send("keyup", b.dataset.k!);
+    };
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    this.el.appendChild(el);
   }
 
   private over(g: Game, n: number, label: string, lowerIsBetter = false) {

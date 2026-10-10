@@ -211,26 +211,30 @@ export function facadeTextures(wUnits: number, hUnits: number, o: FacadeOpts) {
 }
 
 /** Neon sign: glowing text in a dark box. Vertical signs stack characters. */
-export function neonTexture(text: string, color: string, opts: { vertical?: boolean; bg?: string; font?: string } = {}) {
+export function neonTexture(text: string, color: string, opts: { vertical?: boolean; bg?: string; font?: string; scale?: number } = {}) {
   const chars = [...text];
   const S = 128;
   const vertical = opts.vertical ?? false;
   const latin = /^[\x20-\x7e]+$/.test(text);
   const w = vertical ? S : latin ? Math.max(S, chars.length * 70 + 60) : chars.length * S + 40;
   const h = vertical ? chars.length * S + 40 : S;
-  const [c, ctx] = canvas(w, h);
+  // (drawn in the same units at any scale: `scale` only changes how many texels it gets; the
+  // blur is in pixels whatever the transform, so it is scaled by hand)
+  const k = opts.scale ?? 1;
+  const [c, ctx] = canvas(Math.round(w * k), Math.round(h * k));
+  ctx.scale(c.width / w, c.height / h);
   ctx.fillStyle = opts.bg ?? "rgba(8,8,14,0.92)";
   ctx.fillRect(0, 0, w, h);
   ctx.strokeStyle = color;
   ctx.lineWidth = 5;
   ctx.shadowColor = color;
-  ctx.shadowBlur = 14;
+  ctx.shadowBlur = 14 * k;
   ctx.strokeRect(8, 8, w - 16, h - 16);
   ctx.font = opts.font ?? `700 ${latin ? 76 : 92}px "Hiragino Sans", "Noto Sans JP", "Yu Gothic", Inter, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#fff";
-  ctx.shadowBlur = 22;
+  ctx.shadowBlur = 22 * k;
   if (vertical) chars.forEach((ch, i) => ctx.fillText(ch, w / 2, 20 + S / 2 + i * S));
   else if (latin) ctx.fillText(text, w / 2, h / 2 + 4);
   else chars.forEach((ch, i) => ctx.fillText(ch, 20 + S / 2 + i * S, h / 2 + 6));
@@ -239,6 +243,21 @@ export function neonTexture(text: string, color: string, opts: { vertical?: bool
   ctx.globalAlpha = 0.35;
   ctx.fillRect(0, 0, w, h);
   return { texture: tex(c), aspect: w / h };
+}
+
+/**
+ * Let a texture's canvas go once it is on the GPU (a phone: the city's neon signs alone held
+ * ~70 MB of canvas memory besides their GPU copies, and iOS Safari caps the memory of all
+ * canvases together). Only for textures drawn once, never disposed nor cloned: there is nothing left to
+ * upload them from again (a lost GPU context reloads the page on phones, see main.ts).
+ */
+export function releaseAfterUpload(t: THREE.Texture) {
+  t.onUpdate = () => {
+    const c = t.image as HTMLCanvasElement | undefined;
+    if (c && "width" in c) c.width = c.height = 1;
+    t.onUpdate = null;
+  };
+  return t;
 }
 
 /** Round Zcash ⓩ badge. */
