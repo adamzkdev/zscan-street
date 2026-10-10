@@ -5677,3 +5677,128 @@ a.srow:hover span {
   overflow-wrap: anywhere;
   line-height: 1.3;
 }
+
+/* ---- phones held upright: ZStreet is played in landscape ---- */
+#rotate {
+  display: none;
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 50% 40%, rgba(40, 24, 64, 0.94), rgba(8, 6, 14, 0.98));
+    color: #f2f2f6;
+    text-align: center;
+    padding: 24px;
+    font-family: var(--pixel);
+    touch-action: none;
+  }
+  #rotate svg {
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 18px;
+    display: block;
+    animation: rotate-hint 2.4s ease-in-out infinite;
+  }
+  #rotate .ph {
+    fill: none;
+    stroke: #f4b728;
+    stroke-width: 2.5;
+  }
+  #rotate .sc {
+    fill: rgba(244, 183, 40, 0.16);
+  }
+  #rotate .ar {
+    fill: none;
+    stroke: #3ef0ff;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #rotate b {
+    display: block;
+    font-size: 17px;
+    letter-spacing: 0.08em;
+    color: #f4b728;
+    text-shadow: 0 0 12px rgba(244, 183, 40, 0.5);
+  }
+  #rotate p {
+    margin: 10px 0 0;
+    font-size: 13px;
+    opacity: 0.75;
+  }
+  /* nothing else to tap behind it */
+  #ui {
+    visibility: hidden;
+  }
+}
+@keyframes rotate-hint {
+  0%, 20% {
+    transform: rotate(0deg);
+  }
+  50%, 80% {
+    transform: rotate(-90deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* ---- phones in landscape (the way ZStreet is played on a phone): a compact HUD that fits ---- */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  /* the live strip comes back, smaller, centred at the bottom */
+  .strip {
+    display: block !important;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    transform: translateX(-50%) scale(0.8);
+    transform-origin: 50% 100%;
+    max-width: calc((100vw - 160px) / 0.8);
+  }
+  /* (still hidden on foot and inside the places, like on a desktop) */
+  .indoors .strip,
+  .walking .strip {
+    display: none !important;
+  }
+  /* the top buttons a little smaller, clear of the notch */
+  .corner {
+    top: calc(8px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    gap: 4px;
+  }
+  .seg button,
+  .hbtn {
+    width: 30px;
+    height: 28px;
+  }
+  .hbtn {
+    width: 32px;
+    height: 32px;
+  }
+  /* the camera rail under the top buttons, tight, ending above the mailbox */
+  .rail {
+    top: calc(50px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    transform: none;
+    padding: 2px;
+  }
+  .rail > button {
+    width: 30px;
+    height: 27px;
+  }
+  .rail > i {
+    margin: 1px 0;
+  }
+  .mailbtn {
+    right: calc(10px + env(safe-area-inset-right));
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    width: 44px;
+    height: 44px;
+  }
+  .mailbtn svg.px {
+    width: 24px;
+    height: 18px;
+  }
+}

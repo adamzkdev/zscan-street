@@ -137,6 +137,18 @@ window.addEventListener("unhandledrejection", (e) => {
   e.preventDefault();
   if (netFailures++ % 50 === 0) console.warn(`network: ${msg} (${netFailures} request${netFailures > 1 ? "s" : ""} failed so far, the city carries on)`);
 });
+// Phones play in landscape (an overlay asks to turn the phone, see #rotate): where the browser
+// allows it (Android), the first touch goes full screen and locks the landscape orientation.
+if (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches) {
+  const lock = () => {
+    const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+    const go = el.requestFullscreen?.bind(el) ?? el.webkitRequestFullscreen?.bind(el);
+    Promise.resolve(go?.({ navigationUI: "hide" } as FullscreenOptions))
+      .then(() => (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.("landscape"))
+      .catch(() => {});
+  };
+  window.addEventListener("pointerdown", lock, { once: true, capture: true });
+}
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 bubbles.init(renderer);
