@@ -63,7 +63,23 @@ export function loadArt(id: number): Promise<Art> {
       const img = ctx.getImageData(0, 0, c.width, c.height);
       keyOutBackground(img);
       ctx.putImageData(img, 0, 0);
-      const texture = new THREE.CanvasTexture(c);
+      // the art is pixel art on a 26×26 grid, drawn up with nearest filtering: four texels per cell
+      // look the same as the 520 px original, at a 25th of the memory (100 people on the street
+      // took 140 MB of textures and made phones run out)
+      const small = document.createElement("canvas");
+      small.width = small.height = GRID * 4;
+      const sg = small.getContext("2d", { willReadFrequently: true })!;
+      sg.imageSmoothingEnabled = false;
+      const cell = c.width / GRID;
+      for (let r = 0; r < GRID; r++)
+        for (let q = 0; q < GRID; q++) {
+          const k = (Math.floor((r + 0.5) * cell) * c.width + Math.floor((q + 0.5) * cell)) * 4;
+          const a = img.data[k + 3];
+          if (!a) continue;
+          sg.fillStyle = `rgba(${img.data[k]},${img.data[k + 1]},${img.data[k + 2]},${a / 255})`;
+          sg.fillRect(q * 4, r * 4, 4, 4);
+        }
+      const texture = new THREE.CanvasTexture(small);
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.magFilter = THREE.NearestFilter;
       texture.minFilter = THREE.LinearMipmapLinearFilter;

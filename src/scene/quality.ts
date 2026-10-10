@@ -30,7 +30,21 @@ export const TIERS: Tier[] = [
   { dpr: 0.75, shadow: 0, bloom: false, tilt: false, ao: false, ssr: false },
 ];
 
-const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+export const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+
+/**
+ * Phones: a sharp image first (a 3× screen drawn at 1× looked like a mosaic), the costly effects
+ * never (ambient occlusion, reflections and a 4K shadow map ran the GPU's memory out and the page
+ * crashed). Never below 1.25× either: the governor drops the effects before the resolution.
+ */
+const PHONE: Tier[] = [
+  { dpr: 2, shadow: 1024, bloom: true, tilt: false, ao: false, ssr: false },
+  { dpr: 1.6, shadow: 1024, bloom: true, tilt: false, ao: false, ssr: false },
+  { dpr: 1.5, shadow: 0, bloom: true, tilt: false, ao: false, ssr: false },
+  { dpr: 1.35, shadow: 0, bloom: false, tilt: false, ao: false, ssr: false },
+  { dpr: 1.25, shadow: 0, bloom: false, tilt: false, ao: false, ssr: false },
+];
+if (TOUCH) TIERS.splice(0, TIERS.length, ...PHONE);
 
 /** Length of one measuring window (s). */
 const WINDOW = 2.5;
@@ -62,7 +76,7 @@ export class Quality {
   constructor(private apply: (t: Tier) => void) {
     const q = new URLSearchParams(location.search).get("quality");
     this.fixed = q !== null;
-    this.level = q !== null ? Math.max(0, Math.min(TIERS.length - 1, Number(q) || 0)) : TOUCH ? 2 : 0;
+    this.level = q !== null ? Math.max(0, Math.min(TIERS.length - 1, Number(q) || 0)) : TOUCH ? 1 : 0;
     apply(TIERS[this.level]);
   }
 

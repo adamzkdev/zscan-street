@@ -361,7 +361,9 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     else copies.set(k, [j]);
   }
   // the bundle's file name carries a content hash in production: that is the cache's version
-  const cache = new CityCache(import.meta.env.PROD ? new URL(import.meta.url).pathname : null);
+  // (not on phones: writing the whole city to IndexedDB copies it all again at the very moment
+  // memory peaks, and mobile browsers kill the page for it)
+  const cache = new CityCache(import.meta.env.PROD && !LITE ? new URL(import.meta.url).pathname : null);
   const cached = await cache.getAll([...copies.keys()]);
   const unique = [...copies.entries()].filter(([k]) => !cached.has(k)).map(([, l]) => l[0]);
   const n = unique.length ? Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 4) - 1)) : 0;

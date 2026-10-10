@@ -69,7 +69,7 @@ import { Arcade } from "./ui/arcade";
 import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";
 import { Joystick } from "./ui/joystick";
-import { Quality } from "./scene/quality";
+import { Quality, TOUCH } from "./scene/quality";
 import { warm, idle, warmTarget } from "./scene/warm";
 import { pxPerMetre } from "./scene/farview";
 import { LightBudget } from "./scene/lights";
@@ -328,6 +328,12 @@ function resize() {
   tilt.resize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio());
 }
 // resolution, shadows and post effects follow what the device can keep up with
+/**
+ * How much life the world carries (crowds, traffic, kept places, view panoramas): the render tier
+ * on a desktop; on a phone always a light world, whatever its sharp image tier (memory, not pixels,
+ * is what a phone runs out of).
+ */
+const worldLevel = () => (TOUCH ? 3 : quality.level);
 const quality = new Quality((q) => {
   const dpr = Math.min(window.devicePixelRatio, q.dpr);
   renderer.setPixelRatio(dpr);
@@ -419,23 +425,23 @@ const residents = new Residents(director);
 const RESIDENTS_BY_TIER = [24, 22, 16, 10, 6];
 function crowd() {
   // the street follows the visitor's clock (busy at rush hours, a few night owls), a curfew empties it
-  residents.setTarget((RESIDENTS_BY_TIER[quality.level] + Math.min(8, Math.floor(director.mempoolList().length / 2))) * streetLife() * (curfew ? 0.3 : 1));
+  residents.setTarget((RESIDENTS_BY_TIER[worldLevel()] + Math.min(8, Math.floor(director.mempoolList().length / 2))) * streetLife() * (curfew ? 0.3 : 1));
 }
 crowd();
 setInterval(crowd, 5000);
 rainListeners.push((on) => residents.setRain(on));
 weather(true);
 // pigeons and street cats (fewer on small devices)
-const critters = new Critters(scene, director, quality.level >= 3 ? 8 : 16, quality.level >= 3 ? 2 : 3);
+const critters = new Critters(scene, director, worldLevel() >= 3 ? 8 : 16, worldLevel() >= 3 ? 2 : 3);
 // the ZEC Line: the elevated metro, a train for every block
 const metro = new Metro(scene, city.nav);
 director.metro = metro;
 // the tram, along the street under the metro
 const tram = new Tram(scene, city.nav);
 // traffic lights at the junctions, cars and a police car on the other streets
-const cityTraffic = new CityTraffic(scene, director.traffic, [44, 36, 26, 16, 10][quality.level], city.nav);
+const cityTraffic = new CityTraffic(scene, director.traffic, [44, 36, 26, 16, 10][worldLevel()], city.nav);
 // Shibuya: the scramble crossing, its crowd and its screens
-const shibuya = new Shibuya(scene, city, cityTraffic, { count: [300, 260, 200, 140, 90][quality.level], director });
+const shibuya = new Shibuya(scene, city, cityTraffic, { count: [300, 260, 200, 140, 90][worldLevel()], director });
 rainListeners.push((on) => shibuya.setRain(on));
 shibuyaNight = (n) => shibuya.setNight(n);
 shibuya.setNight(theme === "night");
@@ -564,9 +570,9 @@ async function arrest() {
   horns.pardoned();
 }
 // life in every district: anglers, boats, balconies, the park, the shōtengai
-const life = new Life(scene, city, director, [1, 0.9, 0.6, 0.4, 0.25][quality.level]);
+const life = new Life(scene, city, director, [1, 0.9, 0.6, 0.4, 0.25][worldLevel()]);
 // the megalopolis busier: crowds on every pavement, street events, the sky and the bay
-const alive = new Alive(scene, city, director, [1, 0.85, 0.6, 0.4, 0.25][quality.level]);
+const alive = new Alive(scene, city, director, [1, 0.85, 0.6, 0.4, 0.25][worldLevel()]);
 // two police officers at the avenue's junctions, watching the traffic
 for (const [x, z, id] of [
   [ST.heartE + 5.4, CITY.south.z0 + 0.7, 4911],
@@ -607,9 +613,9 @@ const walletCrowns = new WalletCrowns(scene, city);
 // Shielded Woods: the redwood forest on the headland across the bridge, walkable off its deck
 const forest = new Forest(scene, city, director, (z) => goldenGate.deckAt(z));
 // the ZK Cemetery: zombie zkSNARKs rising from their graves (more of them at night)
-const cemetery = new Cemetery(scene, city, director, { day: [4, 4, 3, 2, 1][quality.level], night: [10, 9, 7, 5, 3][quality.level] });
+const cemetery = new Cemetery(scene, city, director, { day: [4, 4, 3, 2, 1][worldLevel()], night: [10, 9, 7, 5, 3][worldLevel()] });
 // people talk to each other wherever the camera looks
-const chatter = new Chatter(director, city, scene, [3, 3, 2, 2, 1][quality.level]);
+const chatter = new Chatter(director, city, scene, [3, 3, 2, 2, 1][worldLevel()]);
 // a goal inside the stadium: the crowd's roar (or groan)
 window.addEventListener("zstreet:stadium-goal", (e) => sound.crowd(!!(e as CustomEvent<{ shielded: boolean }>).detail?.shielded));
 
@@ -806,7 +812,7 @@ const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 // the least recently used one (never the one the place you are in is showing). A place whose
 // panorama was taken over gets it re-rendered when it is entered again (refreshView).
 const views = new Map<string, { rt: THREE.WebGLCubeRenderTarget; at: number; used: number; theme?: Theme }>();
-const VIEW_POOL = quality.level >= 3 ? 3 : 6;
+const VIEW_POOL = worldLevel() >= 3 ? 3 : 6;
 /** What each place showed last (place → its cityView arguments and texture). */
 const shownView = new Map<string, { up: number; back: number; tex: THREE.Texture }>();
 // The GPU was reset (driver update, sleep, too many tabs): three.js re-uploads geometry and
@@ -854,7 +860,7 @@ function cityView(place: string, up: number, back = 3): THREE.Texture | null {
         views.delete(lru);
       }
     }
-    e ??= { rt: new THREE.WebGLCubeRenderTarget(quality.level >= 3 ? 512 : 1024, { type: THREE.HalfFloatType }), at: 0, used: 0 };
+    e ??= { rt: new THREE.WebGLCubeRenderTarget(worldLevel() >= 3 ? 512 : 1024, { type: THREE.HalfFloatType }), at: 0, used: 0 };
   }
   e.at = e.used = now;
   e.theme = theme;
@@ -946,7 +952,7 @@ const interiors = new InteriorManager(
   },
 );
 // phones and modest machines keep fewer walk-in places on the GPU at once
-interiors.keep = quality.level >= 2 ? 3 : 8;
+interiors.keep = TOUCH ? 2 : worldLevel() >= 2 ? 3 : 8;
 warmTarget(() => renderPass.rt);
 interiors.compile = (s, c) => warm(renderer, s, c);
 // frames during an entry, a camera flight or right after a tier change say nothing about the device
@@ -2621,7 +2627,7 @@ idle(() => {
   warm(renderer, scene, rig.camera).then(() => console.info(`shaders warmed in ${Math.round(performance.now() - t0)} ms (${renderer.info.programs?.length ?? 0} programs)`));
   // and the variant without the lamps' lights (the whole-city map)
   lampLights.warmOff(() => warm(renderer, scene, rig.camera));
-  const ahead: Interior["key"][] = quality.level >= 2 ? [] : ["tower", "mempool", "factory"];
+  const ahead: Interior["key"][] = worldLevel() >= 2 ? [] : ["tower", "mempool", "factory"];
   const unseen = () => document.hidden || bootUp();
   const next = () => {
     if (!ahead.length) return;

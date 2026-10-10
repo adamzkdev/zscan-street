@@ -1,5 +1,7 @@
 import * as THREE from "three";
 
+const PHONE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+
 /**
  * Comic speech bubbles: a white rounded box with a black outline and a tail, bold text inside.
  * Sprites, so they always face the camera and never read backwards (the characters' cut-outs
@@ -178,8 +180,9 @@ class Bubbles {
   /** At most this many `sayAt` bubbles on screen. */
   max = 4;
   /** One-line bubble height as a share of the view's height: [min, max] (perspective), ortho. */
-  size: [number, number] = [0.06, 0.095];
-  orthoSize = 0.055;
+  /** A line's height as a share of the screen's (min, max). A phone's screen is short: bigger there. */
+  size: [number, number] = PHONE ? [0.085, 0.12] : [0.06, 0.095];
+  orthoSize = PHONE ? 0.08 : 0.055;
   /** Farther speakers (metres, perspective cameras) get no bubble. */
   range = 70;
   private gl: WebGL2RenderingContext | null = null;
