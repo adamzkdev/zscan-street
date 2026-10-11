@@ -13,7 +13,8 @@ import { compact, day, esc, fitText, FONT, type Look, type WalletKit } from "./s
  */
 
 export const LAB_FLOOR = 2;
-const f = LAB_FLOOR;
+/** The floor index being built (the ZApp tower has no tweets floor: its lab is floor 1). */
+let f = LAB_FLOOR;
 const X0 = -14,
   X1 = 14,
   Z0 = -26,
@@ -35,7 +36,8 @@ export function plainNotes(md: string) {
     .trim();
 }
 
-export function labFloor(wk: WalletKit) {
+export function labFloor(wk: WalletKit, floor = LAB_FLOOR) {
+  f = floor;
   const { k, look } = wk;
 
   // ---- the room ----------------------------------------------------------------------------------------

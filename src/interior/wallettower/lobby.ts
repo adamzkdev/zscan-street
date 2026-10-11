@@ -26,6 +26,8 @@ const X0 = -14,
 export function lobby(wk: WalletKit) {
   const { k, look } = wk;
   const zodl = look.key === "zodl";
+  /** No X account (ZApp): GitHub fills the card, the latest commit replaces the store. */
+  const gh = look.handle === "";
 
   // ---- floor, ceiling, walls -------------------------------------------------------------------------
   k.flat(f, X1 - X0, Z1 - Z0, new THREE.MeshStandardMaterial({ map: marbleTex(zodl ? 11 : 13, look.floor, look.vein, 512, 4, 4, 4, "rgba(0,0,0,0.45)"), roughness: 0.12, metalness: 0.12 }), 0, (Z0 + Z1) / 2);
@@ -82,7 +84,7 @@ export function lobby(wk: WalletKit) {
     k.plane(f, w, h, s.mat, x, y, zw + 0.03);
   }
   k.label(f, look.motto.toUpperCase(), -9.0, 6.0, zw + 0.04, { h: 0.2, color: look.sign });
-  k.label(f, `@${look.handle}`, 9.0, 6.0, zw + 0.04, { h: 0.26, color: look.sign });
+  k.label(f, gh ? "GITHUB · ZLABCASH" : `@${look.handle}`, 9.0, 6.0, zw + 0.04, { h: 0.26, color: look.sign });
   drawMarkPlate(k, f, look, -9.0, 7.4, zw);
   drawMarkPlate(k, f, look, 9.0, 7.4, zw);
   const redraw = async () => {
@@ -90,14 +92,14 @@ export function lobby(wk: WalletKit) {
     const [av, bn] = await Promise.all([xImage(feed?.profile?.avatar), xImage(feed?.profile?.banner)]);
     banner.draw((g, W, Hh) => drawBanner(g, W, Hh, look, bn));
     card.draw((g, W, Hh) => drawCard(g, W, Hh, feed, look, av));
-    store.draw((g, W, Hh) => drawStore(g, W, Hh, feed, look));
+    store.draw((g, W, Hh) => (gh ? drawCommit(g, W, Hh, feed, look) : drawStore(g, W, Hh, feed, look)));
     git.draw((g, W, Hh) => drawGit(g, W, Hh, feed, look));
   };
   wk.onFeed(() => void redraw());
   void redraw();
   void document.fonts?.ready.then(() => void redraw());
   k.hit(f, 10.8, 7.6, 0.3, 0, 0.9, zw + 0.15, `<b>${look.name}</b><span>the wallet's card</span>`, () => profileInfo(wk.feed(), look));
-  k.hit(f, 4.5, 3.6, 0.3, -9.0, 0.9, zw + 0.15, `<b>App Store</b><span>rating · version</span>`, () => storeInfo(wk.feed(), look));
+  k.hit(f, 4.5, 3.6, 0.3, -9.0, 0.9, zw + 0.15, gh ? `<b>Latest commit</b><span>live from GitHub</span>` : `<b>App Store</b><span>rating · version</span>`, () => (gh ? gitInfo(wk.feed(), look) : storeInfo(wk.feed(), look)));
   k.hit(f, 4.5, 3.6, 0.3, 9.0, 0.9, zw + 0.15, `<b>GitHub</b><span>open source</span>`, () => gitInfo(wk.feed(), look));
 
   // ---- the giant phone (tip ZStreet) on the west side, the guestbook on the east ----------------------
@@ -158,7 +160,7 @@ export function lobby(wk: WalletKit) {
     k.solid(f, x - 0.75, z - 0.75, x + 0.75, z + 0.75);
   }
   k.lifts(f, X0 + 0.2, -21, Math.PI / 2, look.lift);
-  k.label(f, "TWEETS · LAB · ROOF", X0 + 0.3, 5.2, -21, { h: 0.22, color: look.sign, ry: Math.PI / 2 });
+  k.label(f, gh ? "LAB · ROOF" : "TWEETS · LAB · ROOF", X0 + 0.3, 5.2, -21, { h: 0.22, color: look.sign, ry: Math.PI / 2 });
 
   // ---- light -----------------------------------------------------------------------------------------
   k.light(f, 0, 6.5, CZ, look.glow, 18, 16);
@@ -175,14 +177,14 @@ export function lobby(wk: WalletKit) {
       lines: [
         `Welcome to the ${look.title}.`,
         () => (feed()?.store ? `${look.name} ${feed()!.store!.version} is out. ${feed()!.store!.rating?.toFixed(2) ?? "?"} stars on the ${feed()!.store!.chrome ? "Chrome Web Store" : "App Store"}.` : `${look.name}: ${look.motto.toLowerCase()}.`),
-        "The tweets are on the first floor. The releases in the lab above.",
+        gh ? "No tweets here: the code is in the lab upstairs. All of it open source." : "The tweets are on the first floor. The releases in the lab above.",
         "Scan the phone by the window: a tip lights fireworks for the whole city.",
       ],
     });
     const a = k.person(f, zodl ? 2202 : 2302, [-5.2, -18.6], "Visitor", { face: [1, 0.2] });
     const b = k.person(f, zodl ? 2203 : 2303, [-3.6, -18.4], "Visitor", { face: [-1, 0.2] });
     k.dialog(f, [a, b], [
-      [0, () => (feed()?.profile ? `${num(feed()!.profile!.followers)} followers on X now.` : "Big crowd on X these days.")],
+      [0, () => (gh ? `${feed()?.commits?.length ?? 0} fresh commits on GitHub. They never stop.` : feed()?.profile ? `${num(feed()!.profile!.followers)} followers on X now.` : "Big crowd on X these days.")],
       [1, "Shielded by default. That's the whole point."],
       [0, () => (feed()?.releases[0] ? `They shipped ${feed()!.releases[0].tag} on ${day(feed()!.releases[0].date)}.` : "They ship every week.")],
       [1, "Signing the guestbook. Memo and all."],
@@ -255,22 +257,38 @@ function drawCard(g: CanvasRenderingContext2D, W: number, H: number, feed: Walle
   g.fillStyle = look.accent;
   g.fillRect(0, 0, 10, H);
   const p = feed?.profile;
-  avatar(g, av, 150, 150, 100, look);
+  const gh = look.handle === "";
+  if (gh) {
+    // no avatar on X: the mark on its dark disc
+    g.fillStyle = look.iconBg;
+    g.beginPath();
+    g.arc(150, 150, 100, 0, Math.PI * 2);
+    g.fill();
+    drawMark(g, look.key, 150, 150, 130, look.iconMark);
+  } else avatar(g, av, 150, 150, 100, look);
+  const repos = feed?.repos ?? [];
   g.textBaseline = "top";
   g.fillStyle = look.ink;
   g.font = FONT(800, 64);
   g.fillText(p?.name ?? look.name, 290, 62);
   g.fillStyle = look.muted;
   g.font = FONT(500, 36);
-  g.fillText(`@${p?.handle ?? look.handle}${p?.joined ? ` · joined ${day(p.joined)}` : ""}`, 290, 144);
+  g.fillText(gh ? `github.com/ZLabcash · by ZLab` : `@${p?.handle ?? look.handle}${p?.joined ? ` · joined ${day(p.joined)}` : ""}`, 290, 144);
   g.fillStyle = look.ink;
-  fitText(g, (p?.description ?? look.motto).replace(/\s+/g, " ").trim(), 60, 290, W - 520, 90, (px) => FONT(500, px), [38, 32, 28]);
+  const about = gh ? (repos[0]?.description ?? look.motto) : (p?.description ?? look.motto);
+  fitText(g, about.replace(/\s+/g, " ").trim(), 60, 290, W - 520, 90, (px) => FONT(500, px), [38, 32, 28]);
   // the counts
-  const counts: [string, string][] = [
-    [compact(p?.followers), "followers"],
-    [compact(p?.tweets), "posts"],
-    [String(feed?.tweets.length ?? "–"), "on the wall"],
-  ];
+  const counts: [string, string][] = gh
+    ? [
+        [String(repos.reduce((a, r) => a + r.stars, 0)), "stars"],
+        [String(repos.length || "–"), "repositories"],
+        [String(feed?.commits?.length ?? "–"), "latest commits"],
+      ]
+    : [
+        [compact(p?.followers), "followers"],
+        [compact(p?.tweets), "posts"],
+        [String(feed?.tweets.length ?? "–"), "on the wall"],
+      ];
   counts.forEach(([v, l], i) => {
     const x = 60 + i * 330;
     g.fillStyle = look.accent;
@@ -313,6 +331,25 @@ function drawStore(g: CanvasRenderingContext2D, W: number, H: number, feed: Wall
   g.fillStyle = look.muted;
   g.font = FONT(500, 26);
   g.fillText(s?.released ? day(s.released) : s?.chrome ? "browser extension" : "", 40, 418);
+}
+
+/** The latest commit, for a wallet with no store listing (ZApp). */
+function drawCommit(g: CanvasRenderingContext2D, W: number, H: number, feed: WalletFeed | null, look: Look) {
+  g.fillStyle = look.card;
+  g.fillRect(0, 0, W, H);
+  const c = feed?.commits?.[0];
+  g.textBaseline = "top";
+  g.fillStyle = look.muted;
+  g.font = FONT(700, 30);
+  g.fillText("LATEST COMMIT", 40, 36);
+  g.fillStyle = look.ink;
+  g.font = FONT(800, 84);
+  g.fillText(c ? c.sha.slice(0, 7) : "–", 40, 86);
+  g.fillStyle = look.soft;
+  if (c) fitText(g, c.message.split("\n")[0], 40, 200, W - 80, 150, (px) => FONT(600, px), [34, 30, 26]);
+  g.fillStyle = look.muted;
+  g.font = FONT(500, 26);
+  g.fillText(c ? `${c.repo.split("/")[1]} · @${c.login ?? c.author} · ${day(c.date)}` : "loading…", 40, 418);
 }
 
 function drawGit(g: CanvasRenderingContext2D, W: number, H: number, feed: WalletFeed | null, look: Look) {
@@ -363,7 +400,9 @@ export function profileInfo(feed: WalletFeed | null, look: Look): PickInfo {
       [feed?.store?.chrome ? "Chrome" : "App Store", feed?.store?.rating ? `${feed.store.rating.toFixed(2)} ★` : "–"],
       ["GitHub ★", String((feed?.repos ?? []).reduce((a, r) => a + r.stars, 0) || "–")],
     ],
-    body: `<p>${esc(p?.description ?? look.motto)}</p><p><a href="https://x.com/${look.handle}" target="_blank" rel="noopener">@${look.handle} on X</a></p>`,
+    body: look.handle
+      ? `<p>${esc(p?.description ?? look.motto)}</p><p><a href="https://x.com/${look.handle}" target="_blank" rel="noopener">@${look.handle} on X</a></p>`
+      : `<p>${esc(feed?.repos[0]?.description ?? look.motto)}</p><p>Open source, by ZLab. An experimental product.</p>`,
     link: { href: look.site, label: look.site.replace(/^https?:\/\/(www\.)?/, "") },
   };
 }

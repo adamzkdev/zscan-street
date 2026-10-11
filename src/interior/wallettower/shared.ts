@@ -126,6 +126,32 @@ export const LOOKS: Record<WalletTower, Look> = {
     lamps: 0.9,
     screens: 0.86,
   },
+  // ZApp (ZLab): black, Zcash gold, the shield's green scan line. No X account: GitHub only.
+  zapp: {
+    key: "zapp",
+    name: "ZApp",
+    title: "ZAPP TOWER",
+    handle: "",
+    site: "https://github.com/ZLabcash/zapp",
+    accent: "#c98f0a",
+    soft: "#3a3326",
+    glow: "#f4b728",
+    sign: "#f4f1ea",
+    iconBg: "#0d0d0d",
+    iconMark: "#ffffff",
+    dark: "#0b0b0a",
+    wall: "#151412",
+    floor: "#1a1916",
+    vein: "#4a3a12",
+    trim: "#f4b728",
+    card: "#ffffff",
+    ink: "#151314",
+    muted: "#6e6a60",
+    lift: { wall: "#151412", frame: "#f4b728", door: "#262420", ink: "#f4f1ea", lit: "#1baf7a", accent: "#f4b728", deco: "bar" },
+    motto: "Your wallets, your rules",
+    lamps: 0.85,
+    screens: 0.84,
+  },
 };
 
 export interface WalletKit {

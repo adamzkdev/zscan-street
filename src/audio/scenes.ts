@@ -735,6 +735,7 @@ export function presetFor(key: string, floor: number, name: string): string {
     case "zodl":
     case "vizor":
     case "noir":
+    case "zapp":
       if (has("trading")) return "trading";
       if (has("desk", "capital", "coworking")) return "office";
       if (has("rooftop", "pool")) return "sky-pool";

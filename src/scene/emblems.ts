@@ -37,8 +37,71 @@ function noirCrescent(): [number, number][] {
   return pts;
 }
 
-export function emblem(key: "zodl" | "vizor" | "noir", o: { glow?: number } = {}) {
+/**
+ * ZApp's mark (ZLab's shield, 32×32 viewBox): a gold shield outline, a white Z, a green dashed
+ * scan line across it. Paths from zapp's Theme.swift / zlab's Mark.
+ */
+const ZAPP = { gold: "#f4b728", green: "#1baf7a" };
+function zappShield(n = 48): [number, number][] {
+  // M16 2.5 27.5 7v8.6c0 7-4.8 11.9-11.5 13.9C9.3 27.5 4.5 22.6 4.5 15.6V7Z, sampled
+  const out: [number, number][] = [[16, 2.5], [27.5, 7], [27.5, 15.6]];
+  const bez = (p0: number[], p1: number[], p2: number[], p3: number[]) => {
+    for (let i = 1; i <= n / 2; i++) {
+      const t = i / (n / 2),
+        u = 1 - t;
+      out.push([u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0], u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]]);
+    }
+  };
+  bez([27.5, 15.6], [27.5, 22.6], [22.7, 27.5], [16, 29.5]);
+  bez([16, 29.5], [9.3, 27.5], [4.5, 22.6], [4.5, 15.6]);
+  out.push([4.5, 7]);
+  return out;
+}
+const ZAPP_Z: [number, number][] = [[11, 11], [21, 11], [11, 21], [21, 21]];
+
+function zappEmblem(o: { glow?: number }) {
+  const g = new THREE.Group();
+  const R = 0.5,
+    T = 0.08;
+  const v = ([x, y]: [number, number]) => new THREE.Vector2((x - 16) / 32 * 0.9, -(y - 16) / 32 * 0.9);
+  const shield = zappShield().map(v);
+  // the outline: the shield minus a slightly smaller one
+  const outer = new THREE.Shape(shield);
+  const inner = zappShield().map(([x, y]) => v([16 + (x - 16) * 0.86, 16.3 + (y - 16) * 0.86]));
+  outer.holes = [new THREE.Path(inner.reverse())];
+  const ext = { depth: T + 0.07, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.006, bevelSegments: 2, curveSegments: 24 };
+  const gold = new THREE.MeshStandardMaterial({ color: ZAPP.gold, metalness: 0.85, roughness: 0.25, emissive: new THREE.Color(ZAPP.gold), emissiveIntensity: 0.25 * (o.glow ?? 1) });
+  const shieldGeo = new THREE.ExtrudeGeometry(outer, ext);
+  shieldGeo.translate(0, 0, -(T + 0.07) / 2);
+  // the Z as three bars (a thick polyline)
+  const bar = (a: [number, number], b: [number, number], w = 1.1) => {
+    const dx = b[0] - a[0],
+      dy = b[1] - a[1],
+      l = Math.hypot(dx, dy),
+      nx = (-dy / l) * w,
+      ny = (dx / l) * w;
+    return new THREE.Shape([v([a[0] + nx, a[1] + ny]), v([b[0] + nx, b[1] + ny]), v([b[0] - nx, b[1] - ny]), v([a[0] - nx, a[1] - ny])]);
+  };
+  const zGeo = new THREE.ExtrudeGeometry([bar(ZAPP_Z[0], ZAPP_Z[1]), bar(ZAPP_Z[1], ZAPP_Z[2]), bar(ZAPP_Z[2], ZAPP_Z[3])], ext);
+  zGeo.translate(0, 0, -(T + 0.07) / 2);
+  const white = new THREE.MeshStandardMaterial({ color: "#f4f4f2", metalness: 0.3, roughness: 0.3, emissive: new THREE.Color("#ffffff"), emissiveIntensity: 0.12 * (o.glow ?? 1) });
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(R, R, T, 64).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: "#0d0d0d", metalness: 0.4, roughness: 0.35 }));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(R, 0.03, 12, 64), new THREE.MeshStandardMaterial({ color: ZAPP.gold, metalness: 0.9, roughness: 0.25, emissive: new THREE.Color(ZAPP.gold), emissiveIntensity: 0.4 * (o.glow ?? 1) }));
+  g.add(new THREE.Mesh(shieldGeo, gold), new THREE.Mesh(zGeo, white), face, ring);
+  // the green dashed scan line, both faces
+  const dash = new THREE.MeshBasicMaterial({ color: new THREE.Color(ZAPP.green).multiplyScalar(2), toneMapped: false });
+  for (let x = 7.5; x < 24.5; x += 4) {
+    const d = new THREE.Mesh(new THREE.BoxGeometry((2 / 32) * 0.9, (1.2 / 32) * 0.9, T + 0.1), dash);
+    d.position.set(((x + 1 - 16) / 32) * 0.9, 0, 0);
+    g.add(d);
+  }
+  g.scale.setScalar(1.2);
+  return g;
+}
+
+export function emblem(key: "zodl" | "vizor" | "noir" | "zapp", o: { glow?: number } = {}) {
   if (key === "noir") return noirEmblem(o);
+  if (key === "zapp") return zappEmblem(o);
   const g = new THREE.Group();
   const R = 0.5;
   const T = 0.08;
@@ -101,10 +164,28 @@ function noirEmblem(o: { glow?: number }) {
 }
 
 /** The marks as flat paths on a canvas (posters, screens): the mark centred at (x, y), `size` tall. */
-export function drawMark(g: CanvasRenderingContext2D, key: "zodl" | "vizor" | "noir", x: number, y: number, size: number, color: string) {
+export function drawMark(g: CanvasRenderingContext2D, key: "zodl" | "vizor" | "noir" | "zapp", x: number, y: number, size: number, color: string) {
   g.save();
   g.fillStyle = color;
-  if (key === "noir") {
+  if (key === "zapp") {
+    // the shield (gold), the Z (in `color`), the green dashes
+    const k = size / 27;
+    const at = ([px, py]: [number, number]) => [x + (px - 16) * k, y + (py - 16) * k] as const;
+    g.lineJoin = g.lineCap = "round";
+    g.beginPath();
+    zappShield().forEach((p, i) => (i ? g.lineTo : g.moveTo).call(g, ...at(p)));
+    g.closePath();
+    g.strokeStyle = ZAPP.gold;
+    g.lineWidth = 2 * k;
+    g.stroke();
+    g.beginPath();
+    ZAPP_Z.forEach((p, i) => (i ? g.lineTo : g.moveTo).call(g, ...at(p)));
+    g.strokeStyle = color;
+    g.lineWidth = 2.2 * k;
+    g.stroke();
+    g.fillStyle = ZAPP.green;
+    for (let px = 7.5; px < 24.5; px += 4) g.fillRect(...at([px, 15.4]), 2 * k, 1.2 * k);
+  } else if (key === "noir") {
     const k = size / (NOIR.r * 2);
     const at = ([px, py]: [number, number]) => [x + (px - 0.5) * k, y + (py - 0.5) * k] as const;
     g.beginPath();

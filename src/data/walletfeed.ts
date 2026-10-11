@@ -1,13 +1,13 @@
 import { get } from "./zscan";
 
 /**
- * What ZODL, Vizor and Noir say about themselves, for their towers: the X profile, the latest tweets
+ * What ZODL, Vizor, Noir and ZApp say about themselves, for their towers (ZApp: GitHub only, no X): the X profile, the latest tweets
  * (their own, their retweets, their users'), GitHub releases, repositories, the latest commits
  * with their diffs and the open pull requests, the App Store
  * rating. Read every quarter hour by the API (`/v1/street/wallets`), here at most every 10 min.
  */
 
-export type WalletTower = "zodl" | "vizor" | "noir";
+export type WalletTower = "zodl" | "vizor" | "noir" | "zapp";
 
 export interface Tweet {
   id: string;

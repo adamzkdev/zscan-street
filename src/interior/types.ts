@@ -41,7 +41,7 @@ export interface PickInfo {
   /** Opens one of the shop panels (the bank's terminals). */
   panel?: "bank" | "cards" | "wallets" | "guestbook";
   /** The wallet on show that was clicked (the hall's phones). */
-  wallet?: "zodl" | "vizor" | "noir";
+  wallet?: "zodl" | "vizor" | "noir" | "zapp";
   /** Starts a mini-game (the ZK TOWER's apartments). */
   game?: import("../ui/arcade").Game;
   /** Takes the elevator to this floor (clicking its doors). */
@@ -66,7 +66,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "university";
+  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zapp" | "university";
   /** Shown top-left while inside ("MEMPOOL"). */
   readonly title: string;
   readonly scene: THREE.Scene;

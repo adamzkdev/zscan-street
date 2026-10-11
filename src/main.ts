@@ -657,6 +657,7 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
   zodl: "tweets · releases · the crown",
   vizor: "tweets · releases · the crown",
   noir: "tweets · releases · the crown",
+  zapp: "GitHub · the lab · the crown",
   university: "courses · Zakura · Tachyon · the library",
   cemetery: "the crypt · zombies inside",
 };
@@ -681,6 +682,7 @@ const PLACE_ABOUT: Record<string, string> = {
   "tower-halo": "ZK TOWER HALO is the twisted glass tower on Wall Street: a trading floor with live Zcash charts, a VIP lounge and a helipad on the roof.",
   zodl: "The ZODL TOWER is the white tower of Zodl, the Zcash wallet (formerly Zashi) built by ZODL, across the avenue from the ZEC Reserve: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its black bird on white turning over the roof.",
   noir: "The NOIR TOWER is the obsidian tower of Noir, the shielded Zcash wallet in your browser (a Chrome extension web pages can ask to pay or sign), next to the ZODL TOWER on the avenue: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver eclipse and green light turning over the roof.",
+  zapp: "The ZAPP TOWER is the black and gold tower of ZApp, ZLab's open-source Zcash wallet app (keys on the phone, or on a cold wallet like a Flipper Zero), west of the heart across from the NOIR TOWER: the wallet's card and its latest commit in the lobby, the lab of its code on 8 (ZApp has no X account, so no wall of tweets), its shield turning over the roof.",
   university: "ZK UNIVERSITY is the campus next to the city works, built like Stanford's Main Quad (sandstone, round arches, red tile roofs, a bell tower): free video courses on cryptography, zkSNARKs and Zcash, every claim with its source. G: the Main Quad hall and the course catalogue; 1: the Lecture Hall (theory); 2: Zakura Hall, about the Zakura node, with its real releases and announcements; 3: Tachyon Hall, about scaling Zcash with Tachyon and Ragu, with the team's real blog posts and commits; 4: the Library, where every lesson can be read.",
   vizor: "The VIZOR TOWER is the crimson tower of Vizor, the Zcash wallet from the Keplr team, across the avenue from ZK TOWER HALO: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver knight's helmet turning over the roof.",
   cemetery: "The ZK Cemetery is the Père-Lachaise of ZStreet, on the hill at the north-east edge: crooked graves with epitaphs about lost seed phrases and transparent addresses, a chapel, and the CRYPT under the mausoleum, where Zcash buries what it retired (the Sprout pool, BCTV14, the trusted setup, the Founders' Reward). Only zombie zkSNARKs live here; more of them climb out at night.",
@@ -815,6 +817,7 @@ const PLACES: Record<Interior["key"], string> = {
   zodl: "ZODL TOWER",
   vizor: "VIZOR TOWER",
   noir: "NOIR TOWER",
+  zapp: "ZAPP TOWER",
   university: "ZK UNIVERSITY",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
@@ -936,6 +939,7 @@ const interiors = new InteriorManager(
     zodl: () => buildWalletTower(ictx, "zodl"),
     vizor: () => buildWalletTower(ictx, "vizor"),
     noir: () => buildWalletTower(ictx, "noir"),
+    zapp: () => buildWalletTower(ictx, "zapp"),
     university: () => buildUniversity(ictx),
     cemetery: () => buildCemetery(ictx),
   },
@@ -1343,7 +1347,7 @@ canvas.addEventListener("pointerup", (e) => {
     const info = interiors.pickAt(e.clientX, e.clientY);
     if (info?.panel === "wallets" || info?.panel === "guestbook") {
       interiors.walk.enabled = false;
-      return info.panel === "wallets" ? payDesk.gallery(info.wallet ?? null) : payDesk.compose("guestbook");
+      return info.panel === "wallets" ? payDesk.gallery(info.wallet === "zapp" ? null : (info.wallet ?? null)) : payDesk.compose("guestbook");
     }
     if (info?.panel) return venues.show(info.panel);
     // the tower: its elevator doors, its arcade games
@@ -1898,6 +1902,7 @@ const PLACE_ICON: Record<Interior["key"], string> = {
   zodl: "鳥",
   vizor: "視",
   noir: "黒",
+  zapp: "盾",
   university: "学",
 };
 const placeBlips: Blip[] = doors.map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));

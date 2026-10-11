@@ -8,13 +8,15 @@ import { spinningEmblem } from "./shared";
  */
 
 export const ROOF_FLOOR = 3;
-const f = ROOF_FLOOR;
+/** The floor index being built (the ZApp tower has no tweets floor: its lab is floor 1). */
+let f = ROOF_FLOOR;
 const X0 = -12,
   X1 = 12,
   Z0 = -22,
   Z1 = 0;
 
-export function roof(wk: WalletKit) {
+export function roof(wk: WalletKit, floor = ROOF_FLOOR) {
+  f = floor;
   const { k, look } = wk;
   // the deck: teak boards, a border of the accent
   for (let z = Z0; z < Z1; z += 0.5) k.box(f, X1 - X0, 0.06, 0.46, 0, -0.06, z + 0.25, (Math.round(z * 2) & 1) === 0 ? "#6b4a30" : "#73503a", "matte");

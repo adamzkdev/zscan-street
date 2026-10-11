@@ -10,7 +10,8 @@ import { tweetsFloor } from "./tweets";
 
 /**
  * The wallet towers on the avenue, Noir's (obsidian and emerald, next to ZODL's), ZODL's (white and black, like its app icon, across from the ZEC Reserve) and
- * Vizor's (crimson and silver, its knight's colours, across from HALO): the lobby and the wallet's card, the wall of
+ * Vizor's (crimson and silver, its knight's colours, across from HALO), ZApp's (black and gold, west of the heart, no
+ * tweets floor: GitHub only): the lobby and the wallet's card, the wall of
  * its tweets on 8, the lab of its releases on 16, its emblem over the roof. Everything on the walls
  * is read live from X, GitHub and the App Store (through the API, every quarter hour).
  */
@@ -20,12 +21,15 @@ export const LEVELS: Level[] = [
   { label: "16", name: "Lab · releases, developers", y: 60, spawn: [-11.4, -6], yaw: -Math.PI / 2, view: 60 },
   { label: "R", name: "Roof · the crown, the view", y: 104, spawn: [0, -19.4], yaw: Math.PI, view: 106 },
 ];
+/** ZApp has no X account: no tweets floor, the lab right above the lobby. */
+export const LEVELS_GITHUB: Level[] = [LEVELS[0], { ...LEVELS[2], label: "8", y: 30, view: 30 }, LEVELS[3]];
 /** Metres from the street door back to the tower's axis (the panoramas' point). */
 const BACK = 14;
 
 export function buildWalletTower(ctx: InteriorContext, key: WalletTower): Interior {
   const look = LOOKS[key];
-  const k = new SkyKit(ctx, LEVELS, look.title, { bg: look.dark });
+  const tweets = look.handle !== "";
+  const k = new SkyKit(ctx, tweets ? LEVELS : LEVELS_GITHUB, look.title, { bg: look.dark });
   k.scene.environmentIntensity = 0.3;
   const listeners: (() => void)[] = [];
   const wk: WalletKit = {
@@ -39,9 +43,14 @@ export function buildWalletTower(ctx: InteriorContext, key: WalletTower): Interi
   // fresh posters every 10 minutes while the tower is open
   setInterval(() => void walletFeeds(), 600_000);
   lobby(wk);
-  tweetsFloor(wk);
-  labFloor(wk);
-  roof(wk);
+  if (tweets) {
+    tweetsFloor(wk);
+    labFloor(wk);
+    roof(wk);
+  } else {
+    labFloor(wk, 1);
+    roof(wk, 2);
+  }
   const interior = k.interior(key, BACK);
   // the look's dimming: every lamp, every self-lit screen and sign
   k.scene.traverse((o) => {
