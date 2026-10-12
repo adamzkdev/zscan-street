@@ -13,8 +13,6 @@ import { compact, day, esc, fitText, FONT, type Look, type WalletKit } from "./s
  */
 
 export const LAB_FLOOR = 2;
-/** The floor index being built (the ZApp tower has no tweets floor: its lab is floor 1). */
-let f = LAB_FLOOR;
 const X0 = -14,
   X1 = 14,
   Z0 = -26,
@@ -36,8 +34,21 @@ export function plainNotes(md: string) {
     .trim();
 }
 
-export function labFloor(wk: WalletKit, floor = LAB_FLOOR) {
-  f = floor;
+/** One repository's part of the feed (ZLab's tower has a lab per project). */
+function only(feed: WalletFeed | null, repo: string): WalletFeed | null {
+  if (!feed) return null;
+  const mine = <T extends { repo: string }>(l: T[] | undefined) => (l ?? []).filter((x) => x.repo === repo);
+  return { ...feed, releases: mine(feed.releases), commits: mine(feed.commits), pulls: mine(feed.pulls), repos: mine(feed.repos) };
+}
+
+/**
+ * `floor`: the floor index being built (the ZLab tower has no tweets floor: its labs start at 1).
+ * `repo`: this lab shows one repository only, its name over the timeline and its card in place of the
+ * store's (ZLab: a lab per project).
+ */
+export function labFloor(wk0: WalletKit, floor = LAB_FLOOR, repo?: { repo: string; name: string; seed: number; about: string }) {
+  const f = floor;
+  const wk: WalletKit = repo ? { ...wk0, feed: () => only(wk0.feed(), repo.repo) } : wk0;
   const { k, look } = wk;
 
   // ---- the room ----------------------------------------------------------------------------------------
@@ -48,7 +59,7 @@ export function labFloor(wk: WalletKit, floor = LAB_FLOOR) {
   k.wall(f, X1, Z0, X1, Z1, H, look.wall, "matte", 0.4);
   k.curtain(f, X0, Z1, X1, Z1, H, look.dark, 2.0, { transom: 3.0 });
   for (const z of [-5, -11, -17, -23]) k.box(f, X1 - X0 - 1, 0.04, 0.12, 0, H - 0.05, z, look.glow, "glow");
-  k.label(f, "RELEASES · 研究所 · THE LAB", 0, 5.35, Z0 + 0.25, { h: 0.36, color: look.sign });
+  k.label(f, repo ? `${repo.name.toUpperCase()} · 研究所 · THE LAB` : "RELEASES · 研究所 · THE LAB", 0, 5.35, Z0 + 0.25, { h: 0.36, color: look.sign });
 
   // ---- the timeline: six releases, the newest on the right ---------------------------------------------
   const N = 6;
@@ -84,7 +95,9 @@ export function labFloor(wk: WalletKit, floor = LAB_FLOOR) {
   const store = new Surface(1024, 512, 1.05);
   k.box(f, 0.08, 3.2, 6.8, X1 - 0.22, 1.2, -19, look.trim, "metal");
   k.plane(f, 6.6, 3.0, store.mat, X1 - 0.28, 2.7, -19, 0, -Math.PI / 2);
-  k.hit(f, 0.3, 3.0, 6.6, X1 - 0.4, 1.2, -19, "<b>What's new</b><span>App Store</span>", () => {
+  k.hit(f, 0.3, 3.0, 6.6, X1 - 0.4, 1.2, -19, repo ? `<b>${esc(repo.name)}</b><span>the repository</span>` : "<b>What's new</b><span>App Store</span>", () => {
+    const r = wk.feed()?.repos[0];
+    if (repo) return r ? { eyebrow: `${look.title} · GitHub`, title: repo.name, stats: [["Stars", String(r.stars)], ["Forks", String(r.forks)], ["Language", r.language ?? "–"], ["Last push", ago(r.pushed_at)]], body: `<p>${esc(r.description ?? "")}</p>`, link: { href: r.url, label: "Open on GitHub" } } : null;
     const s = wk.feed()?.store;
     return s ? { eyebrow: `${look.title} · App Store`, title: `${s.name} ${s.version}`, body: `<p style="white-space:pre-line">${esc(s.notes ?? "")}</p>`, link: { href: s.url, label: "Open in the App Store" } } : null;
   });
@@ -100,7 +113,7 @@ export function labFloor(wk: WalletKit, floor = LAB_FLOOR) {
     await Promise.all([...(feed?.commits ?? []).slice(0, 7), ...(feed?.pulls ?? []).slice(0, 6)].map(async (c) => c.avatar && avatars.set(c.avatar, await xImage(c.avatar))));
     commitsBoard.draw((g, W, Hh) => drawCommits(g, W, Hh, feed, look, avatars));
     pullsBoard.draw((g, W, Hh) => drawPulls(g, W, Hh, feed, look, avatars));
-    store.draw((g, W, Hh) => drawWhatsNew(g, W, Hh, feed, look));
+    store.draw((g, W, Hh) => (repo ? drawRepo(g, W, Hh, feed, repo, look) : drawWhatsNew(g, W, Hh, feed, look)));
     setCode();
   };
   wk.onFeed(() => void fill());
@@ -110,12 +123,15 @@ export function labFloor(wk: WalletKit, floor = LAB_FLOOR) {
   const SCREENS = 4;
   const code = Array.from({ length: SCREENS }, () => ({ s: new Surface(512, 320, 1.1), lines: [] as string[], head: "", scroll: Math.random() * 20, commit: null as Commit | null }));
   const setCode = () => {
-    const diffs = (wk.feed()?.commits ?? []).flatMap((c) => c.files.map((file) => ({ c, file })));
+    const commits = wk.feed()?.commits ?? [];
+    const diffs = commits.flatMap((c) => c.files.map((file) => ({ c, file })));
+    // no diffs (GitHub's API over its quota: the commits come from the Atom feed): the log scrolls instead
+    const log = commits.map((c) => `${c.sha}  ${c.message}`).concat(["", ...commits.map((c) => `   @${c.login ?? c.author} · ${day(c.date)}`)]);
     code.forEach((m, i) => {
       const d = diffs[i % Math.max(1, diffs.length)];
-      m.commit = d?.c ?? null;
-      m.lines = d ? d.file.patch.split("\n") : ["// loading the latest commits from GitHub…"];
-      m.head = d ? `${d.c.repo.split("/")[1]} · ${d.c.sha} · @${d.c.login ?? d.c.author} · ${d.file.name.split("/").pop()}` : look.name;
+      m.commit = d?.c ?? commits[i % Math.max(1, commits.length)] ?? null;
+      m.lines = d ? d.file.patch.split("\n") : commits.length ? log.slice(i * 2).concat(log.slice(0, i * 2)) : ["// loading the latest commits from GitHub…"];
+      m.head = d ? `${d.c.repo.split("/")[1]} · ${d.c.sha} · @${d.c.login ?? d.c.author} · ${d.file.name.split("/").pop()}` : commits.length ? `${commits[0].repo.split("/")[1]} · git log` : look.name;
     });
   };
   setCode();
@@ -152,12 +168,13 @@ export function labFloor(wk: WalletKit, floor = LAB_FLOOR) {
   k.light(f, 0, 4.6, -22, "#fff4e0", 12, 16);
   k.light(f, 0, 3, -24.5, look.glow, 6, 10);
   k.light(f, 0, 4, -3, "#ffffff", 10, 12);
+  const seed = repo?.seed ?? (look.key === "zodl" ? 4401 : 4501);
   const rel = () => wk.feed()?.releases[0];
   const last = () => wk.feed()?.commits?.[0];
   k.onCast(f, () => {
-    void k.person(f, look.key === "zodl" ? 4401 : 4501, [-6.6, -7.7], "Developer", { face: [0, -1], lines: [() => (rel() ? `${rel()!.tag} shipped ${day(rel()!.date)}. Next one's already on my screen.` : "Shipping again this week."), "Shielded by default. No exceptions.", "Every commit is public. Every balance is not."] });
-    void k.person(f, look.key === "zodl" ? 4402 : 4502, [2.2, -14.2], "Developer", { face: [0, -1], lines: [() => (last() ? `Just landed on ${last()!.repo.split("/")[1]}: "${last()!.message.slice(0, 70)}"` : "Syncing a wallet in seconds is harder than it looks."), () => (last() ? `${last()!.sha}, by @${last()!.login ?? last()!.author}. Every commit is on GitHub.` : "Memos, swaps, Keystone… one release at a time."), () => `${wk.feed()?.pulls?.length ?? 0} pull requests open. Reviews after lunch.`] });
-    void k.person(f, look.key === "zodl" ? 4403 : 4503, [8, -20], "Designer", { wander: [[8, -20], [-8, -21], [0, -4]], lines: [`The ${look.name} logo up top turns all day. Took me a week.`, "Privacy should feel beautiful."] });
+    void k.person(f, seed, [-6.6, -7.7], "Developer", { face: [0, -1], lines: [() => (rel() ? `${rel()!.tag} shipped ${day(rel()!.date)}. Next one's already on my screen.` : repo ? `No release of ${repo.name} yet. Experimental, not audited: we say it everywhere.` : "Shipping again this week."), "Shielded by default. No exceptions.", "Every commit is public. Every balance is not."] });
+    void k.person(f, seed + 1, [2.2, -14.2], "Developer", { face: [0, -1], lines: [() => (last() ? `Just landed on ${last()!.repo.split("/")[1]}: "${last()!.message.slice(0, 70)}"` : "Syncing a wallet in seconds is harder than it looks."), () => (last() ? `${last()!.sha}, by @${last()!.login ?? last()!.author}. Every commit is on GitHub.` : "Memos, swaps, Keystone… one release at a time."), () => `${wk.feed()?.pulls?.length ?? 0} pull requests open. Reviews after lunch.`] });
+    void k.person(f, seed + 2, [8, -20], "Designer", { wander: [[8, -20], [-8, -21], [0, -4]], lines: [`The ${look.name} logo up top turns all day. Took me a week.`, "Privacy should feel beautiful."] });
   });
 }
 
@@ -307,6 +324,30 @@ function drawDiff(g: CanvasRenderingContext2D, W: number, H: number, lines: stri
     g.fillText(l.replace(/\t/g, "  ").slice(0, 60), 10, y);
   }
   g.restore();
+}
+
+/** A repository's card (ZLab's labs, no store listing): what it is, its stars, its language, its last push. */
+function drawRepo(g: CanvasRenderingContext2D, W: number, H: number, feed: WalletFeed | null, repo: { repo: string; name: string; about: string }, look: Look) {
+  g.fillStyle = look.card;
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = look.accent;
+  g.fillRect(0, 0, W, 8);
+  const r = feed?.repos[0];
+  const last = feed?.commits?.[0];
+  g.textBaseline = "top";
+  g.fillStyle = look.muted;
+  g.font = FONT(700, 28);
+  g.fillText(`GITHUB · ${repo.repo}`, 44, 36);
+  g.fillStyle = look.ink;
+  g.font = FONT(800, 58);
+  g.fillText(repo.name, 44, 84);
+  g.fillStyle = look.muted;
+  g.font = FONT(500, 26);
+  const line = r ? `★ ${r.stars} · ${r.forks} forks · ${r.language ?? "–"} · pushed ${ago(r.pushed_at)}` : last ? `${feed?.commits?.length} recent commits · last ${ago(last.date)}` : "";
+  g.fillText(line, 44, 160);
+  g.fillStyle = look.ink;
+  const about = r?.description || `${repo.name}: ${repo.about}. Open source, experimental, not audited.`;
+  fitText(g, about, 44, 214, W - 88, H - 244, (px) => FONT(500, px), [32, 28, 24, 20]);
 }
 
 function drawWhatsNew(g: CanvasRenderingContext2D, W: number, H: number, feed: WalletFeed | null, look: Look) {

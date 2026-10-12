@@ -1,13 +1,13 @@
 import { get } from "./zscan";
 
 /**
- * What ZODL, Vizor, Noir and ZApp say about themselves, for their towers (ZApp: GitHub only, no X): the X profile, the latest tweets
+ * What ZODL, Vizor, Noir and ZLab say about themselves, for their towers (ZLab: GitHub only, no X): the X profile, the latest tweets
  * (their own, their retweets, their users'), GitHub releases, repositories, the latest commits
  * with their diffs and the open pull requests, the App Store
  * rating. Read every quarter hour by the API (`/v1/street/wallets`), here at most every 10 min.
  */
 
-export type WalletTower = "zodl" | "vizor" | "noir" | "zapp";
+export type WalletTower = "zodl" | "vizor" | "noir" | "zlab";
 
 export interface Tweet {
   id: string;
@@ -117,9 +117,9 @@ let cache: { at: number; feeds: Partial<Record<WalletTower, WalletFeed>> } | nul
 let pending: Promise<Partial<Record<WalletTower, WalletFeed>>> | null = null;
 const listeners = new Set<() => void>();
 
-/** Both feeds (missing ones while the API has none yet). */
-export function walletFeeds(): Promise<Partial<Record<WalletTower, WalletFeed>>> {
-  if (cache && performance.now() - cache.at < 600_000) return Promise.resolve(cache.feeds);
+/** Every feed (missing ones while the API has none yet). `fresh`: read again now (the pulse saw news). */
+export function walletFeeds(fresh = false): Promise<Partial<Record<WalletTower, WalletFeed>>> {
+  if (!fresh && cache && performance.now() - cache.at < 600_000) return Promise.resolve(cache.feeds);
   pending ??= get<Partial<Record<WalletTower, WalletFeed>>>("/v1/street/wallets").then((f) => {
     pending = null;
     if (f) {
@@ -159,4 +159,34 @@ export function xImage(url: string | null | undefined): Promise<HTMLImageElement
     images.set(url, p);
   }
   return p;
+}
+
+/** What just happened in a wallet's world (the API reads it every minute): a commit, a release, a pull request, a tweet. */
+export interface Pulse {
+  id: number;
+  wallet: WalletTower;
+  kind: "commit" | "release" | "pull" | "merge" | "tweet" | "retweet";
+  repo: string | null;
+  actor: string | null;
+  avatar: string | null;
+  title: string;
+  url: string | null;
+  at: string;
+}
+
+let pulseLast: number | null = null;
+/**
+ * What came since the last call (the first call only learns where the pulse stands: nothing that
+ * happened before you walked in is announced).
+ */
+export async function walletPulse(): Promise<Pulse[]> {
+  if (pulseLast === null) {
+    const r = await get<{ last: number; items: Pulse[] }>("/v1/street/wallets/pulse");
+    if (r) pulseLast = r.last;
+    return [];
+  }
+  const r = await get<{ last: number; items: Pulse[] }>(`/v1/street/wallets/pulse?since=${pulseLast}`);
+  if (!r) return [];
+  for (const i of r.items) pulseLast = Math.max(pulseLast, i.id);
+  return r.items;
 }

@@ -6,7 +6,7 @@
  * one-shots of the place (a cell door slamming, the goal roar, Big Ben on the hour, the lift's
  * ding) and handlers for its events (a goal, a blow in the arena, a new block).
  */
-import { bell, brass, clank, type Room, type Scene, tone, whistle } from "./lib";
+import { bell, brass, burst, clank, type Room, type Scene, tone, whistle } from "./lib";
 import { loop, preload, shot } from "./samples";
 import { pyramidMusic } from "./egypt";
 
@@ -151,6 +151,16 @@ const quietHall: Preset = {
   rain: 0.05,
   build(s) {
     loop(s, "museum", 0.7);
+    // HashSmash Hall (university, floor 5): a round of stone hits the floor and shatters, or chips
+    s.on.smash = (t) => {
+      burst(s, t, "brown", "lowpass", 140, 0.8, 0.55, 0.5, 0.35);
+      burst(s, t, "white", "bandpass", 1900, 0.9, 0.28, 0.09, 0.4);
+      for (let i = 0; i < 9; i++) burst(s, t + 0.06 + i * 0.045 + Math.random() * 0.06, "white", "bandpass", 2400 + Math.random() * 2600, 2, 0.1 * (1 - i / 10), 0.03, 0.5, Math.random() - 0.5);
+    };
+    s.on.chip = (t) => {
+      burst(s, t, "white", "bandpass", 3200, 1.6, 0.1, 0.03, 0.4);
+      burst(s, t + 0.11, "white", "bandpass", 4100, 2, 0.05, 0.025, 0.4);
+    };
   },
 };
 
@@ -735,7 +745,7 @@ export function presetFor(key: string, floor: number, name: string): string {
     case "zodl":
     case "vizor":
     case "noir":
-    case "zapp":
+    case "zlab":
       if (has("trading")) return "trading";
       if (has("desk", "capital", "coworking")) return "office";
       if (has("rooftop", "pool")) return "sky-pool";

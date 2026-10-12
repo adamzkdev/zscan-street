@@ -6,6 +6,7 @@ import { marbleTex, paint, Surface, SERIF, type SkyKit } from "../zktowers/kit";
 import { drawSources, drawSpines, INK, levelName, MUTED, PAPER } from "./draw";
 import { sourcesInfo } from "./hall";
 import { LIFT, OLD_GOLD, SAND, WOOD, WOOD_DK } from "./style";
+import { frontWallAndStairs } from "./stairs";
 
 /**
  * 4 · the Library: oak shelves of gilt spines up every wall and in bays at the back, reading
@@ -43,12 +44,8 @@ export function library(k: SkyKit) {
   k.wall(f, X0, Z0, X1, Z0, H, SAND, "matte", 0.4);
   k.wall(f, X0, Z0, X0, Z1, H, SAND, "matte", 0.4);
   k.wall(f, X1, Z0, X1, Z1, H, SAND, "matte", 0.4);
-  k.wall(f, X0, Z1, -2.2, Z1, H, SAND, "matte", 0.4);
-  k.wall(f, 2.2, Z1, X1, Z1, H, SAND, "matte", 0.4);
-  k.box(f, 4.4, H - 3.4, 0.4, 0, 3.4, Z1, SAND);
-  k.box(f, 4.6, 0.3, 0.5, 0, 3.4, Z1, "#9fd28a", "glow");
-  k.box(f, 4.3, 3.4, 0.05, 0, 0, Z1, "#cfe4f4", "glass");
-  k.solid(f, -2.2, Z1 - 0.2, 2.2, Z1 + 2);
+  // the front wall: no door upstairs, the stairs right of where it was
+  frontWallAndStairs(k, f, { x0: X0, x1: X1, z: Z1, h: H, top: 5 });
   k.box(f, X1 - X0, 0.3, Z1 - Z0, 0, H, (Z0 + Z1) / 2, WOOD_DK);
   // a barrel vault of oak ribs
   for (let z = Z0 + 2; z < Z1; z += 3) {

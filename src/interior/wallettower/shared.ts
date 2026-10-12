@@ -126,13 +126,13 @@ export const LOOKS: Record<WalletTower, Look> = {
     lamps: 0.9,
     screens: 0.86,
   },
-  // ZApp (ZLab): black, Zcash gold, the shield's green scan line. No X account: GitHub only.
-  zapp: {
-    key: "zapp",
-    name: "ZApp",
-    title: "ZAPP TOWER",
+  // ZLab: black, Zcash gold, the shield's green scan line. No X account: GitHub only, a lab per repository.
+  zlab: {
+    key: "zlab",
+    name: "ZLab",
+    title: "ZLAB TOWER",
     handle: "",
-    site: "https://github.com/ZLabcash/zapp",
+    site: "https://zlab.cash",
     accent: "#c98f0a",
     soft: "#3a3326",
     glow: "#f4b728",

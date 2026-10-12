@@ -8,6 +8,7 @@ import { commitRows, drawCatalogue, drawCourseCard, drawFeedBoard, drawSources, 
 import { CourseScreen } from "./screen";
 import { logoBanner, logoSign, type Mark } from "./logos";
 import { LIFT, SAND, WOOD, WOOD_DK } from "./style";
+import { frontWallAndStairs } from "./stairs";
 
 /**
  * A lecture hall: you come in at the top, on a landing with the lifts, behind a rail that carries
@@ -60,9 +61,8 @@ export function lectureHall(k: SkyKit, s: HallSpec) {
   k.wall(f, X0, Z0, X1, Z0, WALL_H, SAND, "matte", 0.4, STAGE);
   k.wall(f, X0, Z0, X0, Z1, WALL_H, SAND, "matte", 0.4, STAGE);
   k.wall(f, X1, Z0, X1, Z1, WALL_H, SAND, "matte", 0.4, STAGE);
-  k.wall(f, X0, Z1, -2.2, Z1, WALL_H, SAND, "matte", 0.4, STAGE);
-  k.wall(f, 2.2, Z1, X1, Z1, WALL_H, SAND, "matte", 0.4, STAGE);
-  k.box(f, 4.4, H - 3.4, 0.4, 0, 3.4, Z1, SAND);
+  // the front wall: no door upstairs, the stairs right of where it was
+  frontWallAndStairs(k, f, { x0: X0, x1: X1, z: Z1, h: WALL_H, y: STAGE, top: 5 });
   // wainscot round the walls, a frieze of the hall's colour under the ceiling
   for (const [x, z, w, d] of [
     [0, Z0 + 0.25, X1 - X0, 0.1],
@@ -75,10 +75,6 @@ export function lectureHall(k: SkyKit, s: HallSpec) {
   k.box(f, X1 - X0, 0.3, Z1 - Z0, 0, H, (Z0 + Z1) / 2, WOOD_DK);
   for (let x = X0 + 3.5; x < X1; x += 3.5) k.box(f, 0.3, 0.45, Z1 - Z0, x, H - 0.45, (Z0 + Z1) / 2, WOOD);
   for (let z = Z0 + 3; z < Z1; z += 3) k.box(f, X1 - X0, 0.45, 0.3, 0, H - 0.45, z, WOOD);
-  // the doors behind the landing: you leave the way you came
-  k.box(f, 4.6, 0.3, 0.5, 0, 3.4, Z1, s.color, "glow");
-  k.box(f, 4.3, 3.4, 0.05, 0, 0, Z1, "#cfe4f4", "glass");
-  k.solid(f, -2.2, Z1 - 0.2, 2.2, Z1 + 2);
 
   // ---- the tiers: six steps of benches down to the stage, aisles in the middle and on the sides --------------
   k.box(f, X1 - X0, -STAGE, LAND, 0, STAGE, -LAND / 2, "#bfa77d");

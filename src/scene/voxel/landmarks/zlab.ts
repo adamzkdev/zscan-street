@@ -6,7 +6,7 @@ import { lotSize } from "./lot";
 import { bench, lampPost, leafTree, planterBox } from "./needle";
 
 /**
- * The ZAPP TOWER, on the avenue west of the heart (across it from Noir's), in ZApp's colours (ZLab's
+ * The ZLAB TOWER, on the avenue west of the heart (across it from Noir's), in ZLab's colours (its
  * shield: gold outline, white Z, a green dashed scan line, on black): a black glass slab (~113 m)
  * with gold edges, green dashed scan lines running round it every few floors, and on the roof the
  * shield itself standing on its tip, its Z and its scan line; the real 3D mark turns over it (scene:
@@ -15,7 +15,7 @@ import { bench, lampPost, leafTree, planterBox } from "./needle";
  *
  * Scale 2 (a third of a metre). Points: `door`, `keeper`, `crown`, `camPos`, `camLook`.
  */
-export function zapp(seed: number, o: LandmarkOpts): Built {
+export function zlab(seed: number, o: LandmarkOpts): Built {
   const k = 2;
   const { W, D } = lotSize(o, k);
   const TOP = 340;
@@ -32,7 +32,7 @@ export function zapp(seed: number, o: LandmarkOpts): Built {
   const obsidian = G("#121211");
   const obsidianHi = G("#1f1e1b");
   const band = C("#0b0b0a");
-  const silver = C("#f4b728"); // gold, ZApp's shield
+  const silver = C("#f4b728"); // gold, ZLab's shield
   const silverDark = C("#a07410");
   const green = E("#1baf7a", 1.9); // the scan line
   const greenSoft = E("#f4b728", 1.1);
@@ -145,7 +145,7 @@ export function zapp(seed: number, o: LandmarkOpts): Built {
   m.box(c0, 17, front, c1, 19, cz1, band);
   m.box(c0, 16, cz1 - 1, c1, 17, cz1, green);
   for (const x of [c0 + 1, c1 - 2]) m.box(x, 1, cz1 - 3, x + 1, 16, cz1 - 2, silver);
-  signs.push({ text: "ZAPP", color: "#f4b728", x: cx, y: 21.5, z: cz1 + 0.2, w: 16, h: 4.5, vertical: false, facing: "front" });
+  signs.push({ text: "ZLAB", color: "#f4b728", x: cx, y: 21.5, z: cz1 + 0.2, w: 16, h: 4.5, vertical: false, facing: "front" });
   lights.push([cx, 12, cz1 + 2, "#ffe2a0"]);
 
   // ---- the plaza: trees, planters, benches, lamps, bollards ---------------------------------------

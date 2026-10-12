@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { onWalletFeeds, walletFeed, walletFeeds, type WalletTower } from "../../data/walletfeed";
 import type { Interior, InteriorContext } from "../types";
 import { SkyKit, type Level } from "../zktowers/kit";
+import { herald } from "./herald";
 import { labFloor } from "./lab";
 import { lobby } from "./lobby";
 import { roof } from "./roof";
@@ -10,8 +11,8 @@ import { tweetsFloor } from "./tweets";
 
 /**
  * The wallet towers on the avenue, Noir's (obsidian and emerald, next to ZODL's), ZODL's (white and black, like its app icon, across from the ZEC Reserve) and
- * Vizor's (crimson and silver, its knight's colours, across from HALO), ZApp's (black and gold, west of the heart, no
- * tweets floor: GitHub only): the lobby and the wallet's card, the wall of
+ * Vizor's (crimson and silver, its knight's colours, across from HALO), ZLab's (black and gold, west of the heart, no
+ * tweets floor: GitHub only, a lab per project): the lobby and the wallet's card, the wall of
  * its tweets on 8, the lab of its releases on 16, its emblem over the roof. Everything on the walls
  * is read live from X, GitHub and the App Store (through the API, every quarter hour).
  */
@@ -21,15 +22,25 @@ export const LEVELS: Level[] = [
   { label: "16", name: "Lab · releases, developers", y: 60, spawn: [-11.4, -6], yaw: -Math.PI / 2, view: 60 },
   { label: "R", name: "Roof · the crown, the view", y: 104, spawn: [0, -19.4], yaw: Math.PI, view: 106 },
 ];
-/** ZApp has no X account: no tweets floor, the lab right above the lobby. */
-export const LEVELS_GITHUB: Level[] = [LEVELS[0], { ...LEVELS[2], label: "8", y: 30, view: 30 }, LEVELS[3]];
+/** ZLab's projects, a lab each (ZLab has no X account: no tweets floor). */
+export const ZLAB_REPOS = [
+  { repo: "ZLabcash/zapp", name: "ZApp", seed: 4601, about: "the phone wallet" },
+  { repo: "ZLabcash/zapp-chrome", name: "ZApp Chrome", seed: 4611, about: "the browser extension" },
+  { repo: "ZLabcash/zfirm", name: "ZFirm", seed: 4621, about: "the signer firmware" },
+  { repo: "ZLabcash/kindlewallet", name: "KindleWallet", seed: 4631, about: "a hardware wallet on a Kindle" },
+];
+export const LEVELS_ZLAB: Level[] = [
+  LEVELS[0],
+  ...ZLAB_REPOS.map((r, i) => ({ ...LEVELS[2], label: String(8 * (i + 1)), name: `${r.name} · ${r.about}`, y: 30 * (i + 1), view: 30 * (i + 1) })),
+  { ...LEVELS[3], y: 164, view: 166 },
+];
 /** Metres from the street door back to the tower's axis (the panoramas' point). */
 const BACK = 14;
 
 export function buildWalletTower(ctx: InteriorContext, key: WalletTower): Interior {
   const look = LOOKS[key];
   const tweets = look.handle !== "";
-  const k = new SkyKit(ctx, tweets ? LEVELS : LEVELS_GITHUB, look.title, { bg: look.dark });
+  const k = new SkyKit(ctx, tweets ? LEVELS : LEVELS_ZLAB, look.title, { bg: look.dark });
   k.scene.environmentIntensity = 0.3;
   const listeners: (() => void)[] = [];
   const wk: WalletKit = {
@@ -48,9 +59,10 @@ export function buildWalletTower(ctx: InteriorContext, key: WalletTower): Interi
     labFloor(wk);
     roof(wk);
   } else {
-    labFloor(wk, 1);
-    roof(wk, 2);
+    ZLAB_REPOS.forEach((r, i) => labFloor(wk, i + 1, r));
+    roof(wk, ZLAB_REPOS.length + 1);
   }
+  herald(wk, ctx, tweets ? LEVELS : LEVELS_ZLAB, { zodl: 4701, vizor: 4711, noir: 4721, zlab: 4731 }[key]);
   const interior = k.interior(key, BACK);
   // the look's dimming: every lamp, every self-lit screen and sign
   k.scene.traverse((o) => {

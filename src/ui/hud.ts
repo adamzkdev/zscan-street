@@ -160,7 +160,7 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   zodl: { icon: "tower", color: "#f5f4f2" },
   vizor: { icon: "tower", color: "#e0306a" },
   noir: { icon: "tower", color: "#00d38c" },
-  zapp: { icon: "tower", color: "#f4b728" },
+  zlab: { icon: "tower", color: "#f4b728" },
   university: { icon: "book", color: "#e2b448" },
   cemetery: { icon: "vault", color: "#7dff9a" },
 };

@@ -6,7 +6,7 @@ import { emblem } from "./emblems";
  * The wallet towers' crowns: over the ZODL TOWER its bird, over the VIZOR TOWER its visored head,
  * each a real 3D emblem some ten metres across, turning slowly in a halo of its colour, seen from
  * the whole avenue and the map. Over the NOIR TOWER, its silver eclipse and green light; over the
- * ZAPP TOWER, its gold shield.
+ * ZLAB TOWER, its gold shield.
  */
 export class WalletCrowns {
   private crowns: { obj: THREE.Object3D; base: number; phase: number }[] = [];
@@ -16,7 +16,7 @@ export class WalletCrowns {
       ["zodl", "#ffffff"],
       ["vizor", "#ff4f86"],
       ["noir", "#00d38c"],
-      ["zapp", "#f4b728"],
+      ["zlab", "#f4b728"],
     ] as const) {
       const at = city.landmarks.get(kind)?.points.crown;
       if (!at) continue;

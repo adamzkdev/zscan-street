@@ -27,7 +27,7 @@ import { cemetery } from "./cemetery";
 import { zodl } from "./zodl";
 import { vizor } from "./vizor";
 import { noir } from "./noir";
-import { zapp } from "./zapp";
+import { zlab } from "./zlab";
 import { university } from "./university";
 
 /**
@@ -45,10 +45,10 @@ export interface LandmarkOpts {
   venue?: string;
 }
 
-export type LandmarkKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "statue" | "prison" | "bridge" | "green" | "pyramid" | "eiffel" | "colosseum" | "parliament" | "opera" | "shibuya" | "palm" | "burjalarab" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "zodl" | "vizor" | "noir" | "zapp" | "university";
+export type LandmarkKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "statue" | "prison" | "bridge" | "green" | "pyramid" | "eiffel" | "colosseum" | "parliament" | "opera" | "shibuya" | "palm" | "burjalarab" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "zodl" | "vizor" | "noir" | "zlab" | "university";
 
 type Builder = (seed: number, o: LandmarkOpts) => Built;
-const BUILDERS: Partial<Record<LandmarkKind, Builder>> = { stadium, museum, foodhall, reserve, mall, needle, marina, gardens, port, statue, bridge, pyramid, eiffel, colosseum, parliament, opera, shibuya, palm, burjalarab, zkorchard, zksapling, zkhalo, binhai, cemetery, zodl, vizor, noir, zapp, university };
+const BUILDERS: Partial<Record<LandmarkKind, Builder>> = { stadium, museum, foodhall, reserve, mall, needle, marina, gardens, port, statue, bridge, pyramid, eiffel, colosseum, parliament, opera, shibuya, palm, burjalarab, zkorchard, zksapling, zkhalo, binhai, cemetery, zodl, vizor, noir, zlab, university };
 
 export function landmark(seed: number, o: LandmarkOpts): Built {
   const b = BUILDERS[o.kind];

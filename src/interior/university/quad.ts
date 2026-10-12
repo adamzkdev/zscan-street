@@ -7,6 +7,7 @@ import { marbleTex, paint, Surface, type SkyKit } from "../zktowers/kit";
 import { drawCatalogue, drawCrest, drawDirectory, drawFeedBoard, levelName } from "./draw";
 import { drawLogo, logoBanner } from "./logos";
 import { LIFT, OLD_GOLD, SAND, SAND_LT, TILE, WOOD, WOOD_DK } from "./style";
+import { frontWallAndStairs } from "./stairs";
 
 /**
  * G · the Main Quad hall: an arcaded sandstone hall under a coffered oak ceiling. The course
@@ -28,6 +29,7 @@ export const FLOORS: [string, string, string, string][] = [
   ["2", "Zakura Hall", "the node · its releases, live", FACULTIES.zakura.color],
   ["3", "Tachyon Hall", "scaling Zcash · Ragu · the blog, live", FACULTIES.tachyon.color],
   ["4", "The Library", "every lesson to read · every source", "#9fd28a"],
+  ["5", "HashSmash Hall", "breaking hashes · Orchard's Poseidon · live", "#e5533d"],
 ];
 
 export function mainQuad(k: SkyKit) {
@@ -36,8 +38,8 @@ export function mainQuad(k: SkyKit) {
   k.wall(f, X0, Z0, X1, Z0, H, SAND, "matte", 0.4);
   k.wall(f, X0, Z0, X0, Z1, H, SAND, "matte", 0.4);
   k.wall(f, X1, Z0, X1, Z1, H, SAND, "matte", 0.4);
-  k.wall(f, X0, Z1, -2.2, Z1, H, SAND, "matte", 0.4);
-  k.wall(f, 2.2, Z1, X1, Z1, H, SAND, "matte", 0.4);
+  // the front wall: the street doors in the middle, the stairs up on the right
+  frontWallAndStairs(k, f, { x0: X0, x1: X1, z: Z1, h: H, door: true, top: 5 });
   k.box(f, 4.4, H - 3.4, 0.4, 0, 3.4, Z1, SAND);
   // the doors and the name over them
   k.box(f, 4.6, 0.3, 0.5, 0, 3.4, Z1, OLD_GOLD, "glow");
@@ -96,7 +98,7 @@ export function mainQuad(k: SkyKit) {
   const dir = new Surface(1024, 1024, 1.0);
   k.box(f, 0.12, 4.6, 4.6, X0 + 0.26, 0.9, -11, WOOD_DK, "polish");
   k.plane(f, 4.4, 4.4, dir.mat, X0 + 0.34, 3.1, -11, 0, Math.PI / 2);
-  k.hit(f, 0.3, 4.4, 4.4, X0 + 0.5, 0.9, -11, "<b>Directory</b><span>the floors</span>", () => ({ eyebrow: "ZK University", title: "Directory", body: FLOORS.map(([l, n, s]) => `<p><b>${l} · ${n}</b><br><span style="opacity:.7">${esc(s)}</span></p>`).join("") + "<p>Take the lifts by the doors.</p>" }));
+  k.hit(f, 0.3, 4.4, 4.4, X0 + 0.5, 0.9, -11, "<b>Directory</b><span>the floors</span>", () => ({ eyebrow: "ZK University", title: "Directory", body: FLOORS.map(([l, n, s]) => `<p><b>${l} · ${n}</b><br><span style="opacity:.7">${esc(s)}</span></p>`).join("") + "<p>Take the lifts left of the doors, or the stairs on the right: every floor, one flight up.</p>" }));
   const news = new Surface(1024, 1024, 1.0);
   k.box(f, 0.12, 6.2, 6.2, X1 - 0.26, 0.6, -14, WOOD_DK, "polish");
   k.plane(f, 6, 6, news.mat, X1 - 0.34, 3.6, -14, 0, -Math.PI / 2);

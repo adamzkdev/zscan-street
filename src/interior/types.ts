@@ -41,7 +41,7 @@ export interface PickInfo {
   /** Opens one of the shop panels (the bank's terminals). */
   panel?: "bank" | "cards" | "wallets" | "guestbook";
   /** The wallet on show that was clicked (the hall's phones). */
-  wallet?: "zodl" | "vizor" | "noir" | "zapp";
+  wallet?: "zodl" | "vizor" | "noir" | "zlab";
   /** Starts a mini-game (the ZK TOWER's apartments). */
   game?: import("../ui/arcade").Game;
   /** Takes the elevator to this floor (clicking its doors). */
@@ -63,10 +63,12 @@ export interface InteriorContext {
    * scene's background so the windows look onto ZStreet itself.
    */
   cityView(place: string, up: number, back?: number): import("three").Texture | null;
+  /** A letter to the inbox (the NEWS square): what a place announced while you were inside. */
+  mail(kind: import("../game/ui").MailKind, title: string, text: string, act?: { label: string; fn: () => void }): void;
 }
 
 export interface Interior {
-  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zapp" | "university";
+  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zlab" | "university";
   /** Shown top-left while inside ("MEMPOOL"). */
   readonly title: string;
   readonly scene: THREE.Scene;

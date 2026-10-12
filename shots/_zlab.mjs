@@ -1,4 +1,4 @@
-// node shots/_zapp.mjs [day|night] — the ZAPP TOWER from the avenue (dev server on $PORT, 3009 by default)
+// node shots/_zlab.mjs [day|night] — the ZLAB TOWER from the avenue (dev server on $PORT, 3009 by default)
 import puppeteer from "puppeteer-core";
 const PORT = process.env.PORT ?? 3009;
 const theme = process.argv[2] ?? "night";
@@ -17,8 +17,8 @@ const view = async (name, x, z, yaw, pitch) => {
     street.onFoot.pitch = v.pitch;
   }, { x, z, yaw, pitch });
   await wait(2500);
-  await p.screenshot({ path: `shots/zapp-${name}-${theme}.png` });
-  console.log(`shots/zapp-${name}-${theme}.png`);
+  await p.screenshot({ path: `shots/zlab-${name}-${theme}.png` });
+  console.log(`shots/zlab-${name}-${theme}.png`);
 };
 await view("near", -70, -1, 0, 0.78);
 await view("far", -34, 1, 0.97, 0.42);

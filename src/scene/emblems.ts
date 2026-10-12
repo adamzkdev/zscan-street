@@ -99,9 +99,9 @@ function zappEmblem(o: { glow?: number }) {
   return g;
 }
 
-export function emblem(key: "zodl" | "vizor" | "noir" | "zapp", o: { glow?: number } = {}) {
+export function emblem(key: "zodl" | "vizor" | "noir" | "zlab", o: { glow?: number } = {}) {
   if (key === "noir") return noirEmblem(o);
-  if (key === "zapp") return zappEmblem(o);
+  if (key === "zlab") return zappEmblem(o);
   const g = new THREE.Group();
   const R = 0.5;
   const T = 0.08;
@@ -164,10 +164,10 @@ function noirEmblem(o: { glow?: number }) {
 }
 
 /** The marks as flat paths on a canvas (posters, screens): the mark centred at (x, y), `size` tall. */
-export function drawMark(g: CanvasRenderingContext2D, key: "zodl" | "vizor" | "noir" | "zapp", x: number, y: number, size: number, color: string) {
+export function drawMark(g: CanvasRenderingContext2D, key: "zodl" | "vizor" | "noir" | "zlab", x: number, y: number, size: number, color: string) {
   g.save();
   g.fillStyle = color;
-  if (key === "zapp") {
+  if (key === "zlab") {
     // the shield (gold), the Z (in `color`), the green dashes
     const k = size / 27;
     const at = ([px, py]: [number, number]) => [x + (px - 16) * k, y + (py - 16) * k] as const;
