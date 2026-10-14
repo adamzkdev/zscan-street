@@ -417,43 +417,6 @@ export function memorial(k: MuseumKit, data: Collection) {
     },
   );
 
-  // ---- the book of condolences, open on a lectern -------------------------------------------------
-  const BX = 7.6,
-    BZ = L + 3.2;
-  k.geo(f, k.oak, boxGeo(0.5, 1.0, 0.4, BX, 0, BZ));
-  k.geo(f, k.oak, new THREE.BoxGeometry(0.9, 0.05, 0.62).rotateX(-0.35).translate(BX, 1.12, BZ));
-  k.solid(f, BX - 0.5, BZ - 0.4, BX + 0.5, BZ + 0.4);
-  const bookTex = canvasTex(1024, 640, (c, w, h) => {
-    c.fillStyle = "#f4ecd8";
-    c.fillRect(0, 0, w, h);
-    c.fillStyle = "#c8b890";
-    c.fillRect(w / 2 - 3, 0, 6, h);
-  });
-  const book = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.52), new THREE.MeshStandardMaterial({ map: bookTex, roughness: 0.9 }));
-  book.rotation.set(-Math.PI / 2 + 0.35, 0, 0);
-  book.position.set(BX, 1.17, BZ);
-  g.add(book);
-  let condolences: string[] = [];
-  k.pick(f, book, "<b>Book of condolences</b><span>read what they wrote</span>", () => ({
-    eyebrow: "Memorial of the Purged",
-    title: "Book of condolences",
-    body: `<dl class="kvlist">${condolences.map((c) => `<div><dd>${c}</dd></div>`).join("")}</dl>`,
-  }));
-  void data.ready.then(() => {
-    if (!data.purge.purged.length) return;
-    condolences = condolenceLines(data);
-    const c = (bookTex.image as HTMLCanvasElement).getContext("2d")!;
-    c.fillStyle = "#3a3048";
-    c.font = `italic 30px ${SERIF}`;
-    condolences.slice(0, 12).forEach((ln, i) => {
-      const plain = ln.replace(/<[^>]+>/g, "");
-      const x = i < 6 ? 34 : 546,
-        y = 70 + (i % 6) * 96;
-      c.fillText(plain.length > 34 ? `${plain.slice(0, 33)}…` : plain, x, y);
-    });
-    bookTex.needsUpdate = true;
-  });
-
   // ---- once visited and the purge known: the Wall, the statue, the names ------------------------------
   void (async () => {
     await k.whenVisited(f);
@@ -619,27 +582,4 @@ function eulogy(data: Collection): string[] {
     `We were ${p.minted.toLocaleString("en-US")}. We are ${p.supply.toLocaleString("en-US")}.`,
     "Let us keep a moment of silence.",
   ];
-}
-
-/** What visitors wrote in the book: signed by the neighbours of the purged (the next number, still here). */
-function condolenceLines(data: Collection): string[] {
-  const p = data.purge;
-  const gone = new Set(p.purged.map((x) => x.item));
-  const out: string[] = [];
-  const words = [
-    (x: number, a: string) => `For #${x}, who went into ${a}. I still look at the hole beside me.`,
-    (x: number) => `#${x}, you were a good neighbour.`,
-    (x: number, a: string) => `Rest well, #${x}. ${a} is beautiful because of you.`,
-    (x: number) => `Never forgotten, #${x}.`,
-    (x: number) => `#${x}: twenty-six of you, one of you was mine.`,
-    (x: number) => `For #${x}. The row is quieter now.`,
-  ];
-  for (let i = 0; out.length < 18 && i < p.purged.length; i += 37) {
-    const x = p.purged[i];
-    const nb = x.item + 1;
-    if (x.item % 100 === 0 || gone.has(nb) || p.appOf.has(nb)) continue;
-    const a = p.purgedFor.get(x.item)?.name ?? "an Apparition";
-    out.push(`${words[out.length % words.length](x.item, a)} <i>— #${nb}</i>`);
-  }
-  return out;
 }
