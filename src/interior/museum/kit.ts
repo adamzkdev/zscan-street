@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { ZScan } from "../../data/zscan";
-import { loadArt, Snark } from "../../scene/snark";
+import { loadArt, poseCell, Snark } from "../../scene/snark";
+import { FLASH_CELL } from "../../scene/sprites";
 import { MATERIALS, meshModel } from "../../scene/voxel/mesher";
 import type { Kind, VoxelModel } from "../../scene/voxel/model";
 import { hash } from "../../scene/voxel/model";
@@ -15,7 +16,7 @@ import type { InteriorContext, PickInfo, Rect } from "../types";
  * portrait atlas, one for every wall label), light pools and washes, visitors and guards.
  */
 
-export const FLOOR_Y = [0, 40, 80, 120, 160];
+export const FLOOR_Y = [0, 40, 80, 120, 160, 200];
 export const LIGHTS = 6;
 
 export type Tick = (dt: number, t: number) => void;
@@ -264,11 +265,9 @@ export class MuseumKit {
   readonly oak = new THREE.MeshStandardMaterial({ color: "#6a4428", roughness: 0.55 });
   /** White base so each frame's instance colour is its gilt exactly. */
   readonly frameMat = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.3, metalness: 0.85, emissive: "#1a1206", envMapIntensity: 1.5 });
-  private phoneGeo = new THREE.BoxGeometry(0.16, 0.28, 0.01);
-  private screenGeo = new THREE.PlaneGeometry(0.135, 0.24);
-  private handGeo = new THREE.PlaneGeometry(0.1, 0.14);
-  private phoneMat = new THREE.MeshBasicMaterial({ color: "#16161a" });
-  private screenMat = new THREE.MeshBasicMaterial({ color: new THREE.Color("#bfe0ff").multiplyScalar(1.3), toneMapped: false });
+  /** A camera flash: a white burst, additive, over the phone. */
+  private flashGeo = new THREE.PlaneGeometry(0.9, 0.9);
+  private flashMat = new THREE.MeshBasicMaterial({ map: flashTexture(), color: new THREE.Color(2.2, 2.2, 2.4), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   readonly glass = new THREE.MeshStandardMaterial({ color: "#cfe6ee", roughness: 0.04, metalness: 0.4, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide });
 
   constructor(
@@ -349,14 +348,16 @@ export class MuseumKit {
     this.washes[f].push([x, z, yaw, w, h, top, 0, color]);
   }
 
+  /** A point light (at most LIGHTS a floor, so every floor compiles the same shaders). */
   light(f: number, x: number, y: number, z: number, color = "#ffe6c8", intensity = 30, dist = 30) {
-    if (this.lightCount[f] >= LIGHTS) return;
+    if (this.lightCount[f] >= LIGHTS) return null;
     this.lightCount[f]++;
     const l = new THREE.PointLight(color, intensity, dist, 1.3);
     l.position.set(x, y, z);
     l.userData.base = intensity;
     this.allLights.push(l);
     this.groups[f].add(l);
+    return l;
   }
 
   pick(f: number, o: THREE.Object3D, hover: string | HoverFn, info: PickFn) {
@@ -586,9 +587,10 @@ export class MuseumKit {
 
   /**
    * A zkSNARK on floor f. `face`: the point it looks at; `wander`: spots it strolls between;
-   * `phone`: holds a phone up; `guard`: a museum guard's cap; `perch`: sits on a bench that high.
+   * `phone`: photographs it, phone held up with a flash now and then; `selfie`: turns its back to it
+   * for a selfie; `guard`: a museum guard's cap; `perch`: sits on a bench that high.
    */
-  async person(f: number, id: number, at: [number, number], o: { face?: [number, number]; wander?: [number, number][]; phone?: boolean; guard?: boolean; perch?: number; item?: "bag" | "book" | "coffee"; screen?: THREE.Texture } = {}) {
+  async person(f: number, id: number, at: [number, number], o: { face?: [number, number]; wander?: [number, number][]; phone?: boolean; selfie?: boolean; guard?: boolean; perch?: number; item?: "bag" | "book" | "coffee" | "flowers" } = {}) {
     try {
       await this.whenVisited(f);
       const s = new Snark(id, await this.throttle(() => loadArt(id)));
@@ -603,18 +605,30 @@ export class MuseumKit {
         s.carry = o.item;
         s.redrawHold();
       }
-      // a phone held up over the heads to photograph the painting; its screen shows what it sees
-      if (o.phone) {
-        const ph = new THREE.Group();
-        const body = new THREE.Mesh(this.phoneGeo, this.phoneMat);
-        const scr = new THREE.Mesh(this.screenGeo, o.screen ? new THREE.MeshBasicMaterial({ map: o.screen, color: "#d8d8d8", toneMapped: false }) : this.screenMat);
-        scr.position.z = 0.006;
-        const hand = new THREE.Mesh(this.handGeo, new THREE.MeshBasicMaterial({ color: "#c89878" }));
-        hand.position.set(0, -0.15, 0.003);
-        ph.add(hand, body, scr);
-        ph.position.set(0.12 + (hash(id, 5, 1) - 0.5) * 0.2, 2.2 + hash(id, 3, 1) * 0.3, 0.12);
-        ph.rotation.z = (hash(id, 4, 1) - 0.5) * 0.3;
-        s.visual.add(ph);
+      // a phone up over the heads to photograph the painting, or out at arm's length for a selfie
+      // with the painting behind (turned away from it); now and then the flash goes
+      if (o.phone || o.selfie) {
+        const kind = o.selfie ? "selfie" : "snap";
+        s.carry = kind;
+        s.redrawHold();
+        if (o.selfie && o.face) s.faceDir = new THREE.Vector3(s.root.position.x - o.face[0], 0, s.root.position.z - o.face[1]).normalize();
+        const [c, r] = FLASH_CELL[kind]!;
+        const fl = new THREE.Mesh(this.flashGeo, this.flashMat);
+        fl.position.copy(poseCell(c, r)).setZ(0.06);
+        fl.visible = false;
+        fl.raycast = () => {};
+        s.attachToHold(fl);
+        let next = 2 + hash(id, 9, 2) * 8,
+          off = 0;
+        this.ticks[f].push((_dt, t) => {
+          if (t > next) {
+            // one pop, sometimes two (the pre-flash)
+            off = t + 0.07;
+            next = t + (hash(id, Math.floor(t), 4) < 0.25 ? 0.18 : 4 + hash(id, Math.floor(t), 6) * 9);
+          }
+          fl.visible = t < off;
+          if (fl.visible) fl.scale.setScalar(0.7 + (off - t) * 6);
+        });
       }
       if (o.perch) s.perch(o.perch);
       this.groups[f].add(s.root);
@@ -643,4 +657,22 @@ export class MuseumKit {
   visitor(n: number) {
     return 1 + Math.floor(hash(n, 7, 31, 5) * 9999);
   }
+}
+
+/** A soft white burst for camera flashes (a bright core, a quick fall-off, four short rays). */
+function flashTexture() {
+  const [c, g] = canvas(128, 128);
+  const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, "rgba(255,255,255,1)");
+  r.addColorStop(0.12, "rgba(255,255,250,0.9)");
+  r.addColorStop(0.35, "rgba(255,250,235,0.25)");
+  r.addColorStop(1, "rgba(255,250,235,0)");
+  g.fillStyle = r;
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = "rgba(255,255,255,0.5)";
+  g.fillRect(62, 8, 4, 112);
+  g.fillRect(8, 62, 112, 4);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }

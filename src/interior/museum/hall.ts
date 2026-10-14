@@ -6,7 +6,7 @@ import type { Collection } from "./data";
 import { num, zec } from "./data";
 import { boxGeo, canvasTex, FACE, type MuseumKit } from "./kit";
 import { coffers, damask, goldMosaic, limestone, paintedCeiling, skylight, stoneFloor, versailles } from "./look";
-import { bandTexture, beamGeo, escalator, lifts, rodGeo, SANS, wayfinding } from "./parts";
+import { bandTexture, beamGeo, escalator, FLOORS, rodGeo, SANS, wayfinding } from "./parts";
 import { banquette, bust, stonePyramid, ticketMachine, wingedVictory } from "./voxels";
 import { memePoster } from "../../scene/memes";
 import { nextMeme } from "../../scene/memewalls";
@@ -200,11 +200,63 @@ export function hall(k: MuseumKit, data: Collection) {
   for (const [w, to] of wings)
     for (const hit of wing(k, f, w, stone, landing)) k.pick(f, hit, `<b>${names[to]}</b><span>escalator</span>`, () => ({ eyebrow: "Escalator", title: names[to], floor: to }));
 
-  // ---- the lifts, by the entrance -------------------------------------------------------------
-  lifts(k, f, 14, -0.32, FACE.nz, 2.3, false);
-  const lw = wayfinding(k, f, "ASCENSEURS", "Lifts · all levels", "#f4b728", 3.0);
-  lw.position.set(14, 4.4, -0.33);
-  lw.rotation.y = FACE.nz;
+  // ---- by the entrance, the plan of the house: a click on a level takes the lift there ----------
+  const PLAN_W = 1200,
+    PLAN_H = 1500,
+    ROW0 = 300,
+    ROW = 200;
+  const plan = k.panel(
+    f,
+    PLAN_W,
+    PLAN_H,
+    3.4,
+    (c, w, h) => {
+      c.fillStyle = "#16161a";
+      c.fillRect(0, 0, w, h);
+      c.fillStyle = "#f4b728";
+      c.fillRect(0, 0, w, 14);
+      c.fillStyle = "#ffffff";
+      c.font = `700 92px ${SANS}`;
+      c.fillText("PLAN DU MUSÉE", 60, 150);
+      c.fillStyle = "#9aa0a6";
+      c.font = `500 40px ${SANS}`;
+      c.fillText("Levels · click one to take the lift", 60, 215);
+      FLOORS.forEach((fl, i) => {
+        const y = ROW0 + i * ROW;
+        c.fillStyle = "rgba(255,255,255,0.08)";
+        c.fillRect(60, y + ROW - 4, w - 120, 2);
+        c.fillStyle = i === FLOORS.length - 1 || fl.name.startsWith("Aile") || fl.name.startsWith("Mémorial") ? "#f4b728" : "#ffffff";
+        c.font = `800 120px ${SANS}`;
+        c.fillText(fl.label, 60, y + 140);
+        c.fillStyle = "#ffffff";
+        c.font = `700 58px ${SANS}`;
+        c.fillText(fl.name, 190, y + 92);
+        c.fillStyle = "#9aa0a6";
+        c.font = `500 38px ${SANS}`;
+        c.fillText(fl.sub, 190, y + 150);
+      });
+    },
+    { glow: true, transparent: false },
+  );
+  plan.position.set(14, 0.6 + (3.4 * PLAN_H) / PLAN_W / 2, -0.34);
+  plan.rotation.y = FACE.nz;
+  const levelAt = (hit: THREE.Intersection) => {
+    if (!hit.uv) return null;
+    const i = Math.floor(((1 - hit.uv.y) * PLAN_H - ROW0) / ROW);
+    return i >= 0 && i < FLOORS.length ? i : null;
+  };
+  k.pick(
+    f,
+    plan,
+    (hit) => {
+      const i = levelAt(hit);
+      return i != null ? `<b>${FLOORS[i].label} · ${FLOORS[i].name}</b><span>${FLOORS[i].sub}</span>` : "<b>Plan du musée</b><span>click a level</span>";
+    },
+    (hit) => {
+      const i = levelAt(hit);
+      return i != null && i !== f ? { eyebrow: "Lift", title: `${FLOORS[i].label} · ${FLOORS[i].name}`, floor: i } : null;
+    },
+  );
   // the entrance: glass doors in bronze under a lit transom
   for (const x of [-3.6, -1.2, 1.2, 3.6]) {
     k.box(f, k.glass, 2.3, 3.0, 0.05, x, 0, -0.33);

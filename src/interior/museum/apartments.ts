@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Collection } from "./data";
 import { boxGeo, FACE, type MuseumKit } from "./kit";
 import { damask, paintedCeiling, versailles } from "./look";
-import { lifts, SERIF } from "./parts";
+import { SERIF } from "./parts";
 import { banquetTable, borne, chandelier, giltChair, guardChair, stanchions } from "./voxels";
 
 /**
@@ -169,7 +169,7 @@ export function apartments(k: MuseumKit, _data: Collection) {
   for (const z of [-31, -39]) k.hang(f, { x: -X + 0.2, y: 3.9, z, yaw: FACE.px, s: 2.2, rank: rank++ });
   k.hang(f, { x: -5.5, y: 4.2, z: D1 + 0.2, yaw: FACE.pz, s: 2.4, rank: rank++ });
   k.hang(f, { x: 5.5, y: 4.2, z: D1 + 0.2, yaw: FACE.pz, s: 2.4, rank: rank++ });
-  // over the lifts: the salon's name
+  // over the lift: the salon's name
   const name = k.panel(f, 2048, 260, 8, (c, w, h) => {
     c.fillStyle = "#f4ead0";
     c.font = `italic 500 140px ${SERIF}`;
@@ -179,7 +179,6 @@ export function apartments(k: MuseumKit, _data: Collection) {
   });
   name.position.set(0, 6.6, -0.22);
   name.rotation.y = FACE.nz;
-  lifts(k, f, 0, -0.22, FACE.nz, 2.3);
   for (const s of [-1, 1]) {
     k.vox(f, "gchairG", guardChair, s * 4.6, 0, -1.2, Math.PI, 0.5);
   }

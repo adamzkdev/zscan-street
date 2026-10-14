@@ -298,6 +298,8 @@ function dropPlane(m: THREE.Mesh) {
   (m.material as THREE.Material).dispose();
 }
 const snap = (v: number) => Math.round(v / PX) * PX;
+/** The centre of portrait cell (c, r) in the cut-out's own space (row 32 is the ground). */
+export const poseCell = (c: number, r: number) => new THREE.Vector3((c + 0.5 - GRID / 2) * PX, (32 - r - 0.5) * PX, 0);
 /** The arms' plane, laid on the portrait's grid (POSE in portrait cells; row 32 is the ground). */
 const POSE_GEO = new THREE.PlaneGeometry(POSE.w * PX, POSE.h * PX).translate((POSE.x0 + POSE.w / 2 - GRID / 2) * PX, (32 - POSE.y0 - POSE.h / 2) * PX, 0);
 const tmpQ = new THREE.Quaternion();
@@ -512,6 +514,11 @@ export class Snark {
   setTxs(txs: Tx[]) {
     this.txs = txs;
     this.redrawHold();
+  }
+
+  /** Hang something on the hands' layer (it follows the arms, the bob and the facing). */
+  attachToHold(o: THREE.Object3D) {
+    this.hold.add(o);
   }
 
   /** Redraw what the hands hold (after `carry` or the transactions change). */

@@ -10,7 +10,8 @@ export const GRID = 26;
 export type ItemKind = TxKind | "briefcase" | "goldcase" | LifeItem;
 
 /** What residents (people with no transaction) have in hand. */
-export type LifeItem = "coffee" | "can" | "bag" | "phone" | "flowers" | "fish" | "basket" | "rod" | "book";
+/** `snap`: a phone held up high to photograph something; `selfie`: held out at arm's length, a V by the cheek. */
+export type LifeItem = "coffee" | "can" | "bag" | "phone" | "flowers" | "fish" | "basket" | "rod" | "book" | "snap" | "selfie";
 
 export type Px = (x: number, y: number, w: number, h: number, c: string) => void;
 
@@ -597,7 +598,7 @@ function fist(L: Cells, c: number, r: number, skin: string) {
 
 /** Items held up at the chest or face (the others hang from the hand). */
 const RAISED = new Set<ItemKind>(["coffee", "can", "phone", "flowers", "fish", "book"]);
-const ONE_HAND = new Set<ItemKind>(["briefcase", "goldcase", "coffee", "can", "bag", "phone", "flowers", "fish", "basket"]);
+const ONE_HAND = new Set<ItemKind>(["briefcase", "goldcase", "coffee", "can", "bag", "phone", "flowers", "fish", "basket", "snap", "selfie"]);
 
 // Held-item drawings at the size they read in a hand (portrait cells), top-left at (0, 0).
 
@@ -648,6 +649,21 @@ function drawPhone(px: Px) {
   px(1, 1, 1, 1, "#e0f6ff");
   px(0, 0, 1, 1, "#3a3848");
 }
+
+/** A phone seen from behind (its screen toward the one holding it): lens and flash top-left. */
+function drawPhoneBack(px: Px) {
+  px(0, 0, 6, 9, "#24232c");
+  px(0, 0, 6, 1, "#4a4856");
+  px(0, 0, 1, 9, "#3a3946");
+  px(5, 1, 1, 8, "#16151c");
+  px(1, 1, 2, 2, "#0a0a0e");
+  px(1, 1, 1, 1, "#6a6a7a");
+  px(4, 1, 1, 1, "#fff2c0");
+  px(2, 5, 2, 1, "#5a5966");
+}
+
+/** Where the flash LED sits for a pose (portrait cells), for the museum's flashes. */
+export const FLASH_CELL: Partial<Record<ItemKind, [number, number]>> = { snap: [27, -1], selfie: [33, 2] };
 
 function drawBouquet(px: Px) {
   // blooms over a paper cone that the fist closes on
@@ -819,6 +835,11 @@ function paintPose(F: Cells, B: Cells, p: PoseSpec) {
     B.set(8, 21, "#5a3a24");
     arm(B, [SH_B, [4, 20], [5, 18]], sleeve);
     fist(B, 6, 16, skin);
+  } else if (main === "selfie" && !nearBusy) {
+    // the far hand up by the cheek, two fingers in a V
+    arm(B, [SH_B, [2, 17], [2, 11]], sleeve);
+    fist(B, 1, 9, skin);
+    for (const c of [1, 3]) for (const r of [6, 7, 8]) B.set(c, r, r === 6 ? shade(skin, 1.1) : skin);
   } else if (twoHands) {
     // reaching forward under the item: hidden by the bust, its fist drawn with the item below
     arm(B, [SH_B, [8, 23]], sleeve);
@@ -906,6 +927,18 @@ function paintPose(F: Cells, B: Cells, p: PoseSpec) {
       drawBouquet(F.at(21, 13));
       arm(F, [SH_F, [23, 24], [24, 22]], sleeve);
       fist(F, 22, 20, skin);
+      break;
+    case "snap":
+      // up high, over the heads, the arm straight: the phone's back toward us
+      arm(F, [SH_F, [25, 14], [25, 7]], sleeve);
+      drawPhoneBack(F.at(23, -2));
+      fist(F, 23, 6, skin);
+      break;
+    case "selfie":
+      // at arm's length up and out, screen to the face
+      arm(F, [SH_F, [27, 15], [31, 9]], sleeve);
+      drawPhoneBack(F.at(29, 1));
+      fist(F, 29, 9, skin);
       break;
     case "phone":
       // raised to the face, by the cheek

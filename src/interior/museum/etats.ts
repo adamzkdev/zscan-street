@@ -3,7 +3,7 @@ import { sharedAtlasTexture } from "../../data/atlas";
 import type { Collection } from "./data";
 import { boxGeo, canvasTex, FACE, type MuseumKit } from "./kit";
 import { goldMosaic, limestone, skylight, versailles } from "./look";
-import { lifts, SERIF } from "./parts";
+import { SERIF } from "./parts";
 import { banquette, stanchions, wingedVictory } from "./voxels";
 import { ZScan } from "../../data/zscan";
 
@@ -129,8 +129,7 @@ export function etats(k: MuseumKit, data: Collection) {
   k.light(f, 7, 11, -17, "#fff2dc", 40, 30);
   k.light(f, 0, 5, -4, "#ffe6c4", 25, 16);
   k.pool(f, 0, -4, 4, "#fff0d8");
-  // lifts on the front wall; the sign to the Salle des États
-  lifts(k, f, 4.5, -0.27, FACE.nz, 2.3);
+  // the sign to the Salle des États
   const toEtats = k.panel(f, 1024, 300, 3.2, (c, w, h) => {
     c.fillStyle = "#26272b";
     c.fillRect(0, 0, w, h);
@@ -378,7 +377,7 @@ export function etats(k: MuseumKit, data: Collection) {
   k.light(f, X1 - 4, 7, MZ, "#fff0d8", 40, 16);
   k.pool(f, -24, -10, 9, "#f4f6ff", 0.011, 0.7);
 
-  // ---- people: the crowd before #1, phones up; the Daru's climbers; guards -------------------------
+  // ---- people: the crowd before #1, phones up and selfies at the back; the Daru's climbers; guards -------------------------
   let n = 0;
   const id = () => k.visitor(2000 + n++);
   for (let row = 0; row < 4; row++) {
@@ -386,13 +385,13 @@ export function etats(k: MuseumKit, data: Collection) {
     const cnt = 7 + row * 2;
     for (let i = 0; i < cnt; i++) {
       const a = -Math.PI / 2 + 0.35 + ((i + (row % 2) * 0.5) / cnt) * (Math.PI - 0.7);
-      void k.person(f, id(), [WX + Math.cos(a) * r, WZ + Math.sin(a) * r], { face: [WX, WZ], phone: (i + row) % 3 !== 2, screen: monaTex });
+      void k.person(f, id(), [WX + Math.cos(a) * r, WZ + Math.sin(a) * r], { face: [WX, WZ], phone: (i + row) % 3 === 0, selfie: row >= 2 && (i + row) % 4 === 1 });
     }
   }
   void k.person(f, id(), [WX + 2.2, WZ - 1.9], { guard: true, face: [WX + 6, WZ - 2] });
   void k.person(f, id(), [WX + 2.2, WZ + 1.9], { guard: true, face: [WX + 6, WZ + 2] });
   void k.person(f, id(), [X1 - 3, MZ + 0.6], { face: [X1, MZ] });
-  void k.person(f, id(), [X1 - 3.4, MZ - 1.4], { face: [X1, MZ - 1], phone: true, screen: mosaicTex });
+  void k.person(f, id(), [X1 - 3.4, MZ - 1.4], { face: [X1, MZ - 1], phone: true });
   void k.person(f, id(), [X1 - 5.4, MZ + 2.6], { perch: 0.5, face: [X1, MZ + 2.6] });
   for (const [x, z] of [
     [-30, 1.4],

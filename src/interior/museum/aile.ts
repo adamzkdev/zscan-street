@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import { atlasBitmap } from "../../data/atlas";
-import { EXPLORER } from "../../data/zscan";
+import { EXPLORER, ZScan } from "../../data/zscan";
 import type { Collection } from "./data";
 import { canvasTex, FACE, type MuseumKit } from "./kit";
-import { lifts, SERIF } from "./parts";
+import { SERIF } from "./parts";
 import { FusionSculpture } from "./fusion";
 import { cartel, drawDna, drawFlow, drawFrieze, drawHoles, drawRings, drawStats, drawStrategies, holesAt } from "./purgeviz";
 
@@ -12,8 +12,8 @@ import { cartel, drawDna, drawFlow, drawFrieze, drawHoles, drawRings, drawStats,
  * zkSNARKs purge (burn 26, reveal 1). In the middle, LA FUSION, a sculpture of floating pixels that
  * replays every Apparition being born from its 26. Down both walls the 26 Apparitions, each above
  * the frieze of the 26 it cost. Two free-standing walls carry the explorer's views (Flow and
- * Strategies facing the lifts, DNA and Rings behind), and the far wall the Holes: the 10,000 by
- * rarity with every purged one a hole.
+ * Strategies facing the lifts, DNA and Rings behind), the far wall the Holes: the 10,000 by
+ * rarity with every purged one a hole; and beside the lifts, Les 26 on one canvas.
  */
 
 const X = 15,
@@ -40,7 +40,6 @@ export function aile(k: MuseumKit, data: Collection) {
   for (const s of [-1, 1]) k.box(f, k.gold, 0.04, 0.06, -L, s * (X - 0.21), 0.12, L / 2);
 
   // ---- by the lifts: the name, the totem ------------------------------------------------------------
-  lifts(k, f, 0, -0.22, FACE.nz, 2.3);
   const name = k.panel(f, 2048, 300, 11, (c, w, h) => {
     c.fillStyle = "#f2eee6";
     c.font = `italic 500 150px ${SERIF}`;
@@ -54,6 +53,75 @@ export function aile(k: MuseumKit, data: Collection) {
   const stats = k.panel(f, 1000, 1600, 2.3, (c, w, h) => drawStats(c, w, h, null), { glow: true, transparent: false });
   stats.position.set(-9, 0.4 + 1.84, -8 + 0.21);
   k.pick(f, stats, "<b>Apparitions</b><span>purge 26, reveal 1</span>", () => ({ eyebrow: "Aile des Apparitions", title: "Purge 26. Reveal 1.", body: "<p>A holder burns 26 zkSNARKs; one treasury snark is transformed into an Apparition. 26 in all.</p>", link: { href: VIEWS, label: "ZScan" } }));
+
+  // ---- beside the lifts: Les 26, every Apparition on one canvas, framed like the 10,000 below ----
+  // 7 × 4 (the last row two short), 250 px a cell
+  const L26 = { x: 10.6, w: 7.2 };
+  const h26 = (L26.w * 1000) / 1750;
+  const t26 = canvasTex(1750, 1000, (c, w, h) => {
+    c.fillStyle = "#0d0d0e";
+    c.fillRect(0, 0, w, h);
+  });
+  t26.magFilter = THREE.NearestFilter;
+  const les26 = new THREE.Mesh(new THREE.PlaneGeometry(L26.w, h26), new THREE.MeshBasicMaterial({ map: t26, color: "#ece6dc" }));
+  les26.position.set(L26.x, 1.5 + h26 / 2, -0.27);
+  les26.rotation.y = FACE.nz;
+  g.add(les26);
+  for (const [w, h, dx, y] of [
+    [L26.w + 0.5, 0.25, 0, 1.25],
+    [L26.w + 0.5, 0.25, 0, 1.5 + h26],
+    [0.25, h26 + 0.5, -(L26.w / 2 + 0.12), 1.25],
+    [0.25, h26 + 0.5, L26.w / 2 + 0.12, 1.25],
+  ])
+    k.box(f, k.gold, w, h, 0.18, L26.x + dx, y, -0.3);
+  k.wash(f, L26.x, -0.28, FACE.nz, 8, 5, 6.2, "#fff0d8");
+  const lab26 = k.panel(f, 900, 220, 1.6, (c, w, h) => {
+    c.fillStyle = "#efe9dc";
+    c.fillRect(0, 0, w, h);
+    c.fillStyle = "#1d1a17";
+    c.font = `700 64px ${SERIF}`;
+    c.fillText("Les 26", 30, 90);
+    c.font = `500 36px "JetBrains Mono", Menlo, monospace`;
+    c.fillStyle = "#6a1c1c";
+    c.fillText("Apparitions 01 → 26", 30, 170);
+  });
+  // (the canvas faces −z: seen from the room, its left edge is at +x)
+  lab26.position.set(L26.x + L26.w / 2 - 0.8, 0.85, -0.3);
+  lab26.rotation.y = FACE.nz;
+  const appAt = (hit: THREE.Intersection) => {
+    if (!hit.uv || !data.purge.apps.length) return null;
+    const c = Math.floor(hit.uv.x * 7),
+      r = Math.floor((1 - hit.uv.y) * 4);
+    return data.purge.apps.find((a) => a.slot === r * 7 + c + 1) ?? null;
+  };
+  k.pick(
+    f,
+    les26,
+    (hit) => {
+      const a = appAt(hit);
+      return a ? data.hover(a.item) : "<b>Les 26</b><span>every Apparition</span>";
+    },
+    (hit) => {
+      const a = appAt(hit);
+      return a ? data.info(a.item, "Aile des Apparitions · Les 26") : null;
+    },
+  );
+  void (async () => {
+    await k.whenVisited(f);
+    if (!(await data.ready)) return;
+    const c = (t26.image as HTMLCanvasElement).getContext("2d")!;
+    c.imageSmoothingEnabled = false;
+    const cell = 250;
+    await Promise.all(
+      data.purge.apps.map(async (a) => {
+        const im = await k.image(ZScan.zkSnarkImage(a.item)).catch(() => null);
+        if (!im) return;
+        const i = a.slot - 1;
+        c.drawImage(im, (i % 7) * cell + 8, Math.floor(i / 7) * cell + 8, cell - 16, cell - 16);
+        t26.needsUpdate = true;
+      }),
+    );
+  })();
 
   // ---- LA FUSION in the middle --------------------------------------------------------------------
   const FZ = -26;
@@ -228,6 +296,9 @@ export function aile(k: MuseumKit, data: Collection) {
   ];
   for (let i = 0; i < 3; i++) void k.person(f, id(), walk[i * 2], { wander: walk });
   void k.person(f, id(), [5.2, -3], { guard: true, face: [0, -10] });
+  // before Les 26: one photographs it, one takes a selfie with it
+  void k.person(f, id(), [9.4, -3.8], { face: [9.4, 0], phone: true });
+  void k.person(f, id(), [12.2, -2.8], { face: [12.2, 0], selfie: true });
 
   k.finish(f);
   return { spawn: new THREE.Vector3(0, 0, -2.6), yaw: 0, fill };

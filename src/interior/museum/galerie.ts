@@ -2,14 +2,15 @@ import * as THREE from "three";
 import type { Collection } from "./data";
 import { boxGeo, FACE, type MuseumKit } from "./kit";
 import { marble, skylight, vaultCoffers, versailles } from "./look";
-import { column, lifts, SERIF } from "./parts";
-import { banquette, bust, guardChair } from "./voxels";
+import { column, SERIF } from "./parts";
+import { banquette, bust, guardChair, stanchions } from "./voxels";
 
 /**
  * Floor 1, the Grande Galerie: a gallery 13 m wide and over 110 m long under a coffered barrel
  * vault with a skylight down its crown, divided into seven bays by pairs of red marble columns
  * carrying gilt arches. Oxblood walls over an oak dado, Versailles parquet, velvet banquettes. The
- * collection's seventy rarest hang here, rank 1 nearest the door, five paintings a wall per bay.
+ * collection's seventy rarest hang here, rank 1 nearest the door, five paintings a wall per bay;
+ * the first bays' centre pieces behind velvet ropes, under their own light, with a LEGENDARY plaque.
  */
 
 const W = 6.5,
@@ -90,7 +91,29 @@ export function galerie(k: MuseumKit, _data: Collection) {
       const yaw = s < 0 ? FACE.px : FACE.nx;
       // along the wall, "right" for a picture on the west wall is −z… keep the big one central
       const dirZ = s < 0 ? -1 : 1;
+      const centre = rank;
       k.hang(f, { x, y: 3.5, z: zc, yaw, s: 2.5, rank: rank++ });
+      // the first two bays' centre pieces (ranks 1, 6, 11, 16): a velvet rope, a brighter light, a plaque
+      if (b < 2) {
+        const rx = x - s * 1.4;
+        k.vox(f, "ropeG", () => stanchions(2), rx, 0, zc, -Math.PI / 2, 0.5 * (3.2 / 2.15));
+        k.solid(f, Math.min(x, rx) - 0.1, zc - 1.7, Math.max(x, rx) + 0.1, zc + 1.7);
+        k.wash(f, x - s * 0.03, zc, yaw, 3.6, 6.5, HW - 0.4, "#fff4dc");
+        const pl = k.panel(f, 700, 170, 1.4, (c, w, h) => {
+          c.fillStyle = "#14110e";
+          c.fillRect(0, 0, w, h);
+          c.strokeStyle = "#c9982e";
+          c.lineWidth = 6;
+          c.strokeRect(8, 8, w - 16, h - 16);
+          c.fillStyle = "#e8c070";
+          c.font = `600 64px ${SERIF}`;
+          c.textAlign = "center";
+          c.textBaseline = "middle";
+          c.fillText(`★ LEGENDARY · Nº ${centre}`, w / 2, h / 2 + 4);
+        });
+        pl.position.set(x - s * 0.03, 1.55, zc);
+        pl.rotation.y = yaw;
+      }
       for (const d of [-1, 1]) k.hang(f, { x, y: 2.75, z: zc + d * dirZ * 4.2, yaw, s: 1.55, rank: rank++, tone: 1, label: "below" });
       for (const d of [-1, 1]) k.hang(f, { x, y: 5.35, z: zc + d * dirZ * 4.2, yaw, s: 1.0, rank: rank++, tone: 1, label: "none" });
       // picture lights: washes on the wall, pools on the floor
@@ -104,8 +127,7 @@ export function galerie(k: MuseumKit, _data: Collection) {
     k.pool(f, 0, zc, 3, "#fff0d8", 0.012, 0.6);
   }
 
-  // ---- the vestibule: lifts, the gallery's name; the end: the bright door of the Pavillon --------
-  lifts(k, f, 0, -0.22, FACE.nz, 2.3);
+  // ---- the vestibule: the gallery's name; the end: the bright door of the Pavillon --------
   const title = k.panel(f, 2048, 300, 9, (c, w, h) => {
     c.fillStyle = "#e6d8b8";
     c.fillRect(0, 0, w, h);
@@ -156,9 +178,12 @@ export function galerie(k: MuseumKit, _data: Collection) {
     ];
     spots.forEach(([x, z, s], i) => {
       if ((b + i) % 3 === 2) return;
-      void k.person(f, id(), [x, z], { face: [s * W, z + (i % 2 ? 0.4 : -0.4)], phone: (b + i) % 5 === 0, item: (b + i) % 7 === 3 ? "book" : undefined });
+      // before the legendary pieces of the first bays, more phones and a selfie or two
+      const star = b < 2 && i < 2;
+      void k.person(f, id(), [x, z], { face: [s * W, z + (i % 2 ? 0.4 : -0.4)], phone: star ? i === 0 : (b + i) % 5 === 0, selfie: star && i === 1, item: (b + i) % 7 === 3 ? "book" : undefined });
     });
     if (b % 2 === 0) void k.person(f, id(), [0.15, zc - 0.5], { perch: 0.5, face: [W, zc - 0.5] });
+    if (b < 2) for (const [dx, dz, ph] of [[2.2, 1.6, true], [-2.4, -1.4, true]] as const) void k.person(f, id(), [dx, zc + dz], { face: [dx > 0 ? W : -W, zc], phone: ph });
     // a guard on a chair by the columns
     if (b % 2 === 1) {
       const s = b % 4 === 1 ? -1 : 1;

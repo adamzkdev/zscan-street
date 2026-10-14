@@ -12,6 +12,7 @@ export const FLOORS = [
   { label: "2", name: "Salle des États", sub: "Victoire · zkSNARKs #1" },
   { label: "3", name: "Appartements Napoléon III", sub: "Grand salon · salle à manger" },
   { label: "4", name: "Aile des Apparitions", sub: "The purge · La Fusion · 26 Apparitions" },
+  { label: "5", name: "Mémorial des Purgés", sub: "The 676 · the flame · the Unknown Purged" },
 ];
 
 /** A cylinder from a to b (radius r), as a geometry. */
@@ -162,74 +163,6 @@ export function wayfinding(k: MuseumKit, f: number, title: string, sub: string, 
     g.fillStyle = "#c9c9cc";
     g.fillText(sub, 62, 240);
   });
-}
-
-/**
- * The lift lobby of a floor: one bronze door per other floor, a lit number over each, all on a
- * wall facing `yaw` at (x, z) along the wall. Clicking a door takes you there.
- */
-export function lifts(k: MuseumKit, f: number, x: number, z: number, yaw: number, spacing = 2.4, car = true) {
-  const others = FLOORS.map((_, i) => i).filter((i) => i !== f);
-  const rx = Math.cos(yaw),
-    rz = -Math.sin(yaw);
-  const nx = Math.sin(yaw),
-    nz = Math.cos(yaw);
-  const bronze = new THREE.MeshStandardMaterial({ color: "#6a5236", roughness: 0.35, metalness: 0.85, envMapIntensity: 1.2 });
-  // the real lift car (liftplan.ts) stands in the middle: with an even count, the doors leave it a gap
-  const slot = (i: number) => {
-    const c = (others.length - 1) / 2;
-    return car && others.length % 2 === 0 ? (i < others.length / 2 ? i - c - 0.5 : i - c + 0.5) : i - c;
-  };
-  others.forEach((to, i) => {
-    const d = slot(i) * spacing;
-    const cx = x + rx * d,
-      cz = z + rz * d;
-    // stone surround, bronze doors, the split line, the lit number
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.9, 0.12), k.white);
-    frame.position.set(cx + nx * 0.06, 1.45, cz + nz * 0.06);
-    frame.rotation.y = yaw;
-    const doors = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.4, 0.08), bronze);
-    doors.position.set(cx + nx * 0.14, 1.2, cz + nz * 0.14);
-    doors.rotation.y = yaw;
-    const split = new THREE.Mesh(new THREE.BoxGeometry(0.02, 2.4, 0.09), k.black);
-    split.position.copy(doors.position);
-    split.rotation.y = yaw;
-    k.groups[f].add(frame, doors, split);
-    const sign = k.panel(
-      f,
-      512,
-      200,
-      1.5,
-      (g, w, h) => {
-        g.fillStyle = "#16161a";
-        g.fillRect(0, 0, w, h);
-        g.fillStyle = "#f4b728";
-        g.font = `700 110px ${SANS}`;
-        g.textBaseline = "middle";
-        g.fillText(FLOORS[to].label, 26, h / 2 + 6);
-        g.fillStyle = "#ffffff";
-        g.font = `600 38px ${SANS}`;
-        const words = FLOORS[to].name.split(" ");
-        const l1 = words.slice(0, 2).join(" "),
-          l2 = words.slice(2).join(" ");
-        g.fillText(l1, 120, l2 ? h / 2 - 22 : h / 2 + 4);
-        if (l2) g.fillText(l2, 120, h / 2 + 30);
-      },
-      { glow: true, transparent: false },
-    );
-    sign.position.set(cx + nx * 0.13, 3.25, cz + nz * 0.13);
-    sign.rotation.y = yaw;
-    const btn = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.04), k.lit("#ffd27a", 2));
-    btn.position.set(cx + rx * 0.85 + nx * 0.14, 1.2, cz + rz * 0.85 + nz * 0.14);
-    btn.rotation.y = yaw;
-    k.groups[f].add(btn);
-    const info = () => ({ eyebrow: "Lift", title: `${FLOORS[to].label} · ${FLOORS[to].name}`, floor: to });
-    const hov = `<b>Lift · ${FLOORS[to].label}</b><span>${FLOORS[to].name}</span>`;
-    k.pick(f, doors, hov, info);
-    k.pick(f, sign, hov, info);
-  });
-  const w = (2 * Math.abs(slot(0)) + 1) * spacing;
-  k.solid(f, Math.min(x - rx * w / 2, x + rx * w / 2) - Math.abs(nx) * 0.3, Math.min(z - rz * w / 2, z + rz * w / 2) - Math.abs(nz) * 0.3, Math.max(x - rx * w / 2, x + rx * w / 2) + Math.abs(nx) * 0.3, Math.max(z - rz * w / 2, z + rz * w / 2) + Math.abs(nz) * 0.3);
 }
 
 /** A gilt moulding (cornice / dado) running along a wall from (x0, z0) to (x1, z1) at height y. */

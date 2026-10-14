@@ -4,6 +4,7 @@ import type { Theme } from "../../scene/theme";
 import type { Floor, Interior, InteriorContext } from "../types";
 import { aile } from "./aile";
 import { apartments } from "./apartments";
+import { memorial } from "./memorial";
 import { Collection } from "./data";
 import { etats } from "./etats";
 import { galerie } from "./galerie";
@@ -12,12 +13,12 @@ import { FLOOR_Y, MuseumKit } from "./kit";
 import { FLOORS } from "./parts";
 
 /**
- * LOUVRE · zkSNARK MUSEUM, entered through the glass pyramid. Five levels, stacked in one scene
+ * LOUVRE · zkSNARK MUSEUM, entered through the glass pyramid. Six levels, stacked in one scene
  * (only the one you stand on is drawn): the Hall Napoléon under the pyramid; the Grande Galerie,
  * the collection's rarest hung in gilt frames down a long vaulted gallery; the Daru staircase with
  * the winged Victory and the Salle des États where zkSNARKs #1, the original, hangs alone behind
- * glass; the Napoleon III apartments; and the Aile des Apparitions, the zkSNARKs purge as a
- * sculpture of pixels and the explorer's charts. Every painting is a real zkSNARK: hover for its name,
+ * glass; the Napoleon III apartments; the Aile des Apparitions, the zkSNARKs purge as a
+ * sculpture of pixels and the explorer's charts; and the Mémorial des Purgés, for the 676. Every painting is a real zkSNARK: hover for its name,
  * click for its data.
  */
 export function buildMuseum(ctx: InteriorContext): Interior {
@@ -30,7 +31,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
   const k = new MuseumKit(ctx, scene);
   const data = new Collection();
 
-  const built: { spawn: THREE.Vector3; yaw: number; onData?: (d: Collection) => void; fill?: () => void }[] = [hall(k, data), galerie(k, data), etats(k, data), apartments(k, data), aile(k, data)];
+  const built: { spawn: THREE.Vector3; yaw: number; onData?: (d: Collection) => void; fill?: () => void }[] = [hall(k, data), galerie(k, data), etats(k, data), apartments(k, data), aile(k, data), memorial(k, data)];
 
   // ---- the paintings get their zkSNARKs once the collection is known -------------------------
   const idOf: (number | null)[][] = k.hangs.map((l) => l.map((h) => h.id ?? null));
@@ -66,7 +67,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
   };
 
   let theme: Theme = ctx.theme;
-  const backgrounds = [3, 30, 30, 30, 30];
+  const backgrounds = [3, 30, 30, 30, 30, 30];
   const setFloor = (n: number) => {
     k.current = n;
     k.visit(n);
@@ -74,7 +75,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
     const view = ctx.cityView("museum", backgrounds[n], 4);
     if (view) scene.background = view;
     const night = theme === "night";
-    if (hemi) hemi.intensity = [1.05, 0.55, 0.6, 0.45, 0.4][n] * (night ? 0.5 : 1);
+    if (hemi) hemi.intensity = [1.05, 0.55, 0.6, 0.45, 0.4, 0.6][n] * (night ? 0.5 : 1);
     scene.environmentIntensity = night ? 0.22 : 0.45;
     k.setNight(night);
   };
