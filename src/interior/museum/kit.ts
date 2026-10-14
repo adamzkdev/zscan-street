@@ -253,6 +253,7 @@ export class MuseumKit {
   current = 0;
   /** The visitor's camera, world position (pieces that turn to face it). */
   readonly cam = new THREE.Vector3();
+  readonly camQuat = new THREE.Quaternion();
 
   // ---- shared materials --------------------------------------------------------------------------
   readonly gold = new THREE.MeshStandardMaterial({ color: "#c9982e", roughness: 0.32, metalness: 0.85, emissive: "#1a1206", envMapIntensity: 1.4 });

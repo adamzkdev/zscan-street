@@ -5,19 +5,19 @@ import type { Collection } from "./data";
 import { canvasTex, FACE, type MuseumKit } from "./kit";
 import { SERIF } from "./parts";
 import { FusionSculpture } from "./fusion";
-import { avgColours, HoloFlow, HoloHoles, HoloStrategies, holoTime, projector } from "./holo";
+import { Orrery, PiercedWall, plaque, Tubes, Vortex } from "./sculptures";
 import { cartel, drawFrieze, drawStats } from "./purgeviz";
 
 /**
  * Floor 4, the Aile des Apparitions: a contemporary wing in black and polished concrete for the
  * zkSNARKs purge (burn 26, reveal 1). In the middle, LA FUSION, a sculpture of floating pixels that
- * replays every Apparition being born from its 26, and down the axis after it three holograms of
- * the explorer's views over projector discs: Strategies, Flow, Holes. Down both walls the 26
+ * replays every Apparition being born from its 26; down the axis after it the Vortex, the Orrery,
+ * the 26 Glass Tubes and, at the end, the Pierced Wall (sculptures.ts). Down both walls the 26
  * Apparitions, each above the frieze of the 26 it cost; beside the lifts, Les 26 on one canvas.
  */
 
 const X = 15,
-  L = -66,
+  L = -90,
   H = 10;
 const VIEWS = `${EXPLORER}/collection/zksnarks?tab=apparitions`;
 
@@ -123,11 +123,12 @@ export function aile(k: MuseumKit, data: Collection) {
     );
   })();
 
-  // ---- down the middle, four pieces of light: LA FUSION, then the holograms --------------------------
+  // ---- down the middle: LA FUSION, the Vortex, the Orrery, the Glass Tubes, the Pierced Wall --------
   const FZ = -18,
-    SZ = -32,
-    LZ = -45,
-    HZ = -57;
+    VZ = -33,
+    OZ = -51,
+    TZ = -66,
+    WZ = -86;
   const fusion = new FusionSculpture();
   fusion.group.position.set(0, 4.7, FZ);
   g.add(fusion.group);
@@ -141,24 +142,45 @@ export function aile(k: MuseumKit, data: Collection) {
     () => (fusion.current ? `<b>La Fusion · ${fusion.current.name}</b><span>its 26 purged snarks, pixel by pixel</span>` : "<b>La Fusion</b>"),
     () => (fusion.current ? data.info(fusion.current.item, "Aile des Apparitions · La Fusion") : null),
   );
-  const strategies = new HoloStrategies(),
-    flow = new HoloFlow(),
-    holes = new HoloHoles();
-  const holo = (o: { group: THREE.Group; hit: THREE.Mesh }, z: number, y: number, r: number, h: number, title: string, line: string, av: string) => {
-    projector(k, f, 0, z, r, h);
-    o.group.position.set(0, y, z);
-    g.add(o.group);
-    k.pick(f, o.hit, `<b>${title}</b><span>${line}</span>`, () => ({ eyebrow: "Aile des Apparitions · Hologram", title, body: `<p>${line}</p>`, link: { href: `${VIEWS}&av=${av}`, label: "ZScan" } }));
-  };
-  holo(strategies, SZ, 3.9, 2.2, 6.5, "Strategies", "Each purge's 26 snarks placed by rarity rank, the rows sorted by their median", "strategies");
-  holo(flow, LZ, 3.8, 2.2, 6.5, "Flow", "Every purged snark streaming from its lineage to the Apparition it revealed", "flow");
-  holo(holes, HZ, 1.3, 3.2, 4.5, "Holes", "The 10,000 by rarity: the purged rise and leave their holes", "holes");
+  const vortex = new Vortex(k, f, 0, VZ);
+  const orrery = new Orrery(k, f, 0, OZ);
+  const tubes = new Tubes(k, f, 0, TZ, 7);
+  const wall = new PiercedWall(k, f, WZ);
+  const piece = (title: string, line: string, av: string) => () => ({ eyebrow: "Aile des Apparitions", title, body: `<p>${line}</p>`, link: { href: `${VIEWS}&av=${av}`, label: "ZScan" } });
+  k.pick(f, vortex.hit, () => (vortex.current ? `<b>The Vortex · ${vortex.current.name}</b><span>its 26 drawn up into the eye</span>` : "<b>The Vortex</b>"), () =>
+    vortex.current ? data.info(vortex.current.item, "Aile des Apparitions · The Vortex") : piece("The Vortex", "The 676 purged swirl up the funnel; every 6 seconds, 26 of them are drawn into the eye and come out as one Apparition.", "fusion")(),
+  );
+  plaque(k, f, 4.4, VZ + 4.4, "THE VORTEX", "The 676 purged, swirling. Every 6 seconds, 26 are drawn into the eye and become one.");
+  const ORR = "26 Apparitions in orbit, each with its 26 purged snarks as moons. The closer a moon, the rarer the snark it was: gold ring the rarest band, pale ring the commonest.";
+  k.pick(f, orrery.hit, "<b>The Orrery</b><span>closer moon, rarer snark</span>", piece("The Orrery", ORR, "strategies"));
+  plaque(k, f, 4.4, OZ + 10.2, "THE ORRERY", "Each Apparition with its 26 as moons. Closer moon, rarer snark.");
+  for (const h of tubes.hits)
+    k.pick(
+      f,
+      h.mesh,
+      () => (h.app() ? `<b>${h.app()!.name}</b><span>${h.line()}</span>` : "<b>Glass tube</b>"),
+      () => (h.app() ? { ...data.info(h.app()!.item, "Aile des Apparitions · The 26 Tubes"), body: `<p>Its 26, by lineage: ${h.line()}.</p>` } : null),
+    );
+  plaque(k, f, 0, TZ + 3.4, "THE 26 TUBES", "Each fills with the 26 purged for it, one layer each, coloured by lineage. Full, its Apparition appears.");
+  k.pick(
+    f,
+    wall.wall,
+    (hit) => {
+      const id = wall.idAt(hit);
+      return id ? data.hover(id) : null;
+    },
+    (hit) => {
+      const id = wall.idAt(hit);
+      return id ? data.info(id, "Aile des Apparitions · The Pierced Wall") : null;
+    },
+  );
+  plaque(k, f, 5.6, WZ + 5, "THE PIERCED WALL", "The 10,000. The light comes through the 676 that were purged.");
   k.ticks[f].push((_dt, t) => {
-    holoTime.value = t;
     fusion.update(t, k.cam);
-    strategies.update(t, k.cam);
-    flow.update(t, k.cam);
-    holes.update(t, k.cam);
+    vortex.update(t, k.camQuat);
+    orrery.update(t, k.camQuat);
+    tubes.update(t, k.camQuat);
+    wall.update(t, k.camQuat);
   });
 
   // ---- the 26 down the walls, each above its frieze -------------------------------------------------
@@ -192,13 +214,10 @@ export function aile(k: MuseumKit, data: Collection) {
     try {
       const p = data.purge;
       fusion.load(p, atlas);
-      const order = data.byRank.map((it) => it.id);
-      const ranked = new Set(order);
-      for (let id = 1; id <= 10000; id++) if (!ranked.has(id)) order.push(id);
-      const cols = avgColours(atlas);
-      strategies.load(p, cols);
-      flow.load(p, atlas);
-      holes.load(p, order, cols);
+      vortex.load(p);
+      orrery.load(p);
+      tubes.load(p);
+      wall.load(p, k, f);
       const paint = (m: THREE.Mesh, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void) => {
         const t = (m.material as THREE.MeshBasicMaterial).map!;
         const cv = t.image as HTMLCanvasElement;
@@ -234,9 +253,9 @@ export function aile(k: MuseumKit, data: Collection) {
   k.light(f, -4, 8.5, FZ, "#dfe8ff", 30, 22);
   k.light(f, 4, 8.5, FZ, "#dfe8ff", 30, 22);
   k.light(f, 0, 6, -6, "#fff2e0", 20, 18);
-  k.light(f, 0, 8, SZ + 4, "#bfeaff", 18, 20);
-  k.light(f, 0, 8, LZ + 4, "#bfeaff", 18, 20);
-  k.light(f, 0, 8, HZ + 3, "#bfeaff", 18, 20);
+  k.light(f, 0, 8, VZ, "#dfe8ff", 22, 20);
+  k.light(f, 0, 7.5, OZ, "#ffe2b0", 26, 24);
+  k.light(f, 0, 7, TZ - 4, "#e8f2ff", 24, 20);
   let n = 0;
   const id = () => k.visitor(4000 + n++);
   for (const [x, z, ph] of [
@@ -248,25 +267,27 @@ export function aile(k: MuseumKit, data: Collection) {
     [-6, FZ - 3, false],
   ] as const)
     void k.person(f, id(), [x, z], { face: [0, FZ], phone: ph });
-  // before the holograms, off the axis so they stay in view
+  // round the pieces, off the axis so they stay in view; some under the Orrery, looking up
   for (const [x, z, fx, fz] of [
-    [-5.6, SZ + 4.4, 0, SZ],
-    [6, SZ + 3.6, 0, SZ],
-    [-6.4, LZ + 3.8, 0, LZ],
-    [5.4, LZ + 4.6, 0, LZ],
-    [-5.2, HZ + 4.6, 0, HZ],
-    [5.8, HZ + 3.8, 0, HZ],
+    [-5, VZ + 3.6, 0, VZ],
+    [5.6, VZ + 2.4, 0, VZ],
+    [-3.4, OZ + 4.2, 0, OZ],
+    [2.6, OZ - 3, 0, OZ],
+    [-2.2, TZ - 1.4, -2.6, TZ - 6],
+    [3.4, TZ - 1.6, 3.6, TZ - 6],
+    [-3.2, WZ + 6, 0, WZ],
+    [2.4, WZ + 4.4, 0, WZ],
     [-11.6, -16, -X, -16],
     [11.8, -28, X, -28],
     [-11.4, -40, -X, -40],
   ] as const)
-    void k.person(f, id(), [x, z], { face: [fx, fz], phone: x === 6 || x === -5.2 });
+    void k.person(f, id(), [x, z], { face: [fx, fz], phone: x === 5.6 || x === 2.4 || x === -2.2 });
   const walk: [number, number][] = [
     [-10, -12],
     [10, -20],
     [-10, -34],
     [10, -52],
-    [-8, -58],
+    [-8, -78],
     [0, -14],
   ];
   for (let i = 0; i < 3; i++) void k.person(f, id(), walk[i * 2], { wander: walk });

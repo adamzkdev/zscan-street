@@ -132,6 +132,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
     update(dt, t, camera) {
       camera.getWorldQuaternion(camQuat);
       camera.getWorldPosition(k.cam);
+      k.camQuat.copy(camQuat);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
       for (const s of k.people[k.current]) s.update(dt, t, camQuat, camRight);
       for (const tick of k.ticks[k.current]) tick(dt, t);
