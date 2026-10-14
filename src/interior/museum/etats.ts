@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { sharedAtlasTexture } from "../../data/atlas";
 import type { Collection } from "./data";
-import { boxGeo, FACE, type MuseumKit } from "./kit";
+import { boxGeo, canvasTex, FACE, type MuseumKit } from "./kit";
 import { goldMosaic, limestone, skylight, versailles } from "./look";
 import { lifts, SERIF } from "./parts";
 import { banquette, stanchions, wingedVictory } from "./voxels";
@@ -302,6 +302,26 @@ export function etats(k: MuseumKit, data: Collection) {
   mosaic.position.set(X1 - 0.34, 1.6 + MS / 2, MZ);
   mosaic.rotation.y = FACE.nx;
   g.add(mosaic);
+  // the purge's holes: every zkSNARK burned for an Apparition, a black square on the canvas
+  const holes = canvasTex(1000, 1000, () => {});
+  const veil = new THREE.Mesh(new THREE.PlaneGeometry(MS, MS), new THREE.MeshBasicMaterial({ map: holes, transparent: true, depthWrite: false }));
+  veil.position.set(X1 - 0.35, 1.6 + MS / 2, MZ);
+  veil.rotation.y = FACE.nx;
+  veil.raycast = () => {};
+  g.add(veil);
+  void data.ready.then(() => {
+    const cv = holes.image as HTMLCanvasElement;
+    const c = cv.getContext("2d")!;
+    for (const p of data.purge.purged) {
+      const i = p.item - 1;
+      c.fillStyle = "#000";
+      c.fillRect((i % 100) * 10, Math.floor(i / 100) * 10, 10, 10);
+      c.strokeStyle = "rgba(255,255,255,0.85)";
+      c.lineWidth = 1.5;
+      c.strokeRect((i % 100) * 10 + 1, Math.floor(i / 100) * 10 + 1, 8, 8);
+    }
+    holes.needsUpdate = true;
+  });
   const fr = (dz: number, dy: number, w: number, h: number) => k.geo(f, k.gold, boxGeo(0.32, h, w, X1 - 0.36, dy, MZ + dz));
   fr(0, 1.1, MS + 1, 0.5);
   fr(0, 1.6 + MS, MS + 1, 0.5);

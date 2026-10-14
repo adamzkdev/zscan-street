@@ -201,7 +201,7 @@ export function hall(k: MuseumKit, data: Collection) {
     for (const hit of wing(k, f, w, stone, landing)) k.pick(f, hit, `<b>${names[to]}</b><span>escalator</span>`, () => ({ eyebrow: "Escalator", title: names[to], floor: to }));
 
   // ---- the lifts, by the entrance -------------------------------------------------------------
-  lifts(k, f, 14, -0.32, FACE.nz, 2.3);
+  lifts(k, f, 14, -0.32, FACE.nz, 2.3, false);
   const lw = wayfinding(k, f, "ASCENSEURS", "Lifts · all levels", "#f4b728", 3.0);
   lw.position.set(14, 4.4, -0.33);
   lw.rotation.y = FACE.nz;

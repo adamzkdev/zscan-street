@@ -15,7 +15,7 @@ import type { InteriorContext, PickInfo, Rect } from "../types";
  * portrait atlas, one for every wall label), light pools and washes, visitors and guards.
  */
 
-export const FLOOR_Y = [0, 40, 80, 120];
+export const FLOOR_Y = [0, 40, 80, 120, 160];
 export const LIGHTS = 6;
 
 export type Tick = (dt: number, t: number) => void;
@@ -250,6 +250,8 @@ export class MuseumKit {
   private washes: [number, number, number, number, number, number, number, string][][] = FLOOR_Y.map(() => []);
   private lightCount = FLOOR_Y.map(() => 0);
   current = 0;
+  /** The visitor's camera, world position (pieces that turn to face it). */
+  readonly cam = new THREE.Vector3();
 
   // ---- shared materials --------------------------------------------------------------------------
   readonly gold = new THREE.MeshStandardMaterial({ color: "#c9982e", roughness: 0.32, metalness: 0.85, emissive: "#1a1206", envMapIntensity: 1.4 });

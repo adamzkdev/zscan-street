@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { makeScene } from "../kit";
 import type { Theme } from "../../scene/theme";
 import type { Floor, Interior, InteriorContext } from "../types";
+import { aile } from "./aile";
 import { apartments } from "./apartments";
 import { Collection } from "./data";
 import { etats } from "./etats";
@@ -11,11 +12,12 @@ import { FLOOR_Y, MuseumKit } from "./kit";
 import { FLOORS } from "./parts";
 
 /**
- * LOUVRE · zkSNARK MUSEUM, entered through the glass pyramid. Four levels, stacked in one scene
+ * LOUVRE · zkSNARK MUSEUM, entered through the glass pyramid. Five levels, stacked in one scene
  * (only the one you stand on is drawn): the Hall Napoléon under the pyramid; the Grande Galerie,
  * the collection's rarest hung in gilt frames down a long vaulted gallery; the Daru staircase with
  * the winged Victory and the Salle des États where zkSNARKs #1, the original, hangs alone behind
- * glass; and the Napoleon III apartments. Every painting is a real zkSNARK: hover for its name,
+ * glass; the Napoleon III apartments; and the Aile des Apparitions, the zkSNARKs purge as a
+ * sculpture of pixels and the explorer's charts. Every painting is a real zkSNARK: hover for its name,
  * click for its data.
  */
 export function buildMuseum(ctx: InteriorContext): Interior {
@@ -28,7 +30,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
   const k = new MuseumKit(ctx, scene);
   const data = new Collection();
 
-  const built: { spawn: THREE.Vector3; yaw: number; onData?: (d: Collection) => void }[] = [hall(k, data), galerie(k, data), etats(k, data), apartments(k, data)];
+  const built: { spawn: THREE.Vector3; yaw: number; onData?: (d: Collection) => void; fill?: () => void }[] = [hall(k, data), galerie(k, data), etats(k, data), apartments(k, data), aile(k, data)];
 
   // ---- the paintings get their zkSNARKs once the collection is known -------------------------
   const idOf: (number | null)[][] = k.hangs.map((l) => l.map((h) => h.id ?? null));
@@ -44,6 +46,9 @@ export function buildMuseum(ctx: InteriorContext): Interior {
         else k.drawLabel(f, i, `zkSNARKs #${id}`, "", "");
       }),
     );
+    // floors that hang by their own data (the Apparitions), then their ids for picking
+    for (const b of built) b.fill?.();
+    k.hangs.forEach((list, f) => list.forEach((h, i) => (idOf[f][i] = h.id ?? idOf[f][i])));
     for (const fn of onData) fn();
   });
   const onData: (() => void)[] = [];
@@ -61,7 +66,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
   };
 
   let theme: Theme = ctx.theme;
-  const backgrounds = [3, 30, 30, 30];
+  const backgrounds = [3, 30, 30, 30, 30];
   const setFloor = (n: number) => {
     k.current = n;
     k.visit(n);
@@ -69,7 +74,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
     const view = ctx.cityView("museum", backgrounds[n], 4);
     if (view) scene.background = view;
     const night = theme === "night";
-    if (hemi) hemi.intensity = [1.05, 0.55, 0.6, 0.45][n] * (night ? 0.5 : 1);
+    if (hemi) hemi.intensity = [1.05, 0.55, 0.6, 0.45, 0.4][n] * (night ? 0.5 : 1);
     scene.environmentIntensity = night ? 0.22 : 0.45;
     k.setNight(night);
   };
@@ -125,6 +130,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
     },
     update(dt, t, camera) {
       camera.getWorldQuaternion(camQuat);
+      camera.getWorldPosition(k.cam);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
       for (const s of k.people[k.current]) s.update(dt, t, camQuat, camRight);
       for (const tick of k.ticks[k.current]) tick(dt, t);

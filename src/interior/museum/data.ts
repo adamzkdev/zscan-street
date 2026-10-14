@@ -1,7 +1,8 @@
-import { EXPLORER, get, ZScan } from "../../data/zscan";
+import { API, EXPLORER, get, ZScan } from "../../data/zscan";
 import type { PickInfo } from "../types";
+import { median, Purge } from "./purge";
 
-/** The collection as the museum needs it: every item by id and by rank, market figures. */
+/** The collection as the museum needs it: every item by id and by rank, market figures, the purge. */
 
 /** One item of the collection map: [id, rank, ask, bid, last, sales, volume, trait indices]. */
 type MapTuple = [number, number | null, number | null, number | null, number | null, number, number, number[]];
@@ -48,10 +49,12 @@ export class Collection {
   listings: number | null = null;
   sales24: number | null = null;
   volume24: number | null = null;
+  /** The Apparitions purge: which items were burned, which became Apparitions. */
+  readonly purge = new Purge();
   ready: Promise<boolean>;
 
   constructor() {
-    this.ready = this.load();
+    this.ready = Promise.all([this.load(), this.purge.ready.catch(() => false)]).then(([ok]) => ok);
   }
 
   private async load() {
@@ -89,6 +92,10 @@ export class Collection {
   }
 
   hover(id: number) {
+    const app = this.purge.appOf.get(id);
+    if (app) return `<b>${app.name}</b><span>was zkSNARKs #${id} · 26 purged for it</span>`;
+    const gone = this.purge.purgedFor.get(id);
+    if (gone) return `<b>zkSNARKs #${id}</b><span>purged · ${gone.name}</span>`;
     const it = this.byId.get(id);
     if (!it) return `<b>zkSNARKs #${id}</b>`;
     return `<b>zkSNARKs #${id}</b><span>rank ${it.rank != null ? num(it.rank) : "—"} · ${bandOf(it.rank)}${it.ask != null ? ` · ${zec(it.ask)}` : ""}</span>`;
@@ -97,6 +104,34 @@ export class Collection {
   info(id: number, where: string): PickInfo {
     const it = this.byId.get(id);
     const link = { href: `${EXPLORER}/collection/zksnarks/item/${id}`, label: "ZScan" };
+    const app = this.purge.appOf.get(id);
+    if (app) {
+      const ps = this.purge.of(app);
+      const ranks = ps.map((p) => p.rank).filter((r): r is number => r != null);
+      return {
+        eyebrow: `${where} · was zkSNARKs #${id}`,
+        title: app.name,
+        image: ZScan.zkSnarkImage(id),
+        tag: ["Apparition", "info"],
+        stats: [
+          ["Purged", String(ps.length)],
+          ["Median rank", ranks.length ? num(Math.round(median(ranks))) : "—"],
+          ["Rarest", ranks.length ? `#${num(Math.min(...ranks))}` : "—"],
+        ],
+        body: `<p>Before, a treasury snark:</p><p><img src="${API}/v1/collections/zksnarks/items/${id}/image?before=1" alt="zkSNARKs #${id} before" width="96" height="96" style="image-rendering:pixelated;border-radius:6px"></p><p>Purged for it: ${ps.map((p) => `#${p.item}`).join(" ")}</p>`,
+        link,
+      };
+    }
+    const gone = this.purge.purgedFor.get(id);
+    if (gone)
+      return {
+        eyebrow: `${where} · Rank #${it?.rank != null ? num(it.rank) : "—"}`,
+        title: `zkSNARKs #${id}`,
+        image: ZScan.zkSnarkImage(id),
+        tag: ["Purged", "warn"],
+        body: `<p>Burned to reveal ${esc(gone.name)}. Gone for good.</p>`,
+        link,
+      };
     if (!it) return { eyebrow: where, title: `zkSNARKs #${id}`, image: ZScan.zkSnarkImage(id), link };
     return {
       eyebrow: `${where} · Rank #${it.rank != null ? num(it.rank) : "—"} · ${bandOf(it.rank)}`,

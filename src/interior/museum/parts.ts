@@ -11,6 +11,7 @@ export const FLOORS = [
   { label: "1", name: "Grande Galerie", sub: "Ranks 1–70" },
   { label: "2", name: "Salle des États", sub: "Victoire · zkSNARKs #1" },
   { label: "3", name: "Appartements Napoléon III", sub: "Grand salon · salle à manger" },
+  { label: "4", name: "Aile des Apparitions", sub: "The purge · La Fusion · 26 Apparitions" },
 ];
 
 /** A cylinder from a to b (radius r), as a geometry. */
@@ -167,15 +168,20 @@ export function wayfinding(k: MuseumKit, f: number, title: string, sub: string, 
  * The lift lobby of a floor: one bronze door per other floor, a lit number over each, all on a
  * wall facing `yaw` at (x, z) along the wall. Clicking a door takes you there.
  */
-export function lifts(k: MuseumKit, f: number, x: number, z: number, yaw: number, spacing = 2.4) {
+export function lifts(k: MuseumKit, f: number, x: number, z: number, yaw: number, spacing = 2.4, car = true) {
   const others = FLOORS.map((_, i) => i).filter((i) => i !== f);
   const rx = Math.cos(yaw),
     rz = -Math.sin(yaw);
   const nx = Math.sin(yaw),
     nz = Math.cos(yaw);
   const bronze = new THREE.MeshStandardMaterial({ color: "#6a5236", roughness: 0.35, metalness: 0.85, envMapIntensity: 1.2 });
+  // the real lift car (liftplan.ts) stands in the middle: with an even count, the doors leave it a gap
+  const slot = (i: number) => {
+    const c = (others.length - 1) / 2;
+    return car && others.length % 2 === 0 ? (i < others.length / 2 ? i - c - 0.5 : i - c + 0.5) : i - c;
+  };
   others.forEach((to, i) => {
-    const d = (i - (others.length - 1) / 2) * spacing;
+    const d = slot(i) * spacing;
     const cx = x + rx * d,
       cz = z + rz * d;
     // stone surround, bronze doors, the split line, the lit number
@@ -222,7 +228,7 @@ export function lifts(k: MuseumKit, f: number, x: number, z: number, yaw: number
     k.pick(f, doors, hov, info);
     k.pick(f, sign, hov, info);
   });
-  const w = others.length * spacing;
+  const w = (2 * Math.abs(slot(0)) + 1) * spacing;
   k.solid(f, Math.min(x - rx * w / 2, x + rx * w / 2) - Math.abs(nx) * 0.3, Math.min(z - rz * w / 2, z + rz * w / 2) - Math.abs(nz) * 0.3, Math.max(x - rx * w / 2, x + rx * w / 2) + Math.abs(nx) * 0.3, Math.max(z - rz * w / 2, z + rz * w / 2) + Math.abs(nz) * 0.3);
 }
 

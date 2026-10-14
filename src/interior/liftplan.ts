@@ -226,7 +226,7 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
     style: "neon",
     lifts: per({ 0: [lobby(-14.8, -24, Math.PI / 2)], 1: [lobby(-17.8, -7, Math.PI / 2)], 2: [lobby(-13.7, -7, Math.PI / 2)], 3: [lobby(0, 1.68, Math.PI)] }),
   },
-  // the Napoleon hall: on the front wall right of the entrance; upstairs, on each floor's middle lift door.
+  // the Napoleon hall: on the front wall right of the entrance; upstairs, between each floor's lift doors.
   // Its escalators (museum/hall.ts: wing()) climb onto the wings' landings and arrive in the wing they
   // serve: Denon (west) the Grande Galerie, Richelieu (east) the apartments, Daru (north) the Salle des
   // États. Each zone runs from the foot plate (0.7 m on) to just past the landing's edge, where the head arrives
@@ -242,6 +242,7 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
       1: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
       2: [{ at: { x: 4.5, z: -1.46, yaw: 0 } }],
       3: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
+      4: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
     }),
   },
   // the stands and the pitch: a lift in a south vomitory (x 20: the middle one is the way out) down
