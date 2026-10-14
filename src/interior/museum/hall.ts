@@ -225,7 +225,7 @@ export function hall(k: MuseumKit, data: Collection) {
         const y = ROW0 + i * ROW;
         c.fillStyle = "rgba(255,255,255,0.08)";
         c.fillRect(60, y + ROW - 4, w - 120, 2);
-        c.fillStyle = i === FLOORS.length - 1 || fl.name.startsWith("Aile") || fl.name.startsWith("Mémorial") ? "#f4b728" : "#ffffff";
+        c.fillStyle = i === FLOORS.length - 1 || fl.name.startsWith("Aile") || fl.name.startsWith("Memorial") ? "#f4b728" : "#ffffff";
         c.font = `800 120px ${SANS}`;
         c.fillText(fl.label, 60, y + 140);
         c.fillStyle = "#ffffff";

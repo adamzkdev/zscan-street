@@ -266,7 +266,7 @@ export class MuseumKit {
   /** White base so each frame's instance colour is its gilt exactly. */
   readonly frameMat = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.3, metalness: 0.85, emissive: "#1a1206", envMapIntensity: 1.5 });
   /** A camera flash: a white burst, additive, over the phone. */
-  private flashGeo = new THREE.PlaneGeometry(0.9, 0.9);
+  private flashGeo = new THREE.PlaneGeometry(0.55, 0.55);
   private flashMat = new THREE.MeshBasicMaterial({ map: flashTexture(), color: new THREE.Color(2.2, 2.2, 2.4), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   readonly glass = new THREE.MeshStandardMaterial({ color: "#cfe6ee", roughness: 0.04, metalness: 0.4, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide });
 

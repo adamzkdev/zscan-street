@@ -18,7 +18,7 @@ import { FLOORS } from "./parts";
  * the collection's rarest hung in gilt frames down a long vaulted gallery; the Daru staircase with
  * the winged Victory and the Salle des États where zkSNARKs #1, the original, hangs alone behind
  * glass; the Napoleon III apartments; the Aile des Apparitions, the zkSNARKs purge as a
- * sculpture of pixels and the explorer's charts; and the Mémorial des Purgés, for the 676. Every painting is a real zkSNARK: hover for its name,
+ * sculpture of pixels and the explorer's charts; and the Memorial of the Purged, for the 676. Every painting is a real zkSNARK: hover for its name,
  * click for its data.
  */
 export function buildMuseum(ctx: InteriorContext): Interior {

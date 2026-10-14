@@ -7,12 +7,13 @@ import { SERIF } from "./parts";
 import { pad2, type PApp } from "./purge";
 import { snark } from "./purgeviz";
 import { banquette } from "./voxels";
+import type { Snark } from "../../scene/snark";
 
 /**
- * Floor 5, the Mémorial des Purgés: a high hall of pale stone for the 676 zkSNARKs burned to
- * reveal the Apparitions. On the far wall, under AUX 676 zkSNARKs PURGÉS · LA COLLECTION
- * RECONNAISSANTE, the Wall of the Purged: all 676 portraits, 26 by 26, one row per Apparition. Before
- * it, on a granite plinth, the Snark Purgé Inconnu in bronze: the silhouette all 676 share (every
+ * Floor 5, the Memorial of the Purged: a high hall of pale stone for the 676 zkSNARKs burned to
+ * reveal the Apparitions. On the far wall, under TO THE 676 PURGED zkSNARKs · FROM A GRATEFUL
+ * COLLECTION, the Wall of the Purged: all 676 portraits, 26 by 26, one row per Apparition. Before
+ * it, on a granite plinth, the Unknown Purged Snark in bronze: the silhouette all 676 share (every
  * pixel lit in at least half of them), with an eternal flame and wreaths at its feet. Down both
  * walls, 26 stone tablets engraved with the names, Apparition by Apparition. A guard of honour.
  */
@@ -65,7 +66,7 @@ export function memorial(k: MuseumKit, data: Collection) {
     c.font = `italic 500 150px ${SERIF}`;
     c.textAlign = "center";
     c.textBaseline = "middle";
-    c.fillText("Mémorial des Purgés", w / 2, h / 2);
+    c.fillText("Memorial of the Purged", w / 2, h / 2);
   });
   name.position.set(0, 7, -0.28);
   name.rotation.y = FACE.nz;
@@ -77,7 +78,7 @@ export function memorial(k: MuseumKit, data: Collection) {
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.letterSpacing = "14px";
-    c.fillText("AUX 676 zkSNARKs PURGÉS · LA COLLECTION RECONNAISSANTE", w / 2, h / 2 + 6);
+    c.fillText("TO THE 676 PURGED zkSNARKs · FROM A GRATEFUL COLLECTION", w / 2, h / 2 + 6);
   });
   ins.position.set(0, H - 2.1, L + 0.27);
   const WS = 8.4;
@@ -119,15 +120,15 @@ export function memorial(k: MuseumKit, data: Collection) {
     wall676,
     (hit) => {
       const id = cellAt(hit);
-      return id != null ? data.hover(id) : "<b>Le Mur des Purgés</b><span>all 676, one row per Apparition</span>";
+      return id != null ? data.hover(id) : "<b>The Wall of the Purged</b><span>all 676, one row per Apparition</span>";
     },
     (hit) => {
       const id = cellAt(hit);
-      return id != null ? data.info(id, "Mémorial des Purgés") : { eyebrow: "Mémorial des Purgés", title: "Le Mur des Purgés", body: "<p>All 676 zkSNARKs burned for the Apparitions, one row per Apparition, its own portrait at the start of the row.</p>" };
+      return id != null ? data.info(id, "Memorial of the Purged") : { eyebrow: "Memorial of the Purged", title: "The Wall of the Purged", body: "<p>All 676 zkSNARKs burned for the Apparitions, one row per Apparition, its own portrait at the start of the row.</p>" };
     },
   );
 
-  // ---- the Snark Purgé Inconnu: plinth, bronze, flame, wreaths ---------------------------------------
+  // ---- the Unknown Purged Snark: plinth, bronze, flame, wreaths ---------------------------------------
   k.geo(f, granite, boxGeo(3.2, 0.5, 3.2, 0, 0, SZ));
   k.geo(f, granite, boxGeo(2.6, 1.4, 2.6, 0, 0.5, SZ));
   k.geo(f, bronze, boxGeo(2.7, 0.08, 2.7, 0, 1.86, SZ));
@@ -141,9 +142,9 @@ export function memorial(k: MuseumKit, data: Collection) {
     c.fillStyle = "#f0d8a0";
     c.textAlign = "center";
     c.font = `600 74px ${SERIF}`;
-    c.fillText("AU SNARK PURGÉ INCONNU", w / 2, 150);
+    c.fillText("TO THE UNKNOWN PURGED SNARK", w / 2, 150);
     c.font = `italic 500 50px ${SERIF}`;
-    c.fillText("la silhouette des 676", w / 2, 250);
+    c.fillText("the shape the 676 shared", w / 2, 250);
   });
   plaque.position.set(0, 1.15, SZ + 1.31);
   const VOX = 0.11,
@@ -155,9 +156,9 @@ export function memorial(k: MuseumKit, data: Collection) {
   const statueHit = new THREE.Mesh(new THREE.BoxGeometry(PIX * VOX, PIX * VOX, 0.6), new THREE.MeshBasicMaterial({ visible: false }));
   statueHit.position.set(0, 1.9 + (PIX * VOX) / 2, SZ);
   g.add(statueHit);
-  k.pick(f, statueHit, "<b>Au Snark Purgé Inconnu</b><span>the silhouette the 676 share</span>", () => ({
-    eyebrow: "Mémorial des Purgés",
-    title: "Au Snark Purgé Inconnu",
+  k.pick(f, statueHit, "<b>The Unknown Purged Snark</b><span>the shape the 676 shared</span>", () => ({
+    eyebrow: "Memorial of the Purged",
+    title: "The Unknown Purged Snark",
     tag: ["Bronze", "muted"],
     body: "<p>Every pixel lit in at least half of the 676 purged zkSNARKs: the shape they all had in common.</p>",
   }));
@@ -206,7 +207,7 @@ export function memorial(k: MuseumKit, data: Collection) {
     hit.position.set(0, 1.2, FZ);
     g.add(hit);
     return hit;
-  })(), "<b>La flamme du souvenir</b><span>for the 676</span>", () => ({ eyebrow: "Mémorial des Purgés", title: "La flamme du souvenir", body: "<p>It burns for the 676 zkSNARKs purged so that 26 Apparitions could be revealed.</p>" }));
+  })(), "<b>The Eternal Flame</b><span>for the 676</span>", () => ({ eyebrow: "Memorial of the Purged", title: "The Eternal Flame", body: "<p>It burns for the 676 zkSNARKs purged so that 26 Apparitions could be revealed.</p>" }));
   // wreaths against the plinth: laurel rings with a gold ribbon
   for (const [x, rz] of [
     [-0.95, 0.1],
@@ -264,25 +265,45 @@ export function memorial(k: MuseumKit, data: Collection) {
   const id = () => k.visitor(5000 + n++);
   void k.person(f, id(), [-1.6, FZ + 0.4], { guard: true, face: [-1.6, 0] });
   void k.person(f, id(), [1.6, FZ + 0.4], { guard: true, face: [1.6, 0] });
-  // in a half ring a little aside, so the statue stays in view down the hall
-  for (const [x, z, flowers] of [
-    [-3.4, FZ + 1.6, true],
-    [-4.2, FZ + 3.6, false],
-    [3.3, FZ + 1.8, true],
-    [4.4, FZ + 3.4, false],
-    [-5.6, FZ + 0.4, false],
-  ] as const)
-    void k.person(f, id(), [x, z], { face: [0, SZ], item: flowers ? "flowers" : undefined });
-  for (const [x, z, fx] of [
-    [-11.2, -9, -X],
-    [-11.4, -24, -X],
-    [11.3, -14, X],
-    [11.2, -30, X],
-  ] as const)
-    void k.person(f, id(), [x, z], { face: [fx, z] });
   void k.person(f, id(), [-0.6, -14.3], { perch: 0.45, face: [0, SZ] });
   void k.person(f, id(), [0.8, -22.3], { perch: 0.45, face: [0, SZ] });
-  void k.person(f, id(), [5, L + 4], { face: [3, L], selfie: true });
+
+  // ---- the mourners: they speak, one after another, of the ones they lost (real ids, real ranks) -----
+  const speakers: { s: Snark; line: string }[] = [];
+  // a half ring by the flame (aside, so the statue stays in view), the tablets, the Wall, the benches
+  const spots: { at: [number, number]; face: [number, number]; flowers?: boolean }[] = [
+    { at: [-3.4, FZ + 1.6], face: [0, SZ], flowers: true },
+    { at: [3.3, FZ + 1.8], face: [0, SZ], flowers: true },
+    { at: [-4.4, FZ + 3.8], face: [0, SZ] },
+    { at: [4.6, FZ + 3.4], face: [0, SZ] },
+    { at: [-5.8, FZ + 0.2], face: [0, SZ] },
+    { at: [-11.2, -9], face: [-X, -9] },
+    { at: [-11.4, -24], face: [-X, -24] },
+    { at: [-11.1, -32], face: [-X, -32] },
+    { at: [11.3, -14], face: [X, -14] },
+    { at: [11.2, -30], face: [X, -30] },
+    { at: [-3.6, L + 3.4], face: [-3.6, L] },
+    { at: [3.8, L + 3], face: [3.8, L] },
+    { at: [-1.8, -14.6], face: [0, SZ], flowers: true },
+    { at: [2.2, -22.6], face: [0, SZ] },
+  ];
+  let nextLine = 4,
+    said = 0;
+  k.ticks[f].push((_dt, t) => {
+    if (k.current !== f || !speakers.length || t < nextLine) return;
+    const sp = speakers[said++ % speakers.length];
+    sp.s.say(sp.line, 6);
+    nextLine = t + 3.6;
+  });
+  void (async () => {
+    await k.whenVisited(f);
+    if (!(await data.ready) || !data.purge.apps.length) return;
+    const lines = testimonies(data, spots.length);
+    lines.forEach((ln, i) => {
+      const sp = spots[i];
+      void k.person(f, ln.speaker, sp.at, { face: sp.face, item: sp.flowers ? "flowers" : undefined }).then((s) => s && speakers.push({ s, line: ln.text }));
+    });
+  })();
 
   // ---- once visited and the purge known: the Wall, the statue, the names ------------------------------
   void (async () => {
@@ -345,7 +366,7 @@ export function memorial(k: MuseumKit, data: Collection) {
         tc.fillText(`APPARITION ${pad2(a.slot)}`, w / 2, 110);
         tc.fillStyle = "#5a5040";
         tc.font = `italic 400 32px ${SERIF}`;
-        tc.fillText(`morts pour l'Apparition · #${a.item}`, w / 2, 160);
+        tc.fillText(`they fell so it could appear · #${a.item}`, w / 2, 160);
         tc.fillStyle = "#3a3228";
         tc.font = `500 34px ${SERIF}`;
         p.of(a).forEach((x, j) => {
@@ -361,4 +382,71 @@ export function memorial(k: MuseumKit, data: Collection) {
 
   k.finish(f);
   return { spawn: new THREE.Vector3(0, 0, -2.6), yaw: 0 };
+}
+
+/**
+ * What the mourners say: one line each, about a real purged zkSNARK (its id, rank, lineage, the
+ * Apparition it went into). Neighbours are true neighbours: the speaker is the next number in the
+ * collection, still here, beside the hole. Family ties are the mourners' own.
+ */
+function testimonies(data: Collection, n: number): { speaker: number; text: string }[] {
+  const p = data.purge;
+  const gone = new Set(p.purged.map((x) => x.item));
+  let seed = 7;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const pick = () => p.purged[Math.floor(rnd() * p.purged.length)];
+  const rarest = [...p.purged].filter((x) => x.rank != null).sort((a, b) => a.rank! - b.rank!)[0];
+  const appName = (x: { item: number }) => p.purgedFor.get(x.item)?.name ?? "an Apparition";
+  const lineage = (x: { traits: { trait_type: string; value: string }[] }) => x.traits.find((t) => t.trait_type === "Lineage")?.value ?? "";
+  const kin = ["brother", "sister", "father", "mother", "cousin", "best friend", "twin", "uncle"];
+  const out: { speaker: number; text: string }[] = [];
+  const visitor = () => {
+    let v = 1 + Math.floor(rnd() * 9999);
+    while (gone.has(v) || p.appOf.has(v)) v = 1 + Math.floor(rnd() * 9999);
+    return v;
+  };
+  const make: (() => { speaker: number; text: string } | null)[] = [
+    () => {
+      // a true neighbour: the next number, same row of the 10,000, still here
+      for (let k = 0; k < 50; k++) {
+        const x = pick();
+        const nb = x.item + 1;
+        if (x.item % 100 !== 0 && !gone.has(nb) && !p.appOf.has(nb)) return { speaker: nb, text: `#${x.item} stood right next to me in the 10,000. Now there's a hole where it was.` };
+      }
+      return null;
+    },
+    () => {
+      const x = pick();
+      return { speaker: visitor(), text: `I lost my ${kin[Math.floor(rnd() * kin.length)]}, #${x.item}. Burned for ${appName(x)}.` };
+    },
+    () => ({ speaker: visitor(), text: `#${rarest.item} was the rarest of us to go. Rank ${rarest.rank!.toLocaleString("en-US")}. They burned it anyway.` }),
+    () => {
+      const x = pick();
+      return { speaker: visitor(), text: `They say ${appName(x)} is beautiful. It's made of my ${kin[Math.floor(rnd() * kin.length)]}'s pixels. #${x.item}.` };
+    },
+    () => ({ speaker: visitor(), text: `We were ${p.minted.toLocaleString("en-US")}. Now we're ${p.supply.toLocaleString("en-US")}.` }),
+    () => {
+      const x = pick();
+      return { speaker: visitor(), text: `My ${kin[Math.floor(rnd() * kin.length)]} #${x.item} didn't even get a goodbye. One purge, 26 gone.` };
+    },
+    () => {
+      const x = pick();
+      const l = lineage(x);
+      return { speaker: visitor(), text: `#${x.item} was ${l === "Bare" ? "Bare, like most of the names on these walls" : l || "one of us"}. I come here every block.` };
+    },
+    () => ({ speaker: visitor(), text: `676 names. I knew three of them. That's three too many.` }),
+    () => {
+      const x = pick();
+      return { speaker: visitor(), text: `Rank ${(x.rank ?? 0).toLocaleString("en-US")}. People called #${x.item} common. Not to me.` };
+    },
+    () => ({ speaker: visitor(), text: `Twenty-six for one Apparition. Was it worth it? Ask the flame.` }),
+  ];
+  for (let i = 0; out.length < n && i < n * 4; i++) {
+    const r = make[i % make.length]();
+    if (r) out.push(r);
+  }
+  return out;
 }

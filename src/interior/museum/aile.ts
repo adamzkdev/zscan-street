@@ -5,15 +5,15 @@ import type { Collection } from "./data";
 import { canvasTex, FACE, type MuseumKit } from "./kit";
 import { SERIF } from "./parts";
 import { FusionSculpture } from "./fusion";
-import { cartel, drawDna, drawFlow, drawFrieze, drawHoles, drawRings, drawStats, drawStrategies, holesAt } from "./purgeviz";
+import { avgColours, HoloFlow, HoloHoles, HoloStrategies, holoTime, projector } from "./holo";
+import { cartel, drawFrieze, drawStats } from "./purgeviz";
 
 /**
  * Floor 4, the Aile des Apparitions: a contemporary wing in black and polished concrete for the
  * zkSNARKs purge (burn 26, reveal 1). In the middle, LA FUSION, a sculpture of floating pixels that
- * replays every Apparition being born from its 26. Down both walls the 26 Apparitions, each above
- * the frieze of the 26 it cost. Two free-standing walls carry the explorer's views (Flow and
- * Strategies facing the lifts, DNA and Rings behind), the far wall the Holes: the 10,000 by
- * rarity with every purged one a hole; and beside the lifts, Les 26 on one canvas.
+ * replays every Apparition being born from its 26, and down the axis after it three holograms of
+ * the explorer's views over projector discs: Strategies, Flow, Holes. Down both walls the 26
+ * Apparitions, each above the frieze of the 26 it cost; beside the lifts, Les 26 on one canvas.
  */
 
 const X = 15,
@@ -123,8 +123,11 @@ export function aile(k: MuseumKit, data: Collection) {
     );
   })();
 
-  // ---- LA FUSION in the middle --------------------------------------------------------------------
-  const FZ = -26;
+  // ---- down the middle, four pieces of light: LA FUSION, then the holograms --------------------------
+  const FZ = -18,
+    SZ = -32,
+    LZ = -45,
+    HZ = -57;
   const fusion = new FusionSculpture();
   fusion.group.position.set(0, 4.7, FZ);
   g.add(fusion.group);
@@ -138,7 +141,25 @@ export function aile(k: MuseumKit, data: Collection) {
     () => (fusion.current ? `<b>La Fusion · ${fusion.current.name}</b><span>its 26 purged snarks, pixel by pixel</span>` : "<b>La Fusion</b>"),
     () => (fusion.current ? data.info(fusion.current.item, "Aile des Apparitions · La Fusion") : null),
   );
-  k.ticks[f].push((_dt, t) => fusion.update(t, k.cam));
+  const strategies = new HoloStrategies(),
+    flow = new HoloFlow(),
+    holes = new HoloHoles();
+  const holo = (o: { group: THREE.Group; hit: THREE.Mesh }, z: number, y: number, r: number, h: number, title: string, line: string, av: string) => {
+    projector(k, f, 0, z, r, h);
+    o.group.position.set(0, y, z);
+    g.add(o.group);
+    k.pick(f, o.hit, `<b>${title}</b><span>${line}</span>`, () => ({ eyebrow: "Aile des Apparitions · Hologram", title, body: `<p>${line}</p>`, link: { href: `${VIEWS}&av=${av}`, label: "ZScan" } }));
+  };
+  holo(strategies, SZ, 3.9, 2.2, 6.5, "Strategies", "Each purge's 26 snarks placed by rarity rank, the rows sorted by their median", "strategies");
+  holo(flow, LZ, 3.8, 2.2, 6.5, "Flow", "Every purged snark streaming from its lineage to the Apparition it revealed", "flow");
+  holo(holes, HZ, 1.3, 3.2, 4.5, "Holes", "The 10,000 by rarity: the purged rise and leave their holes", "holes");
+  k.ticks[f].push((_dt, t) => {
+    holoTime.value = t;
+    fusion.update(t, k.cam);
+    strategies.update(t, k.cam);
+    flow.update(t, k.cam);
+    holes.update(t, k.cam);
+  });
 
   // ---- the 26 down the walls, each above its frieze -------------------------------------------------
   const friezes: { tex: THREE.Texture; i: number }[] = [];
@@ -161,56 +182,6 @@ export function aile(k: MuseumKit, data: Collection) {
     k.wash(f, x - s * 0.05, z, yaw, 3.4, 5, H - 1.2, "#e8eeff");
   }
 
-  // ---- the free-standing walls: Flow and Strategies, DNA and Rings behind ---------------------------
-  const WZ = -44,
-    PW = 8,
-    PH = (PW * 1400) / 2000;
-  const panels: { mesh: THREE.Mesh; draw: (c: CanvasRenderingContext2D, w: number, h: number, atlas: CanvasImageSource) => void }[] = [];
-  const viz = (x: number, z: number, yaw: number, title: string, line: string, av: string, draw: (typeof panels)[number]["draw"]) => {
-    const m = k.panel(f, 2000, 1400, PW, (c, w, h) => {
-      c.fillStyle = "#0d0d0e";
-      c.fillRect(0, 0, w, h);
-    }, { glow: true, transparent: false });
-    m.position.set(x, 0.7 + PH / 2, z);
-    m.rotation.y = yaw;
-    panels.push({ mesh: m, draw });
-    k.pick(f, m, `<b>${title}</b><span>${line}</span>`, () => ({ eyebrow: "Aile des Apparitions", title, body: `<p>${line}</p>`, link: { href: `${VIEWS}&av=${av}`, label: "ZScan" } }));
-  };
-  for (const s of [-1, 1]) {
-    k.box(f, slab, PW + 0.6, PH + 1.2, 0.6, s * 6.9, 0, WZ, { solid: true });
-  }
-  viz(-6.9, WZ + 0.31, FACE.pz, "Flow", "Every purged snark, from its lineage to the Apparition it revealed", "flow", (c, w, h, a) => drawFlow(c, w, h, data.purge, a));
-  viz(6.9, WZ + 0.31, FACE.pz, "Strategies", "Each purge's 26 snarks placed by rarity rank", "strategies", (c, w, h, a) => drawStrategies(c, w, h, data.purge, a));
-  viz(-6.9, WZ - 0.31, FACE.nz, "DNA", "The lineages each Apparition was made from", "stats", (c, w, h, a) => drawDna(c, w, h, data.purge, a));
-  viz(6.9, WZ - 0.31, FACE.nz, "Rings", "Each Apparition with the 26 purged for it", "rings", (c, w, h, a) => drawRings(c, w, h, data.purge, a));
-  k.pool(f, -6.9, WZ + 3, 4.5, "#dfe6ff", 0.012, 0.6);
-  k.pool(f, 6.9, WZ + 3, 4.5, "#dfe6ff", 0.012, 0.6);
-
-  // ---- the far wall: the Holes ------------------------------------------------------------------------
-  const HW = 15,
-    HH = (HW * 1400) / 2400;
-  const holes = k.panel(f, 2400, 1400, HW, (c, w, h) => {
-    c.fillStyle = "#0d0d0e";
-    c.fillRect(0, 0, w, h);
-  }, { glow: true, transparent: false });
-  holes.position.set(0, 0.6 + HH / 2, L + 0.22);
-  holes.rotation.y = FACE.pz;
-  let order: number[] = [];
-  const holeId = (hit: THREE.Intersection) => (hit.uv && order.length ? holesAt(hit.uv.x, hit.uv.y, 2400, 1400, order) : null);
-  k.pick(
-    f,
-    holes,
-    (hit) => {
-      const id = holeId(hit);
-      return id ? data.hover(id) : "<b>Holes</b><span>the 10,000 by rarity, every purged one a hole</span>";
-    },
-    (hit) => {
-      const id = holeId(hit);
-      return id ? data.info(id, "Aile des Apparitions · Holes") : { eyebrow: "Aile des Apparitions", title: "Holes", link: { href: `${VIEWS}&av=holes`, label: "ZScan" } };
-    },
-  );
-  k.pool(f, 0, L + 5, 8, "#dfe6ff", 0.012, 0.6);
-
   // ---- once the floor is visited and the purge known: draw it all ---------------------------------------
   void (async () => {
     await k.whenVisited(f);
@@ -221,9 +192,13 @@ export function aile(k: MuseumKit, data: Collection) {
     try {
       const p = data.purge;
       fusion.load(p, atlas);
-      order = [...data.byRank.map((it) => it.id)];
+      const order = data.byRank.map((it) => it.id);
       const ranked = new Set(order);
       for (let id = 1; id <= 10000; id++) if (!ranked.has(id)) order.push(id);
+      const cols = avgColours(atlas);
+      strategies.load(p, cols);
+      flow.load(p, atlas);
+      holes.load(p, order, cols);
       const paint = (m: THREE.Mesh, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void) => {
         const t = (m.material as THREE.MeshBasicMaterial).map!;
         const cv = t.image as HTMLCanvasElement;
@@ -231,8 +206,6 @@ export function aile(k: MuseumKit, data: Collection) {
         t.needsUpdate = true;
       };
       paint(stats, (c, w, h) => drawStats(c, w, h, p));
-      paint(holes, (c, w, h) => drawHoles(c, w, h, p, order, atlas));
-      for (const v of panels) paint(v.mesh, (c, w, h) => v.draw(c, w, h, atlas));
       for (const { tex, i } of friezes) {
         const a = p.apps[i];
         if (!a) continue;
@@ -261,9 +234,9 @@ export function aile(k: MuseumKit, data: Collection) {
   k.light(f, -4, 8.5, FZ, "#dfe8ff", 30, 22);
   k.light(f, 4, 8.5, FZ, "#dfe8ff", 30, 22);
   k.light(f, 0, 6, -6, "#fff2e0", 20, 18);
-  k.light(f, 0, 7, WZ + 6, "#e8eeff", 25, 20);
-  k.light(f, 0, 7, L + 8, "#e8eeff", 25, 22);
-  k.light(f, 0, 8, -52, "#e8eeff", 18, 22);
+  k.light(f, 0, 8, SZ + 4, "#bfeaff", 18, 20);
+  k.light(f, 0, 8, LZ + 4, "#bfeaff", 18, 20);
+  k.light(f, 0, 8, HZ + 3, "#bfeaff", 18, 20);
   let n = 0;
   const id = () => k.visitor(4000 + n++);
   for (const [x, z, ph] of [
@@ -275,17 +248,19 @@ export function aile(k: MuseumKit, data: Collection) {
     [-6, FZ - 3, false],
   ] as const)
     void k.person(f, id(), [x, z], { face: [0, FZ], phone: ph });
+  // before the holograms, off the axis so they stay in view
   for (const [x, z, fx, fz] of [
-    [-6, WZ + 4.4, -6.9, WZ],
-    [-8.4, WZ + 5, -6.9, WZ],
-    [7.4, WZ + 4.2, 6.9, WZ],
-    [-1.6, L + 6, 0, L],
-    [2.4, L + 7.2, 0, L],
+    [-5.6, SZ + 4.4, 0, SZ],
+    [6, SZ + 3.6, 0, SZ],
+    [-6.4, LZ + 3.8, 0, LZ],
+    [5.4, LZ + 4.6, 0, LZ],
+    [-5.2, HZ + 4.6, 0, HZ],
+    [5.8, HZ + 3.8, 0, HZ],
     [-11.6, -16, -X, -16],
     [11.8, -28, X, -28],
     [-11.4, -40, -X, -40],
   ] as const)
-    void k.person(f, id(), [x, z], { face: [fx, fz] });
+    void k.person(f, id(), [x, z], { face: [fx, fz], phone: x === 6 || x === -5.2 });
   const walk: [number, number][] = [
     [-10, -12],
     [10, -20],

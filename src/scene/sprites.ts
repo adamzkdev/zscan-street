@@ -663,7 +663,7 @@ function drawPhoneBack(px: Px) {
 }
 
 /** Where the flash LED sits for a pose (portrait cells), for the museum's flashes. */
-export const FLASH_CELL: Partial<Record<ItemKind, [number, number]>> = { snap: [27, -1], selfie: [33, 2] };
+export const FLASH_CELL: Partial<Record<ItemKind, [number, number]>> = { snap: [26, 5], selfie: [30, 6] };
 
 function drawBouquet(px: Px) {
   // blooms over a paper cone that the fist closes on
@@ -837,9 +837,9 @@ function paintPose(F: Cells, B: Cells, p: PoseSpec) {
     fist(B, 6, 16, skin);
   } else if (main === "selfie" && !nearBusy) {
     // the far hand up by the cheek, two fingers in a V
-    arm(B, [SH_B, [2, 17], [2, 11]], sleeve);
-    fist(B, 1, 9, skin);
-    for (const c of [1, 3]) for (const r of [6, 7, 8]) B.set(c, r, r === 6 ? shade(skin, 1.1) : skin);
+    arm(B, [SH_B, [3, 17], [3, 13]], sleeve);
+    fist(B, 2, 11, skin);
+    for (const c of [2, 4]) for (const r of [8, 9, 10]) B.set(c, r, r === 8 ? shade(skin, 1.1) : skin);
   } else if (twoHands) {
     // reaching forward under the item: hidden by the bust, its fist drawn with the item below
     arm(B, [SH_B, [8, 23]], sleeve);
@@ -929,16 +929,16 @@ function paintPose(F: Cells, B: Cells, p: PoseSpec) {
       fist(F, 22, 20, skin);
       break;
     case "snap":
-      // up high, over the heads, the arm straight: the phone's back toward us
-      arm(F, [SH_F, [25, 14], [25, 7]], sleeve);
-      drawPhoneBack(F.at(23, -2));
-      fist(F, 23, 6, skin);
+      // raised in front of the face, the elbow bent: the phone's back toward us
+      arm(F, [SH_F, [24, 17], [24, 13]], sleeve);
+      drawPhoneBack(F.at(22, 4));
+      fist(F, 22, 11, skin);
       break;
     case "selfie":
-      // at arm's length up and out, screen to the face
-      arm(F, [SH_F, [27, 15], [31, 9]], sleeve);
-      drawPhoneBack(F.at(29, 1));
-      fist(F, 29, 9, skin);
+      // held out a little, up by the head, screen to the face
+      arm(F, [SH_F, [25, 17], [27, 14]], sleeve);
+      drawPhoneBack(F.at(26, 5));
+      fist(F, 26, 12, skin);
       break;
     case "phone":
       // raised to the face, by the cheek
