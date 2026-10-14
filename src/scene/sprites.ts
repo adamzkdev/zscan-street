@@ -267,7 +267,7 @@ export function umbrellaSprite(color: string) {
 }
 
 /** What a speech bubble shows: a reaction, never words. */
-export type Emote = "!" | "?" | "note" | "heart" | "zec" | "dots" | "zzz" | "up" | "down" | "sad" | "star" | "angry";
+export type Emote = "!" | "?" | "note" | "heart" | "zec" | "dots" | "zzz" | "up" | "down" | "sad" | "star" | "angry" | "tears";
 
 const GLYPH: Record<Emote, [string, string[]]> = {
   "!": ["#e0302a", ["..#..", "..#..", "..#..", ".....", "..#.."]],
@@ -283,6 +283,8 @@ const GLYPH: Record<Emote, [string, string[]]> = {
   star: ["#f4b728", ["..#..", ".###.", "#####", ".###.", ".#.#."]],
   // the anime anger vein
   angry: ["#e0202a", ["##.##", "#...#", ".....", "#...#", "##.##"]],
+  // two closed eyes, a tear falling from each
+  tears: ["#3a8ee8", ["##.##", ".....", "#...#", "#...#", "....#"]],
 };
 
 const bubbleCache = new Map<Emote, ReturnType<typeof sprite>>();

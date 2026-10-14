@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { atlasBitmap } from "../../data/atlas";
+import { ZScan } from "../../data/zscan";
 import type { Collection } from "./data";
 import { boxGeo, canvasTex, FACE, type MuseumKit } from "./kit";
 import { coffers, limestone, marble, stoneFloor } from "./look";
@@ -183,6 +184,8 @@ export function memorial(k: MuseumKit, data: Collection) {
     c.fill();
   });
   const flameMat = new THREE.MeshBasicMaterial({ map: flameTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.6, 1.4, 1.2) });
+  // candle flames: plain alpha, so they still show against the pale stone (additive light would vanish there)
+  const wickMat = new THREE.MeshBasicMaterial({ map: flameTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.5, 1.25, 0.9) });
   const flames: THREE.Mesh[] = [];
   for (let i = 0; i < 3; i++) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.4).translate(0, 0.7, 0), flameMat);
@@ -193,13 +196,16 @@ export function memorial(k: MuseumKit, data: Collection) {
     flames.push(m);
   }
   const fire = k.light(f, 0, 1.6, FZ, "#ffa040", 14, 9);
-  k.ticks[f].push((_dt, t) => {
+  /** The flame stands taller during the silence (see the ceremony below). */
+  const boost = { value: 1, target: 1 };
+  k.ticks[f].push((dt, t) => {
+    boost.value += (boost.target - boost.value) * Math.min(1, dt * 1.5);
     flames.forEach((m, i) => {
       const n = Math.sin(t * 9 + i * 2.1) * 0.5 + Math.sin(t * 15.3 + i) * 0.3 + Math.sin(t * 4.1 + i * 1.7) * 0.2;
-      m.scale.set(1 + n * 0.08, 1 + n * 0.16, 1);
+      m.scale.set((1 + n * 0.08) * boost.value, (1 + n * 0.16) * boost.value ** 1.4, 1);
       m.rotation.y = (i * Math.PI) / 3 + Math.sin(t * 0.7 + i) * 0.2;
     });
-    if (fire) fire.intensity = (fire.userData.base as number) * (1 + Math.sin(t * 13) * 0.14 + Math.sin(t * 7.3) * 0.1);
+    if (fire) fire.intensity = (fire.userData.base as number) * boost.value * (1 + Math.sin(t * 13) * 0.14 + Math.sin(t * 7.3) * 0.1);
   });
   k.pool(f, 0, FZ, 3.2, "#ffb060", 0.012, 1.2);
   k.pick(f, (() => {
@@ -226,7 +232,7 @@ export function memorial(k: MuseumKit, data: Collection) {
       z = L + 0.9 + (i % 2) * 0.25;
     const h = 0.18 + ((i * 37) % 7) * 0.03;
     k.geo(f, k.white, new THREE.CylinderGeometry(0.035, 0.035, h, 10).translate(x, h / 2, z));
-    const c = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.12), flameMat);
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.12), wickMat);
     c.position.set(x, h + 0.06, z);
     c.raycast = () => {};
     g.add(c);
@@ -287,13 +293,65 @@ export function memorial(k: MuseumKit, data: Collection) {
     { at: [-1.8, -14.6], face: [0, SZ], flowers: true },
     { at: [2.2, -22.6], face: [0, SZ] },
   ];
-  let nextLine = 4,
-    said = 0;
-  k.ticks[f].push((_dt, t) => {
-    if (k.current !== f || !speakers.length || t < nextLine) return;
-    const sp = speakers[said++ % speakers.length];
-    sp.s.say(sp.line, 6);
-    nextLine = t + 3.6;
+  // ---- the ceremony: now and then the curator speaks at the lectern before the flame; everyone
+  // falls quiet and turns to listen, then a moment of silence, the flame standing taller -------------
+  const LX = 0,
+    LZc = FZ + 3.1;
+  k.geo(f, k.oak, boxGeo(0.7, 1.05, 0.45, LX, 0, LZc));
+  k.geo(f, k.oak, boxGeo(0.86, 0.06, 0.6, LX, 1.05, LZc));
+  k.geo(f, k.brass, boxGeo(0.4, 0.3, 0.02, LX, 0.55, LZc + 0.235));
+  k.solid(f, LX - 0.5, LZc - 0.35, LX + 0.5, LZc + 0.35);
+  let curator: Snark | null = null;
+  let speech: string[] = [];
+  const faced = new Map<Snark, THREE.Vector3 | null>();
+  /** Seconds spent on this floor (the ceremony keeps its own clock, paused elsewhere). */
+  let ft = 0,
+    nextLine = 4,
+    said = 0,
+    nextTear = 6,
+    ceremony = 40;
+  const LINE = 5.6,
+    SILENCE = 12;
+  k.ticks[f].push((dt) => {
+    if (k.current !== f) return;
+    ft += dt;
+    const into = ft - ceremony;
+    const speaking = curator && speech.length && into >= 0 && into < speech.length * LINE;
+    const silent = into >= speech.length * LINE && into < speech.length * LINE + SILENCE;
+    if (curator && speech.length && into >= 0) {
+      if (into < dt) {
+        // they turn to the lectern
+        for (const sp of speakers) {
+          faced.set(sp.s, sp.s.faceDir);
+          sp.s.faceDir = new THREE.Vector3(LX - sp.s.root.position.x, 0, LZc - sp.s.root.position.z).normalize();
+        }
+      }
+      const li = Math.floor(into / LINE);
+      if (speaking && into - li * LINE < dt) curator.say(speech[li], LINE - 0.3);
+      if (silent && into - speech.length * LINE < dt) {
+        boost.target = 1.7;
+        for (const sp of speakers) sp.s.emote(Math.random() < 0.6 ? "tears" : "sad", SILENCE - 1);
+      }
+      if (into >= speech.length * LINE + SILENCE) {
+        boost.target = 1;
+        for (const [sn, d] of faced) sn.faceDir = d;
+        faced.clear();
+        curator.say("Thank you. They are not forgotten.", 4);
+        ceremony = ft + 95;
+        nextLine = ft + 6;
+      }
+      return;
+    }
+    // between ceremonies: one at a time they speak; someone, somewhere, is crying
+    if (speakers.length && ft >= nextLine) {
+      const sp = speakers[said++ % speakers.length];
+      sp.s.say(sp.line, 6);
+      nextLine = ft + 3.6;
+    }
+    if (speakers.length && ft >= nextTear) {
+      speakers[Math.floor(Math.random() * speakers.length)].s.emote("tears", 4);
+      nextTear = ft + 3 + Math.random() * 4;
+    }
   });
   void (async () => {
     await k.whenVisited(f);
@@ -303,7 +361,98 @@ export function memorial(k: MuseumKit, data: Collection) {
       const sp = spots[i];
       void k.person(f, ln.speaker, sp.at, { face: sp.face, item: sp.flowers ? "flowers" : undefined }).then((s) => s && speakers.push({ s, line: ln.text }));
     });
+    speech = eulogy(data);
+    curator = await k.person(f, k.visitor(5900), [LX, LZc - 0.55], { face: [LX, 0], item: "book" });
+    if (curator) curator.role = "Curator";
   })();
+
+  // ---- light a candle: a brass stand of 27; a click lights one more for a purged zkSNARK -------------
+  const CX0 = -7.6,
+    CZ0 = L + 3.2;
+  k.geo(f, k.brass, boxGeo(2.6, 0.9, 0.5, CX0, 0, CZ0 + 0.1));
+  // three tiers, each higher one set back, so no tier hides the flames below it
+  const tierZ = (r: number) => CZ0 + 0.14 - r * 0.16;
+  for (let r = 0; r < 3; r++) k.geo(f, k.brass, boxGeo(2.6, 0.95 + r * 0.22, 0.15, CX0, 0, tierZ(r)));
+  k.solid(f, CX0 - 1.4, CZ0 - 0.4, CX0 + 1.4, CZ0 + 0.4);
+  const KEY = "zstreet.memorial.candles";
+  let lit = Math.max(7, Math.min(27, Number(localStorage.getItem(KEY)) || 7));
+  const wicks: THREE.Mesh[] = [];
+  for (let i = 0; i < 27; i++) {
+    const r = 2 - Math.floor(i / 9),
+      c = i % 9;
+    const x = CX0 - 1.1 + c * 0.275,
+      y = 0.95 + r * 0.22,
+      z = tierZ(r);
+    k.geo(f, k.white, new THREE.CylinderGeometry(0.03, 0.03, 0.12, 8).translate(x, y + 0.06, z));
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.12), wickMat);
+    w.position.set(x, y + 0.17, z);
+    w.raycast = () => {};
+    w.visible = i < lit;
+    g.add(w);
+    wicks.push(w);
+  }
+  const candleHit = new THREE.Mesh(new THREE.BoxGeometry(2.8, 1.8, 0.8), new THREE.MeshBasicMaterial({ visible: false }));
+  candleHit.position.set(CX0, 0.9, CZ0);
+  g.add(candleHit);
+  k.pick(
+    f,
+    candleHit,
+    () => `<b>Light a candle</b><span>${lit} burning · click to light one</span>`,
+    () => {
+      const p = data.purge;
+      if (!p.purged.length) return null;
+      const x = p.purged[(lit * 97) % p.purged.length];
+      if (lit < 27) {
+        wicks[lit].visible = true;
+        lit++;
+      } else {
+        // all 27 lit: the oldest goes out as a new one is lit
+        lit = 7;
+        wicks.forEach((w, i) => (w.visible = i < lit));
+      }
+      localStorage.setItem(KEY, String(lit));
+      const near = speakers.find((sp) => sp.s.root.position.distanceTo(new THREE.Vector3(CX0, 0, CZ0)) < 6);
+      near?.s.emote("heart", 3);
+      return { eyebrow: "Memorial of the Purged", title: `A candle for #${x.item}`, image: ZScan.zkSnarkImage(x.item), body: `<p>It burns for zkSNARKs #${x.item}${x.rank != null ? `, rank ${x.rank.toLocaleString("en-US")},` : ""} purged for ${p.purgedFor.get(x.item)?.name ?? "an Apparition"}.</p>` };
+    },
+  );
+
+  // ---- the book of condolences, open on a lectern -------------------------------------------------
+  const BX = 7.6,
+    BZ = L + 3.2;
+  k.geo(f, k.oak, boxGeo(0.5, 1.0, 0.4, BX, 0, BZ));
+  k.geo(f, k.oak, new THREE.BoxGeometry(0.9, 0.05, 0.62).rotateX(-0.35).translate(BX, 1.12, BZ));
+  k.solid(f, BX - 0.5, BZ - 0.4, BX + 0.5, BZ + 0.4);
+  const bookTex = canvasTex(1024, 640, (c, w, h) => {
+    c.fillStyle = "#f4ecd8";
+    c.fillRect(0, 0, w, h);
+    c.fillStyle = "#c8b890";
+    c.fillRect(w / 2 - 3, 0, 6, h);
+  });
+  const book = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.52), new THREE.MeshStandardMaterial({ map: bookTex, roughness: 0.9 }));
+  book.rotation.set(-Math.PI / 2 + 0.35, 0, 0);
+  book.position.set(BX, 1.17, BZ);
+  g.add(book);
+  let condolences: string[] = [];
+  k.pick(f, book, "<b>Book of condolences</b><span>read what they wrote</span>", () => ({
+    eyebrow: "Memorial of the Purged",
+    title: "Book of condolences",
+    body: `<dl class="kvlist">${condolences.map((c) => `<div><dd>${c}</dd></div>`).join("")}</dl>`,
+  }));
+  void data.ready.then(() => {
+    if (!data.purge.purged.length) return;
+    condolences = condolenceLines(data);
+    const c = (bookTex.image as HTMLCanvasElement).getContext("2d")!;
+    c.fillStyle = "#3a3048";
+    c.font = `italic 30px ${SERIF}`;
+    condolences.slice(0, 12).forEach((ln, i) => {
+      const plain = ln.replace(/<[^>]+>/g, "");
+      const x = i < 6 ? 34 : 546,
+        y = 70 + (i % 6) * 96;
+      c.fillText(plain.length > 34 ? `${plain.slice(0, 33)}…` : plain, x, y);
+    });
+    bookTex.needsUpdate = true;
+  });
 
   // ---- once visited and the purge known: the Wall, the statue, the names ------------------------------
   void (async () => {
@@ -447,6 +596,50 @@ function testimonies(data: Collection, n: number): { speaker: number; text: stri
   for (let i = 0; out.length < n && i < n * 4; i++) {
     const r = make[i % make.length]();
     if (r) out.push(r);
+  }
+  return out;
+}
+
+/** The curator's eulogy, from the purge's own figures. */
+function eulogy(data: Collection): string[] {
+  const p = data.purge;
+  const rarest = [...p.purged].filter((x) => x.rank != null).sort((a, b) => a.rank! - b.rank!)[0];
+  const lin = new Map<string, number>();
+  for (const x of p.purged) {
+    const v = x.traits.find((t) => t.trait_type === "Lineage")?.value ?? "";
+    lin.set(v, (lin.get(v) ?? 0) + 1);
+  }
+  const [topLin, topN] = [...lin].sort((a, b) => b[1] - a[1])[0];
+  return [
+    `Friends. We are here for the ${p.purged.length}.`,
+    `${p.apps.length} purges. ${p.apps.length} Apparitions. Not one of them asked to go.`,
+    `The rarest of them was #${rarest.item}. Rank ${rarest.rank!.toLocaleString("en-US")}.`,
+    `${topN} of them were ${topLin}. Plain, quiet: the backbone of this collection.`,
+    "Every pixel of every Apparition was one of them first.",
+    `We were ${p.minted.toLocaleString("en-US")}. We are ${p.supply.toLocaleString("en-US")}.`,
+    "Let us keep a moment of silence.",
+  ];
+}
+
+/** What visitors wrote in the book: signed by the neighbours of the purged (the next number, still here). */
+function condolenceLines(data: Collection): string[] {
+  const p = data.purge;
+  const gone = new Set(p.purged.map((x) => x.item));
+  const out: string[] = [];
+  const words = [
+    (x: number, a: string) => `For #${x}, who went into ${a}. I still look at the hole beside me.`,
+    (x: number) => `#${x}, you were a good neighbour.`,
+    (x: number, a: string) => `Rest well, #${x}. ${a} is beautiful because of you.`,
+    (x: number) => `Never forgotten, #${x}.`,
+    (x: number) => `#${x}: twenty-six of you, one of you was mine.`,
+    (x: number) => `For #${x}. The row is quieter now.`,
+  ];
+  for (let i = 0; out.length < 18 && i < p.purged.length; i += 37) {
+    const x = p.purged[i];
+    const nb = x.item + 1;
+    if (x.item % 100 === 0 || gone.has(nb) || p.appOf.has(nb)) continue;
+    const a = p.purgedFor.get(x.item)?.name ?? "an Apparition";
+    out.push(`${words[out.length % words.length](x.item, a)} <i>— #${nb}</i>`);
   }
   return out;
 }
