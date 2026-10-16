@@ -3,6 +3,7 @@ import { KIND_LABEL } from "../data/types";
 import { get, links } from "../data/zscan";
 import type { Director } from "../scene/director";
 import type { Snark } from "../scene/snark";
+import { ClipRecorder } from "./clip";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const num = (n: number) => n.toLocaleString("en-US");
@@ -15,6 +16,7 @@ const SEARCH = I('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21
 const SHARE = I('<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V13"/>');
 const X_LOGO = I('<path d="M4 4l16 16M20 4L4 20"/>');
 const CLOSE = I('<path d="M6 6l12 12M18 6L6 18"/>');
+const REC = I('<rect x="3" y="6" width="13" height="12" rx="1"/><path d="M16 10.5 21 7.5v9l-5-3"/>');
 const EYE = I('<circle cx="12" cy="12" r="3"/><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/>');
 
 /** `/v1/tx/{txid}`, the fields the tracker reads. */
@@ -35,6 +37,8 @@ export interface TrackCallbacks {
   follow(s: Snark): void;
   /** Open the Block Archive on this height. */
   archive(height: number): void;
+  /** Hands over the canvas right after the next frame is drawn (for the clip). */
+  grab(fn: (canvas: HTMLCanvasElement) => void): void;
 }
 
 /**
@@ -53,12 +57,15 @@ export class Tracker {
   private minedAt: number | null = null;
   private timer: ReturnType<typeof setInterval> | undefined;
   private checked = 0;
+  private clip: ClipRecorder;
+  private recLeft: number | null = null;
 
   constructor(
     root: HTMLElement,
     private director: Director,
     private cb: TrackCallbacks,
   ) {
+    this.clip = new ClipRecorder((fn) => cb.grab(fn));
     // the button sits first in the top-right corner, before the theme switch
     const btn = document.createElement("button");
     btn.className = "hbtn track-btn";
@@ -95,6 +102,7 @@ export class Tracker {
         this.followed = true;
         this.cb.follow(this.carrier);
       } else if (a === "share") void this.share();
+      else if (a === "clip") void this.film();
       else if (a === "archive" && this.info?.height) this.cb.archive(this.info.height);
     });
   }
@@ -217,6 +225,7 @@ export class Tracker {
       <div class="tc-actions">
         ${this.carrier ? `<button data-t="follow">${EYE} Follow</button>` : ""}
         ${h ? `<button data-t="archive">Block #${num(h)}</button>` : ""}
+        ${ClipRecorder.supported() ? `<button data-t="clip" class="${this.recLeft !== null ? "rec" : ""}">${this.recLeft !== null ? `● REC ${Math.ceil(this.recLeft)}s` : `${REC} Clip`}</button>` : ""}
         <button data-t="share">${SHARE} Share</button>
         <a href="${tweetUrl(id, h ?? null)}" target="_blank" rel="noopener">${X_LOGO} Post</a>
         <a href="${links.tx(id)}" target="_blank" rel="noopener">ZScan</a>
@@ -231,7 +240,7 @@ export class Tracker {
   private async share() {
     const id = this.txid;
     if (!id) return;
-    const url = `${SITE}/?tx=${id}`;
+    const url = `${SITE}/tx/${id}`;
     const text = "Watch my Zcash transaction ride the bus to its block on ZStreet";
     try {
       if (navigator.share) return void (await navigator.share({ title: "ZStreet", text, url }));
@@ -246,6 +255,37 @@ export class Tracker {
     }
   }
 
+  /** Ten seconds of the street following the carrier, as a video to post. */
+  private async film() {
+    const id = this.txid;
+    if (!id || this.clip.busy) return;
+    if (this.carrier) {
+      this.followed = true;
+      this.cb.follow(this.carrier);
+    }
+    const file = await this.clip.record({ txid: id, line: () => (this.info ? this.status()[0] : "On ZStreet") }, (left) => {
+      const was = this.recLeft;
+      this.recLeft = left;
+      if (was === null || Math.ceil(was) !== Math.ceil(left)) this.render();
+    });
+    this.recLeft = null;
+    this.render();
+    if (!file) return this.flash("Recording failed");
+    const text = "My Zcash transaction on ZStreet 🛡";
+    try {
+      // phones: the share sheet (straight into the X app); computers: the file
+      if (matchMedia("(pointer: coarse)").matches && navigator.canShare?.({ files: [file] })) return void (await navigator.share({ files: [file], text, url: `${SITE}/tx/${id}` }));
+    } catch {
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file);
+    a.download = file.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    this.flash("Saved");
+  }
+
   private flash(t: string) {
     const b = this.card.querySelector<HTMLElement>('[data-t="share"]');
     if (!b) return;
@@ -257,5 +297,5 @@ export class Tracker {
 
 function tweetUrl(txid: string, height: number | null) {
   const text = height ? `My Zcash transaction just took the bus of block #${num(height)} on ZStreet 🚌` : "My Zcash transaction is waiting for its bus on ZStreet 🚏";
-  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(`${SITE}/?tx=${txid}`)}&hashtags=Zcash`;
+  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(`${SITE}/tx/${txid}`)}&hashtags=Zcash`;
 }

@@ -104,10 +104,11 @@ export class Nu7 {
     this.nextBurst = this.clock;
   }
 
-  update(dt: number) {
+  /** `focus` is where the camera looks: the bursts go up around it, wherever that is in the city. */
+  update(dt: number, focus?: THREE.Vector3) {
     this.clock += dt;
     if (this.clock < this.partyUntil && this.clock >= this.nextBurst) {
-      this.burst();
+      this.burst(focus);
       this.nextBurst = this.clock + 0.35 + Math.random() * 0.6;
     }
     let alive = 0;
@@ -137,12 +138,13 @@ export class Nu7 {
     this.sparks.instanceMatrix.needsUpdate = true;
   }
 
-  private burst() {
-    // the diorama is about 100 × 68 m around the origin
-    const b = new THREE.Box3(new THREE.Vector3(-45, 0, -32), new THREE.Vector3(45, 30, 26));
-    const cx = THREE.MathUtils.lerp(b.min.x * 0.7, b.max.x * 0.7, Math.random()),
-      cz = THREE.MathUtils.lerp(b.min.z * 0.6, b.max.z * 0.4, Math.random()),
-      cy = CURB + 13 + Math.random() * 7;
+  private burst(focus?: THREE.Vector3) {
+    // within ~40 m of where the camera looks (the diorama's centre without one)
+    const fx = focus?.x ?? 0,
+      fz = focus?.z ?? -3;
+    const cx = fx + (Math.random() - 0.5) * 70,
+      cz = fz + (Math.random() - 0.5) * 50,
+      cy = CURB + 13 + Math.random() * 9;
     const color = this.c.set(COLORS[Math.floor(Math.random() * COLORS.length)]).multiplyScalar(2.2).clone();
     const speed = 6 + Math.random() * 4;
     for (let k = 0; k < PER_BURST; k++) {

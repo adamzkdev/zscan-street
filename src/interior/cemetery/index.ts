@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { loadArt } from "../../scene/snark";
 import { Zombie } from "../../scene/cemetery/zombie";
 import { box, makeScene, std } from "../kit";
+import { sproutEvacuation } from "./sprout";
 import type { Interior, InteriorContext, PickInfo, Rect } from "../types";
 
 /**
@@ -24,11 +25,11 @@ interface Tomb {
 const TOMBS: Tomb[] = [
   {
     title: "THE SPROUT POOL",
-    epitaph: "Migrated to a better place",
+    epitaph: "Last call: closes for good with NU7",
     born: "Oct 28, 2016",
     died: "Nov 18, 2020",
     block: "0 → 1,046,400",
-    body: "Zcash's first shielded pool: JoinSplits, BCTV14 proofs, addresses starting with zc. ZIP 211, activated with Canopy, stopped any new value going in; what was left can only be moved out, to Sapling or Orchard.",
+    body: "Zcash's first shielded pool: JoinSplits, BCTV14 proofs, addresses starting with zc. ZIP 211, activated with Canopy, stopped any new value going in; what was left can only be moved out. JoinSplits only exist in v4 transactions, which NU7 switches off: whatever is still inside then can never be spent.",
   },
   {
     title: "BCTV14",
@@ -410,7 +411,7 @@ export function buildCemetery(ctx: InteriorContext): Interior {
   tomb(TOMBS[0], 0, -24.6, true);
   rects.push([-2.2, -26.1, 2.2, -23.1]);
   const sproutSign = plaque([{ text: "SPROUT  ·  2016 – 2020", font: "700 52px Georgia, serif", color: "#9adf9a" }], 2.6, 0.36, "#0e1410");
-  sproutSign.position.set(0, 3.3, H.z0 + 0.02);
+  sproutSign.position.set(0, 4.55, H.z0 + 0.02);
   scene.add(sproutSign);
   // a shaft of green light over it, motes in it
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.6, H.h, 20, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 0.9, 0.45), transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
@@ -420,6 +421,8 @@ export function buildCemetery(ctx: InteriorContext): Interior {
   ring.rotation.x = Math.PI / 2;
   ring.position.set(0, H.h - 0.02, -24.6);
   scene.add(ring);
+  // the evacuation: what is still inside, and the real exits rising out as ghosts
+  const evac = sproutEvacuation(scene, new THREE.Vector3(0, 0, -24.6), H.z0);
 
   // ---- light: a lantern you carry, the green over Sprout, two warm ones in the hall ---------------
   const lantern = new THREE.PointLight("#ffb46a", 2.2, 7, 1.6);
@@ -503,6 +506,7 @@ export function buildCemetery(ctx: InteriorContext): Interior {
       ring.rotation.z += dt * 0.3;
       camera.getWorldQuaternion(camQuat);
       camRight.set(1, 0, 0).applyQuaternion(camQuat);
+      evac.update(dt, t, camQuat);
       for (const z of zombies) {
         if (!z.walking) {
           z.idle -= dt;

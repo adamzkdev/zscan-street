@@ -86,7 +86,7 @@ export const EPITAPHS: [string, string][] = [
   ["A TRANSPARENT ADDRESS", "Everyone saw it coming"],
   ["MY SEED PHRASE", "12 words · 0 backups"],
   ["NOT YOUR KEYS", "Not your coins"],
-  ["THE SPROUT POOL", "2016–2020 · Migrated to a better place"],
+  ["THE SPROUT POOL", "2016–2020 · Last call before NU7"],
   ["THE TOXIC WASTE", "Burned, as promised · 2016"],
   ["BCTV14", "Proved itself · Retired by Sapling, 2018"],
   ["THE TRUSTED SETUP", "No longer needed · Halo 2, 2022"],

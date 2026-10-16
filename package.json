@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --port 3007",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --port 3007"
+    "preview": "vite preview --port 3007",
+    "start": "node server.mjs"
   },
   "dependencies": {
     "@noir-wallet/sdk": "^0.1.9",

@@ -112,6 +112,7 @@ import { Editor } from "./build/editor";
 import { Plots } from "./build/plots";
 import { Works } from "./game/works";
 import { Nu7Quarter } from "./game/nu7quarter";
+import { Nu7Night } from "./game/nu7night";
 import { Factions } from "./game/factions";
 import { LiveEvents } from "./game/events";
 import { Disasters } from "./game/disasters";
@@ -1612,6 +1613,7 @@ talk = new Talk(document.getElementById("ui")!);
 
 // "follow your transaction": paste a txid or open zstreet.cash/?tx=…
 const tracker = new Tracker(document.getElementById("ui")!, director, {
+  grab: (fn) => grabbers.push(fn),
   follow: (s) => {
     if (interiors.active) interiors.exit();
     if (walking) setWalking(false);
@@ -1791,6 +1793,13 @@ const nu7Quarter = new Nu7Quarter(scene, gameHud, {
   },
   nu7: () => ({ date: nu7.date, height: nu7.height, activated: nu7.activated, tip: director.blockHeight || null }),
 });
+
+// the activation as a live event: countdown banner, last blocks called out, the first NU7 blocks
+const nu7Night = new Nu7Night(document.getElementById("ui")!, decor, {
+  state: () => ({ height: nu7.height, date: nu7.date, activated: nu7.activated, tip: director.blockHeight || null }),
+  here: () => visitors.others_count,
+});
+blockListeners.push((h) => nu7Night.block(h));
 
 // a street cat to adopt: it follows you around the city (and is still yours next visit)
 const CAT_NAMES = ["Mochi", "Nori", "Satoshi", "Zooko", "Halo", "Sapling", "Orchard", "Nullifier", "Tofu", "Yuzu", "Proof", "Memo"];
@@ -2303,6 +2312,8 @@ if (CAPTURE) {
     capture: {
       /** Advance the world by `dt` seconds and render one frame. */
       step: (dt: number) => frame(dt),
+      /** The capture clock (seconds): the time every animation runs on, to film a given moment. */
+      time: () => capT,
       shot: (s: CapShot | null) => (capShot = s),
       enter: (k: Interior["key"], floor = 0) => {
         interiors.enter(k, floor);
@@ -2598,7 +2609,8 @@ function frameBody(stepDt?: number) {
   joystick.sync(walking ? onFoot : null);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
-  nu7.update(dt);
+  nu7.update(dt, focus);
+  nu7Night.update(dt);
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   // close-ups keep full detail further out; the whole-city view is mostly simplified
   if (wide) city.lod(focus, 0, 50);
