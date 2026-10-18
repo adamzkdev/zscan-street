@@ -43,6 +43,8 @@ import { buildOrchard } from "./interior/zktowers/orchard";
 import { buildSapling } from "./interior/zktowers/sapling";
 import { buildHalo } from "./interior/zktowers/halo";
 import { buildCemetery } from "./interior/cemetery";
+import { buildZsaLab } from "./interior/zsalab";
+import { ZsaLabPanel } from "./ui/zsalab";
 import { StadiumLive } from "./scene/stadium";
 import { type RideKind, Sky } from "./scene/sky";
 import { Shibuya } from "./scene/shibuya";
@@ -113,6 +115,7 @@ import { Plots } from "./build/plots";
 import { Works } from "./game/works";
 import { Nu7Quarter } from "./game/nu7quarter";
 import { Nu7Night } from "./game/nu7night";
+import { Parade } from "./game/parade";
 import { Factions } from "./game/factions";
 import { LiveEvents } from "./game/events";
 import { Disasters } from "./game/disasters";
@@ -659,6 +662,7 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
   vizor: "tweets · releases · the crown",
   noir: "tweets · releases · the crown",
   zlab: "ZApp · ZApp Chrome · ZFirm · KindleWallet · the crown",
+  zsalab: "mint your own shielded asset",
   university: "courses · Zakura · Tachyon · the library · HashSmash",
   cemetery: "the crypt · zombies inside",
 };
@@ -684,6 +688,7 @@ const PLACE_ABOUT: Record<string, string> = {
   zodl: "The ZODL TOWER is the white tower of Zodl, the Zcash wallet (formerly Zashi) built by ZODL, across the avenue from the ZEC Reserve: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its black bird on white turning over the roof.",
   noir: "The NOIR TOWER is the obsidian tower of Noir, the shielded Zcash wallet in your browser (a Chrome extension web pages can ask to pay or sign), next to the ZODL TOWER on the avenue: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver eclipse and green light turning over the roof.",
   zlab: "The ZLAB TOWER is the black and gold tower of ZLab, the open-source Zcash lab, west of the heart across from the NOIR TOWER: ZLab's card and its latest commits in the lobby, then a floor per project, each a lab with its real releases, commits and pull requests: ZApp (the phone wallet) on 8, ZApp Chrome (the browser extension) on 16, ZFirm (the signer firmware for a Flipper Zero, a Pi Zero or a Kindle) on 24, KindleWallet (a hardware wallet on a jailbroken Kindle) on 32; ZLab has no X account, so no wall of tweets. Its shield turns over the roof, and a zkSNARK tells whoever is inside about every commit and release as it lands.",
+  zsalab: "The ZSA LAB is the white laboratory with the glass dome on the avenue east of the heart, where anyone can mint their own Zcash Shielded Asset (ZIPs 226 and 227) on the public ZSA test network, proved and signed in their own browser: the MINT counter, the reactor the live tokens orbit, a wall of every token on the testnet, a live feed, the furnace to burn and the seal to fix a supply for good. Test tokens have no value; ZSAs reach mainnet with a future upgrade.",
   university: "ZK UNIVERSITY is the campus next to the city works, built like Stanford's Main Quad (sandstone, round arches, red tile roofs, a bell tower): free video courses on cryptography, zkSNARKs and Zcash, every claim with its source. G: the Main Quad hall and the course catalogue; 1: the Lecture Hall (theory); 2: Zakura Hall, about the Zakura node, with its real releases and announcements; 3: Tachyon Hall, about scaling Zcash with Tachyon and Ragu, with the team's real blog posts and commits; 4: the Library, where every lesson can be read; 5: HashSmash Hall, live from HashSmash (yukon.org/hashsmash, Eigen Labs with Shielded Labs, Zcash, Project Eleven and the Ethereum Foundation), the open challenge to find collisions in reduced-round SHA-256, SHA3-256, BLAKE3 and Orchard's Poseidon: a column of rounds per hash, the broken ones knocked out, the collision frontier, the solvers, every new attack as it comes.",
   vizor: "The VIZOR TOWER is the crimson tower of Vizor, the Zcash wallet from the Keplr team, across the avenue from ZK TOWER HALO: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver knight's helmet turning over the roof.",
   cemetery: "The ZK Cemetery is the Père-Lachaise of ZStreet, on the hill at the north-east edge: crooked graves with epitaphs about lost seed phrases and transparent addresses, a chapel, and the CRYPT under the mausoleum, where Zcash buries what it retired (the Sprout pool, BCTV14, the trusted setup, the Founders' Reward). Only zombie zkSNARKs live here; more of them climb out at night.",
@@ -819,6 +824,7 @@ const PLACES: Record<Interior["key"], string> = {
   vizor: "VIZOR TOWER",
   noir: "NOIR TOWER",
   zlab: "ZLAB TOWER",
+  zsalab: "ZSA LAB",
   university: "ZK UNIVERSITY",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
@@ -942,6 +948,7 @@ const interiors = new InteriorManager(
     vizor: () => buildWalletTower(ictx, "vizor"),
     noir: () => buildWalletTower(ictx, "noir"),
     zlab: () => buildWalletTower(ictx, "zlab"),
+    zsalab: () => buildZsaLab(ictx),
     university: () => buildUniversity(ictx),
     cemetery: () => buildCemetery(ictx),
   },
@@ -1351,6 +1358,10 @@ canvas.addEventListener("pointerup", (e) => {
       interiors.walk.enabled = false;
       return info.panel === "wallets" ? payDesk.gallery(info.wallet === "zlab" ? null : (info.wallet ?? null)) : payDesk.compose("guestbook");
     }
+    if (info?.panel === "zsalab") {
+      interiors.walk.enabled = false;
+      return void zsaLab.open(info.zsa ?? "mint");
+    }
     if (info?.panel) return venues.show(info.panel);
     // the tower: its elevator doors, its arcade games
     // old elevator doors, escalators: no teleport, the lift cars and the stairs are walked
@@ -1646,6 +1657,20 @@ new Photo(document.getElementById("ui")!, canvas, {
 // ---- the game: one block = one turn ----
 const chainClock = new ChainClock();
 const gameHud = new GameHud(document.getElementById("ui")!);
+// the ZSA LAB's counter: an in-browser testnet wallet, mint / send / burn / seal
+const zsaLab = new ZsaLabPanel(
+  document.getElementById("ui")!,
+  () => import("./ui/zsalabWallet").then((m) => m.store),
+  () => {
+    if (interiors.active) interiors.walk.enabled = true;
+  },
+);
+// your coin's cinematic in the mint: the hall drives the camera, the terminal steps aside
+window.addEventListener("zsalab:cine", (e) => {
+  const on = (e as CustomEvent<{ on: boolean }>).detail.on;
+  if (interiors.active) interiors.walk.enabled = false;
+  zsaLab.cinematic(on);
+});
 gameWorld = new GameWorld(chainClock, decor, lampLights, city.factory?.hall ?? null, {
   power: (st) => sound.power(st === "down"),
   storm: (on) => {
@@ -1801,6 +1826,25 @@ const nu7Night = new Nu7Night(document.getElementById("ui")!, decor, {
 });
 blockListeners.push((h) => nu7Night.block(h));
 
+// the daily star parade: the Apparition of the day down the north boulevard, noon and 8 PM New York
+const parade = new Parade(scene, {
+  decor,
+  mail: (k, title, text, act) => gameHud.mail(k, title, text, act),
+  go: (x, z, zoom = 0.45) => {
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    rig.district(new THREE.Vector3(x, 1, z), zoom);
+  },
+  follow: (s) => {
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    rig.follow(s);
+    hud.follow(s);
+  },
+  closeRoad: (pts) => (cityTraffic.blockers = pts ? () => pts : () => []),
+  tier: worldLevel(),
+});
+
 // a street cat to adopt: it follows you around the city (and is still yours next visit)
 const CAT_NAMES = ["Mochi", "Nori", "Satoshi", "Zooko", "Halo", "Sapling", "Orchard", "Nullifier", "Tofu", "Yuzu", "Proof", "Memo"];
 const catFollow = () => (walking ? onFoot.camera.position : rig.focus);
@@ -1913,6 +1957,7 @@ const PLACE_ICON: Record<Interior["key"], string> = {
   vizor: "視",
   noir: "黒",
   zlab: "盾",
+  zsalab: "鋳",
   university: "学",
 };
 const placeBlips: Blip[] = doors.map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));
@@ -2185,6 +2230,8 @@ if (new URLSearchParams(location.search).has("debug")) {
       onFoot,
       quality,
       rig,
+      zsaLab,
+      parade,
       city,
       testVip: (tier: "taxi" | "limo") => director.debugVip(tier),
       cars: () => director.debugCars(),
@@ -2611,6 +2658,7 @@ function frameBody(stepDt?: number) {
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
   nu7.update(dt, focus);
   nu7Night.update(dt);
+  parade.update(sim, walking ? onFoot.camera : rig.shot ? rig.persp : rig.iso);
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   // close-ups keep full detail further out; the whole-city view is mostly simplified
   if (wide) city.lod(focus, 0, 50);

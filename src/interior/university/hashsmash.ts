@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ago, announce, hashSmash, hashSmashNow, HS_SITE, onHashSmash, pow2, statusOf, type HashSmash, type HsFamily, type HsPoint, type HsSolver } from "../../data/hashsmash";
+import { ago, announce, hashSmash, hashSmashNow, HS_SITE, onHashSmash, pow2, statusOf, type HashSmash, type HsFamily, type HsPoint, type HsSolver, roundsOf } from "../../data/hashsmash";
 import { TOUCH } from "../../scene/quality";
 import type { PickInfo } from "../types";
 import type { Snark } from "../../scene/snark";
@@ -223,7 +223,7 @@ export function hashSmashHall(k: SkyKit, f: number) {
     },
     () => {
       const x = fam(hashSmashNow(), "poseidon");
-      return x?.deepest != null ? `Orchard's Poseidon: ${x.deepest} of ${x.full} rounds down. ${x.full - x.deepest} rounds of margin.` : "Poseidon, Orchard's hash, is on the bench too.";
+      return x?.deepest != null ? `Orchard's Poseidon: ${x.deepest} of ${x.full} rounds down. ${roundsOf(x.full - x.deepest)} of margin.` : "Poseidon, Orchard's hash, is on the bench too.";
     },
     () => {
       const x = fam(hashSmashNow(), "sha256");
@@ -722,7 +722,7 @@ function drawFrontier(g: CanvasRenderingContext2D, W: number, H: number, d: Hash
     g.fillText(`← ${deepest} ROUNDS BROKEN`, X(deepest) + 12 * s, py1 - 44 * s);
     g.fillStyle = DIM;
     g.font = sans(600)(Math.round(24 * s));
-    g.fillText(`${full - deepest} rounds of margin →`, X(deepest) + 12 * s, py1 - 12 * s);
+    g.fillText(`${roundsOf(full - deepest)} of margin →`, X(deepest) + 12 * s, py1 - 12 * s);
   }
   if (!fam) {
     g.textAlign = "center";
@@ -878,7 +878,7 @@ function drawFrontier(g: CanvasRenderingContext2D, W: number, H: number, d: Hash
   g.fillText("rounds broken", sx + w1 + 18 * s, y + 8 * s);
   g.fillStyle = PAPER;
   g.font = sans(800)(Math.round(26 * s));
-  g.fillText(`${full - deepest} rounds of margin`, sx + w1 + 18 * s, y + 38 * s);
+  g.fillText(`${roundsOf(full - deepest)} of margin`, sx + w1 + 18 * s, y + 38 * s);
   y += 92 * s;
   g.font = sans(700)(Math.round(26 * s));
   g.fillStyle = PAPER;
@@ -956,7 +956,7 @@ function drawBanner(g: CanvasRenderingContext2D, W: number, H: number, p: HsPoin
   g.textBaseline = "middle";
   g.fillText(label, tx + 18 * s, 242 * s);
   g.fillStyle = ACCENT[p.family] ?? PAPER;
-  const what = `${LABELS[p.family] ?? p.family}${p.rounds != null ? ` · ${p.rounds} rounds` : ""}${p.time != null ? ` · ${pow2(p.time)}` : ""}`;
+  const what = `${LABELS[p.family] ?? p.family}${p.rounds != null ? ` · ${roundsOf(p.rounds)}` : ""}${p.time != null ? ` · ${pow2(p.time)}` : ""}`;
   fitText(g, what, tx + pw + 28 * s, 214 * s, W - tx - pw - 68 * s, 60 * s, sans(800), [Math.round(56 * s), Math.round(46 * s), Math.round(38 * s)], 1.0);
   g.textBaseline = "alphabetic";
 }
@@ -1180,7 +1180,7 @@ function drawPlaque(g: CanvasRenderingContext2D, W: number, H: number, fam: HsFa
     g.fillText(`${fam.accepted} accepted`, 34 * s + w2 + w3, 290 * s);
     const best = fam.frontier[fam.frontier.length - 1];
     g.fillStyle = DIM;
-    if (best) fitText(g, `deepest: ${best.solver} · ${best.rounds} rounds · ${pow2(best.time)}`, 34 * s, 338 * s, W - 68 * s, 40 * s, sans(600), [Math.round(25 * s), Math.round(21 * s)], 1.2);
+    if (best) fitText(g, `deepest: ${best.solver} · ${roundsOf(best.rounds)} · ${pow2(best.time)}`, 34 * s, 338 * s, W - 68 * s, 40 * s, sans(600), [Math.round(25 * s), Math.round(21 * s)], 1.2);
   } else {
     g.fillStyle = DIM;
     g.font = sans(600)(Math.round(28 * s));
@@ -1325,7 +1325,7 @@ function drawLatest(g: CanvasRenderingContext2D, W: number, H: number, list: HsP
     g.fillText(p.solver, tx, cy - 15 * s);
     g.fillStyle = ACCENT[p.family] ?? DIM;
     g.font = sans(600)(Math.round(20 * s));
-    const what = `${LABELS[p.family] ?? p.family}${p.rounds != null ? ` · ${p.rounds} rounds` : ""}${p.time != null ? ` · ${pow2(p.time)}` : ""}`;
+    const what = `${LABELS[p.family] ?? p.family}${p.rounds != null ? ` · ${roundsOf(p.rounds)}` : ""}${p.time != null ? ` · ${pow2(p.time)}` : ""}`;
     g.fillText(what, tx, cy + 18 * s);
     g.textAlign = "right";
     g.fillStyle = isNew ? "#f0b429" : DIM;
@@ -1369,7 +1369,7 @@ function frontierInfo(fam: HsFamily | null): PickInfo | null {
   if (!fam) return { eyebrow: "HashSmash Hall", title: "HashSmash", body: "<p>Reading HashSmash…</p>", link: { href: HS_SITE, label: "yukon.org/hashsmash" } };
   const rows = [...fam.frontier]
     .reverse()
-    .map((p) => `<p><b>${p.rounds} rounds · ${esc(pow2(p.time))}</b> · ${esc(statusOf(p.status).label)}<br>${link(p.profile, p.solver)} <span style="opacity:.6">· ${esc(ago(p.updated))}</span></p>`)
+    .map((p) => `<p><b>${roundsOf(p.rounds)} · ${esc(pow2(p.time))}</b> · ${esc(statusOf(p.status).label)}<br>${link(p.profile, p.solver)} <span style="opacity:.6">· ${esc(ago(p.updated))}</span></p>`)
     .join("");
   return {
     eyebrow: fam.zcash ? "HashSmash Hall · Zcash's own hash" : "HashSmash Hall",
@@ -1379,7 +1379,7 @@ function frontierInfo(fam: HsFamily | null): PickInfo | null {
       ["Attacks", String(fam.submissions)],
       ["In review", String(fam.review)],
       ["Accepted", String(fam.accepted)],
-      ["Margin", `${fam.full - (fam.deepest ?? 0)} rounds`],
+      ["Margin", `${roundsOf(fam.full - (fam.deepest ?? 0))}`],
     ],
     body: `<p>${esc(fam.note)}</p><p style="opacity:.75">The frontier: the attacks nobody beats on both counts (more rounds, less work).</p>${rows || "<p>No attack on the frontier yet.</p>"}`,
     link: { href: `${HS_SITE}?algorithm=${encodeURIComponent(fam.id)}`, label: "See it on HashSmash" },
@@ -1404,7 +1404,7 @@ function latestInfo(list: HsPoint[]): PickInfo {
     body: list.length
       ? list
           .slice(0, 20)
-          .map((p) => `<p><b>${link(p.profile, p.solver)}</b> · <span style="color:${statusOf(p.status).color}">${esc(statusOf(p.status).label)}</span><br><span style="opacity:.7">${esc(LABELS[p.family] ?? p.family)}${p.rounds != null ? ` · ${p.rounds} rounds` : ""}${p.time != null ? ` · ${esc(pow2(p.time))}` : ""} · ${esc(ago(p.updated))}</span></p>`)
+          .map((p) => `<p><b>${link(p.profile, p.solver)}</b> · <span style="color:${statusOf(p.status).color}">${esc(statusOf(p.status).label)}</span><br><span style="opacity:.7">${esc(LABELS[p.family] ?? p.family)}${p.rounds != null ? ` · ${roundsOf(p.rounds)}` : ""}${p.time != null ? ` · ${esc(pow2(p.time))}` : ""} · ${esc(ago(p.updated))}</span></p>`)
           .join("")
       : "<p>Reading HashSmash…</p>",
     link: { href: HS_SITE, label: "yukon.org/hashsmash" },

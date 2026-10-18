@@ -6381,3 +6381,536 @@ a.srow:hover span {
     opacity: 0.55;
   }
 }
+
+/* ZSA MINT terminal (ui/zsalab.ts): near-black, hairlines, square corners, teal for go, gold for value */
+.zsalab {
+  --zt: #3ef0c8;
+  --zg: #f4b728;
+  position: absolute;
+  right: 16px;
+  top: 64px;
+  bottom: 86px;
+  width: min(440px, calc(100vw - 32px));
+  display: none;
+  flex-direction: column;
+  background: rgba(10, 11, 14, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #ececf1;
+  font: 400 13.5px/1.5 Roboto, Inter, sans-serif;
+  z-index: 30;
+  backdrop-filter: blur(10px);
+}
+.zsalab.open {
+  display: flex;
+  /* #ui lets clicks through to the scene; the terminal takes them */
+  pointer-events: auto;
+}
+.zsalab::before,
+.zsalab::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 0 solid var(--zt);
+}
+.zsalab::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+.zsalab::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+}
+.zl-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.zl-title {
+  font: 800 16px/1 "JetBrains Mono", Menlo, monospace;
+  letter-spacing: 0.06em;
+  color: #fff;
+}
+.zl-title .jp {
+  color: var(--zt);
+  font-weight: 600;
+  margin-left: 6px;
+}
+.zl-chip {
+  display: flex;
+  gap: 10px;
+  margin-top: 7px;
+  font: 500 11.5px "JetBrains Mono", Menlo, monospace;
+  color: #8b8f99;
+}
+.zl-chip .ok {
+  color: var(--zt);
+}
+.zl-chip .low {
+  color: #ff9a5a;
+}
+.zl-x {
+  background: none;
+  border: 0;
+  color: #8b8f99;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.zl-x:hover {
+  color: #fff;
+}
+.zl-steps {
+  display: flex;
+  margin: 0;
+  padding: 10px 16px;
+  list-style: none;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.zl-steps li {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 11px "JetBrains Mono", Menlo, monospace;
+  color: #5d616b;
+  white-space: nowrap;
+}
+.zl-steps li b {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid currentColor;
+  font-size: 10px;
+}
+.zl-steps li.on {
+  color: #fff;
+}
+.zl-steps li.on b {
+  background: var(--zt);
+  border-color: var(--zt);
+  color: #0b0b0e;
+}
+.zl-steps li.done {
+  color: var(--zt);
+}
+.zl-body {
+  flex: 1;
+  overflow: auto;
+  padding: 14px 16px 16px;
+}
+.zl-foot {
+  padding: 8px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font: 500 10.5px "JetBrains Mono", Menlo, monospace;
+  color: #5d616b;
+}
+.zl-tabs {
+  display: flex;
+  margin: -4px 0 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.zl-tabs button {
+  flex: 1;
+  padding: 8px 2px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #8b8f99;
+  font: 600 11.5px "JetBrains Mono", Menlo, monospace;
+  cursor: pointer;
+}
+.zl-tabs button.on {
+  color: #fff;
+  border-bottom-color: var(--zt);
+}
+.zsalab h3 {
+  margin: 10px 0 6px;
+  font: 700 19px/1.25 Roboto, Inter, sans-serif;
+  color: #fff;
+}
+.zsalab h4 {
+  margin: 18px 0 8px;
+  font: 700 11px "JetBrains Mono", Menlo, monospace;
+  letter-spacing: 0.08em;
+  color: #8b8f99;
+  text-transform: uppercase;
+}
+.zsalab p {
+  margin: 0 0 10px;
+  color: #b7bac3;
+}
+.zl-lead {
+  font-size: 12.5px;
+}
+.zl-hero {
+  text-align: center;
+  padding: 6px 4px;
+}
+.zl-preview {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0 6px;
+}
+.zl-preview .zl-coin {
+  filter: drop-shadow(0 6px 18px rgba(62, 240, 200, 0.18));
+}
+.zl-how {
+  list-style: none;
+  margin: 14px 0 16px;
+  padding: 0;
+  text-align: left;
+}
+.zl-how li {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: #c9ccd4;
+  font-size: 13px;
+}
+.zl-how li b {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--zt);
+  color: var(--zt);
+  font: 700 11px "JetBrains Mono", Menlo, monospace;
+}
+.zsalab button {
+  font: 600 12px "JetBrains Mono", Menlo, monospace;
+  cursor: pointer;
+}
+.zl-go {
+  display: block;
+  width: 100%;
+  padding: 11px 14px;
+  background: var(--zt);
+  border: 1px solid var(--zt);
+  color: #08090b;
+  letter-spacing: 0.02em;
+}
+.zl-go:hover {
+  filter: brightness(1.08);
+}
+.zl-go.big {
+  padding: 15px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  margin-top: 6px;
+}
+.zl-ghost {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ececf1;
+}
+.zl-ghost:hover,
+.zl-cc-act button:hover,
+.zl-wallet button:hover,
+.zl-presets button:hover {
+  border-color: var(--zt);
+  color: var(--zt);
+}
+.zl-link {
+  display: block;
+  margin: 10px auto 0;
+  background: none;
+  border: 0;
+  color: #8b8f99;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.zl-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.zl-row > button {
+  flex: 1;
+  margin: 0;
+}
+.zl-card {
+  padding: 4px 0;
+}
+.zl-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  color: #5d616b;
+  font: 500 11px "JetBrains Mono", Menlo, monospace;
+}
+.zl-or::before,
+.zl-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.zl-wait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(62, 240, 200, 0.35);
+  color: var(--zt);
+  font: 500 12px "JetBrains Mono", Menlo, monospace;
+}
+.zl-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--zt);
+  animation: zlpulse 1.2s ease-in-out infinite;
+}
+@keyframes zlpulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+.zl-strike {
+  padding-top: 2px;
+}
+.zl-field {
+  display: block;
+  margin: 10px 0;
+}
+.zl-field span {
+  display: block;
+  margin-bottom: 5px;
+  font: 600 11px "JetBrains Mono", Menlo, monospace;
+  letter-spacing: 0.06em;
+  color: #8b8f99;
+  text-transform: uppercase;
+}
+.zsalab input:not([type]),
+.zsalab input[inputmode],
+.zsalab select {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font: 500 15px "JetBrains Mono", Menlo, monospace;
+  outline: none;
+}
+.zsalab input:focus,
+.zsalab select:focus {
+  border-color: var(--zt);
+}
+.zl-presets {
+  display: flex;
+  gap: 6px;
+  margin: -2px 0 12px;
+}
+.zl-presets button {
+  flex: 1;
+  padding: 6px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #b7bac3;
+}
+.zl-presets button.on {
+  border-color: var(--zt);
+  color: var(--zt);
+}
+.zl-toggle {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid rgba(244, 183, 40, 0.3);
+  color: #c9ccd4;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.zl-toggle input {
+  margin-top: 2px;
+  accent-color: #f4b728;
+}
+.zl-toggle b {
+  color: var(--zg);
+}
+.zl-busy {
+  padding: 18px 2px;
+}
+.zl-what {
+  font: 700 18px Roboto, Inter, sans-serif;
+  color: #fff;
+}
+.zl-stage {
+  margin: 6px 0 12px;
+  color: var(--zt);
+  font: 500 12.5px "JetBrains Mono", Menlo, monospace;
+}
+.zl-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.zl-bar i {
+  display: block;
+  height: 100%;
+  background: var(--zt);
+  transition: width 0.4s;
+}
+.zl-busy.indet .zl-bar i {
+  width: 30% !important;
+  animation: zlslide 1.2s ease-in-out infinite;
+}
+@keyframes zlslide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+.zl-wallet {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8b8f99;
+  font: 500 11.5px "JetBrains Mono", Menlo, monospace;
+}
+.zl-wallet .mono {
+  flex: 1;
+}
+.zl-wallet button,
+.zl-cc-act button {
+  padding: 5px 9px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #c9ccd4;
+}
+.zl-coins {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zl-coincard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.zl-cc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.zl-cc-main b {
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zl-cc-main .mono {
+  font: 500 12px "JetBrains Mono", Menlo, monospace;
+  color: var(--zg);
+}
+.zl-cc-act {
+  display: flex;
+  gap: 6px;
+}
+.zl-inline {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.zl-inline .zl-link {
+  margin: 2px 0 0;
+}
+.zl-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.zl-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.zl-pair b {
+  color: var(--zg);
+  font-family: "JetBrains Mono", Menlo, monospace;
+}
+.zl-arrow {
+  color: #5d616b;
+  font: 600 11px "JetBrains Mono", Menlo, monospace;
+}
+.zl-offer-st {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8b8f99;
+  font-size: 12px;
+}
+.zl-offer-st .zl-go {
+  width: auto;
+}
+.zl-offer-st .zl-link {
+  margin: 0;
+}
+.zl-note {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-left: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12.5px;
+}
+.zl-note.ok {
+  border-color: var(--zt);
+}
+.zl-note.err {
+  border-color: #ff6a5a;
+  color: #ffb3aa;
+}
+.zl-small {
+  color: #6f737d !important;
+  font-size: 11.5px;
+}
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  .zsalab {
+    top: 8px;
+    bottom: 8px;
+    right: 8px;
+    width: min(420px, calc(100vw - 16px));
+  }
+}
+.zl-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+  filter: none;
+}
+
+.zsalab.open.cine {
+  display: none;
+}

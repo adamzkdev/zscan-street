@@ -161,6 +161,7 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   vizor: { icon: "tower", color: "#e0306a" },
   noir: { icon: "tower", color: "#00d38c" },
   zlab: { icon: "tower", color: "#f4b728" },
+  zsalab: { icon: "vault", color: "#3ef0c8" },
   university: { icon: "book", color: "#e2b448" },
   cemetery: { icon: "vault", color: "#7dff9a" },
 };

@@ -39,7 +39,9 @@ export interface PickInfo {
   /** Main link, e.g. to ZScan. */
   link?: { href: string; label: string };
   /** Opens one of the shop panels (the bank's terminals). */
-  panel?: "bank" | "cards" | "wallets" | "guestbook";
+  panel?: "bank" | "cards" | "wallets" | "guestbook" | "zsalab";
+  /** The ZSA LAB panel's tab (the mint counter, the furnace, the seal). */
+  zsa?: "mint" | "burn" | "finalize" | "tokens" | "exchange";
   /** The wallet on show that was clicked (the hall's phones). */
   wallet?: "zodl" | "vizor" | "noir" | "zlab";
   /** Starts a mini-game (the ZK TOWER's apartments). */
@@ -68,7 +70,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zlab" | "university";
+  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zlab" | "university" | "zsalab";
   /** Shown top-left while inside ("MEMPOOL"). */
   readonly title: string;
   readonly scene: THREE.Scene;

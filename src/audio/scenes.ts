@@ -733,6 +733,9 @@ export function presetFor(key: string, floor: number, name: string): string {
       return "stairwell";
     case "factory":
       return has("control") ? "control-room" : "factory";
+    case "zsalab":
+      // the mint: presses, belts and furnaces, the factory's soundscape
+      return "factory";
     case "mempool":
       return "shop";
     case "palm":

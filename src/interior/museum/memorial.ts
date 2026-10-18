@@ -312,6 +312,8 @@ export function memorial(k: MuseumKit, data: Collection) {
     ceremony = 40;
   const LINE = 5.6,
     SILENCE = 12;
+  // (filming: shots/apparitions-capture.mjs starts the ceremony when it wants it)
+  g.userData.startCeremony = () => (ceremony = ft + 0.05);
   k.ticks[f].push((dt) => {
     if (k.current !== f) return;
     ft += dt;

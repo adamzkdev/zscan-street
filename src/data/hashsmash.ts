@@ -125,9 +125,12 @@ export const STATUS: Record<string, { label: string; color: string }> = {
 };
 export const statusOf = (s: string) => STATUS[s] ?? { label: s, color: "#9a948a" };
 
+/** "1 round", "38 rounds". */
+export const roundsOf = (n: number | null) => `${n ?? "–"} round${n === 1 ? "" : "s"}`;
+
 /** What the hall's professor says about a submission that just moved (a bubble holds ~110 characters). */
 export function announce(p: HsPoint, label: string): string {
-  const what = p.rounds != null ? `${label}, ${p.rounds} rounds` : label;
+  const what = p.rounds != null ? `${label}, ${roundsOf(p.rounds)}` : label;
   const cost = p.time != null ? ` at ${pow2(p.time)}` : "";
   switch (p.status) {
     case "accepted":

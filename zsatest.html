@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ZSA wallet test</title>
+<style>body{font:13px ui-monospace,monospace;background:#0b0d10;color:#cde;padding:16px}pre{white-space:pre-wrap}</style>
+</head>
+<body>
+<h3>ZSA wallet test (dev only)</h3>
+<p>?offline=1 runs the offline flow · ?funded=1 runs create → drip → mint against the ZSA service (VITE_ZSA_URL or ?api=)</p>
+<pre id="log"></pre>
+<script type="module">
+import { ZsaWallet, offlineSelfTest } from "/src/zsa/zsaWallet.ts";
+const q = new URLSearchParams(location.search);
+const API = q.get("api") || import.meta.env.VITE_ZSA_URL || "http://127.0.0.1:8095";
+const out = document.getElementById("log");
+const log = (...a) => { const s = a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" "); out.textContent += s + "\n"; console.log("[zsa]", s); };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+window.zsa = { done: false, result: {}, error: null };
+
+async function offline() {
+  const t0 = performance.now();
+  const r = await offlineSelfTest();
+  r.total_ms = Math.round(performance.now() - t0);
+  log("offline flow", r);
+  return r;
+}
+
+async function funded() {
+  const res = {};
+  const info = await (await fetch(`${API}/v1/zsa/info`)).json();
+  log("service", { tip: info.tip, sponsor_spendable: info.sponsor?.spendable_zat, drip: info.drip_zat });
+  let t = performance.now();
+  const w = q.get("fresh") ? await ZsaWallet.create(API) : await ZsaWallet.loadOrCreate(API);
+  res.open_ms = Math.round(performance.now() - t);
+  log("wallet", w.address().slice(0, 24) + "…", "birthday", w.birthday);
+  t = performance.now();
+  await w.sync();
+  res.first_sync_ms = Math.round(performance.now() - t);
+  log("synced to", w.scanned, "in", res.first_sync_ms, "ms", w.balances());
+  if (w.balances().zec_zat < 20000) {
+    const r = await fetch(`${API}/v1/zsa/drip`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: w.address() }) });
+    const j = await r.json().catch(() => ({}));
+    log("drip", r.status, j);
+    if (!r.ok) throw new Error("drip refused: " + JSON.stringify(j));
+    if (j.txid) await w.trackIncoming(j.txid, j.amount_zat ?? 0);
+    log("pending after drip", w.balances());
+    const t1 = performance.now();
+    for (let i = 0; i < 60 && w.balances().zec_zat < 20000; i++) { await sleep(15000); await w.sync(); log("waiting for the drip… tip", w.scanned); }
+    res.drip_wait_ms = Math.round(performance.now() - t1);
+    if (w.balances().zec_zat < 20000) throw new Error("drip not mined after 15 min");
+    log("drip landed", w.balances());
+  }
+  const name = q.get("name") || `ZStreet test ${Date.now().toString(36)}`;
+  const stages = [];
+  t = performance.now();
+  const sent = await w.issue(name, 1000, false, (s) => { if (!s.includes("%")) { stages.push(s); log("stage:", s); } });
+  res.issue = { ...sent, total_ms: Math.round(performance.now() - t), stages };
+  log("issued", res.issue, w.balances());
+  const t2 = performance.now();
+  for (let i = 0; i < 60; i++) {
+    await sleep(15000);
+    await w.sync();
+    const a = w.balances().assets.find((x) => x.asset_id === sent.asset_id);
+    log("waiting for the mint… tip", w.scanned, a);
+    if (a && a.units >= 1000) { res.mint_mined_ms = Math.round(performance.now() - t2); res.asset = a; break; }
+  }
+  if (!res.asset) throw new Error("mint not seen mined");
+  if (q.get("more")) {
+    for (const [op, fn] of [["burn", () => w.burn(sent.asset_id, 100)], ["transfer", () => w.transfer(sent.asset_id, 50, w.address())], ["finalize", () => w.finalize(sent.asset_id)]]) {
+      try {
+        const r = await fn();
+        log(op, "broadcast", r);
+        for (let i = 0; i < 60; i++) { await sleep(15000); await w.sync(); if (w.history().find((x) => x.txid === r.txid)?.status === "mined") break; }
+        res[op] = { ...r, status: w.history().find((x) => x.txid === r.txid)?.status };
+      } catch (e) { res[op] = { error: String(e.message || e) }; }
+      log(op, res[op], w.balances());
+    }
+  }
+  res.history = w.history();
+  res.balances = w.balances();
+  return res;
+}
+
+(async () => {
+  try {
+    if (q.get("offline")) window.zsa.result.offline = await offline();
+    if (q.get("funded")) window.zsa.result.funded = await funded();
+  } catch (e) {
+    window.zsa.error = String(e?.message || e);
+    log("ERROR", window.zsa.error);
+  }
+  window.zsa.done = true;
+})();
+</script>
+</body>
+</html>
