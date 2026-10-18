@@ -7,9 +7,9 @@ import { bench, lampPost, leafTree, planterBox } from "./needle";
 
 /**
  * The ZEC CONVENTION CENTER, on the avenue across from the mall: a long low hall under a white roof
- * that rolls like a wave, a glass front lit from inside, a red LED band across it ("ROADSTER
- * REVEAL"), vertical banners, and on the plaza the white roadster itself on a turntable plinth,
- * searchlights either side. Inside (interior/convention) the roadster is unveiled on stage, does
+ * that rolls like a wave, a glass front lit from inside, a red LED band across it ("zkCAR
+ * REVEAL"), vertical banners, and on the plaza the white zkCar itself on a turntable plinth,
+ * searchlights either side. Inside (interior/convention) the zkCar is unveiled on stage, does
  * its loop and flies over a row of cars.
  *
  * Scale 2 (a third of a metre). Points: `door`, `keeper`, `crown`, `camPos`, `camLook`.
@@ -67,7 +67,7 @@ export function convention(seed: number, o: LandmarkOpts): Built {
     for (let z = z0; z < z1 + 6; z++) m.set(x, top, z, z >= z1 ? whiteShade : white);
     m.set(x, top - 1, z1 + 5, redSoft);
   }
-  signs.push({ text: "ROADSTER REVEAL", color: "#ff2a3a", x: cx, y: 19.5, z: z1 + 0.2, w: 70, h: 6, vertical: false, facing: "front" });
+  signs.push({ text: "zkCAR REVEAL", color: "#ff2a3a", x: cx, y: 19.5, z: z1 + 0.2, w: 70, h: 6, vertical: false, facing: "front" });
   signs.push({ text: "ZEC CONVENTION CENTER", color: "#ffffff", x: cx, y: 30, z: z1 + 6.2, w: 44, h: 4, vertical: false, facing: "front" });
 
   // vertical banners on the flanks of the doors: red, a white car stripe

@@ -322,7 +322,7 @@ export const AREAS = [
   { key: "ironwood", name: "Ironwood", blurb: "Izakayas, karaoke, the NU7 tower", color: "#b07bff", x: 37, z: 0, zoom: 1.1 },
   { key: "transparent", name: "Transparent Square", blurb: "Open market, nothing hidden", color: "#ffd28a", x: 0, z: 18, zoom: 1.2 },
   { key: "zsalab", name: "ZSA LAB", blurb: "Mint your own shielded asset", color: "#3ef0c8", x: 70, z: 17, zoom: 0.9 },
-  { key: "convention", name: "Convention Center", blurb: "The roadster reveal: the loop, the flight", color: "#ff2a3a", x: 160, z: 17, zoom: 0.7 },
+  { key: "convention", name: "Convention Center", blurb: "The zkCar reveal: the loop, the flight", color: "#ff2a3a", x: 160, z: 17, zoom: 0.7 },
   { key: "park", name: "Central Park", blurb: "The lake, the bandstand, the woods", color: "#5cff9a", x: 0, z: -82, zoom: 0.55 },
   { key: "museum", name: "zkSNARK Museum", blurb: "The 10,000 zkSNARKs", color: "#ff3e8a", x: -86, z: -82, zoom: 0.6 },
   { key: "stadium", name: "Block Stadium", blurb: "Shielded vs Transparent, live", color: "#f4b728", x: -175, z: -82, zoom: 0.5 },

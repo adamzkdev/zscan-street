@@ -664,7 +664,7 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
   noir: "tweets · releases · the crown",
   zlab: "ZApp · ZApp Chrome · ZFirm · KindleWallet · the crown",
   zsalab: "mint your own shielded asset",
-  convention: "the roadster reveal · the loop · the flight",
+  convention: "the zkCar reveal · the loop · the flight",
   university: "courses · Zakura · Tachyon · the library · HashSmash",
   cemetery: "the crypt · zombies inside",
 };
@@ -690,7 +690,7 @@ const PLACE_ABOUT: Record<string, string> = {
   zodl: "The ZODL TOWER is the white tower of Zodl, the Zcash wallet (formerly Zashi) built by ZODL, across the avenue from the ZEC Reserve: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its black bird on white turning over the roof.",
   noir: "The NOIR TOWER is the obsidian tower of Noir, the shielded Zcash wallet in your browser (a Chrome extension web pages can ask to pay or sign), next to the ZODL TOWER on the avenue: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver eclipse and green light turning over the roof.",
   zlab: "The ZLAB TOWER is the black and gold tower of ZLab, the open-source Zcash lab, west of the heart across from the NOIR TOWER: ZLab's card and its latest commits in the lobby, then a floor per project, each a lab with its real releases, commits and pull requests: ZApp (the phone wallet) on 8, ZApp Chrome (the browser extension) on 16, ZFirm (the signer firmware for a Flipper Zero, a Pi Zero or a Kindle) on 24, KindleWallet (a hardware wallet on a jailbroken Kindle) on 32; ZLab has no X account, so no wall of tweets. Its shield turns over the roof, and a zkSNARK tells whoever is inside about every commit and release as it lands.",
-  convention: "The ZEC CONVENTION CENTER is the long white hall with the wave roof on the avenue across from the ZK Mall. Inside, the arena: thousands of zkSNARKs in the stands, a stage with a giant screen, and the roadster reveal, like Tesla's of October 2026: the white roadster rises through the stage, launches from 0 to 60 mph in under a second, drives round a loop upside down on its air thrusters, then lifts off, spins in the air and flies over a row of cars before landing in front of the crowd.",
+  convention: "The ZEC CONVENTION CENTER is the long white hall with the wave roof on the avenue across from the ZK Mall. Inside, the arena: thousands of zkSNARKs in the stands, a stage with a giant screen, and the zkCar reveal, like Tesla's roadster of October 2026: the white zkCar rises through the stage, launches from 0 to 60 mph in under a second, drives round a loop upside down on its air thrusters, then lifts off, spins in the air and flies over a row of cars before landing in front of the crowd.",
   zsalab: "The ZSA LAB is the white laboratory with the glass dome on the avenue east of the heart, where anyone can mint their own Zcash Shielded Asset (ZIPs 226 and 227) on the public ZSA test network, proved and signed in their own browser: the MINT counter, the reactor the live tokens orbit, a wall of every token on the testnet, a live feed, the furnace to burn and the seal to fix a supply for good. Test tokens have no value; ZSAs reach mainnet with a future upgrade.",
   university: "ZK UNIVERSITY is the campus next to the city works, built like Stanford's Main Quad (sandstone, round arches, red tile roofs, a bell tower): free video courses on cryptography, zkSNARKs and Zcash, every claim with its source. G: the Main Quad hall and the course catalogue; 1: the Lecture Hall (theory); 2: Zakura Hall, about the Zakura node, with its real releases and announcements; 3: Tachyon Hall, about scaling Zcash with Tachyon and Ragu, with the team's real blog posts and commits; 4: the Library, where every lesson can be read; 5: HashSmash Hall, live from HashSmash (yukon.org/hashsmash, Eigen Labs with Shielded Labs, Zcash, Project Eleven and the Ethereum Foundation), the open challenge to find collisions in reduced-round SHA-256, SHA3-256, BLAKE3 and Orchard's Poseidon: a column of rounds per hash, the broken ones knocked out, the collision frontier, the solvers, every new attack as it comes.",
   vizor: "The VIZOR TOWER is the crimson tower of Vizor, the Zcash wallet from the Keplr team, across the avenue from ZK TOWER HALO: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver knight's helmet turning over the roof.",
@@ -2664,7 +2664,7 @@ function frameBody(stepDt?: number) {
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
   nu7.update(dt, focus);
   nu7Night.update(dt);
-  parade.update(sim, walking ? onFoot.camera : rig.shot ? rig.persp : rig.iso);
+  parade.update(sim, cam);
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   // close-ups keep full detail further out; the whole-city view is mostly simplified
   if (wide) city.lod(focus, 0, 50);

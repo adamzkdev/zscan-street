@@ -59,14 +59,14 @@ function softDot(rgba: string) {
 }
 
 /**
- * THE ZEC CONVENTION CENTER: the roadster reveal, after Tesla's of 15 October 2026 (the white
+ * THE ZEC CONVENTION CENTER: the zkCar reveal, after Tesla's of 15 October 2026 (the white
  * roadster that drove up an inverted ramp on its air thrusters, spun in the air and flew over a
  * row of cars). An arena: thousands of zkSNARKs in the stands either side of a track that runs from
  * the stage to the pit where you stand, a giant screen behind the stage, beams sweeping from the
  * rig.
  *
  * The show, every two minutes: the countdown, the presenter, the drum roll, the cover flies off in
- * smoke and lasers and the hall stands up, phones flashing; the roadster drives off the turntable,
+ * smoke and lasers and the hall stands up, phones flashing; the zkCar drives off the turntable,
  * waits under the start lights and launches (0–60 mph in 0.81 s, timed on the screen), goes round
  * the loop upside down, its thrusters holding it to the track, then lifts off, spins full circle in
  * the air over the robotaxi, two saloons, the pickup and the semi, and lands in front of you; the
@@ -285,7 +285,7 @@ export function buildConvention(ctx: InteriorContext): Interior {
     c.group.rotation.y = i % 2 ? -Math.PI / 2 : Math.PI / 2;
     c.group.position.set(0, 0, ROW[i]);
     scene.add(c.group);
-    pickable(c.group, { eyebrow: "THE ROW", title: c.name, body: "<p>Parked across the track. The roadster flies over all five of them.</p>" }, c.name);
+    pickable(c.group, { eyebrow: "THE ROW", title: c.name, body: "<p>Parked across the track. The zkCar flies over all five of them.</p>" }, c.name);
   });
 
   // ---- the stage: a black deck, the turntable, the screen ------------------------------------------
@@ -317,7 +317,7 @@ export function buildConvention(ctx: InteriorContext): Interior {
   screenMesh.position.set(0, SCREEN.y + SCREEN.h / 2, H.z0 + 0.4);
   scene.add(screenMesh);
   box(scene, SCREEN.w + 0.8, SCREEN.h + 0.8, 0.3, std("#08080a", 0.6), 0, SCREEN.y - 0.4, H.z0 + 0.15);
-  pickable(screenMesh, { eyebrow: "CONVENTION CENTER", title: "The roadster reveal", tag: ["EVERY 2 MINUTES", "info"], body: "<p>After Tesla's reveal of 15 October 2026 at a SpaceX test site in Texas: the white roadster drove up an inverted ramp on ten air thrusters (600 litres of compressed air), spun in the air and jumped a row of Tesla vehicles. Production is planned for 2028.</p>" }, "The show");
+  pickable(screenMesh, { eyebrow: "CONVENTION CENTER", title: "The zkCar reveal", tag: ["EVERY 2 MINUTES", "info"], body: "<p>After Tesla's reveal of 15 October 2026 at a SpaceX test site in Texas: the white roadster drove up an inverted ramp on ten air thrusters (600 litres of compressed air), spun in the air and jumped a row of Tesla vehicles. Production is planned for 2028.</p>" }, "The show");
 
   // ---- the roadster, under its silk cover ----------------------------------------------------------
   const car = roadster();
@@ -326,7 +326,7 @@ export function buildConvention(ctx: InteriorContext): Interior {
     car.group,
     {
       eyebrow: "THE REVEAL",
-      title: "Roadster",
+      title: "zkCar",
       tag: ["FLIGHT MODE", "ok"],
       stats: [
         ["0–60 mph", "0.81 s"],
@@ -336,7 +336,7 @@ export function buildConvention(ctx: InteriorContext): Interior {
       ],
       body: "<p>Ten nozzles fed by 600 litres of compressed air lift it, spin it and hold it to the loop; a compressor refills the tank. \"This will be the actual car that's on the roads.\"</p>",
     },
-    "The roadster",
+    "The zkCar",
   );
   const silkM = new THREE.MeshStandardMaterial({ color: "#8a0c16", roughness: 0.45, metalness: 0.1, transparent: true });
   const silk = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), silkM);
@@ -493,7 +493,7 @@ export function buildConvention(ctx: InteriorContext): Interior {
     };
     if (tau < 0) {
       const s = Math.ceil(-tau);
-      big("ROADSTER", 220, "#ffffff", 230);
+      big("zkCAR", 240, "#ffffff", 230);
       small(`NEXT SHOW IN 0:${String(s).padStart(2, "0")}`, 420, RED, 64);
       small("0–60 MPH IN 0.81 S · 230+ MPH · FLIGHT MODE", 520);
     } else if (tau < 6) {
@@ -501,9 +501,9 @@ export function buildConvention(ctx: InteriorContext): Interior {
       big(String(n), 480, tau % 1 < 0.5 ? "#ffffff" : RED);
     } else if (tau < 21) {
       big("TONIGHT", 90, "#9aa0a8", 160, 600);
-      big("ROADSTER", 260, `rgba(255,255,255,${0.15 + 0.1 * Math.sin(tau * 3)})`, 360);
+      big("zkCAR", 280, `rgba(255,255,255,${0.15 + 0.1 * Math.sin(tau * 3)})`, 360);
     } else if (tau < 36) {
-      big("ROADSTER", 300, "#ffffff", 270);
+      big("zkCAR", 320, "#ffffff", 270);
       small('"THIS WILL BE THE ACTUAL CAR THAT\'S ON THE ROADS"', 500, "#c9ced6", 50);
     } else if (tau < 39.5) {
       const t = Math.max(0, Math.min(0.81, tau - 36));
@@ -519,7 +519,7 @@ export function buildConvention(ctx: InteriorContext): Interior {
       big("LANDED.", 300, "#ffffff", 260);
       small('"BETTER THAN ANY BOND CAR"', 500, "#c9ced6", 56);
     } else {
-      big("ROADSTER", 220, "#ffffff", 220);
+      big("zkCAR", 240, "#ffffff", 220);
       small("PRODUCTION 2028 · DEPOSITS OPEN", 430, RED, 64);
       small("SEE YOU AT THE NEXT SHOW", 520);
     }
@@ -633,7 +633,7 @@ export function buildConvention(ctx: InteriorContext): Interior {
     if (presenter) {
       if (cue(tau, 6)) void presenter.walk([new THREE.Vector3(-4, STAGE.y, STAGE.z1 - 2.5)], 1.6);
       if (cue(tau, 9)) presenter.say("Welcome to ZStreet!", 3, "shout");
-      if (cue(tau, 12.5)) presenter.say("Nine years ago we promised you a roadster.", 3.5);
+      if (cue(tau, 12.5)) presenter.say("Nine years ago we promised you a car.", 3.5);
       if (cue(tau, 16.5)) presenter.say("Tonight… it's real.", 2.5);
       if (cue(tau, 25)) presenter.say("Zero to sixty in under a second.", 3);
       if (cue(tau, 29)) presenter.say("And it flies.", 2.5, "shout");
@@ -833,7 +833,7 @@ export function buildConvention(ctx: InteriorContext): Interior {
     key: "convention",
     title: "CONVENTION CENTER",
     scene,
-    floors: [{ label: "Arena", name: "THE ROADSTER REVEAL · every two minutes", y: TERR.y, spawn: new THREE.Vector3(0, TERR.y, 6.5), yaw: 0 }],
+    floors: [{ label: "Arena", name: "THE zkCAR REVEAL · every two minutes", y: TERR.y, spawn: new THREE.Vector3(0, TERR.y, 6.5), yaw: 0 }],
     // the terrace is the floor; the stairs go down to the aisles and the track's level
     groundAt: (_f, x, z) => {
       if (z >= TERR.z) return null;
