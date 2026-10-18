@@ -6,7 +6,7 @@
  * one-shots of the place (a cell door slamming, the goal roar, Big Ben on the hour, the lift's
  * ding) and handlers for its events (a goal, a blow in the arena, a new block).
  */
-import { bell, brass, burst, clank, type Room, type Scene, tone, whistle } from "./lib";
+import { bell, brass, burst, clank, drum, type Room, type Scene, tone, whistle } from "./lib";
 import { loop, preload, shot } from "./samples";
 import { pyramidMusic } from "./egypt";
 
@@ -406,6 +406,38 @@ const crypt: Preset = {
   },
 };
 
+/** The Convention Center's arena: thousands in the stands, the roadster's whine, its thrusters, the ovation. */
+const arena: Preset = {
+  room: BOWL,
+  rain: 0,
+  build(s) {
+    preload(s.ctx, "applause");
+    const crowd = loop(s, "stadium", 0.35, { lp: 1400 });
+    s.knobs.crowd = crowd.gain;
+    s.on.applause = (t) => {
+      shot(s, "applause", t, 1.2, { wet: 0.35 });
+      swell(crowd, t, 0.35, 0.9, 6);
+    };
+    // the drum roll before the reveal, the hit as the cover comes off
+    s.on.roll = (t, dur) => {
+      const d = typeof dur === "number" ? dur : 3;
+      for (let x = 0; x < d; x += 0.06) drum(s, t + x, 140 + Math.random() * 20, 0.05 + (x / d) * 0.12, 0.4, Math.random() - 0.5);
+    };
+    s.on.hit = (t) => {
+      drum(s, t, 55, 0.5, 0.5);
+      burst(s, t, "white", "highpass", 3000, 0.7, 0.25, 0.9, 0.6);
+    };
+    // the launch: an electric whine climbing, the air torn
+    s.on.launch = (t) => {
+      tone(s, t, 180, "sawtooth", 0.1, 1.6, 0.3, { to: 2400, lp: 3000 });
+      tone(s, t, 90, "sine", 0.25, 1.2, 0.2, { to: 300 });
+      burst(s, t, "pink", "lowpass", 600, 0.7, 0.4, 1.4, 0.5, 0, 0.05);
+    };
+    // the thrusters: a hiss of compressed air
+    s.on.thrust = (t, dur) => burst(s, t, "white", "bandpass", 2600, 0.6, 0.22, typeof dur === "number" ? dur : 1.2, 0.4, 0, 0.04);
+  },
+};
+
 const opera = (foyer: boolean): Preset => ({
   room: foyer ? LOBBY : CATHEDRAL,
   rain: foyer ? 0.15 : 0,
@@ -633,6 +665,7 @@ export const PRESETS: Record<string, Preset> = {
   "pyramid-chamber": pyramid(true),
   "opera-foyer": opera(true),
   "opera-hall": opera(false),
+  arena,
   "great-hall": greatHall,
   stairwell,
   "clock-room": clockwork(1, 0, 1),
@@ -733,6 +766,8 @@ export function presetFor(key: string, floor: number, name: string): string {
       return "stairwell";
     case "factory":
       return has("control") ? "control-room" : "factory";
+    case "convention":
+      return "arena";
     case "zsalab":
       // the mint: presses, belts and furnaces, the factory's soundscape
       return "factory";
