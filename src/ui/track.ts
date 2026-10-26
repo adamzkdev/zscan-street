@@ -207,7 +207,8 @@ export class Tracker {
           return [h ? `Delivered in block #${num(h)}` : `${who} is on the street`, h ? "mined" : "pending"];
       }
     }
-    if (h) return [`Mined in block #${num(h)}${i.confirmations ? ` · ${num(i.confirmations)} confirmations` : ""}`, "mined"];
+    // the API counts confirmations from its own indexed tip, which can trail a just-mined block
+    if (h) return [`Mined in block #${num(h)}${i.confirmations && i.confirmations > 0 ? ` · ${num(i.confirmations)} confirmations` : ""}`, "mined"];
     return ["In the mempool, its zkSNARK is on the way", "pending"];
   }
 
