@@ -1,0 +1,4 @@
+target/
+.secrets/
+pkg/
+zsa-data/

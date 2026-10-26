@@ -1,0 +1,92 @@
+[package]
+name = "zapp-zsa-engine"
+version = "0.0.1"
+edition = "2021"
+description = "ZApp for Chrome: feasibility spike, OrchardZSA (ZIP 226/227) issue/transfer built, proven and signed in WebAssembly against the public ZSA testnet"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "zsa-e2e"
+required-features = ["native"]
+
+[[bin]]
+name = "zsa-svc"
+required-features = ["svc"]
+
+[features]
+default = []
+native = ["dep:ureq", "dep:serde_json", "dep:base64", "orchard/multicore", "zcash_primitives/multicore"]
+# zsa-svc: ZStreet ZSA Lab backend (lightwalletd proxy, sponsor drip wallet, asset index).
+svc = ["dep:serde_json", "dep:base64", "dep:tokio", "dep:axum", "dep:tower-http", "dep:tonic", "dep:prost", "dep:serde", "dep:bytes", "orchard/multicore", "zcash_primitives/multicore"]
+
+[dependencies]
+# Same revisions as the deployed ZSA testnet node (zcash-shielded-assets/zebra@6a91831a, see [patch]).
+zcash_primitives = { version = "0.28", default-features = false, features = ["std", "circuits", "zsa-issuance", "non-standard-fees", "zip-233"] }
+zcash_protocol = "0.9"
+zcash_address = "0.12"
+zcash_encoding = "0.4"
+transparent = { package = "zcash_transparent", version = "0.8", default-features = false }
+orchard = { version = "0.14", default-features = false, features = ["circuit", "std", "zsa-issuance"] }
+sapling = { package = "sapling-crypto", version = "0.7", default-features = false }
+zcash_note_encryption = "0.4.1"
+incrementalmerkletree = { version = "0.8", features = ["legacy-api"] }
+jubjub = "0.10"
+bls12_381 = "0.8"
+nonempty = "0.11"
+zip32 = "0.2"
+rand = "0.8"
+rand_core = { version = "0.6", features = ["getrandom"] }
+hex = "0.4"
+blake2b_simd = "1"
+
+ureq = { version = "2", optional = true, features = ["json"] }
+serde_json = { version = "1", optional = true }
+base64 = { version = "0.22", optional = true }
+tokio = { version = "1", optional = true, features = ["rt-multi-thread", "macros", "sync", "time", "signal", "fs"] }
+axum = { version = "0.8", optional = true }
+tower-http = { version = "0.6", optional = true, features = ["cors"] }
+tonic = { version = "0.14", optional = true, default-features = false, features = ["transport", "codegen", "tls-ring", "tls-webpki-roots"] }
+prost = { version = "0.14", optional = true }
+serde = { version = "1", optional = true, features = ["derive"] }
+bytes = { version = "1", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+getrandom = { version = "0.2", features = ["js"] }
+getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = false
+panic = "abort"
+
+[patch.crates-io]
+# Exactly the [patch] block of zcash-shielded-assets/zebra@6a91831a6a9c18f667f59ab956c9437bf0bb5c5f
+# Vendored copy of that rev (ZApp for Chrome patches: proving key cached, Merkle domain made once).
+orchard = { path = "../vendor/orchard-zsa" }
+sapling-crypto = { git = "https://github.com/QED-it/sapling-crypto.git", rev = "e785faaa5eaf67bd2cb328fdd82a345df44e5754" }
+zcash_note_encryption = { git = "https://github.com/hhanh00/zcash_note_encryption.git", rev = "0f6f999c96821afa4bdcc323c8e277ab1ca56199" }
+halo2_gadgets = { git = "https://github.com/zcash-shielded-assets/halo2.git", rev = "d687ce0e3e913549cab370ec66765e6d59d4612f" }
+halo2_proofs = { git = "https://github.com/zcash-shielded-assets/halo2.git", rev = "d687ce0e3e913549cab370ec66765e6d59d4612f" }
+halo2_poseidon = { git = "https://github.com/zcash-shielded-assets/halo2.git", rev = "d687ce0e3e913549cab370ec66765e6d59d4612f" }
+zcash_primitives = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+zcash_proofs = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+zcash_protocol = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+zcash_address = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+zcash_encoding = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+zcash_keys = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+zcash_history = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+zcash_transparent = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+equihash = { git = "https://github.com/hhanh00/librustzcash.git", rev = "09c0ea88cd6ed93160cadb2406176baac0b1338c" }
+sinsemilla = { git = "https://github.com/zcash/sinsemilla.git", rev = "aabb707e862bc3d7b803c77d14e5a771bcee3e8c" }
+# ZApp for Chrome wasm patch (shared with engine/): faster field multiply on wasm32.
+pasta_curves = { path = "../vendor/pasta_curves" }
+zcash_spec = { git = "https://github.com/QED-it/zcash_spec.git", rev = "c031bec62f1ea5a395d97e807ba831d206324cbe" }

@@ -1,59 +1,99 @@
 # ZStreet
 
-The Zcash blockchain as a living voxel city (Three.js), at street.zscan.cash. Real zkSNARK NFTs pick
-up real mempool transactions at the MEMPOOL shop, wait at the stop and board the block bus when the
-block that includes their transaction is mined. You can walk into the shops.
+**The Zcash blockchain as a living city.** Live at **https://zstreet.cash**.
+
+Every real transaction in the Zcash mempool is carried through a voxel megalopolis by one of the
+10,000 zkSNARKs, and every mined block drives them into the chain. Around that street is a city you can fly
+over or walk through in first person, with more than 30 buildings you can walk into, citizens you
+can talk to, and things to do that are paid for with shielded ZEC.
+
+Built for the Zecathon (Wildcard track) between 2026-10-03 and 2026-10-28.
+
+## How the chain becomes a city
+
+- **A transaction** enters the mempool → a truck brings it from the Proof Factory (shielded) or
+  the depot (transparent) to the MEMPOOL shop → a zkSNARK picks up the parcel and queues at the
+  bus stop. Large *public* amounts take a taxi (≥ 50 ZEC) or a limousine with bodyguards
+  (≥ 500 ZEC); shielded ones ride the bus like everyone else.
+- **A block** is mined → its vehicle, with the real height on its sign, picks up exactly the riders
+  whose transactions are in it and drives into the chain: a taxi for two or three, a bus for a
+  handful, a metro train for a full block. An empty block just drives past.
+- **The city reacts**: LED screens flash on every block; an empty block blacks out the city; a
+  big shielded transaction strikes the Proof Factory with lightning; the Block Stadium scores
+  shielded against transparent, block by block.
+- **Follow your own transaction**: paste a txid (or open `zstreet.cash/tx/<txid>`) and the camera
+  follows its carrier from the shop to the bus; share a 10 s clip or a card.
+
+Nothing is simulated: blocks, mempool, transactions, pools, market, supply and the zkSNARK
+collection all come from the public ZScan API. A transaction's carrier is picked from its txid
+(zkSNARKs live off-chain, so it is casting, not ownership).
+
+## Shielded ZEC in the city
+
+- **Messages on the ground, guestbook, sealed City Works votes, tips**: ZStreet gives a ZIP-321
+  QR code to its own shielded address with `ZS1:<ref>` and your text in the memo. Pay from any
+  wallet (Zodl, Vizor, or one click with the Noir browser extension). The server reads the memo
+  with the address's viewing key and the whole city sees the result. It never learns who paid:
+  no account, no login, no sender in a shielded note.
+- **ZSA Lab**: mint your own Zcash Shielded Asset (ZIPs 226/227) on the public ZSA test network.
+  The transaction is built, proved and signed in your browser (WebAssembly); the seed never
+  leaves it, and ZStreet drips the testnet fees so you need nothing. Then send, trade on the
+  player-to-player board, or burn it in the furnace.
+- **View Key Bank**: paste a viewing key at a teller; your shielded history is decrypted in your
+  browser and the key is never sent anywhere.
+
+## Privacy rules
+
+- ZStreet shows what the chain already makes public. For shielded transactions that is the fact
+  that they happened, their size and their pool: never amounts, addresses or memos.
+- Payments to ZStreet: only the memo the payer chose to write is shown.
+- Viewing keys and ZSA seeds stay in the browser.
+- Multiplayer presence carries positions and emojis only, kept in memory.
+
+## The city
+
+- **A megalopolis** on a grid of named streets: the avenue with the MEMPOOL shop, a bay with
+  ferries and a Golden Gate, a metro line, Central Park, a port, landmarks from around the world
+  rebuilt in voxels, day and night with the visitor's clock.
+- **30+ walk-in places**, each with live data: the MEMPOOL HQ and its block archive (Bitfeed-style
+  mosaic of any block), the Proof Factory's mining hall, the ZEC Reserve (value pools in vaults,
+  a live zkSNARKs order book on the trading floor), the zkSNARK Museum (a Louvre with all 10,000,
+  the Apparitions wing and the Memorial of the Purged), the ZK University (video courses, Zakura
+  and Tachyon halls, HashSmash Hall), wallet towers for Zodl, Vizor and Noir fed live from their
+  tweets and GitHub, the ZSA Lab, a cinema, a stadium, a prison of crypto's convicted founders, a
+  cemetery whose crypt tracks the ZEC still leaving Sprout, a convention center, and more.
+- **Citizens are AI agents**: every zkSNARK has a persona; walk up to anyone and press E to talk.
+  A cast of 12 lives one turn per block. Each 576-block round, agents propose a building, visitors
+  vote, and the winner is built block by block.
+- **NU7**: a quarter whose tower and karting circuit rise with the countdown to the upgrade.
+- **Daily events**: the Apparition parade at 12:00 and 20:00 New York time, with a crowd of phones.
+- **Multiplayer**: see other visitors walk around.
+- **Phones**: landscape, touch joystick, adaptive quality.
+
+## Run it
 
     npm install
-    npm run dev      # http://localhost:3007   (?debug exposes window.street for tests)
-    npm run build    # static site in dist/
+    npm run dev      # http://localhost:3007
+    npm run build    # static site in dist/ (server.mjs serves it with per-transaction share tags)
 
-Data comes only from zscan-api (`VITE_API_URL`, default https://api.zscan.cash): mempool, blocks,
-transactions, market, supply, pools, network, miners, the zkSNARK collection and its atlas, and the
-compact blocks the viewing-key scanner decrypts in the browser. Nothing is simulated. The carrier of
-a transaction is picked from its txid (zkSNARKs live off-chain, so it's casting, not ownership).
-
-## The street
-
-- One avenue, Downtown in the middle, the Orchard park west, Ironwood's Proof Factory and depot east,
-  the Transparent square south. The avenue runs off the board into a tunnel at each end: buses come
-  "from the miners" in the west and carry blocks "into the chain" in the east.
-- A new mempool transaction sends a truck from the Proof Factory (shielded) or the depot
-  (transparent) to the MEMPOOL shop; a zkSNARK picks the parcel up and queues at the bus stop, or
-  takes a taxi (≥ 50 ZEC public) or a limousine (≥ 500 ZEC, with two of the rarest zkSNARKs as
-  bodyguards). Each block is one bus.
-- LED screens on the towers show the live ZEC price, market cap and supply.
-- Day and night themes (night: rain and neon), sound, a camera rail on the right, and one thin data
-  strip at the bottom (last block, mempool, market, supply, network) that unfolds on click.
-- On foot: the walker button under the camera rail puts you in the street in first person (WASD /
-  ZQSD, drag to look, Shift to run). Walk into a shop door to go in; walk back out of the entrance
-  to come out on the pavement. Esc returns to the map.
-
-## Walk-in places
-
-Hover a building to light it up, click to go in. Inside: ZQSD / WASD to walk, drag to look, scroll to
-step, the lift for floors, Esc to leave. Click things for details and links to ZScan.
-
-| Place | Inside |
-|---|---|
-| ZK TOWER | An eight-level condo tower between the MEMPOOL and zkCARDS, furnished in voxels like the city, glass all round onto the real street: G grand lobby, 1 offices (live screens, meeting room, coffee bar, ZIP of the day), 2 game hall (arcade cabinets, ZK KART sims, console lounge, air hockey, UFO catchers, paintball), 3 bowling & karaoke (four lanes, a karaoke stage, dance machines, billiards), 4 gym, 5 infinity pool (Sapling / Orchard / Ironwood lanes), 6 residences (four complete flats), R rooftop (sky bar, garden, helipad, fireworks per block). Click any zkSNARK to talk. |
-| LIBRARY | On Transparent Square: G press room (the week's news as front pages, a ticker), 1 ZIP stacks (one book per ZIP; open it to read the real text). |
-| MEMPOOL | One room: drivers set every pending transaction on the pickup table as a parcel, zkSNARKs come in and take theirs; the live mempool board on the back wall. |
-| zkCARDS | A museum of the whole collection: a lobby with the ten Legendaries, then one floor per rank band (10,000 cards). |
-| VIEW KEY BANK | The banking hall: paste a viewing key at a terminal; it is decrypted in this browser and never sent. -1: the vaults of the value pools. |
-| Proof Factory | The mining hall: rows per mining pool, a press that stamps every new block, the big wall screen. 1F: the control room. |
-| ZSA EXCHANGE | A building site: Zcash Shielded Assets (ZIPs 226, 227, 228) are coming, the zkSNARKs are fitting out the shop. |
+`VITE_API_URL` sets the API (default `https://api.zscan.cash`). `?debug` exposes `window.street`.
 
 ## Code
 
-- `src/scene/city`: layout (`plan.ts`), voxel generation in workers (`worker.ts`), assembly
-  (`index.ts`), the tunnels (`tunnel.ts`)
-- `src/scene/voxel`: the voxel engine (greedy mesher with AO), buildings, props, vehicles
-- `src/scene`: `director.ts` (the chain's events), `traffic.ts`, `camera.ts`, `decor.ts` (screens,
-  neon, rain), `theme.ts` (day / night), `shelf.ts`, `mining.ts`
-- `src/interior`: the walk-in places (`types.ts` is the contract, `walk.ts` the first-person walker,
-  `manager.ts` switches scenes)
-- `src/ui`: the HUD (`hud.ts`) and the shop panels (`venues.ts`)
-- `src/data`: the API client (rate-limited), market data, the viewing-key scanner (`viewkey.ts`, wasm
-  in `public/wasm`)
-- `shots/*.mjs`: puppeteer scripts used to check the scene (`?debug&interior=<place>`)
+| Path | |
+|---|---|
+| `src/scene/` | the city: layout (`city/plan.ts`), the voxel engine (`voxel/`: greedy mesher, buildings, landmarks, vehicles), the director that turns chain events into the street (`director.ts`), traffic, camera, crowds, render passes |
+| `src/interior/` | the walk-in places (`types.ts` is the contract, `walk.ts` the first-person walker, `manager.ts` switches scenes) |
+| `src/game/` | the chain-driven life of the city: block clock, AI agents and personas, City Works, parades, NU7 |
+| `src/ui/` | the HUD, the pay desk (`paydesk.ts`), the ZSA Lab terminal, transaction tracking and clips |
+| `src/data/` | API clients, the viewing-key scanner, ZSA and payment clients |
+| `src/zsa/` | the ZSA wallet (WebAssembly engine in a Web Worker) |
+| `university/` | ZK University courses and their Remotion video kit |
+| `server/` | the server code: ZStreet's API routes and payment scanner, and the ZSA engine and Lab backend ([server/README.md](server/README.md)) |
+| `shots/` | puppeteer scripts used to check scenes and to film |
+
+## Credits
+
+zkSNARKs artwork belongs to the zkSNARKs collection and its creators. Sounds are CC0. Wallet
+names and logos belong to their projects. Code: MIT (see `LICENSE`), except `server/vendor/`,
+which keeps its upstream licenses.

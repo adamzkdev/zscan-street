@@ -1,0 +1,11 @@
+# ZSA (OrchardZSA, ZIP 226/227) code in the forks is behind cfg(zcash_unstable = "nu7").
+[build]
+target-dir = "target"
+rustflags = ["--cfg", 'zcash_unstable="nu7"']
+
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", 'zcash_unstable="nu7"', "--cfg", 'getrandom_backend="wasm_js"']
+
+[env]
+CC_wasm32_unknown_unknown = "/opt/homebrew/opt/llvm@22/bin/clang"
+AR_wasm32_unknown_unknown = "/opt/homebrew/opt/llvm@22/bin/llvm-ar"
