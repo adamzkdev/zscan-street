@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { CURB } from "./city";
+import { CURB, type City } from "./city";
 import type { Nu7 } from "./nu7";
 
 /** A birthday installation in Transparent Square. All decoration is local, with no API calls. */
@@ -11,7 +11,7 @@ export class Anniversary {
   private nextParty = 8;
   private reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
-  constructor(scene: THREE.Scene, private fireworks: Nu7) {
+  constructor(scene: THREE.Scene, private fireworks: Nu7, city?: City) {
     this.group.name = "Zcash · 10 years · 2016–2026";
     scene.add(this.group);
     const gold = new THREE.MeshStandardMaterial({ color: "#ffc84d", metalness: 0.75, roughness: 0.23, emissive: "#be6a08", emissiveIntensity: 0.25 });
@@ -116,6 +116,105 @@ export class Anniversary {
     ten.add(panel);
     this.group.add(ten);
     this.floats.push(ten);
+    if (city) this.dressCity(city);
+  }
+
+  /** Big, legible birthday banners on the skyline, with festoon lights over the avenue. */
+  private dressCity(city: City) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 1024;
+    const g = canvas.getContext("2d")!;
+    g.fillStyle = "#101b22";
+    g.fillRect(0, 0, 512, 1024);
+    g.strokeStyle = "#f9cf6d";
+    g.lineWidth = 7;
+    g.strokeRect(15, 15, 482, 994);
+    g.textAlign = "center";
+    g.fillStyle = "#9cf2d0";
+    g.font = "700 60px sans-serif";
+    g.fillText("ZCASH", 256, 135);
+    g.fillStyle = "#ffe09a";
+    g.font = "900 330px sans-serif";
+    g.fillText("10", 248, 480);
+    g.font = "800 82px sans-serif";
+    g.fillText("YEARS", 256, 600);
+    g.fillRect(105, 665, 302, 4);
+    g.font = "600 54px monospace";
+    g.fillText("2016", 256, 754);
+    g.fillText("2026", 256, 825);
+    g.fillStyle = "#9cf2d0";
+    g.font = "600 31px sans-serif";
+    g.fillText("CELEBRATE PRIVACY", 256, 943);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+    const plane = new THREE.PlaneGeometry(1, 1);
+    const golden = new THREE.LineBasicMaterial({ color: new THREE.Color("#ffcb55").multiplyScalar(1.6), toneMapped: false });
+    const wires: THREE.Vector3[] = [];
+    const mount = (at: THREE.Vector3, width: number, height: number, yaw: number) => {
+      const banner = new THREE.Mesh(plane, material);
+      banner.name = "Zcash birthday facade";
+      banner.position.copy(at);
+      banner.rotation.y = yaw;
+      banner.scale.set(width, height, 1);
+      this.group.add(banner);
+      // Real edges, visible from oblique views too; one shared line batch for the entire city.
+      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).multiplyScalar(width / 2 + 0.12);
+      for (const side of [-1, 1]) {
+        const p = at.clone().addScaledVector(right, side);
+        wires.push(p.clone().add(new THREE.Vector3(0, -height / 2, 0)), p.clone().add(new THREE.Vector3(0, height / 2, 0)));
+      }
+    };
+    const towerKinds = ["noir", "zodl", "zlab", "vizor", "zkorchard", "zksapling", "zkhalo", "needle", "marina"];
+    for (const kind of towerKinds) {
+      const lm = city.landmarks.get(kind);
+      if (!lm) continue;
+      const h = lm.occluder.box.max.y;
+      const out = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), lm.yaw);
+      const at = lm.door.clone().addScaledVector(out, 0.5);
+      at.y = h * 0.58;
+      const height = Math.min(22, Math.max(12, h * 0.38));
+      mount(at, height / 2, height, lm.yaw);
+      // A second face lets the anniversary read from the rear of the city as well.
+      const centre = lm.occluder.box.getCenter(new THREE.Vector3());
+      const back = at.clone();
+      back.x = centre.x * 2 - at.x;
+      back.z = centre.z * 2 - at.z;
+      mount(back, height / 2, height, lm.yaw + Math.PI);
+    }
+    let count = 0;
+    for (const [i, facade] of city.facades.entries()) {
+      if (facade.type === "landmark" || facade.height < 8 || !["s", "n"].includes(facade.face)) continue;
+      if ((!facade.frontRow && i % 9 !== 0) || count++ >= 28) continue;
+      const width = Math.min(3.6, (facade.x1 - facade.x0) * 0.32);
+      if (width < 1.5) continue;
+      const height = Math.min(width * 2, facade.height * 0.55);
+      const sign = new THREE.Mesh(plane, material);
+      sign.name = "Zcash birthday neighborhood banner";
+      sign.scale.set(height / 2, height, 1);
+      sign.position.set(facade.x0 + (facade.x1 - facade.x0) * 0.28, CURB + facade.height * 0.67, facade.z + (facade.face === "s" ? 0.3 : -0.3));
+      sign.rotation.y = facade.face === "s" ? 0 : Math.PI;
+      facade.extras.add(sign);
+    }
+    // Five illuminated arches over downtown. Bulbs share one instanced draw call.
+    const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.14, 6, 4), new THREE.MeshBasicMaterial({ toneMapped: false }), 105);
+    const transform = new THREE.Matrix4();
+    let bulb = 0;
+    for (const x of [-38, -20, 0, 22, 42]) {
+      let previous: THREE.Vector3 | undefined;
+      for (let i = 0; i <= 20; i++) {
+        const k = i / 20;
+        const point = new THREE.Vector3(x, 9 - Math.sin(k * Math.PI) * 1.8, -10 + k * 17);
+        if (previous) wires.push(previous, point);
+        previous = point;
+        bulbs.setMatrixAt(bulb, transform.makeTranslation(point));
+        bulbs.setColorAt(bulb++, new THREE.Color(i % 3 === 0 ? "#7fffd1" : "#ffcf6e").multiplyScalar(2));
+      }
+      for (const z of [-10, 7]) wires.push(new THREE.Vector3(x, CURB, z), new THREE.Vector3(x, 9, z));
+    }
+    bulbs.computeBoundingSphere();
+    this.group.add(bulbs, new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(wires), golden));
   }
 
   update(dt: number, outside: boolean) {

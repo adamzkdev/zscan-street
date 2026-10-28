@@ -209,7 +209,7 @@ const lampLights = new LampLights(scene, city.lamps, 12);
 const decor = buildDecor(scene, city);
 // the NU7 upgrade: countdown on the screens, fireworks when it activates
 const nu7 = new Nu7(scene, city, decor);
-const anniversary = new Anniversary(scene, nu7);
+const anniversary = new Anniversary(scene, nu7, city);
 // the MEMPOOL shop's shelves hold the last blocks
 const shelf = city.shops[0] ? new BlockShelf(scene, city.shops[0]) : null;
 void get<BlockSummary[]>("/v1/blocks?limit=100").then((b) => b && shelf?.set(b));
