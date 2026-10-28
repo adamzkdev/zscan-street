@@ -44,6 +44,9 @@ const TOUR: [string, string][] = [
 ];
 
 const CHAT: [number, string][][] = [
+  [[0, "Happy 10 years, Zcash!"], [1, "2016–2026. Here's to the next ten!"]],
+  [[1, "Did you see our birthday banner?"], [0, "A whole city celebrating Zcash!"]],
+  [[0, "Sprout, Sapling, Orchard..."], [1, "Ten years of growing privacy."]],
   [
     [0, "The stadium looks tiny from up here."],
     [1, "Shielded are winning again, I bet."],
@@ -160,15 +163,17 @@ export class Blimp {
     // the LED band on both flanks: a strip of the envelope itself
     const c = document.createElement("canvas");
     c.width = 1536;
-    c.height = 128;
+    c.height = 384;
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     this.band = { ctx: c.getContext("2d")!, tex };
     const bandMat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: new THREE.Color(1.5, 1.5, 1.5) });
     for (const phi of [Math.PI / 2, (3 * Math.PI) / 2]) {
-      const g = new THREE.SphereGeometry(1.006, 48, 4, phi - 0.6, 1.2, Math.PI / 2 - 0.2, 0.4).scale(HULL.a, HULL.r, HULL.r);
-      this.group.add(new THREE.Mesh(g, bandMat));
+      const g = new THREE.SphereGeometry(1.006, 48, 12, phi - 0.6, 1.2, Math.PI / 2 - 0.4, 0.8).scale(HULL.a, HULL.r, HULL.r);
+      const banner = new THREE.Mesh(g, bandMat);
+      banner.name = "Zcash 10 years · envelope banner";
+      this.group.add(banner);
     }
 
     // ---- the gondola: shell, windows all round (a rounded nose), fairing up to the envelope ----
@@ -407,7 +412,7 @@ export class Blimp {
       this.tour.push(s);
     }
     this.crew.hush(9);
-    setTimeout(() => this.pilotSay(`Welcome aboard the ZEC Blimp! First stop: ${this.tour?.[0]?.name ?? "the city"}.`, 4.5), 900);
+    setTimeout(() => this.pilotSay("Welcome aboard! Happy 10 years, Zcash!", 4.5), 900);
   }
 
   stop() {
@@ -505,11 +510,23 @@ export class Blimp {
     ctx.fillRect(0, 0, w, h);
     const p = Market.state.price;
     const text = `ⓩ ZSTREET   BLOCK #${this.height?.toLocaleString("en-US") ?? "—"}   ZEC ${p ? "$" + p.usd.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"} ${p ? (p.usd_24h_change >= 0 ? "▲" : "▼") + Math.abs(p.usd_24h_change).toFixed(1) + "%" : ""}   PRIVACY IS NORMAL   `;
-    ctx.font = `800 84px ${FONT}`;
+    ctx.strokeStyle = "#eab64a";
+    ctx.lineWidth = 7;
+    ctx.strokeRect(14, 14, w - 28, h - 28);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffe3a0";
+    ctx.font = `900 118px ${FONT}`;
+    ctx.fillText("10 YEARS OF ZCASH", w / 2, 157);
+    ctx.fillStyle = "#95efd1";
+    ctx.font = `700 46px ${FONT}`;
+    ctx.fillText("2016 — 2026  ·  HAPPY BIRTHDAY, ZCASH!", w / 2, 233);
+    ctx.textAlign = "left";
+    ctx.font = `700 43px ${FONT}`;
     ctx.textBaseline = "middle";
     const tw = ctx.measureText(text).width;
     ctx.fillStyle = "#f4b728";
-    for (let x = -((t * 140) % tw); x < w; x += tw) ctx.fillText(text, x, h / 2 + 5);
+    for (let x = -((t * 100) % tw); x < w; x += tw) ctx.fillText(text, x, 318);
     ctx.fillStyle = "rgba(0,0,0,0.25)";
     for (let y = 0; y < h; y += 4) ctx.fillRect(0, y, w, 2);
     tex.needsUpdate = true;
@@ -526,7 +543,7 @@ export class Blimp {
     g.fillStyle = "#0b0a10";
     g.font = `800 32px ${FONT}`;
     g.textBaseline = "middle";
-    g.fillText("ⓩ ZEC BLIMP · LIVE", 18, 27);
+    g.fillText("ⓩ ZCASH · 10 YEARS", 18, 27);
     const p = this.group.position;
     const stop = this.tour?.[0];
     g.fillStyle = "#8a86a0";

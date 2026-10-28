@@ -36,12 +36,12 @@ try {
   }finally{window.Image=NativeImage;window.setTimeout=nativeTimeout;}
  }));
  console.log('anniversary tests', await page.evaluate(async () => {
-  const THREE=await import('/node_modules/three/build/three.module.js');
+  const THREE=await import('/node_modules/.vite/deps/three.js');
   const {Anniversary}=await import('/src/scene/anniversary.ts');
   const parties=[];
   const anniversary=new Anniversary(new THREE.Scene(), {party: seconds=>parties.push(seconds)});
-  anniversary.update(8,true);
-  anniversary.update(49,true);
+  anniversary.update(1.5,true);
+  anniversary.update(17,true);
   if(parties.length!==1) throw Error('firework interval');
   anniversary.update(1,true);
   anniversary.update(100,false);
@@ -57,4 +57,41 @@ try {
   if(parties.length!==before||floating.rotation.z!==rotation)throw Error('reduced motion');
  });
  console.log('reduced motion passed');
+ console.log('birthday integration', await page.evaluate(async()=>{
+  const THREE=await import('/node_modules/.vite/deps/three.js');
+  const {Anniversary}=await import('/src/scene/anniversary.ts');
+  const {Chatter}=await import('/src/scene/chatter.ts');
+  const {Nu7}=await import('/src/scene/nu7.ts');
+  const full=new THREE.Group();
+  const wall=new THREE.Mesh(new THREE.BoxGeometry(12,60,12),new THREE.MeshBasicMaterial());
+  wall.position.y=30;full.add(wall);full.updateMatrixWorld(true);
+  const box=new THREE.Box3().setFromObject(full);
+  const occluder={full,box,extras:new THREE.Group()};
+  const city={landmarks:new Map([['noir',{door:new THREE.Vector3(0,0,30),yaw:0,occluder}]]),facades:[],occluders:[occluder]};
+  const anniversary=new Anniversary(new THREE.Scene(),{party(){}},city);
+  const decals=anniversary.group.children.filter(o=>o.name==='Zcash birthday facade');
+  if(decals.length!==2)throw Error('Missing projected banners');
+  for(const decal of decals){
+   const p=decal.geometry.getAttribute('position');
+   for(let i=0;i<p.count;i++)if(Math.abs(Math.abs(p.getZ(i))-6)>.001)throw Error('Poster floats off wall');
+  }
+  const scene=new THREE.Group(),root=new THREE.Group();scene.add(root);
+  const said=[];
+  const actor={root,state:'resident',say:(...args)=>said.push(args)};
+  const chatter=new Chatter({snarks:new Set([actor])},{landmarks:new Map()},scene);
+  chatter.update(4.1,new THREE.Vector3());
+  if(said[0]?.[0]!=='Happy 10 years, Zcash!')throw Error('Missing birthday greeting');
+  chatter.update(4.1,new THREE.Vector3());
+  if(said.length!==1)throw Error('Greeting cooldown failed');
+  const roofBox=new THREE.Box3(new THREE.Vector3(-100,0,-100),new THREE.Vector3(100,80,100));
+  const fireworks=new Nu7(new THREE.Scene(),{occluders:[{box:roofBox}],factory:null},{setLive(){}});
+  fireworks.party(8);fireworks.update(.1,new THREE.Vector3());
+  let sparks=0;
+  for(let i=0;i<fireworks.life.length;i++)if(fireworks.life[i]>0){
+   sparks++;if(fireworks.pos[i*3+1]<90)throw Error('Firework burst below roof');
+  }
+  if(!sparks)throw Error('No fireworks spawned');
+  return {postersOnActualWalls:true,birthdayGreeting:true,greetingCooldown:true,fireworksAboveRoofs:true};
+ }));
+
 }finally{await browser.close();}

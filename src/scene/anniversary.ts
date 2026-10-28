@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { DecalGeometry } from "three/examples/jsm/geometries/DecalGeometry.js";
 import { CURB, type City } from "./city";
 import type { Nu7 } from "./nu7";
 
@@ -8,7 +9,7 @@ export class Anniversary {
   readonly group = new THREE.Group();
   private floats: THREE.Group[] = [];
   private clock = 0;
-  private nextParty = 8;
+  private nextParty = 1.5;
   private reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
   constructor(scene: THREE.Scene, private fireworks: Nu7, city?: City) {
@@ -76,7 +77,7 @@ export class Anniversary {
 
     // Oversized foil number balloons above the fountain; no ground-level obstacle.
     const ten = new THREE.Group();
-    ten.position.set(0, CURB + 8, 19);
+    ten.position.set(0, CURB + 8, 24.5);
     const one = new THREE.CatmullRomCurve3([
       new THREE.Vector3(-2.5, 2.5, 0), new THREE.Vector3(-1.8, 3.1, 0),
       new THREE.Vector3(-1.8, 1.6, 0), new THREE.Vector3(-1.8, 0, 0),
@@ -87,8 +88,11 @@ export class Anniversary {
     zero.scale.y = 1.4;
     ten.add(zero);
     for (const x of [-1.8, 0.7]) {
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x * 0.6, -3, 0)]), string);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x * 0.6, -7.85, 0)]), string);
       ten.add(line);
+      const weight = new THREE.Mesh(anchor, gold);
+      weight.position.set(x * 0.6, CURB + 0.12, 24.5);
+      this.group.add(weight);
     }
     const label = document.createElement("canvas");
     label.width = 1024;
@@ -148,23 +152,32 @@ export class Anniversary {
     g.fillText("CELEBRATE PRIVACY", 256, 943);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
-    const plane = new THREE.PlaneGeometry(1, 1);
+    const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const golden = new THREE.LineBasicMaterial({ color: new THREE.Color("#ffcb55").multiplyScalar(1.6), toneMapped: false });
     const wires: THREE.Vector3[] = [];
-    const mount = (at: THREE.Vector3, width: number, height: number, yaw: number) => {
-      const banner = new THREE.Mesh(plane, material);
+    const ray = new THREE.Raycaster();
+    const mount = (building: THREE.Object3D, at: THREE.Vector3, width: number, height: number, yaw: number) => {
+      building.updateWorldMatrix(true, true);
+      const out = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+      ray.set(at.clone().addScaledVector(out, 150), out.clone().negate());
+      const hit = ray.intersectObject(building, true).find((h) => h.object instanceof THREE.Mesh);
+      if (!hit) return;
+      // Project the print onto actual wall polygons. Door positions and lot bounds are not
+      // facade coordinates, especially on tapered towers and buildings with large plazas.
+      const parts: THREE.BufferGeometry[] = [];
+      building.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const decal = new DecalGeometry(object, hit.point, new THREE.Euler(0, yaw, 0), new THREE.Vector3(width, height, 1));
+        if (decal.getAttribute("position").count) parts.push(decal);
+        else decal.dispose();
+      });
+      if (!parts.length) return;
+      const geometry = mergeGeometries(parts);
+      parts.forEach((p) => p.dispose());
+      const banner = new THREE.Mesh(geometry, material);
       banner.name = "Zcash birthday facade";
-      banner.position.copy(at);
-      banner.rotation.y = yaw;
-      banner.scale.set(width, height, 1);
+      banner.userData.wall = hit.point.toArray();
       this.group.add(banner);
-      // Real edges, visible from oblique views too; one shared line batch for the entire city.
-      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).multiplyScalar(width / 2 + 0.12);
-      for (const side of [-1, 1]) {
-        const p = at.clone().addScaledVector(right, side);
-        wires.push(p.clone().add(new THREE.Vector3(0, -height / 2, 0)), p.clone().add(new THREE.Vector3(0, height / 2, 0)));
-      }
     };
     const towerKinds = ["noir", "zodl", "zlab", "vizor", "zkorchard", "zksapling", "zkhalo", "needle", "marina"];
     for (const kind of towerKinds) {
@@ -175,13 +188,13 @@ export class Anniversary {
       const at = lm.door.clone().addScaledVector(out, 0.5);
       at.y = h * 0.58;
       const height = Math.min(22, Math.max(12, h * 0.38));
-      mount(at, height / 2, height, lm.yaw);
+      mount(lm.occluder.full, at, height / 2, height, lm.yaw);
       // A second face lets the anniversary read from the rear of the city as well.
       const centre = lm.occluder.box.getCenter(new THREE.Vector3());
       const back = at.clone();
       back.x = centre.x * 2 - at.x;
       back.z = centre.z * 2 - at.z;
-      mount(back, height / 2, height, lm.yaw + Math.PI);
+      mount(lm.occluder.full, back, height / 2, height, lm.yaw + Math.PI);
     }
     let count = 0;
     for (const [i, facade] of city.facades.entries()) {
@@ -190,12 +203,9 @@ export class Anniversary {
       const width = Math.min(3.6, (facade.x1 - facade.x0) * 0.32);
       if (width < 1.5) continue;
       const height = Math.min(width * 2, facade.height * 0.55);
-      const sign = new THREE.Mesh(plane, material);
-      sign.name = "Zcash birthday neighborhood banner";
-      sign.scale.set(height / 2, height, 1);
-      sign.position.set(facade.x0 + (facade.x1 - facade.x0) * 0.28, CURB + facade.height * 0.67, facade.z + (facade.face === "s" ? 0.3 : -0.3));
-      sign.rotation.y = facade.face === "s" ? 0 : Math.PI;
-      facade.extras.add(sign);
+      const building = city.occluders.find((o) => o.extras === facade.extras);
+      if (!building) continue;
+      mount(building.full, new THREE.Vector3(facade.x0 + (facade.x1 - facade.x0) * 0.28, CURB + facade.height * 0.67, facade.z), height / 2, height, facade.face === "s" ? 0 : Math.PI);
     }
     // Five illuminated arches over downtown. Bulbs share one instanced draw call.
     const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.14, 6, 4), new THREE.MeshBasicMaterial({ toneMapped: false }), 105);
@@ -228,8 +238,8 @@ export class Anniversary {
     });
     if (this.clock >= this.nextParty) {
       // Reuse the city's bounded particle pool. No extra lights, timers or particle systems.
-      this.fireworks.party(5);
-      this.nextParty = this.clock + 50;
+      this.fireworks.party(8);
+      this.nextParty = this.clock + 18;
     }
   }
 }

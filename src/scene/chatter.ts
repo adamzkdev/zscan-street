@@ -15,6 +15,13 @@ import type { Tone } from "./speech";
 type Line = string | [string, Tone];
 type Script = Line[];
 
+const BIRTHDAY: Script[] = [
+  [["Happy 10 years, Zcash!", "shout"], "2016–2026. Here's to the next ten!", "Privacy is normal."],
+  ["Sprout. Sapling. Orchard.", "Ten years of growing privacy.", "Happy birthday, Zcash!"],
+  ["Look at the birthday blimp!", "The whole city is celebrating.", ["Happy 10 years!", "shout"]],
+  ["Ten candles on a shielded cake?", "Nobody can see my birthday wish.", "I put mine in a memo."],
+];
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const pick = <T>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];
 
@@ -119,6 +126,7 @@ export class Chatter {
   private cool = new WeakMap<Snark, number>();
   private acc = 0;
   private active = 0;
+  private birthdayConversation = 0;
 
   constructor(
     private director: Director,
@@ -150,6 +158,8 @@ export class Chatter {
   }
 
   private topicAt(x: number, z: number): Script[] {
+    // The birthday is a visible part of city life, while keeping ordinary local conversations.
+    if (this.birthdayConversation++ % 3 !== 2) return BIRTHDAY;
     let best: string | null = null,
       bd = 70 * 70;
     for (const [k, l] of this.city.landmarks) {
@@ -193,6 +203,12 @@ export class Chatter {
         void this.talk(a, b);
         return;
       }
+    // A quiet street still gets a birthday greeting; no second person is needed to start it.
+    if (near.length) {
+      const s = near[0];
+      s.say("Happy 10 years, Zcash!", 4.5, "shout");
+      this.cool.set(s, now + 30000);
+    }
   }
 
   private async talk(a: Snark, b: Snark) {

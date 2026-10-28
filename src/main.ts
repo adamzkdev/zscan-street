@@ -2235,6 +2235,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       tv,
       sound,
       nu7,
+      anniversary,
       onFoot,
       quality,
       rig,
@@ -2354,6 +2355,7 @@ function project(v: THREE.Vector3) {
 const timer = new THREE.Timer();
 const camRight = new THREE.Vector3();
 const camQuat = new THREE.Quaternion();
+const fireworkFocus = new THREE.Vector3();
 
 // ---- capture mode (?debug&capture): no HUD, time advanced by the script, camera set per frame ----
 const CAPTURE = new URLSearchParams(location.search).has("capture");
@@ -2665,7 +2667,7 @@ function frameBody(stepDt?: number) {
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
   anniversary.update(dt, !interiors.active);
-  nu7.update(dt, focus);
+  nu7.update(dt, capturing && capShot ? fireworkFocus.set(...capShot.look) : focus, cam);
   nu7Night.update(dt);
   parade.update(sim, cam);
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);

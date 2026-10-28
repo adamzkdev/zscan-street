@@ -6,7 +6,7 @@ import { CURB } from "./city";
 
 /** Fireworks particles in flight at most (one draw call). */
 const SPARKS = 2400;
-const PER_BURST = 140;
+const PER_BURST = 180;
 /** How long the city celebrates the activation (seconds). */
 const PARTY = 120;
 const COLORS = ["#f4b728", "#3ee08f", "#b07bff", "#3ef0ff", "#ff3e8a", "#ffffff"];
@@ -28,6 +28,10 @@ export class Nu7 {
   private nextBurst = 0;
   private override: string | null = new URLSearchParams(location.search).get("nu7");
   private sparks: THREE.InstancedMesh;
+  private trails: THREE.LineSegments;
+  private trailPos = new Float32Array(SPARKS * 6);
+  private trailColor = new Float32Array(SPARKS * 6);
+  private sparkScale = new Float32Array(SPARKS);
   private pos = new Float32Array(SPARKS * 3);
   private vel = new Float32Array(SPARKS * 3);
   private life = new Float32Array(SPARKS);
@@ -50,6 +54,13 @@ export class Nu7 {
     this.sparks.setColorAt(0, this.c.set("#fff"));
     this.sparks.count = 0;
     scene.add(this.sparks);
+    const trails = new THREE.BufferGeometry();
+    trails.setAttribute("position", new THREE.BufferAttribute(this.trailPos, 3).setUsage(THREE.DynamicDrawUsage));
+    trails.setAttribute("color", new THREE.BufferAttribute(this.trailColor, 3).setUsage(THREE.DynamicDrawUsage));
+    this.trails = new THREE.LineSegments(trails, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    this.trails.frustumCulled = false;
+    this.trails.visible = false;
+    scene.add(this.trails);
     this.life.fill(0);
     void this.poll();
     setInterval(() => void this.poll(), 10 * 60_000);
@@ -105,10 +116,10 @@ export class Nu7 {
   }
 
   /** `focus` is where the camera looks: the bursts go up around it, wherever that is in the city. */
-  update(dt: number, focus?: THREE.Vector3) {
+  update(dt: number, focus?: THREE.Vector3, camera?: THREE.Camera) {
     this.clock += dt;
     if (this.clock < this.partyUntil && this.clock >= this.nextBurst) {
-      this.burst(focus);
+      this.burst(focus, camera);
       this.nextBurst = this.clock + 0.35 + Math.random() * 0.6;
     }
     let alive = 0;
@@ -130,23 +141,59 @@ export class Nu7 {
       const o = i * 3;
       const k = Math.max(0, Math.min(1, this.life[i] / 1.2));
       this.v.set(this.pos[o], this.pos[o + 1], this.pos[o + 2]);
-      this.s.setScalar(this.life[i] > 0 ? 0.4 + k : 0);
+      this.s.setScalar(this.life[i] > 0 ? (0.4 + k) * this.sparkScale[i] : 0);
       this.m.compose(this.v, this.q, this.s);
       this.sparks.setMatrixAt(i, this.m);
+      for (let axis = 0; axis < 3; axis++) {
+        this.trailPos[i * 6 + axis] = this.pos[o + axis];
+        this.trailPos[i * 6 + 3 + axis] = this.pos[o + axis] - this.vel[o + axis] * 0.2;
+        const color = this.life[i] > 0 ? this.sparks.instanceColor!.array[o + axis] * k : 0;
+        this.trailColor[i * 6 + axis] = color;
+        this.trailColor[i * 6 + 3 + axis] = color * 0.06;
+      }
     }
     this.sparks.count = alive ? SPARKS : 0;
     this.sparks.instanceMatrix.needsUpdate = true;
+    this.trails.visible = alive > 0;
+    this.trails.geometry.getAttribute("position").needsUpdate = true;
+    this.trails.geometry.getAttribute("color").needsUpdate = true;
   }
 
-  private burst(focus?: THREE.Vector3) {
+  private burst(focus?: THREE.Vector3, camera?: THREE.Camera) {
     // within ~40 m of where the camera looks (the diorama's centre without one)
     const fx = focus?.x ?? 0,
       fz = focus?.z ?? -3;
-    const cx = fx + (Math.random() - 0.5) * 70,
-      cz = fz + (Math.random() - 0.5) * 50,
-      cy = CURB + 13 + Math.random() * 9;
+    let cx = fx, cz = fz, cy = CURB + 24;
+    // Clear the real roofline, including the burst's radius. The old fixed 13–22 m altitude
+    // put almost every shell inside a building when the camera was near the towers.
+    const point = new THREE.Vector3();
+    const projected = new THREE.Vector3();
+    const cameraAt = camera?.getWorldPosition(new THREE.Vector3());
+    const span = camera instanceof THREE.OrthographicCamera ? (camera.top - camera.bottom) / camera.zoom
+      : camera instanceof THREE.PerspectiveCamera ? cameraAt!.distanceTo(focus ?? point) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 2 : 100;
+    const scale = THREE.MathUtils.clamp(span / 100, 1, 3);
+    const sight = new THREE.Ray();
+    const intersection = new THREE.Vector3();
+    camera?.updateMatrixWorld(true);
+    for (let attempt = 0; attempt < (camera ? 48 : 1); attempt++) {
+      cx = fx + (Math.random() - 0.5) * 90;
+      cz = fz + (Math.random() - 0.5) * 75;
+      let roof = Math.max(CURB + 12, (focus?.y ?? 0) - 5);
+      for (const { box } of this.city.occluders) {
+        if (cx >= box.min.x - 10 && cx <= box.max.x + 10 && cz >= box.min.z - 10 && cz <= box.max.z + 10)
+          roof = Math.max(roof, box.max.y);
+      }
+      cy = roof + 18 * scale + Math.random() * 6;
+      if (!camera) break;
+      projected.copy(point.set(cx, cy, cz)).project(camera);
+      if (Math.abs(projected.x) >= 0.85 || Math.abs(projected.y) >= 0.8 || projected.z <= -1 || projected.z >= 1) continue;
+      sight.set(cameraAt!, point.clone().sub(cameraAt!).normalize());
+      const distance = cameraAt!.distanceTo(point);
+      const blocked = this.city.occluders.some(({ box }) => sight.intersectBox(box, intersection) && cameraAt!.distanceTo(intersection) < distance - 2);
+      if (!blocked) break;
+    }
     const color = this.c.set(COLORS[Math.floor(Math.random() * COLORS.length)]).multiplyScalar(2.2).clone();
-    const speed = 6 + Math.random() * 4;
+    const speed = (9 + Math.random() * 4) * scale;
     for (let k = 0; k < PER_BURST; k++) {
       const i = this.head;
       this.head = (this.head + 1) % SPARKS;
@@ -162,7 +209,8 @@ export class Nu7 {
       this.vel[o] = r * Math.cos(a) * sp;
       this.vel[o + 1] = u * sp;
       this.vel[o + 2] = r * Math.sin(a) * sp;
-      this.life[i] = 1.4 + Math.random() * 0.9;
+      this.life[i] = 2.1 + Math.random() * 0.9;
+      this.sparkScale[i] = scale;
       this.sparks.setColorAt(i, color);
     }
     if (this.sparks.instanceColor) this.sparks.instanceColor.needsUpdate = true;
