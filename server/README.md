@@ -1,8 +1,8 @@
 # ZStreet server code
 
 ZStreet is a static site (the rest of this repo) plus a few server pieces. They run on the ZScan
-backend next to the ZScan explorer API, so in production they live in other
-repositories. They were all written for ZStreet during the Zecathon window and are copied here so
+backend next to the ZScan explorer API. The full API source is available in
+[zscan-api-source](https://github.com/adamzkdev/zscan-api-source). These modules were written for ZStreet during the Zecathon window and are copied here so
 the whole project is open source in one place.
 
 | Folder | What it is | Runs as |

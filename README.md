@@ -24,23 +24,25 @@ Built for the Zecathon (Wildcard track) between 2026-10-03 and 2026-10-28.
 - **Follow your own transaction**: paste a txid (or open `zstreet.cash/tx/<txid>`) and the camera
   follows its carrier from the shop to the bus; share a 10 s clip or a card.
 
-Nothing is simulated: blocks, mempool, transactions, pools, market, supply and the zkSNARK
+Blocks, mempool, transactions, pools, market, supply and the zkSNARK
 collection all come from the public ZScan API. A transaction's carrier is picked from its txid
-(zkSNARKs live off-chain, so it is casting, not ownership).
+(zkSNARKs live off-chain, so it is casting, not ownership). The city, characters and generated
+dialogue are a visual interpretation of those data.
 
 ## Shielded ZEC in the city
 
-- **Messages on the ground, guestbook, sealed City Works votes, tips**: ZStreet gives a ZIP-321
+- **Messages on the ground, guestbook, tips**: ZStreet gives a ZIP-321
   QR code to its own shielded address with `ZS1:<ref>` and your text in the memo. Pay from any
   wallet (Zodl, Vizor, or one click with the Noir browser extension). The server reads the memo
-  with the address's viewing key and the whole city sees the result. It never learns who paid:
-  no account, no login, no sender in a shielded note.
+  with the address's viewing key and publishes the submitted message. A shielded note does not
+  disclose a sender address; this does not conceal network requests or the browser's payment intent.
 - **ZSA Lab**: mint your own Zcash Shielded Asset (ZIPs 226/227) on the public ZSA test network.
   The transaction is built, proved and signed in your browser (WebAssembly); the seed never
   leaves it, and ZStreet drips the testnet fees so you need nothing. Then send, trade on the
-  player-to-player board, or burn it in the furnace.
-- **View Key Bank**: paste a viewing key at a teller; your shielded history is decrypted in your
-  browser and the key is never sent anywhere.
+  player-to-player board, or burn it in the furnace. The experimental board publishes maker/taker
+  addresses and transaction IDs; trades are two separate payments, not atomic swaps.
+- **Viewing-key terminals** in the ZEC Reserve: paste a viewing key and your shielded history is
+  decrypted in your browser; the key is never sent anywhere.
 
 ## Privacy rules
 
@@ -48,6 +50,8 @@ collection all come from the public ZScan API. A transaction's carrier is picked
   that they happened, their size and their pool: never amounts, addresses or memos.
 - Payments to ZStreet: only the memo the payer chose to write is shown.
 - Viewing keys and ZSA seeds stay in the browser.
+- API requests reveal requested resources; AI chat is processed server-side through an external
+  model provider. This is not a network-anonymity service.
 - Multiplayer presence carries positions and emojis only, kept in memory.
 
 ## The city
@@ -64,7 +68,8 @@ collection all come from the public ZScan API. A transaction's carrier is picked
   cemetery whose crypt tracks the ZEC still leaving Sprout, a convention center, and more.
 - **Citizens are AI agents**: every zkSNARK has a persona; walk up to anyone and press E to talk.
   A cast of 12 lives one turn per block. Each 576-block round, agents propose a building, visitors
-  vote, and the winner is built block by block.
+  voting logic selects a winner, and it is built block by block. The visitor voting panel is
+  currently disabled; its payment integration remains in the source.
 - **NU7**: a quarter whose tower and karting circuit rise with the countdown to the upgrade.
 - **Daily events**: the Apparition parade at 12:00 and 20:00 New York time, with a crowd of phones.
 - **Multiplayer**: see other visitors walk around.
@@ -77,6 +82,12 @@ collection all come from the public ZScan API. A transaction's carrier is picked
     npm run build    # static site in dist/ (server.mjs serves it with per-transaction share tags)
 
 `VITE_API_URL` sets the API (default `https://api.zscan.cash`). `?debug` exposes `window.street`.
+
+Demo video: [zstreet.cash/video.mp4](https://zstreet.cash/video.mp4).
+
+Source dependencies: [ZScan API](https://github.com/adamzkdev/zscan-api-source) and the
+[ZScan viewing-key scanner](https://github.com/adamzkdev/zscan/tree/main/wasm). The scanner's
+build script is `scripts/build-wasm.sh` in ZScan; its compiled files are in `public/wasm/` here.
 
 ## Code
 
