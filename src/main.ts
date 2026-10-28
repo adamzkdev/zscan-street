@@ -96,6 +96,7 @@ import { Critters } from "./scene/critters";
 import { TvMode } from "./scene/tv";
 import { Tracker } from "./ui/track";
 import { Nu7 } from "./scene/nu7";
+import { Anniversary } from "./scene/anniversary";
 import { Photo } from "./ui/photo";
 import { Visitors } from "./scene/visitors";
 import { crowdSpeaker, npcSpeaker, snarkSpeaker, Talk } from "./ui/talk";
@@ -208,6 +209,7 @@ const lampLights = new LampLights(scene, city.lamps, 12);
 const decor = buildDecor(scene, city);
 // the NU7 upgrade: countdown on the screens, fireworks when it activates
 const nu7 = new Nu7(scene, city, decor);
+const anniversary = new Anniversary(scene, nu7);
 // the MEMPOOL shop's shelves hold the last blocks
 const shelf = city.shops[0] ? new BlockShelf(scene, city.shops[0]) : null;
 void get<BlockSummary[]>("/v1/blocks?limit=100").then((b) => b && shelf?.set(b));
@@ -2662,6 +2664,7 @@ function frameBody(stepDt?: number) {
   joystick.sync(walking ? onFoot : null);
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
+  anniversary.update(dt, !interiors.active);
   nu7.update(dt, focus);
   nu7Night.update(dt);
   parade.update(sim, cam);

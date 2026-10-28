@@ -100,7 +100,7 @@ export class Nu7 {
 
   /** Fireworks over the city for `seconds`. */
   party(seconds = PARTY) {
-    this.partyUntil = this.clock + seconds;
+    this.partyUntil = Math.max(this.partyUntil, this.clock + seconds);
     this.nextBurst = this.clock;
   }
 
