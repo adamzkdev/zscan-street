@@ -1,3 +1,4 @@
+import { portraitTexture } from "../../data/portrait";
 import * as THREE from "three";
 import { ZScan } from "../../data/zscan";
 import { Snark, loadArt } from "../../scene/snark";
@@ -170,7 +171,7 @@ export class TowerKit {
     g.position.set(x, LEVELS[f].y + y, z);
     g.rotation.y = rot;
     place(g, `frame${size}`, () => frame(size + 0.12, size + 0.12), 0, -(size + 0.12) / 2, 0);
-    const tex = new THREE.TextureLoader().load(ZScan.zkSnarkImage(id));
+    const tex = portraitTexture(ZScan.zkSnarkImage(id));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.NearestFilter;
     const art = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }));

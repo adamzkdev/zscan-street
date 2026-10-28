@@ -1,3 +1,4 @@
+import { portraitTexture } from "../../data/portrait";
 import * as THREE from "three";
 import { sharedAtlasTexture } from "../../data/atlas";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -456,7 +457,7 @@ export class ReserveKit {
     back.position.z = 0.04;
     const inner = new THREE.Mesh(new THREE.BoxGeometry(size + 0.08, size * 1.2 + 0.08, 0.05), new THREE.MeshStandardMaterial({ color: "#3a2410", roughness: 0.6 }));
     inner.position.z = 0.08;
-    const t = new THREE.TextureLoader().load(ZScan.zkSnarkImage(id));
+    const t = portraitTexture(ZScan.zkSnarkImage(id));
     t.colorSpace = THREE.SRGBColorSpace;
     t.magFilter = THREE.NearestFilter;
     // a painted backdrop behind the bust (the portrait's own black would read as a hole)

@@ -1,3 +1,4 @@
+import { portraitTexture } from "../../data/portrait";
 import * as THREE from "three";
 import { Market } from "../../data/market";
 import { ZScan } from "../../data/zscan";
@@ -209,7 +210,7 @@ export function villa(k: PalmKit) {
   [137, 2048, 777].forEach((id, i) => {
     const z = -1 - i * 3.3;
     k.box(f, 0.08, 2.1, 2.1, X0 + 0.24, 1.8, z, "#1a1612", "polish");
-    const tex = new THREE.TextureLoader().load(ZScan.zkSnarkImage(id));
+    const tex = portraitTexture(ZScan.zkSnarkImage(id));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.NearestFilter;
     const art = k.plane(f, 1.85, 1.85, new THREE.MeshBasicMaterial({ map: tex }), X0 + 0.3, 2.85, z, 0, Math.PI / 2);

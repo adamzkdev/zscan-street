@@ -1,3 +1,4 @@
+import { portraitTexture } from "../../data/portrait";
 import * as THREE from "three";
 import { Market } from "../../data/market";
 import { ZScan } from "../../data/zscan";
@@ -321,7 +322,7 @@ export class HotelKit {
     g.position.set(x, LEVELS[f].y + y, z);
     g.rotation.y = rot;
     place(g, `frame${size}${color ?? ""}`, () => frame(size + 0.12, size + 0.12, color), 0, -(size + 0.12) / 2, 0);
-    const t = new THREE.TextureLoader().load(ZScan.zkSnarkImage(id));
+    const t = portraitTexture(ZScan.zkSnarkImage(id));
     t.colorSpace = THREE.SRGBColorSpace;
     t.magFilter = THREE.NearestFilter;
     const art = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshStandardMaterial({ map: t, roughness: 0.7 }));

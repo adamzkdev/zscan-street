@@ -1,3 +1,4 @@
+import { portraitTexture } from "../../../data/portrait";
 import * as THREE from "three";
 import { ZScan } from "../../../data/zscan";
 import { armchair, bed as bedModel, bookshelf, chair, coffeeTable, desk, diningTable, floorLamp, fridge, kitchen, nightstand, pendant, plant, rug, sofa, stool, tvUnit, wardrobe } from "../../furniture";
@@ -108,7 +109,7 @@ export function residence(k: SkyKit) {
   for (const [x, z, s] of [[11.0, -1.0, 1], [1.2, -9.8, 2], [-1.0, -0.9, 3]] as const) k.vox(f, `sap-rp${s}`, () => plant(s % 2 ? "monstera" : "ficus", s + 30), x, z, s);
   // a zkSNARK portrait over the sofa: the family's own
   {
-    const tex = new THREE.TextureLoader().load(ZScan.zkSnarkImage(4321));
+    const tex = portraitTexture(ZScan.zkSnarkImage(4321));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.NearestFilter;
     k.box(f, 0.1, 1.3, 1.3, 1.85, 1.2, -6.8, SAP.oakDark);

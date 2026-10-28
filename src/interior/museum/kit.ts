@@ -1,3 +1,4 @@
+import { portraitImage } from "../../data/portrait";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { ZScan } from "../../data/zscan";
@@ -517,16 +518,7 @@ export class MuseumKit {
 
   /** An image from the API, through the throttle. */
   image(url: string) {
-    return this.throttle(
-      () =>
-        new Promise<HTMLImageElement>((ok, fail) => {
-          const im = new Image();
-          im.crossOrigin = "anonymous";
-          im.onload = () => ok(im);
-          im.onerror = () => fail(new Error("image"));
-          im.src = url;
-        }),
-    );
+    return portraitImage(url);
   }
 
   /** A texture filled once its image arrives (pixel art: nearest filtering). */

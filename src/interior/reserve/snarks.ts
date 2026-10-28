@@ -1,3 +1,4 @@
+import { portraitImage } from "../../data/portrait";
 import { onSnarkMarket, refreshSnarkMarket, snarkMarket, type Order, type Sale, type SnarkMarket } from "../../data/snarkmarket";
 import { API, EXPLORER } from "../../data/zscan";
 import type { Snark } from "../../scene/snark";
@@ -34,13 +35,13 @@ let onFace: () => void = () => {};
 function face(id: number) {
   if (faces.has(id)) return faces.get(id)!;
   faces.set(id, null);
-  const i = new Image();
-  i.crossOrigin = "anonymous";
-  i.onload = () => {
-    faces.set(id, i);
+  void portraitImage(`${API}/v1/collections/zksnarks/items/${id}/image`).then((image) => {
+    faces.set(id, image);
     onFace();
-  };
-  i.src = `${API}/v1/collections/zksnarks/items/${id}/image`;
+  }).catch(() => {
+    // A later board refresh can retry; a failed portrait is never cached forever.
+    setTimeout(() => faces.delete(id), 30_000);
+  });
   return null;
 }
 function portrait(g: CanvasRenderingContext2D, id: number, x: number, y: number, s: number) {

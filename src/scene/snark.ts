@@ -1,3 +1,4 @@
+import { portraitImage } from "../data/portrait";
 import * as THREE from "three";
 import { pxPerMetre } from "./farview";
 import type { NftItem, Tx, TxKind } from "../data/types";
@@ -40,26 +41,12 @@ export function loadArt(id: number): Promise<Art> {
   let p = artCache.get(id);
   if (!p) {
     p = (async () => {
-      // the image API rate-limits bursts (a 429 shows up as a CORS failure): a couple of retries
-      // with a growing pause, so a busy moment doesn't leave people missing for the whole visit
-      let res: Response | null = null;
-      for (let k = 0; ; k++) {
-        try {
-          res = await fetch(ZScan.zkSnarkImage(id));
-          if (res.ok || res.status === 404 || k >= 2) break;
-        } catch (e) {
-          if (k >= 2) throw e;
-        }
-        await new Promise((r) => setTimeout(r, 1500 * (k + 1) + Math.random() * 1000));
-      }
-      if (!res?.ok) throw new Error(`zkSNARK #${id}: HTTP ${res?.status}`);
-      const bmp = await createImageBitmap(await res.blob());
+      const bmp = await portraitImage(ZScan.zkSnarkImage(id));
       const c = document.createElement("canvas");
       c.width = bmp.width;
       c.height = bmp.height;
       const ctx = c.getContext("2d", { willReadFrequently: true })!;
       ctx.drawImage(bmp, 0, 0);
-      bmp.close();
       const img = ctx.getImageData(0, 0, c.width, c.height);
       keyOutBackground(img);
       ctx.putImageData(img, 0, 0);

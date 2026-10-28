@@ -1,3 +1,4 @@
+import { portraitTexture } from "../../data/portrait";
 import * as THREE from "three";
 import { ZScan } from "../../data/zscan";
 import { backBar, barCounter, place, plant, receptionDesk, stool } from "../furniture";
@@ -322,7 +323,7 @@ export function buildFoyer(L: Level, program: { draw: (g: CanvasRenderingContext
     [7777, "ORGANIST"],
   ].forEach(([id, role], i) => {
     const grp = new THREE.Group();
-    const tex = new THREE.TextureLoader().load(ZScan.zkSnarkImage(id as number));
+    const tex = portraitTexture(ZScan.zkSnarkImage(id as number));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.NearestFilter;
     const frame = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.1, 0.06), std("#1a1418", 0.5));

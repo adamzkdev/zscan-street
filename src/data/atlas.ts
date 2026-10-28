@@ -120,7 +120,11 @@ export function sharedAtlasTexture(): THREE.Texture {
           t.image = img;
           t.needsUpdate = true;
         };
-        img.onerror = () => URL.revokeObjectURL(url);
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          blob = null;
+          if (attempt < 4) setTimeout(() => load(attempt + 1), 60_000);
+        };
         img.src = url;
       })
       .catch(() => attempt < 4 && setTimeout(() => load(attempt + 1), 60_000));
