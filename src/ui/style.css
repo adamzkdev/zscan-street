@@ -6442,6 +6442,7 @@ a.srow:hover span {
 }
 .zl-chip {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 7px;
   font: 500 11.5px "JetBrains Mono", Menlo, monospace;

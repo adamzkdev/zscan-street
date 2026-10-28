@@ -111,7 +111,7 @@ export class ZsaLabPanel {
       </header>
       <ol class="zl-steps"></ol>
       <div class="zl-body"></div>
-      <footer class="zl-foot">ZSA test network · test coins have no value · proved and signed in your browser</footer>`;
+      <footer class="zl-foot">Experimental ZSA testnet · test coins have no monetary value · proved and signed in your browser</footer>`;
     this.body = this.el.querySelector(".zl-body")!;
     this.steps = this.el.querySelector(".zl-steps")!;
     this.chip = this.el.querySelector(".zl-chip")!;
@@ -291,7 +291,7 @@ export class ZsaLabPanel {
         case "post": {
           const s = this.struck;
           if (!s) return;
-          const text = `I just struck my own private coin "${s.name}" (${units(s.amount)}) on the Zcash shielded-assets testnet, proved and signed in my browser, at the ZSA MINT in ZStreet 🛡`;
+          const text = `I just struck my own shielded test coin "${s.name}" (${units(s.amount)}) on the Zcash shielded-assets testnet, proved and signed in my browser, at the ZSA MINT in ZStreet 🛡`;
           return void window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent("https://zstreet.cash/?interior=zsalab")}`, "_blank", "noopener");
         }
         case "send":
@@ -308,9 +308,9 @@ export class ZsaLabPanel {
           if (s.mode === "send") {
             const to = val("to");
             if (!/^u(regtest|test)1/.test(to)) return this.say("That isn't a ZSA testnet address (uregtest1…).", "err");
-            await this.run("Sending privately", (st) => w!.transfer(s.id, n, to, st));
+            await this.run("Sending shielded", (st) => w!.transfer(s.id, n, to, st));
             this.sendTo = null;
-            this.say(`Sent ${units(n)} ${this.nameOf(s.id)}. Nobody else can see who or how much.`, "ok");
+            this.say(`Sent ${units(n)} ${this.nameOf(s.id)} as a shielded transaction.`, "ok");
           } else {
             await this.run("Into the melt", (st) => w!.burn(s.id, n, st));
             this.sendTo = null;
@@ -346,10 +346,10 @@ export class ZsaLabPanel {
         case "take": {
           const o = this.offers.find((x) => x.id === idOf());
           if (!o) return;
-          if (!confirm(`Send ${units(o.want_amount)} ${this.nameOf(o.want_asset)} now, and get ${units(o.give_amount)} ${this.nameOf(o.give_asset)} once the maker sends theirs? (Two steps: the network has no atomic swaps yet.)`)) return;
+          if (!confirm(`Send ${units(o.want_amount)} ${this.nameOf(o.want_asset)} first, asking for ${units(o.give_amount)} ${this.nameOf(o.give_asset)} in return?\n\nThis experimental testnet trade is not atomic: the other player may never send their part. The board publishes your wallet address and payment transaction ID alongside the offer's assets and amounts.`)) return;
           const r = await this.run("Sending your part", (st) => w!.transfer(o.want_asset, o.want_amount, o.maker_address, st));
           await fetch(`${ZSA_API}/v1/zsa/offers/${o.id}/take`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ taker_address: w!.address(), txid: r.txid }) });
-          this.say("Your part is on its way. The maker sends theirs once it lands.", "ok");
+          this.say("Your part is on its way. The maker still needs to send theirs; this is not guaranteed.", "ok");
           return void this.refresh();
         }
         case "complete": {
@@ -416,7 +416,7 @@ export class ZsaLabPanel {
     // transaction the change is "coming" for a block, and the rest of the terminal stays usable
     const empty = fuel <= 0 && (coming <= 0 || this.dripAt != null) && !this.struck;
     const step = !w ? 0 : empty ? 1 : this.tab === "mint" && !this.struck ? 2 : 3;
-    this.chip.innerHTML = w ? `<span class="${fuel > 0 ? "ok" : "low"}">⛽ ${zec(fuel)} tZEC${coming ? ` · +${zec(coming)} coming` : ""}</span>${this.tip ? `<span>block #${this.tip.toLocaleString("en-US")}</span>` : ""}` : this.tip ? `<span>live · block #${this.tip.toLocaleString("en-US")}</span>` : "";
+    this.chip.innerHTML = `<span>Experimental · testnet</span>` + (w ? `<span class="${fuel > 0 ? "ok" : "low"}">⛽ ${zec(fuel)} tZEC${coming ? ` · +${zec(coming)} coming` : ""}</span>${this.tip ? `<span>block #${this.tip.toLocaleString("en-US")}</span>` : ""}` : this.tip ? `<span>live · block #${this.tip.toLocaleString("en-US")}</span>` : "");
     this.steps.innerHTML = ["Wallet", "Fuel", "Strike", "Your coins"].map((s, i) => `<li class="${i < step ? "done" : i === step ? "on" : ""}"><b>${i < step ? "✓" : i + 1}</b>${s}</li>`).join("");
     return { w, b, fuel, coming, empty };
   }
@@ -430,8 +430,8 @@ export class ZsaLabPanel {
     } else if (!w) {
       html = `<div class="zl-hero">
           <div class="zl-preview">${coinSvg("Your Coin", "#3ef0c8", 120)}</div>
-          <h3>Strike your own private money</h3>
-          <p>A real shielded asset on Zcash's test network: who holds it and how much moves stays private. About two minutes.</p>
+          <h3>Strike your own shielded coin</h3>
+          <p>A real asset on Zcash's experimental ZSA test network. Mint details are public; transfers use shielded transactions. Test coins have no monetary value. About two minutes.</p>
           <ul class="zl-how"><li><b>1</b>A wallet opens in this browser: your keys never leave it.</li><li><b>2</b>ZStreet fills it with a little free test ZEC for the fees.</li><li><b>3</b>Name your coin, choose its supply, strike it. The press in the hall strikes it with you.</li></ul>
           <button class="zl-go" data-a="create">Open my mint wallet</button>
           <button class="zl-link" data-a="restore">I already have one (seed)</button>
@@ -491,11 +491,11 @@ export class ZsaLabPanel {
                 ${coinSvg(name, assetColor(x.asset_id), 56, reg?.finalized)}
                 <div class="zl-cc-main"><b>${esc(name)}</b><span class="mono">${units(x.units)}${reg?.finalized ? " · die broken" : ""}</span></div>
                 <div class="zl-cc-act">
-                  ${mode === "tokens" ? `<button data-a="send">Send</button><button data-tab="exchange">Swap</button>` : ""}
+                  ${mode === "tokens" ? `<button data-a="send">Send</button><button data-tab="exchange">Exchange</button>` : ""}
                   ${mode === "burn" || mode === "tokens" ? `<button data-a="melt">Melt</button>` : ""}
                   ${mode === "finalize" && !reg?.finalized ? `<button data-a="seal">Break die</button>` : ""}
                 </div>
-                ${editing ? `<div class="zl-inline">${this.sendTo!.mode === "send" ? `<input name="to" placeholder="uregtest1… address" autocomplete="off" />` : ""}<input name="n" inputmode="numeric" placeholder="units" /><button class="zl-go" data-a="do-send">${this.sendTo!.mode === "send" ? "Send privately" : "Melt"}</button><button class="zl-link" data-a="cancel-send">Cancel</button></div>` : ""}
+                ${editing ? `<div class="zl-inline">${this.sendTo!.mode === "send" ? `<input name="to" placeholder="uregtest1… address" autocomplete="off" />` : ""}<input name="n" inputmode="numeric" placeholder="units" /><button class="zl-go" data-a="do-send">${this.sendTo!.mode === "send" ? "Send shielded" : "Melt"}</button><button class="zl-link" data-a="cancel-send">Cancel</button></div>` : ""}
               </div>`;
             })
             .join("")}</div>`
@@ -520,7 +520,11 @@ export class ZsaLabPanel {
     const open = this.offers.filter((o) => o.status === "open" && !mine[o.id]);
     const own = this.offers.filter((o) => mine[o.id] && o.status !== "cancelled" && o.status !== "expired");
     const chip = (id: string, n: number) => `<span class="zl-pair">${coinSvg(this.nameOf(id), id === "zec" ? "#f4b728" : assetColor(id), 26)}<b>${id === "zec" ? zec(n) : units(n)}</b> ${esc(this.nameOf(id))}</span>`;
-    let html = `<p class="zl-lead">Swap coins with another player. The network has no atomic swaps yet (ZIP 228), so it happens in two steps: the taker sends first, then the maker. Trade small.</p>`;
+    let html = `<div class="zl-card">
+      <h3>Experimental exchange · testnet</h3>
+      <p>This board is public: offers expose the assets and amounts, both players' wallet addresses and payment transaction IDs. Shielded payments do not hide these details from the board.</p>
+      <p>Trades are two independent payments, not atomic swaps. The taker pays first; the maker may never send their part. Use test coins only.</p>
+    </div>`;
     if (this.making) {
       const mineOpts = bal.assets.filter((x) => x.units > 0).map((x) => `<option value="${esc(x.asset_id)}">${esc(x.name ?? this.nameOf(x.asset_id))} · ${units(x.units)}</option>`);
       const wantOpts = this.registry
@@ -534,14 +538,15 @@ export class ZsaLabPanel {
           <label class="zl-field"><span>I want</span><select name="want"><option value="zec">tZEC (in zatoshis)</option>${wantOpts.join("")}</select></label>
           <label class="zl-field"><span>Or a coin id</span><input name="want_id" placeholder="64-hex asset id (optional)" autocomplete="off" /></label>
           <label class="zl-field"><span>Amount</span><input name="wa" inputmode="numeric" placeholder="500" /></label>
-          <div class="zl-row"><button class="zl-go" data-a="post-offer">Post the offer</button><button class="zl-link" data-tab="exchange">Cancel</button></div>
+          <p class="zl-small">Posting publishes your wallet address, the assets and the amounts. The taker's address and both payment transaction IDs are published as the trade proceeds.</p>
+          <div class="zl-row"><button class="zl-go" data-a="post-offer">Publish offer &amp; address</button><button class="zl-link" data-tab="exchange">Cancel</button></div>
         </div>`;
     } else html += `<button class="zl-go" data-a="new-offer">Make an offer</button>`;
     if (own.length)
       html += `<h4>Your offers</h4>${own
         .map(
           (o) => `<div class="zl-offer" data-id="${esc(o.id)}">${chip(o.give_asset, o.give_amount)}<span class="zl-arrow">for</span>${chip(o.want_asset, o.want_amount)}
-            <div class="zl-offer-st">${o.status === "open" ? `waiting for a taker <button class="zl-link" data-a="cancel-offer">Cancel</button>` : o.status === "taken" ? `taken: their part is on its way (you hold ${units(held(o.want_asset))} ${esc(this.nameOf(o.want_asset))}) <button class="zl-go" data-a="complete">Send my part</button>` : "done ✓"}</div></div>`,
+            <div class="zl-offer-st">${o.status === "open" ? `waiting for a taker <button class="zl-link" data-a="cancel-offer">Cancel</button>` : o.status === "taken" ? `taken: their part is on its way (you hold ${units(held(o.want_asset))} ${esc(this.nameOf(o.want_asset))}) <button class="zl-go" data-a="complete">Send &amp; publish txid</button>` : "done ✓"}</div></div>`,
         )
         .join("")}`;
     html += `<h4>Open offers</h4>`;
@@ -550,7 +555,7 @@ export class ZsaLabPanel {
           .map((o) => {
             const can = held(o.want_asset) >= o.want_amount + (o.want_asset === "zec" ? 20000 : 0);
             return `<div class="zl-offer" data-id="${esc(o.id)}">${chip(o.give_asset, o.give_amount)}<span class="zl-arrow">for</span>${chip(o.want_asset, o.want_amount)}
-              <div class="zl-offer-st">${can ? `<button class="zl-go" data-a="take">Take it</button>` : `you need ${units(o.want_amount)} ${esc(this.nameOf(o.want_asset))}`}</div></div>`;
+              <div class="zl-offer-st">${can ? `<button class="zl-go" data-a="take">Review trade</button>` : `you need ${units(o.want_amount)} ${esc(this.nameOf(o.want_asset))}`}</div></div>`;
           })
           .join("")
       : `<p class="zl-small">No open offer right now: make the first one.</p>`;
