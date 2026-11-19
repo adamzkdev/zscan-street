@@ -5,9 +5,13 @@
  * it was opened from.
  */
 import { openParty } from "./index";
+import { noZoom } from "../game/nozoom";
 import { backToCity } from "../game/solo";
 import { profile } from "../game/profile";
 import { phoneFullscreen } from "../game/fullscreen";
+
+// a double tap or a pinch must never zoom a game off the screen (iPhone Safari)
+noZoom();
 
 const q = new URLSearchParams(location.search);
 const TABS = ["board", "quick", "practice", "tour"] as const;

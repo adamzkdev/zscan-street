@@ -3,8 +3,8 @@
  * from main.ts (which only hands over its hooks). Nothing of the party's code is loaded until the
  * first PLAY: the hall (./index) and the tables' launcher (../tables/launcher) come by dynamic import.
  *
- * - PLAY: a button at the foot of the map's rail, in the HUD's own pixel-icon language (a Z-Block),
- *   and the P key from anywhere in the city (not while typing, not under an open panel).
+ * - PLAY: a square button beside the NEWS mailbox, bottom right (a pixel game pad, in the city's
+ *   gold), and the P key from anywhere in the city (not while typing, not under an open panel).
  * - The ZK TOWER arcade's ZK PARTY cabinets and the GAME HOUSE's wall, desk and board corner open
  *   the hall through a place's pick (PickInfo.party / partyGame), its tables through PickInfo.table.
  * - On a touch screen the hall and the tables run on their own pages (party.html, table.html), so
@@ -119,46 +119,88 @@ export function openTableGame(key: string) {
   );
 }
 
-/** A Z-Block in the HUD's pixel-icon grid (# the colour, d its shade, o a highlight, k ink). */
-const ZBLOCK = ["............", ".##########.", ".#oooooooo#d", ".#o######o#d", ".#oooo#ooo#d", ".#ooo#oooo#d", ".#oo#ooooo#d", ".#o######o#d", ".#oooooooo#d", ".##########d", "..dddddddddd", "............"];
-function zblockIcon() {
-  const paint: Record<string, string> = { "#": `fill="currentColor"`, d: `fill="currentColor" opacity=".55"`, o: `fill="#141219"` };
-  const d: Record<string, string> = {};
-  ZBLOCK.forEach((r, y) => [...r].forEach((c, x) => paint[c] && (d[c] = (d[c] ?? "") + `M${x} ${y}h1v1h-1z`)));
-  return `<svg class="px" viewBox="0 0 12 12" shape-rendering="crispEdges">${Object.entries(d)
-    .map(([c, p]) => `<path ${paint[c]} d="${p}"/>`)
-    .join("")}</svg>`;
+/** A game pad in the HUD's pixel-icon grid (# the colour, o the d-pad and the buttons). */
+const PAD = ["..############..", ".##############.", "###o#######o####", "##ooo#####o#o###", "###o#######o####", "################", "#####......#####", ".###........###."];
+function padIcon() {
+  let d = "";
+  let o = "";
+  PAD.forEach((r, y) => [...r].forEach((c, x) => {
+    if (c === "#") d += `M${x} ${y}h1v1h-1z`;
+    else if (c === "o") o += `M${x} ${y}h1v1h-1z`;
+  }));
+  return `<svg class="px" viewBox="0 0 16 8" shape-rendering="crispEdges"><path fill="currentColor" d="${d}"/><path fill="#141219" d="${o}"/></svg>`;
 }
 
-/** Wire the party into the city: the rail's PLAY, the P key, the news from the hall. Once. */
+/** PLAY's look: the mailbox's square, in the city's gold, its label in the pixel font. */
+const PLAY_CSS = `#ui .playbtn{all:unset;position:fixed;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;pointer-events:auto;z-index:46;background:var(--hud);border:1px solid var(--line);border-radius:3px;box-shadow:var(--shadow);backdrop-filter:blur(12px) saturate(1.3);-webkit-backdrop-filter:blur(12px) saturate(1.3);color:var(--gold)}
+#ui .playbtn:hover,#ui .playbtn:focus-visible{border-color:var(--gold)}
+#ui .playbtn svg.px{width:58%;height:auto}
+#ui .playbtn span{font:400 10px/1 var(--pixel);letter-spacing:.12em;color:var(--gold)}
+#ui .playbtn.has-news::after{content:"";position:absolute;top:-4px;right:-4px;width:8px;height:8px;background:#ff3e8a;box-shadow:0 0 6px #ff3e8a}
+#ui .playbtn[hidden]{display:none}`;
+
+/** Wire the party into the city: PLAY by the mailbox, the P key, the news from the hall. Once. */
 export function wireParty(h: CityHooks) {
   if (hooks) return;
   hooks = h;
-  // PLAY at the foot of the rail (the HUD builds the rail once; it may come a moment later)
+  // PLAY beside the NEWS mailbox, bottom right, level with the live strip (the game HUD builds the
+  // mailbox after the HUD: it may come a moment later). It follows the mailbox wherever the layout
+  // puts it (desktop, tablet, phone upright or sideways), left of it when the strip leaves room,
+  // above it otherwise, and shows and hides with it (on foot, inside the places).
   const addPlay = () => {
-    const rail = document.querySelector<HTMLElement>("#ui .rail");
-    if (!rail) return false;
-    if (rail.querySelector("[data-act=party]")) return true;
-    const sep = document.createElement("i");
+    const ui = document.getElementById("ui");
+    const mail = ui?.querySelector<HTMLElement>(".mailbtn");
+    if (!ui || !mail) return false;
+    if (ui.querySelector(".playbtn")) return true;
+    if (!document.getElementById("zkp-play-css")) {
+      const st = document.createElement("style");
+      st.id = "zkp-play-css";
+      st.textContent = PLAY_CSS;
+      document.head.append(st);
+    }
     const b = document.createElement("button");
-    b.dataset.act = "party";
-    b.className = "party";
+    b.className = "playbtn hud";
     b.title = "ZK PARTY · mini-games (P)";
-    b.setAttribute("aria-label", "ZK PARTY");
-    b.innerHTML = zblockIcon();
-    b.style.color = "#ffd23f";
+    b.setAttribute("aria-label", "ZK PARTY: play");
+    b.innerHTML = `${padIcon()}<span>PLAY</span>`;
     b.addEventListener("click", (e) => {
       e.stopPropagation();
       openPartyHall();
     });
-    rail.append(sep, b);
-    // (its dot: a finished mission waits in the hall; a neon pixel, like the street's signs)
-    if (!document.getElementById("zkp-rail-css")) {
-      const st = document.createElement("style");
-      st.id = "zkp-rail-css";
-      st.textContent = `#ui .rail [data-act=party]{position:relative}#ui .rail [data-act=party].has-news::after{content:"";position:absolute;top:5px;right:5px;width:6px;height:6px;background:#ff3e8a;box-shadow:0 0 6px #ff3e8a}`;
-      document.head.append(st);
-    }
+    ui.append(b);
+    const overlaps = (a: DOMRect, c: DOMRect) => a.left < c.right && a.right > c.left && a.top < c.bottom && a.bottom > c.top;
+    const place = () => {
+      const cs = getComputedStyle(mail);
+      const r = mail.getBoundingClientRect();
+      b.hidden = cs.display === "none" || cs.visibility === "hidden" || r.width === 0;
+      if (b.hidden) return;
+      const gap = 8;
+      const size = r.width;
+      let left = r.left - gap - size;
+      let top = r.top;
+      const strip = ui.querySelector<HTMLElement>(".strip");
+      const sr = strip && getComputedStyle(strip).display !== "none" ? strip.getBoundingClientRect() : null;
+      const spot = new DOMRect(left, top, size, size);
+      if (left < gap || (sr && sr.width > 0 && overlaps(spot, sr))) {
+        left = r.left;
+        top = r.top - gap - size;
+        // (the mailbox near the top, phones upright: under it instead)
+        if (top < gap) top = r.bottom + gap;
+      }
+      Object.assign(b.style, { left: `${left}px`, top: `${top}px`, width: `${size}px`, height: `${size}px` });
+    };
+    let queued = false;
+    const later = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => ((queued = false), place()));
+    };
+    place();
+    addEventListener("resize", later);
+    new MutationObserver(later).observe(ui, { attributes: true, attributeFilter: ["class"] });
+    new ResizeObserver(later).observe(mail);
+    // (the strip opens and folds, the layout settles after fonts load)
+    setInterval(later, 1000);
     // a dot when a finished mission waits in the hall
     const dot = () => b.classList.toggle("has-news", progress.ready > 0);
     progress.on(dot);

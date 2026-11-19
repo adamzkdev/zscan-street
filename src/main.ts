@@ -114,6 +114,10 @@ import { TUNNEL } from "./scene/city/plan";
 import { PayDesk } from "./ui/paydesk";
 import { Marks } from "./game/marks";
 import { myRefs, type PayEvent } from "./data/streetpay";
+import { noZoom } from "./game/nozoom";
+
+// no browser zoom on the city either (iPhone Safari ignores user-scalable=no): game/nozoom.ts
+noZoom();
 
 // ---- renderer ----------------------------------------------------------------------------------
 // The API down or rate-limiting (a portrait, a block that won't load): whoever asked just goes
