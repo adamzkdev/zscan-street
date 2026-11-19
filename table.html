@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e0e0e" />
+    <!-- opened from the Home Screen: no browser bars (the only full screen an iPhone gives a page) -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ZStreet" />
+    <title>The Game House · ZStreet</title>
+    <link rel="icon" href="/icon.svg" />
+    <link href="/fonts/fonts.css" rel="stylesheet" />
+    <style>
+      /* (the city's own sizing, so the launcher lays out here as it does over the city) */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #0e0e0e; overflow: hidden; overscroll-behavior: none; }
+      #say { position: fixed; left: 50%; top: max(14px, env(safe-area-inset-top)); z-index: 100; transform: translate(-50%, -16px); opacity: 0; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 12px; background: rgba(20, 18, 16, 0.92); color: #f2f2f6; font: 600 13px Geist, system-ui, sans-serif; pointer-events: none; transition: transform 0.3s, opacity 0.3s; }
+      #say.on { transform: translate(-50%, 0); opacity: 1; }
+      #say b { color: #ff6b35; }
+    </style>
+  </head>
+  <body>
+    <div id="say"></div>
+    <!-- first: sound on a phone (every AudioContext woken by the first real gesture), src/audio/unlock.ts -->
+    <script type="module" src="/src/audio/unlock.ts"></script>
+    <script type="module" src="/src/tables/page.ts"></script>
+  </body>
+</html>

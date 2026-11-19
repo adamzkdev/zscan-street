@@ -1,4 +1,5 @@
 import { filmAd } from "./films";
+import { load } from "./load";
 import { DETAIL_TIME } from "./detail";
 import { memeAd } from "./memes";
 import * as THREE from "three";
@@ -460,7 +461,7 @@ export const TICKER: Ad = (ctx, w, h, t, live) => {
 
 /** LED screens on the tall buildings, a giant one on the tower, flicker and scan lines on all. */
 function ads(city: City, ticks: Tick[], live: LiveData) {
-  const screens: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; ads: Ad[]; at: number; w: number; h: number; mesh: THREE.Mesh; where: THREE.Vector3 | null }[] = [];
+  const screens: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; ads: Ad[]; at: number; w: number; h: number; mesh: THREE.Mesh; where: THREE.Vector3 | null; r: number; painted?: boolean }[] = [];
   const make = (parent: THREE.Object3D, w: number, h: number, pos: THREE.Vector3, yaw: number, list: Ad[]) => {
     const W = 384,
       H = Math.round((384 * h) / w);
@@ -477,7 +478,7 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
     bezel.position.copy(pos).add(new THREE.Vector3(0, 0, -0.07).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw));
     bezel.rotation.y = yaw;
     parent.add(bezel, screen);
-    screens.push({ ctx: c.getContext("2d")!, tex, ads: list, at: Math.random() * 10, w: W, h: H, mesh: screen, where: null });
+    screens.push({ ctx: c.getContext("2d")!, tex, ads: list, at: Math.random() * 10, w: W, h: H, mesh: screen, where: null, r: Math.hypot(w, h) / 2 });
   };
   const rand = r(77);
   // out in the bigger city, only a few towers carry screens (each one redraws its canvas)
@@ -547,12 +548,18 @@ function ads(city: City, ticks: Tick[], live: LiveData) {
   };
   ticks.push((t, _dt, focus) => {
     now = t;
-    if (t - last < 1 / 15) return;
+    // (a processor that cannot keep up, scene/load.ts: fewer redraws, and only the nearer screens)
+    if (t - last < 1 / (15 * load.rate)) return;
     last = t;
     if (alert && t > alert.until) alert = null;
+    const reach = [95, 70, 50, 45, 40][load.level];
     for (const s of screens) {
       s.where ??= s.mesh.getWorldPosition(new THREE.Vector3());
-      if (s.where.distanceToSquared(focus) > 95 * 95 || !shown(s.mesh)) continue;
+      // (out of the picture: it keeps its frame, and is redrawn on the next beat it is in view; at a
+      // weak processor's last levels the reach is short: one never painted yet is painted once,
+      // however far, a black screen would show)
+      if (((s.painted || load.level < 3) && s.where.distanceToSquared(focus) > reach * reach) || !load.sees(s.where, s.r) || !shown(s.mesh)) continue;
+      s.painted = true;
       if (alert) {
         alertAd(s.ctx, s.w, s.h, t - alert.from, alert.a);
         s.ctx.fillStyle = "rgba(0,0,0,0.18)";

@@ -82,8 +82,10 @@ export class Nu7Night {
     const people = `${here} here now`;
     if (s.activated && s.height !== null) {
       this.liveAt ??= Date.now();
-      if (Date.now() - this.liveAt > AFTER) return this.show(false);
       const since = s.tip !== null ? Math.max(0, s.tip - s.height + 1) : 0;
+      // an hour after activation on the chain (25 s blocks), not an hour of each visit: a visitor
+      // arriving days later sees no "IS LIVE"
+      if (Date.now() - this.liveAt > AFTER || since * 25_000 > AFTER) return this.show(false);
       const gaps = this.arrivals.slice(1).map((a, i) => (a - this.arrivals[i]) / 1000);
       const avg = gaps.length ? `${Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length)} s apart` : "25 s target";
       this.big.textContent = "IS LIVE";

@@ -14,7 +14,15 @@ captures/
 design*.png
 Diorama*.png
 shots/*/
+# (the permanent bench is code: shots/bench/run.mjs)
+!shots/bench/
+!shots/port-party/
+shots/port-party/*.png
+shots/port-party/*.jpg
+shots/port-party/*/
 # course videos (rendered by university/video; hosted on the API server, not in git)
 public/university/video/
 university/video/node_modules
 university/video/out
+
+.cloudflare/

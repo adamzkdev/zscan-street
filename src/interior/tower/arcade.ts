@@ -19,6 +19,8 @@ export const ART: Record<string, { name: string; color: string; bg: string; side
   karaoke: { name: "KARAOKE", color: "#ff7ab0", bg: "#1a0a20", side: "#3a0a2a" },
   dance: { name: "DANCE ZK", color: "#3ee08f", bg: "#0a0614", side: "#103a24" },
   billiards: { name: "BILLIARDS", color: "#3ee08f", bg: "#0a1a10", side: "#103a20" },
+  // ZK PARTY (port): its cabinets open the party hall (src/party)
+  party: { name: "ZK PARTY", color: "#ffd23f", bg: "#1b1540", side: "#5a3b00" },
 };
 
 /** An attract screen for a game: its name, a starfield, PRESS START. */
@@ -42,16 +44,19 @@ export function marquee(game: string, w = 256, h = 192) {
 }
 
 /** A voxel arcade cabinet with the game's attract screen in its recess; click to play. */
-export function cabinet(k: TowerKit, f: number, x: number, z: number, rot: number, game: Game) {
+export function cabinet(k: TowerKit, f: number, x: number, z: number, rot: number, game: Game | "party") {
   const gm = ART[game];
+  // (ZK PARTY's cabinets open the party hall on its mini-games: the board and its mini-games, for ⓩ)
+  const info = () => (game === "party" ? { eyebrow: "ZK Arcade", title: gm.name, party: "practice" as const, partyGame: "*" } : { eyebrow: "ZK Arcade", title: gm.name, game });
+  const hover = game === "party" ? `<b>${gm.name}</b><span>19 mini-games · you vs. three zkSNARKs</span>` : `<b>${gm.name}</b><span>click to play</span>`;
   const cab = k.put(f, `cab-${game}`, () => F.arcadeCabinet(gm.color, gm.side), x, z, rot);
   const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.56), new THREE.MeshBasicMaterial({ map: marquee(game), toneMapped: false }));
   // the cabinet is a half-scale voxel object: its children are placed in doubled units
   scr.position.set(0, 1.38 * 2, 0.03);
   scr.scale.setScalar(2);
   cab.add(scr);
-  k.pick(f, scr, `<b>${gm.name}</b><span>click to play</span>`, () => ({ eyebrow: "ZK Arcade", title: gm.name, game }));
-  cab.traverse((o) => o instanceof THREE.Mesh && o !== scr && k.pick(f, o, `<b>${gm.name}</b><span>click to play</span>`, () => ({ eyebrow: "ZK Arcade", title: gm.name, game })));
+  k.pick(f, scr, hover, info);
+  cab.traverse((o) => o instanceof THREE.Mesh && o !== scr && k.pick(f, o, hover, info));
 }
 
 /** 2 — the game hall: a Japanese arcade with every game, racing sims, UFO catchers, paintball. */
@@ -102,7 +107,7 @@ export function arcade(k: TowerKit) {
     g.add(p);
   }
   // the arcade row along the north glass
-  (["snake", "invaders", "flappy", "whack", "memory", "snake", "invaders", "flappy", "whack"] as Game[]).forEach((game, i) => cabinet(k, f, -6.4 + i * 1.0, Z0 + 0.75, 0, game));
+  (["snake", "invaders", "flappy", "whack", "memory", "party", "party", "flappy", "whack"] as (Game | "party")[]).forEach((game, i) => cabinet(k, f, -6.4 + i * 1.0, Z0 + 0.75, 0, game));
   k.label(f, "VIDEO GAMES · ビデオゲーム", -2.4, 3.5, Z0 + 0.3, { h: 0.3, color: "#3ef0ff" });
   void k.person(f, 5555, [-5.4, -16.4], "Gamer", { face: new THREE.Vector3(0, 0, -1) });
   void k.person(f, 6666, [-1.4, -16.4], "Gamer", { face: new THREE.Vector3(0, 0, -1), bob: 4 });

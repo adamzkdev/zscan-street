@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ZStreet</title>
     <meta name="description" content="The Zcash blockchain as a living city: zkSNARKs pick up real mempool transactions and ride the block bus." />
+    <meta name="theme-color" content="#0d0d0d" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- opened from the Home Screen: no browser bars (the only full screen an iPhone gives a page) -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ZStreet" />
     <link rel="icon" href="/icon.svg" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ZStreet" />
@@ -16,9 +24,12 @@
     <meta name="twitter:title" content="ZStreet · the Zcash blockchain as a living city" />
     <meta name="twitter:description" content="Every real Zcash transaction is a zkSNARK walking to the bus of its block. Follow yours, live." />
     <meta name="twitter:image" content="https://zstreet.cash/og.jpg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=JetBrains+Mono:wght@400;500&family=DotGothic16&display=swap" rel="stylesheet" />
+    <!-- the fonts are the city's own (public/fonts): a stylesheet from fonts.googleapis.com held the
+         first paint for as long as it took to answer -->
+    <link href="/fonts/fonts.css" rel="stylesheet" />
     <link rel="stylesheet" href="/src/ui/style.css" />
+    <!-- phones and tablets, portrait and landscape: after the city's own sheet, so its rules win there -->
+    <link rel="stylesheet" href="/src/ui/mobile.css" />
     <script>
       try {
         var t = new URLSearchParams(location.search).get("theme") || localStorage.getItem("street.theme");
@@ -30,7 +41,6 @@
     <canvas id="scene"></canvas>
     <div id="boot"><div><svg class="mark" viewBox="0 0 32 32"><path d="M16 2.5 27.5 7v8.6c0 7-4.8 11.9-11.5 13.9C9.3 27.5 4.5 22.6 4.5 15.6V7L16 2.5Z" fill="none" stroke="#f4b728" stroke-width="2" stroke-linejoin="round"/><path d="M11 11h10l-10 10h10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 16h17" stroke="#1baf7a" stroke-width="1.2" stroke-dasharray="2 2" opacity=".85"/></svg><p>BUILDING THE CITY</p><b><i></i></b></div></div>
     <div id="ui"></div>
-    <div id="rotate" aria-live="polite"><div><svg viewBox="0 0 64 64" aria-hidden="true"><rect class="ph" x="20" y="8" width="24" height="44" rx="4"/><rect class="sc" x="23" y="13" width="18" height="32" rx="1"/><path class="ar" d="M50 30a18 18 0 0 1-8 15m0 0h6m-6 0v-6"/></svg><b>横向き · TURN YOUR PHONE</b><p>ZStreet is played in landscape</p></div></div>
     <style>
       /* the city could not open, or lost its GPU: a way back instead of a frozen screen */
       #halt { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px; background: var(--bg, #0d0d0d); color: var(--faint, #737373); font: 500 11px var(--mono, ui-monospace, monospace); letter-spacing: 0.2em; text-align: center; }
@@ -38,6 +48,12 @@
       #halt b { color: var(--gold-ink, #f4b728); font-weight: 700; }
       #halt p { margin: 0; letter-spacing: 0.04em; line-height: 1.6; font-size: 12px; }
       #halt button { margin-top: 6px; padding: 12px 22px; border: 1px solid var(--gold, #f4b728); border-radius: 2px; background: transparent; color: var(--gold-ink, #f4b728); font: 700 11px var(--mono, ui-monospace, monospace); letter-spacing: 0.2em; cursor: pointer; }
+      /* (a touch screen: its words and its button a size up, read and tapped at arm's length) */
+      @media (pointer: coarse) {
+        #halt { font-size: 13px; }
+        #halt p { font-size: 15px; }
+        #halt button { min-height: 52px; font-size: 13px; }
+      }
     </style>
     <script>
       // One way back for a city that could not open (the app's script failed or ran out of memory
@@ -66,6 +82,8 @@
         if (boot) boot.remove();
       };
     </script>
+    <!-- first: sound on a phone (every AudioContext woken by the first real gesture), src/audio/unlock.ts -->
+    <script type="module" src="/src/audio/unlock.ts"></script>
     <script type="module">
       // the app, loaded so that a failure on the way (a script error, the build throwing, a chunk
       // that did not download) is caught; once its frame loop runs (__streetUp) the city is open

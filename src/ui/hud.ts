@@ -9,6 +9,7 @@ import type { BusPhase, Director } from "../scene/director";
 import { KIND_COLOR, type Snark } from "../scene/snark";
 import type { Theme } from "../scene/theme";
 import type { Interior, PickInfo } from "../interior/types";
+import { TOUCH } from "../scene/quality";
 
 /** ZIP 317 marginal fee (zat) per logical action, before the drop at mainnet height 3,590,000. */
 const MARGINAL_FEE = 5000;
@@ -42,6 +43,7 @@ const ICON: Record<string, string> = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/>',
+  more: '<circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/>',
   parcel: '<path d="M3 8l9-5 9 5-9 5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>',
   hand: '<path d="M7 11V6.5a1.5 1.5 0 0 1 3 0V11M10 10V4.5a1.5 1.5 0 0 1 3 0V10M13 10V5.5a1.5 1.5 0 0 1 3 0V12M16 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L3.6 14.6a1.5 1.5 0 0 1 2.4-1.8L7 14"/>',
   stop: '<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>',
@@ -133,7 +135,7 @@ export interface HudCallbacks {
 type Section = "block" | "mempool" | "market" | "supply" | "network";
 
 /** Walk-in places: icon and colour of their header and elevator. */
-const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
+export const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   mempool: { icon: "parcel", color: "#ff9f2e" },
   factory: { icon: "bolt", color: "#ffd23f" },
   library: { icon: "book", color: "#ffd28a" },
@@ -165,6 +167,7 @@ const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
   convention: { icon: "bolt", color: "#ff2a3a" },
   university: { icon: "book", color: "#e2b448" },
   cemetery: { icon: "vault", color: "#7dff9a" },
+  gamehouse: { icon: "cards", color: "#ff6b35" },
 };
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
@@ -257,6 +260,7 @@ export class Hud {
         <button class="hbtn exit" data-act="leave" aria-label="Leave" title="Leave (Esc)"><svg viewBox="0 0 24 24" class="door"><path class="frame" d="M5 21V3h14v18"/><rect class="gap" x="6.5" y="4.5" width="11" height="16.5"/><g class="leaf"><rect x="6.5" y="4.5" width="11" height="16.5"/><circle cx="15" cy="13" r="1"/></g><path class="floor" d="M3 21h18"/></svg></button>
         <div class="seg" role="group" aria-label="Theme"><button data-theme="day" aria-label="Day" title="Day">${icon("sun")}</button><button data-theme="night" aria-label="Night" title="Night">${icon("moon")}</button><button data-theme="auto" aria-label="Follow my clock" title="Follow my clock">${icon("clock")}</button></div>
         <button class="hbtn sound" data-act="sound" aria-label="Sound" title="Sound">${icon("sound")}</button>
+        <button class="hbtn more" data-act="more" aria-label="More" title="More" aria-expanded="false">${icon("more")}</button>
       </div>
       <nav class="rail">
         <button data-act="zoom-in" title="Zoom in">${icon("plus")}</button>
@@ -279,11 +283,16 @@ export class Hud {
       <div class="followhead hud hidden"></div>
       <div class="shots hud hidden"></div>
       <div class="tip"></div>
+      <div class="arrive" aria-live="polite"></div>
       <div class="cut"></div>`;
 
     this.root.addEventListener("click", (e) => this.onClick(e));
     document.addEventListener("pointerdown", (e) => {
       if (this.camOpen && !(e.target as HTMLElement).closest(".campop,[data-act=cam]")) this.setCam(false);
+      if (this.root.classList.contains("more") && !(e.target as HTMLElement).closest(".corner")) {
+        this.root.classList.remove("more");
+        this.root.querySelector(".hbtn.more")?.setAttribute("aria-expanded", "false");
+      }
     });
     setInterval(() => this.tick(), 1000);
     void fetch(`${API}/v1/blocks?limit=24`)
@@ -321,7 +330,7 @@ export class Hud {
     if (!h) {
       h = document.createElement("div");
       h.className = "whint";
-      h.innerHTML = `<span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>Shift</kbd> run</span><span><kbd>E</kbd> talk</span><span><kbd>M</kbd> map</span><span>walk into a door to go in</span><span><kbd>Esc</kbd> back to the map</span>`;
+      h.innerHTML = `<span><kbd>WASD</kbd> walk</span><span><kbd>drag</kbd> look</span><span><kbd>Shift</kbd> run</span><span>hold <kbd>R</kbd> swing</span><span><kbd>E</kbd> talk</span><span><kbd>M</kbd> map</span><span>walk into a door to go in</span><span><kbd>Esc</kbd> back to the map</span>`;
       this.root.appendChild(h);
     }
   }
@@ -400,9 +409,18 @@ export class Hud {
 
   cut() {
     const c = this.$(".cut");
-    c.classList.remove("go");
+    // after cover(): the black lifts slowly onto the new place instead of the quick dip
+    const covered = c.classList.contains("cover");
+    c.classList.remove("go", "cover", "reveal");
     void c.offsetWidth;
-    c.classList.add("go");
+    c.classList.add(covered ? "reveal" : "go");
+  }
+
+  /** Fade to black ahead of a jump (going in or out of a place); cut() lifts it. */
+  cover() {
+    const c = this.$(".cut");
+    c.classList.remove("go", "reveal");
+    c.classList.add("cover");
   }
 
   follow(s: Snark | null) {
@@ -599,6 +617,12 @@ export class Hud {
       case "tv":
         this.setCam(false);
         return this.cb.setTv(!this.tv);
+      case "more": {
+        // (phones: the corner's lesser switches fold behind this button, ui/mobile.css)
+        const on = this.root.classList.toggle("more");
+        el.setAttribute("aria-expanded", String(on));
+        return;
+      }
       case "sound": {
         const on = !el.classList.contains("on");
         el.classList.toggle("on", on);
@@ -671,9 +695,22 @@ export class Hud {
     this.root.classList.add("indoors");
     this.cb.select(null);
     this.renderIndoor(floor);
+    // the place's name across the screen as the black lifts, then it gives the view back
+    const st = PLACE_STYLE[i.key];
+    const f = i.floors[floor];
+    const a = this.$(".arrive");
+    a.style.setProperty("--c", st.color);
+    a.innerHTML = `<span class="logo">${pix(st.icon)}</span><b>${esc(i.title)}</b>${f ? `<span>${i.floors.length > 1 ? `<em>${esc(f.label)}</em>` : ""}${esc(f.name.split(" · ")[0])}</span>` : ""}`;
+    a.classList.remove("on");
+    void a.offsetWidth;
+    a.classList.add("on");
+    this.arriveFloor = floor;
   }
+  /** The floor the arrival card names (another floor reached takes it down). */
+  private arriveFloor = -1;
   leaveInterior() {
     this.indoor = null;
+    this.$(".arrive").classList.remove("on");
     this.root.classList.remove("indoors");
     this.close();
   }
@@ -682,6 +719,7 @@ export class Hud {
     if (!i) return;
     const f = i.floors[floor];
     if (!f) return;
+    if (floor !== this.arriveFloor) this.$(".arrive").classList.remove("on");
     const st = PLACE_STYLE[i.key];
     // "The shop · pending transactions": a name, then what is on it
     const split = (n: string) => {
@@ -814,7 +852,7 @@ export class Hud {
       <div class="switch"><span>TV mode</span><button class="toggle ${this.tv ? "on" : ""}" data-act="tv" aria-label="Toggle TV mode"></button></div>
       <div class="switch"><span>Cut to the bus stop</span><button class="toggle ${this.auto ? "on" : ""}" data-act="auto" aria-label="Toggle cinematic cuts"></button></div>
 
-      <div class="keys">drag move · right-drag turn · scroll zoom · WASD fly</div>`;
+      <div class="keys">${TOUCH ? "drag to move · pinch to zoom · drag two fingers to turn" : "drag move · right-drag turn · scroll zoom · WASD fly"}</div>`;
   }
 
   /** zkSNARKs from this street already on board the bus of block `h`. */

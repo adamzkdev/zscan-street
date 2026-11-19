@@ -11,9 +11,31 @@ export function smoothPart(m: VoxelModel, inPart: (c: number) => boolean) {
   const W = m.w + 1,
     H = m.h + 1,
     D = m.d + 1;
+  // the part's bounds: no cell beyond them (one more on the low side) has a vertex or a quad, so
+  // the scans below keep to them (a building with three trees no longer walks its whole volume)
+  const part = new Uint8Array(palette.entries.length);
+  for (let c = 1; c < part.length; c++) part[c] = inPart(c) ? 1 : 0;
+  let x0 = m.w,
+    x1 = -1,
+    y0 = m.h,
+    y1 = -1,
+    z0 = m.d,
+    z1 = -1;
+  for (let y = 0, i = 0; y < m.h; y++)
+    for (let z = 0; z < m.d; z++)
+      for (let x = 0; x < m.w; x++, i++)
+        if (part[m.data[i]]) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+          if (z < z0) z0 = z;
+          if (z > z1) z1 = z;
+        }
+  if (x1 < 0) return null;
   const at = (x: number, y: number, z: number) => {
     const c = m.get(x, y, z);
-    return c && inPart(c) ? c : 0;
+    return part[c] ? c : 0;
   };
   // one vertex per cell whose 8 corners (voxel centres) are mixed; cells run from -1 to w-1
   const vid = new Int32Array(W * H * D).fill(-1);
@@ -21,9 +43,9 @@ export function smoothPart(m: VoxelModel, inPart: (c: number) => boolean) {
   const pos: number[] = [];
   const col: number[] = [];
   const occ: number[] = [];
-  for (let y = -1; y < m.h; y++)
-    for (let z = -1; z < m.d; z++)
-      for (let x = -1; x < m.w; x++) {
+  for (let y = y0 - 1; y <= y1; y++)
+    for (let z = z0 - 1; z <= z1; z++)
+      for (let x = x0 - 1; x <= x1; x++) {
         let n = 0,
           r = 0,
           g = 0,
@@ -81,9 +103,9 @@ export function smoothPart(m: VoxelModel, inPart: (c: number) => boolean) {
       nbr[q].push(p);
     }
   };
-  for (let y = -1; y < m.h; y++)
-    for (let z = -1; z < m.d; z++)
-      for (let x = -1; x < m.w; x++) {
+  for (let y = y0 - 1; y <= y1; y++)
+    for (let z = z0 - 1; z <= z1; z++)
+      for (let x = x0 - 1; x <= x1; x++) {
         const s0 = !!at(x, y, z);
         // +x
         if (s0 !== !!at(x + 1, y, z) && y >= 0 && z >= 0) quad(vid[cell(x, y - 1, z - 1)], vid[cell(x, y, z - 1)], vid[cell(x, y, z)], vid[cell(x, y - 1, z)], !s0);

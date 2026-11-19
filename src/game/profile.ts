@@ -20,6 +20,49 @@ export interface Profile {
   eggs: Record<string, number>;
   /** An adopted street cat. */
   cat: { id: number; name: string } | null;
+  /** ZK PARTY (src/party): experience, the counters, the day's missions, the last free refill. */
+  xp: number;
+  party: PartyStats;
+  missions: { day: string; list: { id: string; n: number; claimed: boolean }[] };
+  refillAt: number;
+  /** The zkSNARK this visitor plays as (the one the city gave them: localStorage "street.avatar"). */
+  avatar: number;
+  /** The name others see online (ZK PARTY's rooms): drawn once ("Snark#4071"), then the visitor's own. */
+  nick: string;
+}
+
+/** A name to start with online, until the visitor picks one. */
+export const randomNick = () => `Snark#${1000 + Math.floor(Math.random() * 9000)}`;
+
+export interface PartyStats {
+  /** Board games played and won (first place). */
+  played: number;
+  wins: number;
+  /** Quick matches played and won, and the current run of quick wins. */
+  quick: number;
+  quickWins: number;
+  run: number;
+  /** Mini-games played and won, anywhere. */
+  minis: number;
+  miniWins: number;
+  /** The biggest single payout (ⓩ). */
+  best: number;
+  /** Per mini-game: the best place reached (0 = first). */
+  places: Record<string, number>;
+}
+
+/** The visitor's zkSNARK: the one the city's presence gave them (scene/visitors.ts), drawn once. */
+function streetAvatar() {
+  try {
+    let a = Number(localStorage.getItem("street.avatar")) || 0;
+    if (!a) {
+      a = 1 + Math.floor(Math.random() * 10000);
+      localStorage.setItem("street.avatar", String(a));
+    }
+    return a;
+  } catch {
+    return 1 + Math.floor(Math.random() * 10000);
+  }
 }
 
 const KEY = "street.profile";
@@ -35,6 +78,12 @@ const fresh = (): Profile => ({
   stats: { bets: 0, won: 0, whales: 0, jobs: 0, eggs: 0 },
   eggs: {},
   cat: null,
+  xp: 0,
+  party: { played: 0, wins: 0, quick: 0, quickWins: 0, run: 0, minis: 0, miniWins: 0, best: 0, places: {} },
+  missions: { day: "", list: [] },
+  refillAt: 0,
+  avatar: streetAvatar(),
+  nick: randomNick(),
 });
 
 function load(): Profile {
@@ -43,7 +92,25 @@ function load(): Profile {
     if (raw) {
       const p = JSON.parse(raw) as Partial<Profile>;
       const f = fresh();
-      return { ...f, ...p, stats: { ...f.stats, ...(p.stats ?? {}) }, cases: p.cases ?? {}, eggs: p.eggs ?? {} };
+      const out: Profile = {
+        ...f,
+        ...p,
+        stats: { ...f.stats, ...(p.stats ?? {}) },
+        cases: p.cases ?? {},
+        eggs: p.eggs ?? {},
+        party: { ...f.party, ...(p.party ?? {}), places: p.party?.places ?? {} },
+        missions: p.missions?.list ? p.missions : f.missions,
+        nick: typeof p.nick === "string" && p.nick ? p.nick : f.nick,
+        // (always the city's zkSNARK: the street and the party show the same one; a face picked
+        // online is written there too, party/online.ts)
+        avatar: f.avatar,
+      };
+      // (a profile from before ZK PARTY: its drawn name kept at once, the same on the next visit)
+      if (out.nick !== p.nick)
+        try {
+          localStorage.setItem(KEY, JSON.stringify(out));
+        } catch {}
+      return out;
     }
   } catch {}
   return fresh();

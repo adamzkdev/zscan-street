@@ -4,6 +4,7 @@
  * BILLIARDS (aim with the mouse, hold to power up, pot them all). Same contract as the others:
  * (screen, score line, game over) → stop.
  */
+import { TOUCH } from "../scene/quality";
 
 type Score = (s: string) => void;
 type Over = (n: number) => void;
@@ -161,7 +162,7 @@ export function bowling(host: HTMLElement, score: Score, over: Over) {
     g.fillStyle = "#e9eef7";
     g.font = '700 14px "JetBrains Mono", monospace';
     g.fillText(`FRAME ${Math.min(10, frame)}/10 · ROLL ${roll}`, 12, 22);
-    g.fillText(phase === "aim" ? "SPACE: lock the aim" : phase === "power" ? "SPACE: release!" : "", 12, 42);
+    g.fillText(phase === "aim" ? (TOUCH ? "A: lock the aim" : "SPACE: lock the aim") : phase === "power" ? (TOUCH ? "A: release!" : "SPACE: release!") : "", 12, 42);
     score(`${total} pins`);
   });
   return () => (stop(), offK());

@@ -1,0 +1,27 @@
+// node shots/_e2epaths.mjs OUTDIR: the other ways in and out (map → place → Escape, the stadium's question, a floor jump)
+import { mkdirSync } from "node:fs";
+import puppeteer from "puppeteer-core";
+const OUT = process.argv[2];
+mkdirSync(OUT, { recursive: true });
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1280, height: 800 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push(e.message.slice(0, 300)));
+await p.goto(`${process.env.URL ?? "http://localhost:3011/"}?debug`);
+await p.waitForFunction(() => window.__streetUp && window.street, { timeout: 240000, polling: 1000 });
+await new Promise((r) => setTimeout(r, 5000));
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const st = () => p.evaluate(() => ({ in: window.street.interiors.active?.key ?? null, floor: window.street.interiors.floor, cut: document.querySelector("#ui .cut")?.className, map: !!document.querySelector(".minimap.on, .minimap:not(.hidden)") }));
+let n = 0;
+const shot = async (name) => p.screenshot({ path: `${OUT}/${String(n++).padStart(2, "0")}-${name}.png` });
+await p.evaluate(() => window.street.enter("eiffel"));
+await wait(100); console.log("map→eiffel +100", await st()); await shot("eiffel-100");
+await wait(1200); console.log("+1300", await st()); await shot("eiffel-1300");
+await p.keyboard.press("PageUp"); await wait(700); console.log("PageUp", await st()); await shot("eiffel-up");
+await p.keyboard.press("Escape"); await wait(100); console.log("esc +100", await st());
+await wait(900); console.log("esc +1000", await st()); await shot("map-back");
+await p.evaluate(() => window.street.enter("stadium")); await wait(500); await shot("stadium-choice");
+await p.click(".choice [data-f='0']"); await wait(1500); console.log("stadium", await st()); await shot("stadium");
+await p.keyboard.press("Escape"); await wait(1000); console.log("out", await st());
+console.log("errors:", errs);
+await b.close();

@@ -95,19 +95,36 @@ function texture(text: string, tone: Tone) {
  */
 export const BUBBLE_LAYER = 5;
 
+/**
+ * What the bubbles are drawn through: a stand-in scene whose children are, for the length of one
+ * draw, the bubbles on show (they stay where they hang: projectObject only walks `children`). Drawing
+ * the whole scene again with the camera on the bubbles' layer walked and matrixed every object of the
+ * city a second time each frame, and (no light on that layer) flipped the renderer's light setup, so
+ * every lit material had its shader program looked up again on the next frame.
+ * Matrices: the scene's own pass has just brought them up to date.
+ */
+const bubbleRoot = new THREE.Scene();
+bubbleRoot.matrixWorldAutoUpdate = false;
+const shownBubbles: THREE.Object3D[] = [];
+
 /** Draws the bubbles of `scene` over the finished frame, sharp, without the post effects. */
 export function drawBubbles(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
-  const bg = scene.background;
+  bubbles.shown(scene, shownBubbles);
+  if (!shownBubbles.length) return;
   const mask = camera.layers.mask;
   const auto = renderer.autoClear;
-  scene.background = null;
   camera.layers.set(BUBBLE_LAYER);
   renderer.autoClear = false;
   renderer.setRenderTarget(null);
-  renderer.render(scene, camera);
-  renderer.autoClear = auto;
-  camera.layers.mask = mask;
-  scene.background = bg;
+  (bubbleRoot as { children: THREE.Object3D[] }).children = shownBubbles;
+  try {
+    renderer.render(bubbleRoot, camera);
+  } finally {
+    (bubbleRoot as { children: THREE.Object3D[] }).children = [];
+    shownBubbles.length = 0;
+    renderer.autoClear = auto;
+    camera.layers.mask = mask;
+  }
 }
 
 /** A bubble sprite: bottom-left corner (the tail) at its position. `height` in metres (one line). */
@@ -178,7 +195,7 @@ const camPos = new THREE.Vector3();
 
 class Bubbles {
   /** At most this many `sayAt` bubbles on screen. */
-  max = 4;
+  max = PHONE ? 2 : 4;
   /** One-line bubble height as a share of the view's height: [min, max] (perspective), ortho. */
   /** A line's height as a share of the screen's (min, max). A phone's screen is short: bigger there. */
   size: [number, number] = PHONE ? [0.085, 0.12] : [0.06, 0.095];
@@ -209,6 +226,20 @@ class Bubbles {
   init(renderer: THREE.WebGLRenderer) {
     const gl = renderer.getContext();
     this.gl = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext ? gl : null;
+  }
+
+  /** The bubbles drawn on their own layer (see drawBubbles) that show in `scene`, into `out`. */
+  shown(scene: THREE.Object3D, out: THREE.Object3D[]) {
+    for (const e of this.list) {
+      if (!e.own || !e.s.visible || e.s.parent !== e.parent) continue;
+      let o: THREE.Object3D = e.s;
+      let hidden = false;
+      while (o.parent) {
+        o = o.parent;
+        if (!o.visible) hidden = true;
+      }
+      if (o === scene && !hidden) out.push(e.s);
+    }
   }
 
   /** How many bubbles are live (shown or not) and how many shown right now. */
@@ -333,9 +364,16 @@ class Bubbles {
       e.y = ((v.y + 1) / 2) * H;
       if (e.own) {
         const lines = (e.s.userData.lines as number) ?? 1;
-        const one = persp ? THREE.MathUtils.clamp(0.85 / e.mpp, lo * H, hi * H) : this.orthoSize * H;
+        // (a phone held upright: its height must not turn a passing remark into a full-width billboard)
+        const sizeH = PHONE ? Math.min(H, 480) : H;
+        const one = persp ? THREE.MathUtils.clamp(0.85 / e.mpp, lo * sizeH, hi * sizeH) : this.orthoSize * sizeH;
         e.h = one * lines * (e.tone === "shout" ? 1.08 : 1);
         e.w = e.h * ((e.s.userData.aspect as number) ?? 2);
+        const maxWidth = PHONE ? Math.min(260, W - 32) : W - 16;
+        if (e.w > maxWidth) {
+          e.h *= maxWidth / e.w;
+          e.w = maxWidth;
+        }
       }
       // the speaker on screen, near enough, and seen by the probe lately (not behind anything)
       const onScreen = Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02;

@@ -242,11 +242,12 @@ export class InteriorManager {
     if (!silent) this.warmUp(i, true);
   }
 
-  exit() {
+  /** `through`: walked out of the doors, no cut: the caller takes the eye from here. */
+  exit(through = false) {
     if (!this.active) return;
     this.circ?.reset();
     this.circ = null;
-    this.ev.fade();
+    if (!through) this.ev.fade();
     this.warming = false;
     this.active = null;
     this.walk.enabled = false;

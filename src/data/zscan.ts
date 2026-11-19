@@ -139,6 +139,13 @@ export interface FeedHandlers {
  * Live feed: a mempool snapshot, then the `/v1/ws` stream. Block events only carry the height,
  * so each block is fetched to learn exactly which transactions it took. Returns a closer.
  */
+/** The feed's first snapshot, asked early (prefetchFeed) so it is in by the time the city is built. */
+let early: Promise<[Tx[] | null, BlockSummary | null]> | null = null;
+/** Ask the API for the mempool and the latest block now (the city then opens on them at once). */
+export function prefetchFeed() {
+  early ??= Promise.all([ZScan.mempool(), ZScan.latestBlock()]);
+}
+
 export function connectFeed(h: FeedHandlers): () => void {
   let ws: WebSocket | null = null;
   let closed = false;
@@ -167,7 +174,9 @@ export function connectFeed(h: FeedHandlers): () => void {
 
   const open = async () => {
     h.status("connecting");
-    const [txs, last] = await Promise.all([ZScan.mempool(), ZScan.latestBlock()]);
+    // (the first time, the snapshot asked while the city was being built)
+    const [txs, last] = await (early ?? Promise.all([ZScan.mempool(), ZScan.latestBlock()]));
+    early = null;
     if (closed) return;
     // Catch up on blocks mined while the socket was down.
     if (lastHeight && last && last.height > lastHeight) {

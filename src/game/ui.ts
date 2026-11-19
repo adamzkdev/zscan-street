@@ -1,5 +1,7 @@
 
 import { pix } from "../ui/hud";
+// (the game's panels on phones and tablets: sheets, thumb-sized buttons; a computer sees no change)
+import "./touch.css";
 
 /** What kind of news a message is: its sign and colour in the inbox. */
 export type MailKind = "mayor" | "paper" | "power" | "storm" | "quake" | "whale" | "secret" | "event" | "city" | "works" | "chain" | "dev" | "smash";

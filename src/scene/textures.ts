@@ -34,6 +34,33 @@ function tex(c: HTMLCanvasElement, opts: { repeat?: [number, number]; srgb?: boo
 }
 
 function noise(ctx: CanvasRenderingContext2D, w: number, h: number, amount: number, r: () => number, cell = 2) {
+  // on an opaque canvas (all of the city's): the cells blended straight into the pixels, as
+  // fillRect would (a few hundred thousand fillRects with their colour strings cost ~0.3 s at boot)
+  const img = ctx.getImageData(0, 0, w, h);
+  const px = img.data;
+  let opaque = true;
+  for (let i = 3; i < px.length; i += 4)
+    if (px[i] !== 255) {
+      opaque = false;
+      break;
+    }
+  if (opaque) {
+    for (let y = 0; y < h; y += cell)
+      for (let x = 0; x < w; x += cell) {
+        const v = (r() - 0.5) * amount;
+        // (the canvas keeps an alpha in 8 bits)
+        const a = Math.round(Math.abs(v) * 255) / 255;
+        const add = v > 0 ? 255 * a : 0;
+        for (let yy = y; yy < Math.min(y + cell, h); yy++)
+          for (let xx = x, o = (yy * w + x) * 4; xx < Math.min(x + cell, w); xx++, o += 4) {
+            px[o] = Math.round(px[o] * (1 - a) + add);
+            px[o + 1] = Math.round(px[o + 1] * (1 - a) + add);
+            px[o + 2] = Math.round(px[o + 2] * (1 - a) + add);
+          }
+      }
+    ctx.putImageData(img, 0, 0);
+    return;
+  }
   for (let y = 0; y < h; y += cell)
     for (let x = 0; x < w; x += cell) {
       const v = (r() - 0.5) * amount;

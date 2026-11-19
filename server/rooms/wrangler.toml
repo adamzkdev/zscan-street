@@ -1,0 +1,26 @@
+# ZK PARTY's online rooms on Cloudflare (worker.ts): one Durable Object per room.
+#   cd server/rooms && npx -y wrangler@4 dev       local, on :8787 (no account used)
+# Standalone deploy (optional; the lead may instead bind Room in ZStreet's production worker and
+# route /rooms/* to roomsFetch, see worker.ts). Then build the page with
+# VITE_ROOMS_SERVER=wss://<this worker's host>.
+name = "zstreet-rooms"
+main = "worker.ts"
+tsconfig = "tsconfig.worker.json"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[observability]
+enabled = true
+
+# Pages allowed to open rooms (comma separated origins; unset: any). For example:
+# [vars]
+# ROOMS_ORIGINS = "https://street.zscan.cash"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# SQLite-backed Durable Objects (the hibernation API).
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

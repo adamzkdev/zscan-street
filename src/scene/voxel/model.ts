@@ -153,9 +153,13 @@ export class VoxelModel {
       by = Math.min(this.h, Math.max(y0, y1));
     const az = Math.max(0, Math.min(z0, z1)),
       bz = Math.min(this.d, Math.max(z0, z1));
+    const data = this.data;
     for (let y = ay; y < by; y++)
-      for (let z = az; z < bz; z++)
-        for (let x = ax; x < bx; x++) this.data[this.i(x, y, z)] = typeof c === "number" ? c : c(x, y, z);
+      for (let z = az; z < bz; z++) {
+        const row = this.w * (z + this.d * y);
+        if (typeof c === "number") data.fill(c, row + ax, row + bx);
+        else for (let x = ax; x < bx; x++) data[row + x] = c(x, y, z);
+      }
   }
 
   clear(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) {
@@ -226,13 +230,31 @@ function soft(x: number, y: number, z: number, cell: number, seed: number) {
   const ix = Math.floor(fx),
     iy = Math.floor(fy),
     iz = Math.floor(fz);
-  const s = (t: number) => t * t * (3 - 2 * t);
-  const ux = s(fx - ix),
-    uy = s(fy - iy),
-    uz = s(fz - iz);
-  const l = (a: number, b: number, t: number) => a + (b - a) * t;
-  const h = (dx: number, dy: number, dz: number) => hash(ix + dx, iy + dy, iz + dz, seed);
-  return l(l(l(h(0, 0, 0), h(1, 0, 0), ux), l(h(0, 1, 0), h(1, 1, 0), ux), uy), l(l(h(0, 0, 1), h(1, 0, 1), ux), l(h(0, 1, 1), h(1, 1, 1), ux), uy), uz);
+  // (written out, no closures: it runs for every voxel a `shades` paint fills)
+  const tx = fx - ix,
+    ty = fy - iy,
+    tz = fz - iz;
+  const ux = tx * tx * (3 - 2 * tx),
+    uy = ty * ty * (3 - 2 * ty),
+    uz = tz * tz * (3 - 2 * tz);
+  const x1 = ix + 1,
+    y1 = iy + 1,
+    z1 = iz + 1;
+  const h000 = hash(ix, iy, iz, seed),
+    h100 = hash(x1, iy, iz, seed),
+    h010 = hash(ix, y1, iz, seed),
+    h110 = hash(x1, y1, iz, seed),
+    h001 = hash(ix, iy, z1, seed),
+    h101 = hash(x1, iy, z1, seed),
+    h011 = hash(ix, y1, z1, seed),
+    h111 = hash(x1, y1, z1, seed);
+  const a00 = h000 + (h100 - h000) * ux,
+    a10 = h010 + (h110 - h010) * ux,
+    a01 = h001 + (h101 - h001) * ux,
+    a11 = h011 + (h111 - h011) * ux;
+  const b0 = a00 + (a10 - a00) * uy,
+    b1 = a01 + (a11 - a01) * uy;
+  return b0 + (b1 - b0) * uz;
 }
 
 /**
@@ -256,25 +278,42 @@ export function half(m: VoxelModel) {
     h = Math.ceil(m.h / 2),
     d = Math.ceil(m.d / 2);
   const o = new VoxelModel(w, h, d);
-  const count = new Map<number, number>();
+  const emits = palette.entries.map((e) => e.kind === "emit");
+  const src = m.data,
+    sw = m.w,
+    swd = m.w * m.d;
+  // the eight cells, in the order of k (x fastest, then y, then z); 0 outside the model
+  const cs = new Uint16Array(8);
   for (let y = 0; y < h; y++)
     for (let z = 0; z < d; z++)
       for (let x = 0; x < w; x++) {
-        count.clear();
         let filled = 0,
           emit = 0;
         for (let k = 0; k < 8; k++) {
-          const c = m.get(x * 2 + (k & 1), y * 2 + ((k >> 1) & 1), z * 2 + ((k >> 2) & 1));
+          const xx = x * 2 + (k & 1),
+            yy = y * 2 + ((k >> 1) & 1),
+            zz = z * 2 + ((k >> 2) & 1);
+          const c = xx < m.w && yy < m.h && zz < m.d ? src[xx + sw * zz + swd * yy] : 0;
+          cs[k] = c;
           if (!c) continue;
           filled++;
-          if (palette.entries[c].kind === "emit") emit = c;
-          count.set(c, (count.get(c) ?? 0) + 1);
+          if (emits[c]) emit = c;
         }
         if (filled < 2 && !emit) continue;
+        // the commonest colour; a tie goes to the one met first
         let best = 0,
           n = 0;
-        for (const [c, k] of count) if (k > n) (best = c), (n = k);
-        o.set(x, y, z, emit || best);
+        for (let k = 0; k < 8; k++) {
+          const c = cs[k];
+          if (!c) continue;
+          let seenBefore = false;
+          for (let e = 0; e < k; e++) if (cs[e] === c) seenBefore = true;
+          if (seenBefore) continue;
+          let cnt = 1;
+          for (let e = k + 1; e < 8; e++) if (cs[e] === c) cnt++;
+          if (cnt > n) (best = c), (n = cnt);
+        }
+        o.data[x + w * (z + d * y)] = emit || best;
       }
   return o;
 }

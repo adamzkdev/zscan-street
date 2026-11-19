@@ -1,0 +1,26 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/fonts/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/audio/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=604800
+/cinema/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=604800
+/memes/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=604800
+/university/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=604800
+/wasm/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=604800
+/party/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=604800
+/manifest.webmanifest
+  Cache-Control: public, max-age=3600, stale-while-revalidate=604800
+/party.html
+  Cache-Control: public, max-age=0, must-revalidate
+/table.html
+  Cache-Control: public, max-age=0, must-revalidate

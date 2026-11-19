@@ -1,13 +1,15 @@
 import * as THREE from "three";
+// (first: three.js's matrix pass made lazy for what has not moved, scene/matrices.ts)
+import "./scene/matrices";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { connectFeed, ZScan } from "./data/zscan";
+import { connectFeed, prefetchFeed, ZScan } from "./data/zscan";
 import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
-import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, LITE, type Occluder } from "./scene/city";
+import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
 import { RIVER, ST } from "./scene/city/plan";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
@@ -21,30 +23,8 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { applyTheme, setRainWanted, type Theme } from "./scene/theme";
 import type { Snark } from "./scene/snark";
 import { Overlays } from "./ui/overlays";
-import { buildMuseum } from "./interior/museum";
-import { buildStadium } from "./interior/stadium";
-import { buildPrison } from "./interior/prison";
-import { buildMall } from "./interior/mall";
-import { buildHotel } from "./interior/hotel";
-import { buildNeedle } from "./interior/needle";
-import { buildPyramid } from "./interior/pyramid";
-import { buildEiffel } from "./interior/eiffel";
-import { buildColosseum } from "./interior/colosseum";
-import { buildReserve } from "./interior/reserve";
-import { buildWalletTower } from "./interior/wallettower";
-import { buildUniversity } from "./interior/university";
-import { buildOpera } from "./interior/opera";
-import { buildBigBen } from "./interior/bigben";
-import { buildStatue } from "./interior/statue";
-import { buildArab } from "./interior/arab";
-import { buildGardens } from "./interior/gardens";
-import { buildPalm } from "./interior/palm";
-import { buildOrchard } from "./interior/zktowers/orchard";
-import { buildSapling } from "./interior/zktowers/sapling";
-import { buildHalo } from "./interior/zktowers/halo";
-import { buildCemetery } from "./interior/cemetery";
-import { buildZsaLab } from "./interior/zsalab";
-import { buildConvention } from "./interior/convention";
+import { openPartyHall, openTableGame, wireParty } from "./party/city";
+import { master } from "./audio/master";
 import { ZsaLabPanel } from "./ui/zsalab";
 import { StadiumLive } from "./scene/stadium";
 import { type RideKind, Sky } from "./scene/sky";
@@ -56,7 +36,9 @@ import { Cemetery } from "./scene/cemetery";
 import { Chatter } from "./scene/chatter";
 import { bubbles, drawBubbles } from "./scene/speech";
 import { PLACE_LORE } from "./data/lore";
-import { Hud } from "./ui/hud";
+import { Hud, PLACE_STYLE } from "./ui/hud";
+import { EntryCinematic } from "./ui/cinematic";
+import { progress } from "./game/progress";
 import { Venues } from "./ui/venues";
 import { BlockShelf } from "./scene/shelf";
 import { MiningHall } from "./scene/mining";
@@ -64,15 +46,16 @@ import { MempoolLive } from "./scene/mempoolhq";
 import { InteriorManager } from "./interior/manager";
 import { WalkControls } from "./interior/walk";
 import type { Interior, InteriorContext } from "./interior/types";
-import { buildFactory } from "./interior/factory";
-import { buildMempool } from "./interior/mempool";
-import { buildLibrary } from "./interior/library";
-import { buildTower } from "./interior/tower/index";
 import { Arcade } from "./ui/arcade";
 import { newsTicker } from "./scene/press";
 import { Reader } from "./ui/reader";
 import { Joystick } from "./ui/joystick";
+import { StreetSwing } from "./scene/swing";
 import { bootSurvived, Quality, SAFE, TOUCH } from "./scene/quality";
+import { load, Stride } from "./scene/load";
+import { Thrift } from "./scene/thrift";
+import { phoneFullscreen } from "./game/fullscreen";
+import { orientRule } from "./game/orient";
 import { warm, idle, warmTarget } from "./scene/warm";
 import { pxPerMetre } from "./scene/farview";
 import { LightBudget } from "./scene/lights";
@@ -143,18 +126,9 @@ window.addEventListener("unhandledrejection", (e) => {
   e.preventDefault();
   if (netFailures++ % 50 === 0) console.warn(`network: ${msg} (${netFailures} request${netFailures > 1 ? "s" : ""} failed so far, the city carries on)`);
 });
-// Phones play in landscape (an overlay asks to turn the phone, see #rotate): where the browser
-// allows it (Android), the first touch goes full screen and locks the landscape orientation.
-if (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches) {
-  const lock = () => {
-    const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
-    const go = el.requestFullscreen?.bind(el) ?? el.webkitRequestFullscreen?.bind(el);
-    Promise.resolve(go?.({ navigationUI: "hide" } as FullscreenOptions))
-      .then(() => (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.("landscape"))
-      .catch(() => {});
-  };
-  window.addEventListener("pointerdown", lock, { once: true, capture: true });
-}
+// Phones: full screen on the first touch where the browser allows it (Android, iPad); on an iPhone,
+// once, the card that says how (the Home Screen app opens without Safari's bars). src/game/fullscreen.ts
+phoneFullscreen();
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 bubbles.init(renderer);
@@ -163,17 +137,16 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
-// A lost context on a phone is a page to reload: its city let the CPU copies of the signs go once
-// uploaded (releaseAfterUpload), so there is nothing to restore them from, and a phone loses it
-// for want of memory, which a reload in safe mode answers. A desktop gets a few seconds to restore
-// it (three.js re-uploads the rest), then the same message instead of a dead canvas.
+// A lost context is a page to reload: the city lets the CPU copies of its geometry and its signs
+// go once they are on the GPU (dropOnUpload in scene/city, releaseAfterUpload), ~300 MB the page
+// no longer holds twice, so there is nothing to restore them from; a phone loses it for want of
+// memory, which a reload in safe mode answers.
 let contextBack: ReturnType<typeof setTimeout> | undefined;
 canvas.addEventListener("webglcontextlost", (e) => {
   e.preventDefault();
   console.warn("WebGL context lost");
   const halt = (window as unknown as { __streetHalt?: (kind: string) => void }).__streetHalt;
-  if (TOUCH || LITE) halt?.("gpu");
-  else contextBack = setTimeout(() => halt?.("gpu"), 6000);
+  halt?.("gpu");
 });
 
 const scene = new THREE.Scene();
@@ -198,13 +171,42 @@ const MOON_OFFSET = new THREE.Vector3(-18, 34, 22);
 // ---- world ------------------------------------------------------------------------------------
 // The voxel city is generated by a pool of workers; the boot screen shows how far along it is.
 const bootBar = document.querySelector<HTMLElement>("#boot i");
+// the chain's first snapshot is asked now, while the workers build (the city then opens on it)
+prefetchFeed();
 const t0 = performance.now();
 const city = await buildCity((k) => bootBar && (bootBar.style.width = `${Math.round(k * 100)}%`));
 // one boot screen: the city is built, now the first snapshot of the chain
 const bootText = document.querySelector<HTMLElement>("#boot p");
 if (bootText) bootText.textContent = "CONNECTING TO ZCASH";
-console.info(`city built in ${Math.round(performance.now() - t0)} ms`);
+console.info(`city built in ${Math.round(performance.now() - t0)} ms (from ${Math.round(t0)} ms)`);
 scene.add(city.group);
+// ---- fewer draws (scene/thrift.ts): the still things merged a tile at a time, the still shadow
+// casters merged for the shadow map alone (shown for its pass only)
+const thrift = new Thrift(scene);
+// ---- the processor's governor (scene/load.ts): at a weak processor's last levels, the still
+// branches out of the picture are skipped whole by the drawing's walk, and shown again for the
+// shadow map's pass (which sees from elsewhere) and after the frame
+{
+  const sm = renderer.shadowMap;
+  const shadowPass = sm.render.bind(sm);
+  sm.render = (...a: Parameters<typeof sm.render>) => {
+    load.unhide();
+    thrift.castShades(true);
+    try {
+      shadowPass(...a);
+    } finally {
+      thrift.castShades(false);
+    }
+  };
+}
+scene.onBeforeRender = (_r, _s, cam) => load.hideUnseen(cam);
+scene.onAfterRender = () => load.unhide();
+// once the city has settled, and again when the rest of it has streamed in (`?nothrift`: off)
+if (!SAFE && !new URLSearchParams(location.search).has("nothrift"))
+  for (const at of [9, 45]) {
+    setTimeout(() => thrift.observe(), at * 1000);
+    setTimeout(() => thrift.merge(), (at + 6) * 1000);
+  }
 const lampLights = new LampLights(scene, city.lamps, 12);
 const decor = buildDecor(scene, city);
 // the NU7 upgrade: countdown on the screens, fireworks when it activates
@@ -501,6 +503,7 @@ const prison = new Prison(scene, city.nav, director);
     kind: "prison",
     name: "the ZEC STATE PENITENTIARY",
     door,
+    front: new THREE.Vector3(0, 0, -1),
     occluder: { full: prison.group, cut: new THREE.Group(), extras: new THREE.Group(), box, level: 1, height: 22, open: false, fixed: true },
     keeper: door.clone(),
     camPos: door.clone().add(new THREE.Vector3(0, 12, -24)),
@@ -668,6 +671,7 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
   zsalab: "mint your own shielded asset",
   convention: "the zkCar reveal · the loop · the flight",
   university: "courses · Zakura · Tachyon · the library · HashSmash",
+  gamehouse: "ZK PARTY · table games · The Orchard Room",
   cemetery: "the crypt · zombies inside",
 };
 
@@ -692,6 +696,7 @@ const PLACE_ABOUT: Record<string, string> = {
   zodl: "The ZODL TOWER is the white tower of Zodl, the Zcash wallet (formerly Zashi) built by ZODL, across the avenue from the ZEC Reserve: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its black bird on white turning over the roof.",
   noir: "The NOIR TOWER is the obsidian tower of Noir, the shielded Zcash wallet in your browser (a Chrome extension web pages can ask to pay or sign), next to the ZODL TOWER on the avenue: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver eclipse and green light turning over the roof.",
   zlab: "The ZLAB TOWER is the black and gold tower of ZLab, the open-source Zcash lab, west of the heart across from the NOIR TOWER: ZLab's card and its latest commits in the lobby, then a floor per project, each a lab with its real releases, commits and pull requests: ZApp (the phone wallet) on 8, ZApp Chrome (the browser extension) on 16, ZFirm (the signer firmware for a Flipper Zero, a Pi Zero or a Kindle) on 24, KindleWallet (a hardware wallet on a jailbroken Kindle) on 32; ZLab has no X account, so no wall of tweets. Its shield turns over the roof, and a zkSNARK tells whoever is inside about every commit and release as it lands.",
+  gamehouse: "THE GAME HOUSE is the city's games café on the avenue across from the hawker centre: a wall of screens with every ZK PARTY mini-game, the tournament desk and the party's board games in the middle, the table games for up to eight (BLOCK BARONS, LAST SNARK, and ORCHARD HOLD'EM in The Orchard Room), a bar and the house leaderboard. Everything is played for ⓩ, ZStreet's play money, never ZEC.",
   convention: "The ZEC CONVENTION CENTER is the long white hall with the wave roof on the avenue across from the ZK Mall. Inside, the arena: thousands of zkSNARKs in the stands, a stage with a giant screen, and the zkCar reveal, like Tesla's roadster of October 2026: the white zkCar rises through the stage, launches from 0 to 60 mph in under a second, drives round a loop upside down on its air thrusters, then lifts off, spins in the air and flies over a row of cars before landing in front of the crowd.",
   zsalab: "The ZSA LAB is the white laboratory with the glass dome on the avenue east of the heart, where anyone can mint their own Zcash Shielded Asset (ZIPs 226 and 227) on the public ZSA test network, proved and signed in their own browser: the MINT counter, the reactor the live tokens orbit, a wall of every token on the testnet, a live feed, the furnace to burn and the seal to fix a supply for good. Test tokens have no value; ZSAs reach mainnet with a future upgrade.",
   university: "ZK UNIVERSITY is the campus next to the city works, built like Stanford's Main Quad (sandstone, round arches, red tile roofs, a bell tower): free video courses on cryptography, zkSNARKs and Zcash, every claim with its source. G: the Main Quad hall and the course catalogue; 1: the Lecture Hall (theory); 2: Zakura Hall, about the Zakura node, with its real releases and announcements; 3: Tachyon Hall, about scaling Zcash with Tachyon and Ragu, with the team's real blog posts and commits; 4: the Library, where every lesson can be read; 5: HashSmash Hall, live from HashSmash (yukon.org/hashsmash, Eigen Labs with Shielded Labs, Zcash, Project Eleven and the Ethereum Foundation), the open challenge to find collisions in reduced-round SHA-256, SHA3-256, BLAKE3 and Orchard's Poseidon: a column of rounds per hash, the broken ones knocked out, the collision frontier, the solvers, every new attack as it comes.",
@@ -740,6 +745,7 @@ hud = new Hud(
       weather();
     },
     setSound: async (on) => {
+      master.set(on);
       if (on) await sound.start();
       else sound.stop();
       try {
@@ -765,7 +771,7 @@ hud = new Hud(
       hud.cut();
       hud.renderIndoor(interiors.floor);
     },
-    leave: () => interiors.exit(),
+    leave: () => leavePlace(),
     talk: (s) => talk.show(snarkSpeaker(s, director, agents)),
     walk: (on) => setWalking(on),
   },
@@ -789,15 +795,16 @@ const overlays = new Overlays(scene, document.getElementById("ui")!, {
 });
 hud.setNight(theme === "night");
 
-// sound stays as it was left; browsers only let it start on the first touch or click
+// sound stays as it was left; browsers only let it start on the first touch or click. On a phone it
+// is on unless it was switched off (src/audio/unlock.ts wakes it on the first real gesture, and keeps
+// it playing with the silent switch on).
 try {
-  if (localStorage.getItem("street.sound") === "1") {
+  const pref = localStorage.getItem("street.sound");
+  if (pref === "1" || (TOUCH && pref !== "0")) {
     hud.setSoundButton(true);
     window.addEventListener("pointerdown", () => void sound.start(), { once: true });
   }
 } catch {}
-// the street opens even if the chain is slow to answer (the strip then says OFFLINE)
-setTimeout(() => hud.ready(), 15000);
 
 // ---- walk-in places ----------------------------------------------------------------------------
 const PLACES: Record<Interior["key"], string> = {
@@ -832,6 +839,7 @@ const PLACES: Record<Interior["key"], string> = {
   zsalab: "ZSA LAB",
   convention: "CONVENTION CENTER",
   university: "ZK UNIVERSITY",
+  gamehouse: "GAME HOUSE",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
@@ -924,41 +932,60 @@ themeHook = (t) => {
   ictx.theme = t;
   interiors.active?.setTheme?.(t);
 };
+// ---- the walk-in places' code, loaded the first time each is entered --------------------------
+// (more than half of the city's code: fetched and compiled behind the entry's fade, not at boot)
+type PlaceBuilder = (c: InteriorContext) => Interior;
+const PLACE_CODE: Record<Interior["key"], () => Promise<PlaceBuilder>> = {
+  mempool: () => import("./interior/mempool").then((m) => m.buildMempool),
+  factory: () => import("./interior/factory").then((m) => m.buildFactory),
+  library: () => import("./interior/library").then((m) => m.buildLibrary),
+  tower: () => import("./interior/tower/index").then((m) => m.buildTower),
+  museum: () => import("./interior/museum").then((m) => m.buildMuseum),
+  stadium: () => import("./interior/stadium").then((m) => m.buildStadium),
+  prison: () => import("./interior/prison").then((m) => m.buildPrison),
+  mall: () => import("./interior/mall").then((m) => m.buildMall),
+  hotel: () => import("./interior/hotel").then((m) => m.buildHotel),
+  needle: () => import("./interior/needle").then((m) => m.buildNeedle),
+  pyramid: () => import("./interior/pyramid").then((m) => m.buildPyramid),
+  eiffel: () => import("./interior/eiffel").then((m) => m.buildEiffel),
+  colosseum: () => import("./interior/colosseum").then((m) => m.buildColosseum),
+  reserve: () => import("./interior/reserve").then((m) => m.buildReserve),
+  opera: () => import("./interior/opera").then((m) => m.buildOpera),
+  bigben: () => import("./interior/bigben").then((m) => m.buildBigBen),
+  statue: () => import("./interior/statue").then((m) => m.buildStatue),
+  arab: () => import("./interior/arab").then((m) => m.buildArab),
+  gardens: () => import("./interior/gardens").then((m) => m.buildGardens),
+  palm: () => import("./interior/palm").then((m) => m.buildPalm),
+  "tower-orchard": () => import("./interior/zktowers/orchard").then((m) => m.buildOrchard),
+  "tower-sapling": () => import("./interior/zktowers/sapling").then((m) => m.buildSapling),
+  "tower-halo": () => import("./interior/zktowers/halo").then((m) => m.buildHalo),
+  zodl: () => import("./interior/wallettower").then((m) => (c) => m.buildWalletTower(c, "zodl")),
+  vizor: () => import("./interior/wallettower").then((m) => (c) => m.buildWalletTower(c, "vizor")),
+  noir: () => import("./interior/wallettower").then((m) => (c) => m.buildWalletTower(c, "noir")),
+  zlab: () => import("./interior/wallettower").then((m) => (c) => m.buildWalletTower(c, "zlab")),
+  zsalab: () => import("./interior/zsalab").then((m) => m.buildZsaLab),
+  convention: () => import("./interior/convention").then((m) => m.buildConvention),
+  university: () => import("./interior/university").then((m) => m.buildUniversity),
+  cemetery: () => import("./interior/cemetery").then((m) => m.buildCemetery),
+  gamehouse: () => import("./interior/gamehouse").then((m) => m.buildGameHouse),
+};
+const placeBuilders: Partial<Record<Interior["key"], PlaceBuilder>> = {};
+const placeLoads = new Map<Interior["key"], Promise<void>>();
+/** The place's code in (once): then `interiors.enter` and `prebuild` can build it. */
+function loadPlace(key: Interior["key"]): Promise<void> {
+  if (placeBuilders[key]) return Promise.resolve();
+  let p = placeLoads.get(key);
+  if (!p) {
+    p = PLACE_CODE[key]().then((b) => void (placeBuilders[key] = b));
+    // a failed fetch (offline, a new release) can be tried again on the next visit
+    p.catch(() => placeLoads.delete(key));
+    placeLoads.set(key, p);
+  }
+  return p;
+}
 const interiors = new InteriorManager(
   canvas,
-  {
-    mempool: () => buildMempool(ictx),
-    factory: () => buildFactory(ictx),
-    library: () => buildLibrary(ictx),
-    tower: () => buildTower(ictx),
-    museum: () => buildMuseum(ictx),
-    stadium: () => buildStadium(ictx),
-    prison: () => buildPrison(ictx),
-    mall: () => buildMall(ictx),
-    hotel: () => buildHotel(ictx),
-    needle: () => buildNeedle(ictx),
-    pyramid: () => buildPyramid(ictx),
-    eiffel: () => buildEiffel(ictx),
-    colosseum: () => buildColosseum(ictx),
-    reserve: () => buildReserve(ictx),
-    opera: () => buildOpera(ictx),
-    bigben: () => buildBigBen(ictx),
-    statue: () => buildStatue(ictx),
-    arab: () => buildArab(ictx),
-    gardens: () => buildGardens(ictx),
-    palm: () => buildPalm(ictx),
-    "tower-orchard": () => buildOrchard(ictx),
-    "tower-sapling": () => buildSapling(ictx),
-    "tower-halo": () => buildHalo(ictx),
-    zodl: () => buildWalletTower(ictx, "zodl"),
-    vizor: () => buildWalletTower(ictx, "vizor"),
-    noir: () => buildWalletTower(ictx, "noir"),
-    zlab: () => buildWalletTower(ictx, "zlab"),
-    zsalab: () => buildZsaLab(ictx),
-    convention: () => buildConvention(ictx),
-    university: () => buildUniversity(ictx),
-    cemetery: () => buildCemetery(ictx),
-  },
+  Object.fromEntries((Object.keys(PLACE_CODE) as Interior["key"][]).map((k) => [k, () => placeBuilders[k]!(ictx)])) as Record<Interior["key"], () => Interior>,
   {
     entered: (i, f) => {
       i.setTheme?.(theme);
@@ -967,8 +994,12 @@ const interiors = new InteriorManager(
       rig.controls.enabled = false;
       venues.close();
       hud.enterInterior(i, f);
+      // ZK PARTY (port): the day's missions count the places walked into; the entry film
+      progress.track("enter");
+      playEntryFilm(i, f);
     },
     left: () => {
+      cine.stop(false);
       venues.close();
       hud.leaveInterior();
       if (walking && cameIn) stepOut(cameIn);
@@ -980,10 +1011,31 @@ const interiors = new InteriorManager(
     ding: () => sound.liftDing(),
     fade: () => {
       lastJump = performance.now();
-      hud.cut();
+      revealWhenReady();
     },
   },
 );
+// ---- the entry film (port, ui/cinematic.ts): every walk into a place opens on a short shot of it --
+const cine = new EntryCinematic(document.body);
+const NO_FILM = new URLSearchParams(location.search).has("nofilm");
+function playEntryFilm(i: Interior, floor: number) {
+  if (CAPTURE || NO_FILM) return;
+  const w = interiors.walk;
+  w.camera.updateMatrixWorld();
+  w.enabled = false;
+  const f = i.floors[floor];
+  cine.play(
+    i.scene,
+    w.camera,
+    w.heading,
+    { title: PLACES[i.key] ?? i.title, eyebrow: `ZSTREET · 入場${i.floors.length > 1 && f ? ` · ${f.label}` : ""}`, sub: PLACE_SUB[i.key] ?? "", color: PLACE_STYLE[i.key]?.color ?? "#f4b728" },
+    () => {
+      // the walker takes over (unless a panel or a game opened meanwhile)
+      if (interiors.active === i && !talk.open && !payDesk.open && !arcade.open && !reader.open && !venues.open && !cityPaused) interiors.walk.enabled = true;
+    },
+    matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+}
 // phones and modest machines keep fewer walk-in places on the GPU at once
 interiors.keep = TOUCH ? 2 : worldLevel() >= 2 ? 3 : 8;
 warmTarget(() => renderPass.rt);
@@ -991,11 +1043,89 @@ interiors.compile = (s, c) => warm(renderer, s, c);
 // frames during an entry, a camera flight or right after a tier change say nothing about the device
 // (and neither do the boot screen's, while the city warms up and places are built ahead)
 quality.busy = () => interiors.warming || rig.flying || performance.now() - lastJump < 1500 || bootUp();
+// (the processor's governor, scene/load.ts, decides within seconds: its levels cost nothing to switch)
+load.busy = () => interiors.warming || rig.flying || performance.now() - lastJump < 1500 || performance.now() - cityUpAt < 4000 || bootUp();
+load.watch(scene);
+let cityUpAt = Infinity;
 function bootUp() {
   const b = document.getElementById("boot");
   return !!b && !b.dataset.gone;
 }
 let lastJump = 0;
+/**
+ * Lift the black off the new view, but only once its first frame can be drawn: while a place's
+ * shaders compile the frame is held, and lifting over a held frame showed the street a moment.
+ */
+let revealing = 0;
+function revealWhenReady() {
+  const id = ++revealing;
+  const t0 = performance.now();
+  const go = () => {
+    if (id !== revealing) return;
+    if (interiors.warming && performance.now() - t0 < 1500) return void requestAnimationFrame(go);
+    // one frame drawn first, so the black lifts onto the place itself
+    requestAnimationFrame(() => id === revealing && hud.cut());
+  };
+  go();
+}
+/** Down to black, then `fn` (the jump in or out), which lifts it through `fade`. */
+let jumping = false;
+function throughBlack(fn: () => void) {
+  if (jumping) return;
+  jumping = true;
+  hud.cover();
+  setTimeout(() => {
+    jumping = false;
+    fn();
+  }, 190);
+}
+/** Out of the place you are in, through the black (the door, Escape, the exit button). */
+function leavePlace() {
+  if (!interiors.active || jumping) return;
+  interiors.walk.enabled = false;
+  throughBlack(() => interiors.exit());
+}
+/**
+ * Walking out of the doors, on foot: no cut. The last frame inside melts into the street, from the
+ * door, looking the same way, the keys still held.
+ */
+const melt = document.createElement("canvas");
+melt.className = "through";
+canvas.after(melt);
+let goingOut: { yaw: number; tilt: number; fov: number } | null = null;
+function walkOut() {
+  if (!walking || !cameIn || !doors.some((d) => d.key === cameIn)) return leavePlace();
+  if (!interiors.active || jumping) return;
+  jumping = true;
+  // (after this frame is drawn: that one is the picture that melts)
+  grabbers.push((c) => {
+    jumping = false;
+    if (!interiors.active) return;
+    const w = interiors.walk;
+    const g = melt.getContext("2d")!;
+    melt.width = window.innerWidth;
+    melt.height = window.innerHeight;
+    g.drawImage(c, 0, 0, melt.width, melt.height);
+    melt.style.display = "block";
+    goingOut = { yaw: w.heading, tilt: w.tilt, fov: w.camera.fov };
+    onFoot.takeKeys(w);
+    lastJump = performance.now();
+    interiors.exit(true);
+    goingOut = null;
+    // (the street's first frame can take a moment: the picture holds until it is there)
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const out = melt.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: "ease-out" });
+        out.onfinish = out.oncancel = () => {
+          melt.style.display = "none";
+          // (its pixels go: a full-screen canvas is several MB)
+          melt.width = melt.height = 1;
+        };
+      }),
+    );
+  });
+}
+interiors.walk.onExit = walkOut;
 interiors.walk.resize(window.innerWidth, window.innerHeight);
 window.addEventListener("resize", () => {
   interiors.walk.resize(window.innerWidth, window.innerHeight);
@@ -1078,28 +1208,71 @@ let walking = false;
 /** The place walked into, to step back out of its door. */
 let cameIn: Interior["key"] | null = null;
 /** Walk-in doors on the street (the Proof Factory's is on the avenue, in line with the others). */
-const doors: { key: Interior["key"]; at: THREE.Vector3 }[] = [
-  ...(city.shops[0] ? [{ key: "mempool" as const, at: city.shops[0].door }] : []),
-  ...city.venues.map((v) => ({ key: v.kind, at: v.door })),
-  ...(city.factory?.door ? [{ key: "factory" as const, at: city.factory.door }] : []),
+const doors: { key: Interior["key"]; at: THREE.Vector3; front: THREE.Vector3 }[] = [
+  ...(city.shops[0] ? [{ key: "mempool" as const, at: city.shops[0].door, front: away(city.shops[0].door, city.shops[0].inside) }] : []),
+  ...city.venues.map((v) => ({ key: v.kind, at: v.door, front: v.front })),
+  ...(city.factory?.door ? [{ key: "factory" as const, at: city.factory.door, front: away(city.factory.door, city.factory.hall) }] : []),
 ];
+/** Out of a door: from a point inside the building to the door, flat. */
+function away(door: THREE.Vector3, inside: THREE.Vector3) {
+  return door.clone().sub(inside).setY(0).normalize();
+}
 /** The camera the viewer is looking through on the street. */
 function viewCam() {
   return walking ? onFoot.camera : rig.camera;
 }
-/** The pavement side of a door: the free spot just outside it. */
-function outside(at: THREE.Vector3) {
-  for (const d of [1.6, -1.6, 2.4, -2.4]) if (!onFoot.collide!(at.x, at.z + d)) return { x: at.x, z: at.z + d, yaw: d > 0 ? Math.PI : 0 };
-  return { x: at.x, z: at.z + 1.6, yaw: Math.PI };
+/**
+ * The pavement side of a door: the free spot just outside it, facing the street. The way out is
+ * the door's own `front`; when that spot is taken (a bench, a lamp), the nearest free one round
+ * the door, still facing away from it; a door deep in its porch or yard: on along its front to
+ * the first free ground, else the nearest free spot all round.
+ */
+function outside(at: THREE.Vector3, front: THREE.Vector3) {
+  const yawOf = (dx: number, dz: number) => Math.atan2(-dx, -dz);
+  const free = (x: number, z: number) => !onFoot.collide!(x, z);
+  for (const r of [1.8, 2.6, 3.4])
+    for (const a of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
+      const dx = front.x * Math.cos(a) - front.z * Math.sin(a),
+        dz = front.x * Math.sin(a) + front.z * Math.cos(a);
+      const x = at.x + dx * r,
+        z = at.z + dz * r;
+      if (free(x, z)) return { x, z, yaw: yawOf(dx, dz) };
+    }
+  for (let r = 4; r <= 16; r += 0.6) if (free(at.x + front.x * r, at.z + front.z * r)) return { x: at.x + front.x * r, z: at.z + front.z * r, yaw: yawOf(front.x, front.z) };
+  for (let r = 2; r <= 16; r += 0.7)
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const x = at.x + Math.cos(a) * r,
+        z = at.z + Math.sin(a) * r;
+      if (free(x, z)) return { x, z, yaw: yawOf(Math.cos(a), Math.sin(a)) };
+    }
+  return { x: at.x + front.x * 1.8, z: at.z + front.z * 1.8, yaw: yawOf(front.x, front.z) };
 }
 function stepOut(key: Interior["key"]) {
   const d = doors.find((x) => x.key === key);
   if (!d) return;
-  const o = outside(d.at);
-  onFoot.place(new THREE.Vector3(o.x, CURB, o.z), o.yaw);
+  const o = outside(d.at, d.front);
+  const from = goingOut;
   onFoot.enabled = true;
   doorCool = 1.2;
+  doorLeft = d;
+  if (!from) {
+    onFoot.place(new THREE.Vector3(o.x, CURB, o.z), o.yaw);
+    return;
+  }
+  // walked out through the doors: the same look turned to the street (the room's way out is +z,
+  // a look along it is π: the same turn takes it to the street's), still walking
+  const yaw = from.yaw + Math.atan2(-d.front.x, -d.front.z) - Math.PI;
+  onFoot.place(new THREE.Vector3(o.x, CURB, o.z), yaw);
+  onFoot.aim(yaw, from.tilt);
+  onFoot.camera.fov = from.fov;
+  onFoot.camera.updateProjectionMatrix();
+  // along the way the look goes while the keys are held; with none, a step clear of the door
+  const on = onFoot.walking;
+  onFoot.carry(on ? -Math.sin(yaw) * 4.5 : d.front.x * 2.5, on ? -Math.cos(yaw) * 4.5 : d.front.z * 2.5);
 }
+/** The door just come out of: it does not take you back in until you have stepped 3 m away from it. */
+let doorLeft: (typeof doors)[number] | null = null;
 let doorCool = 0;
 function setWalking(on: boolean) {
   if (on === walking || interiors.active) return;
@@ -1141,10 +1314,12 @@ const lastFoot = new THREE.Vector3();
 function throughDoors(dt: number) {
   doorCool -= dt;
   const p = onFoot.camera.position;
+  if (doorLeft && Math.hypot(doorLeft.at.x - p.x, doorLeft.at.z - p.z) > 3) doorLeft = null;
   const fx = -Math.sin(onFoot.heading),
     fz = -Math.cos(onFoot.heading);
   let best: { d: (typeof doors)[number]; dist: number; facing: number } | null = null;
   for (const d of doors) {
+    if (d === doorLeft) continue;
     const dx = d.at.x - p.x,
       dz = d.at.z - p.z;
     const dist = Math.hypot(dx, dz);
@@ -1154,6 +1329,8 @@ function throughDoors(dt: number) {
   }
   if (best && (best.facing > 0.35 || best.dist < 1.6)) prompt(`<b>${PLACES[best.d.key]}</b><span>▲ keep walking to enter</span>`);
   else prompt(null);
+  // already on the way in (the fade, the stadium's question)
+  if (jumping || closeChoice) return prompt(null);
   if (doorCool > 0 || !best) return;
   // close to the door and walking at it (the facade's collider may stop you a step short)
   const moving = Math.hypot(p.x - lastFoot.x, p.z - lastFoot.z) > 0.002;
@@ -1252,8 +1429,26 @@ function enterPlace(key: string, floor?: number) {
     cameIn = key as Interior["key"];
     onFoot.enabled = false;
   }
-  interiors.enter(key as Interior["key"], floor ?? 0);
-  caseBook?.visit(key);
+  // from one place straight into another (a link inside, the stadium's choice), or a test: no wait
+  if (interiors.active || CAPTURE) return void goIn(key, floor);
+  if (interiors.walk.enabled) interiors.walk.enabled = false;
+  throughBlack(() => goIn(key, floor));
+}
+function goIn(key: string, floor?: number) {
+  const k = key as Interior["key"];
+  loadPlace(k).then(
+    () => {
+      interiors.enter(k, floor ?? 0);
+      caseBook?.visit(key);
+    },
+    (err) => {
+      // the place's code did not come (offline, a new release): back to the street
+      console.error(`place ${key} could not load`, err);
+      if (walking && cameIn === k) onFoot.enabled = true;
+      cameIn = null;
+      hud.cut();
+    },
+  );
 }
 
 window.addEventListener("keydown", (e) => {
@@ -1281,7 +1476,7 @@ window.addEventListener("keydown", (e) => {
   else if (payDesk.open) payDesk.close();
   else if (interiors.active) {
     if (document.querySelector("#ui .panel.open")) select(null);
-    else interiors.exit();
+    else leavePlace();
   } else if (walking && !document.querySelector("#ui .panel.open")) setWalking(false);
   else hud.escape();
 });
@@ -1338,6 +1533,8 @@ canvas.addEventListener("pointerdown", (e) => {
   rig.interrupt();
 });
 canvas.addEventListener("pointerup", (e) => {
+  // on foot in the street the right button is the swing's (src/scene/swing)
+  if (e.button === 2 && walking && !interiors.active) return;
   // inside a place: a click (not a look-around drag) inspects what is under it
   if (interiors.active) {
     if (e.button !== 0 || interiors.walk.dragged) return;
@@ -1377,6 +1574,9 @@ canvas.addEventListener("pointerup", (e) => {
       interiors.walk.enabled = false;
       return void arcade.show(info.game);
     }
+    // ZK PARTY (port): the ZK TOWER's party cabinets, the GAME HOUSE's wall, desk and tables
+    if (info?.party) return void openPartyHall(info.party === true ? "board" : info.party, info.partyGame);
+    if (info?.table) return void openTableGame(info.table);
     // a book in the library: open it and read
     if (info?.book) {
       interiors.walk.enabled = false;
@@ -1394,6 +1594,7 @@ canvas.addEventListener("pointerup", (e) => {
     if (plots.click(ray)) return;
     if (works.click(ray)) return;
     if (eggs.click(ray)) return;
+    if (nu7Quarter.click(ray)) return;
     const ci = critters.catAt(ray);
     if (ci >= 0) return adoptCat(ci);
     if (whale.hit(ray)) return;
@@ -1824,6 +2025,8 @@ const nu7Quarter = new Nu7Quarter(scene, gameHud, {
     rig.district(new THREE.Vector3(x, 1, z), zoom);
   },
   nu7: () => ({ date: nu7.date, height: nu7.height, activated: nu7.activated, tip: director.blockHeight || null }),
+  // ZK PARTY (port): NU7 is live, the circuit races: SNARK KART on the NU7 GRAND PRIX track
+  race: () => openPartyHall("practice", "kart@astana"),
 });
 
 // the activation as a live event: countdown banner, last blocks called out, the first NU7 blocks
@@ -1894,7 +2097,28 @@ jobs = new Jobs(gameHud, chainClock, {
 });
 
 // the Block Casino: settled by the next block's hash (from the citizen card or the gacha shop)
-new Casino(gameHud, chainClock);
+const casino = new Casino(gameHud, chainClock);
+// ---- ZK PARTY (port): the game hall and the GAME HOUSE's tables over the sleeping city (party/city.ts)
+wireParty({
+  pause: (on) => {
+    cityPaused = on;
+    document.getElementById("ui")!.style.visibility = on ? "hidden" : "";
+  },
+  soundOn: () => sound.on,
+  soundStop: () => sound.stop(),
+  soundStart: () => void sound.start(),
+  place: () => interiors.active?.key ?? null,
+  controls: (on) => {
+    if (!on) {
+      interiors.walk.enabled = false;
+      onFoot.enabled = false;
+    } else if (interiors.active) interiors.walk.enabled = true;
+    else if (walking) onFoot.enabled = true;
+  },
+  say: (h, fn) => gameHud.say(h, fn),
+  casino: () => casino.open(),
+  busy: () => cityPaused,
+});
 
 // the Genesis Line: back through Zcash's history, the city shrinking to what it was
 const genesis = new TimeTravel(scene, canvas, decor, gameHud);
@@ -1967,6 +2191,7 @@ const PLACE_ICON: Record<Interior["key"], string> = {
   zsalab: "鋳",
   convention: "車",
   university: "学",
+  gamehouse: "遊",
 };
 const placeBlips: Blip[] = doors.map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));
 function mapBlips(): Blip[] {
@@ -2237,7 +2462,12 @@ if (new URLSearchParams(location.search).has("debug")) {
       nu7,
       anniversary,
       onFoot,
+      get swing() {
+        return swing;
+      },
       quality,
+      load,
+      thrift,
       rig,
       zsaLab,
       parade,
@@ -2263,8 +2493,20 @@ if (new URLSearchParams(location.search).has("debug")) {
       venues,
       hall,
       mempoolLive,
-      interiors,
+      // (the places' code loads the first time each is entered: a test script's straight
+      // interiors.enter / prebuild waits for it, the rest is the manager itself)
+      interiors: new Proxy(interiors, {
+        get(target, key) {
+          if (key === "enter") return async (k: Interior["key"], floor = 0) => (await loadPlace(k), target.enter(k, floor));
+          if (key === "prebuild") return async (k: Interior["key"]) => (await loadPlace(k), target.prebuild(k));
+          const v = Reflect.get(target, key);
+          return typeof v === "function" ? v.bind(target) : v;
+        },
+      }),
+      loadPlace,
       enter: (k: string) => enterPlace(k),
+      /** Every walk-in door, its front and the spot its way out stands you on (shots/_doorsout.mjs). */
+      doorsList: () => doors.map((d) => ({ key: d.key, x: d.at.x, z: d.at.z, fx: d.front.x, fz: d.front.z, out: outside(d.at, d.front) })),
       hud,
       // the other HUD pieces, to open each panel from a test script
       ui: { talk: () => talk, tracker, gameHud, minimap, reader, arcade, plots, payDesk },
@@ -2372,7 +2614,8 @@ if (CAPTURE) {
       /** The capture clock (seconds): the time every animation runs on, to film a given moment. */
       time: () => capT,
       shot: (s: CapShot | null) => (capShot = s),
-      enter: (k: Interior["key"], floor = 0) => {
+      enter: async (k: Interior["key"], floor = 0) => {
+        await loadPlace(k);
         interiors.enter(k, floor);
         interiors.walk.enabled = false;
       },
@@ -2438,6 +2681,31 @@ function aimCapture(cam: THREE.PerspectiveCamera, s: CapShot) {
 }
 
 const joystick = new Joystick(document.getElementById("ui")!);
+// ---- the swing on foot (src/scene/swing): hold R, the right button or HOLD · SWING to swing from a facade ----
+const swing = new StreetSwing({
+  renderer,
+  scene,
+  canvas,
+  ui: document.getElementById("ui")!,
+  walker: onFoot,
+  street: () => walking && !interiors.active,
+  free: () => walking && !interiors.active && !talk.open && !payDesk.open && !arcade.open && !reader.open && !venues.open && !(CAPTURE && capShot) && !document.querySelector("#ui.photo, #ui .panel.open, .bigmap.on"),
+  depth: () => renderPass.rt.depthTexture,
+  solid: (x, z) => !city.nav.free(x, z, 0.28),
+  ground: groundAt,
+  curb: CURB,
+  bounds: BOARD,
+  movers: () => [
+    ...[...director.snarks].map((s) => s.root),
+    ...[...director.traffic.vehicles].map((v) => v.mover.group),
+    ...[...director.buses].map((b) => b.group),
+    ...[...cityTraffic.movers].map((m) => m.group),
+    ...tram.sets.map((t) => t.group),
+    ...[...metro.trains, ...metro2.trains].map((t) => t.group),
+    sky.blimp.group,
+  ],
+  sound: () => sound.on,
+});
 
 /** Advance the director by `sim` seconds in steps of at most 50 ms. */
 function runDirector(sim: number, t: number, q: THREE.Quaternion, right: THREE.Vector3) {
@@ -2478,9 +2746,14 @@ function listen(focus: THREE.Vector3) {
 // One bad update (a module throwing on odd data) must not freeze the whole city: the frame is
 // guarded, the error reported once per message, and the loop keeps going.
 const frameErrors = new Set<string>();
+/** How long the last frame's own work took (ms): the governors tell a slow processor by it. */
+let frameBusy = 0;
+const minimapStride = new Stride(1);
 function frame(stepDt?: number) {
+  const t0 = performance.now();
   try {
     frameBody(stepDt);
+    frameBusy = performance.now() - t0;
   } catch (e) {
     const msg = String((e as Error)?.stack ?? e);
     if (frameErrors.size < 50 && !frameErrors.has(msg)) {
@@ -2499,7 +2772,7 @@ function frameBody(stepDt?: number) {
   }
   timer.update();
   const real = timer.getDelta();
-  if (stepDt === undefined) quality.sample(real);
+  if (stepDt === undefined) quality.sample(real, frameBusy), load.sample(real, frameBusy);
   // The street keeps real time even when frames are slow: the director (traffic, buses, walkers)
   // runs in steps of at most 50 ms, so a slow device no longer plays it in slow motion while the
   // buses' timers (dwell, departures) run on the wall clock. Everything else keeps the 50 ms cap
@@ -2513,6 +2786,9 @@ function frameBody(stepDt?: number) {
 
   // inside a place: its own scene and the walking camera; the city keeps living (but unseen)
   if (interiors.active) {
+    // the street's little map has nothing to say inside
+    if (minimapOn) minimap.show((minimapOn = false));
+    load.view(interiors.walk.camera);
     interiors.update(dt, t);
     if (!interiors.active) return again();
     updateMemes(dt, interiors.walk.camera, interiors.active.scene);
@@ -2530,7 +2806,9 @@ function frameBody(stepDt?: number) {
     sound.setScene(interiors.active.key, interiors.floor, { name: interiors.active.floors[interiors.floor]?.name ?? "", night: theme === "night", ear: interiors.walk.camera });
     joystick.sync(interiors.walk);
     renderPass.scene = interiors.active.scene;
-    renderPass.camera = finish.camera = interiors.walk.camera;
+    // (the entry film's camera while it plays, then the walker's own)
+    const eye = cine.update(interiors.warming ? 0 : Math.min(real, 0.1), interiors.walk.camera) ?? interiors.walk.camera;
+    renderPass.camera = finish.camera = eye;
     tilt.set(0);
     // indoors only real light sources bloom (screens, neon, bulbs: HDR), never a white floor or
     // wall under the lamps, which glared
@@ -2540,7 +2818,7 @@ function frameBody(stepDt?: number) {
     // its shaders are still compiling: hold the last frame behind the entry fade, no stall
     if (!interiors.warming) {
       composer.render();
-      drawBubbles(renderer, interiors.active.scene, interiors.walk.camera);
+      drawBubbles(renderer, interiors.active.scene, eye);
     }
     if (grabbers.length) {
       const g = grabbers;
@@ -2558,7 +2836,9 @@ function frameBody(stepDt?: number) {
   if (mapOn !== minimapOn) minimap.show((minimapOn = mapOn));
   if (walking) {
     onFoot.update(dt);
-    throughDoors(dt);
+    // (in the air or up on a roof on the swing: no door to walk into)
+    if (swing.active) prompt(null);
+    else throughDoors(dt);
     if (interiors.active) return again();
   } else {
     rig.update(dt);
@@ -2581,8 +2861,10 @@ function frameBody(stepDt?: number) {
     const up = iso ? 0 : Math.max(0, cam.position.y - 15) * 3.5;
     scene.fog.near = (theme === "day" ? 170 : 150) + (iso ? 260 : 0) + up;
     scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 : 0) + up * 1.6;
-  }
+    load.fog(scene.fog.near, scene.fog.far);
+  } else load.fog(1e9, 1e9);
   renderPass.camera = finish.camera = cam;
+  load.view(cam);
   updateMemes(dt, cam, scene);
   cam.getWorldQuaternion(camQuat);
   camRight.set(1, 0, 0).applyQuaternion(camQuat);
@@ -2600,7 +2882,9 @@ function frameBody(stepDt?: number) {
   // compiled a new variant of all of them. The moon always casts; when shadows aren't wanted its
   // map just stops being rendered and the shadow is faded to nothing (a uniform).
   const shadows = !wide && quality.tier.shadow > 0;
-  moon.shadow.autoUpdate = shadows;
+  // (a processor that cannot keep up: the shadow map is drawn again every other frame, or less; in
+  // between it stays as it was, its own matrix with it, so the still city's shadows do not move)
+  moon.shadow.autoUpdate = shadows && load.turn(1);
   // (a map must exist all the same: after a resize to a new tier it is re-made once, unseen)
   if (!moon.shadow.map) moon.shadow.needsUpdate = true;
   // off: every fragment falls outside the map, so the shader skips the shadow lookups altogether
@@ -2686,17 +2970,24 @@ function frameBody(stepDt?: number) {
   if (walking) mayor?.treasure.near(onFoot.camera.position);
   agents?.update(dt, focus);
   marks.update(dt);
-  if (walking && !interiors.active) talkUpdate(dt);
+  if (walking && !interiors.active && !swing.active) talkUpdate(dt);
   else if (talkPrompt.classList.contains("on")) talkPrompt.classList.remove("on");
   npcs.update(dt);
-  if (minimapOn) minimap.update(dt, onFoot.camera.position.x, onFoot.camera.position.z, onFoot.heading, mapBlips());
+  if (minimapOn) {
+    // (a weak processor: the little map moves on its own turn, every other frame or less)
+    const md = minimapStride.step(dt);
+    if (md) minimap.update(md, onFoot.camera.position.x, onFoot.camera.position.z, onFoot.heading, mapBlips());
+  }
   hall?.update(t, dt);
   press?.update(t, dt);
   lightBudget.update();
   bubbles.update(dt, cam, window.innerWidth, window.innerHeight);
+  // the swing's hands, line and reticle, and the camera kept for its next pick (src/scene/swing)
+  swing.update(dt, cam);
   // an earthquake shakes whichever camera draws this frame
   const quake = disasters?.shake(dt) ?? null;
   if (quake) cam.position.add(quake);
+  thrift.update(cam, window.innerHeight * renderer.getPixelRatio());
   composer.render();
   drawBubbles(renderer, scene, cam);
   if (quake) cam.position.sub(quake);
@@ -2709,9 +3000,32 @@ function frameBody(stepDt?: number) {
   hud.frame(project);
   again();
 }
+// the first view's shaders compile in parallel behind the boot screen (KHR_parallel_shader_compile),
+// so the first frame doesn't stop for half a second linking them one by one (capped: a slow GPU
+// driver must not hold the city back)
+if (!SAFE && !CAPTURE) await Promise.race([warm(renderer, scene, rig.camera), new Promise((r) => setTimeout(r, 2500))]);
 // the loop runs: whatever fails from here on is not a city that could not open (index.html)
 (window as unknown as { __streetUp?: boolean }).__streetUp = true;
+cityUpAt = performance.now();
+// On a phone: the street on foot and the buildings are played on the phone's side; the map from
+// above either way (src/game/orient.ts). Its way out goes back to the map: out of the building and
+// off your feet.
+orientRule(() => (walking || interiors.active ? "landscape" : "any"), {
+  leave: () => {
+    if (!interiors.active) return setWalking(false);
+    leavePlace();
+    // (once out of the door: off your feet too, so the map is what comes back)
+    const off = () => (interiors.active ? setTimeout(off, 200) : setWalking(false));
+    off();
+  },
+  leaveLabel: "Back to the map",
+});
+console.info(`city up at ${Math.round(performance.now())} ms`);
 frame();
+// the city is up: the boot screen goes, the chain's first snapshot or not (it was asked while the
+// city was built: the strip says CONNECTING meanwhile and the street fills when it lands); a
+// snapshot already in lifts it sooner (connectFeed above)
+setTimeout(() => hud.ready(), 900);
 setTimeout(bootSurvived, 30_000);
 // Shaders of the whole city (every district, the night-only lights, the rides' cabins) compile
 // while the boot screen is up, so the first flight to a district no longer stalls on them; then
@@ -2730,9 +3044,15 @@ idle(() => {
   const next = () => {
     if (!ahead.length) return;
     if (interiors.active || !unseen()) return void document.addEventListener("visibilitychange", () => idle(next), { once: true });
-    const i = interiors.prebuild(ahead.shift()!);
-    if (i) warm(renderer, i.scene, interiors.walk.camera);
-    setTimeout(next, 30);
+    const k = ahead.shift()!;
+    void loadPlace(k).then(
+      () => {
+        const i = interiors.prebuild(k);
+        if (i) warm(renderer, i.scene, interiors.walk.camera);
+        setTimeout(next, 30);
+      },
+      () => setTimeout(next, 30),
+    );
   };
   setTimeout(next, 30);
   // the day textures of the roads (painted the first time the day comes: a 0.25 s stall), one per

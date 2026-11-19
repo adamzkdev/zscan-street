@@ -1261,6 +1261,120 @@ kbd {
 .cut.go {
   animation: cut 0.45s ease-out;
 }
+/* walking out of a place: its last frame, melting into the street */
+.through {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  pointer-events: none;
+}
+/* going in or out of a place: down to black, then the new place comes up out of it */
+.cut.cover {
+  opacity: 1;
+  transition: opacity 0.18s ease-in;
+}
+.cut.reveal {
+  animation: reveal 0.6s cubic-bezier(0.3, 0, 0.2, 1);
+}
+@keyframes reveal {
+  0%,
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* the place's name as you come in */
+.arrive {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 34px 16px;
+  max-width: 92vw;
+  text-align: center;
+  pointer-events: none !important;
+  opacity: 0;
+  z-index: 25;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.5), transparent);
+}
+.arrive.on {
+  animation: arrive 3.2s ease-out both;
+}
+.arrive .logo svg.px {
+  width: 26px;
+  height: 26px;
+  color: var(--c);
+}
+.arrive b {
+  font: 400 28px var(--pixel, var(--mono));
+  letter-spacing: 0.16em;
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.9);
+}
+.arrive > span:last-child {
+  font: 400 13px var(--pixel, var(--mono));
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.86);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+.arrive em {
+  font: 400 11px var(--pixel, var(--mono));
+  font-style: normal;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 0 4px;
+  margin-right: 7px;
+}
+.arrive::after {
+  content: "";
+  width: 54px;
+  height: 2px;
+  background: var(--c);
+  order: 1;
+}
+@keyframes arrive {
+  0%,
+  8% {
+    opacity: 0;
+    letter-spacing: 0.04em;
+    transform: translate(-50%, calc(-50% + 8px));
+  }
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 6px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cut.reveal {
+    animation-duration: 0.25s;
+  }
+  .arrive.on {
+    animation-name: arrive-still;
+  }
+  @keyframes arrive-still {
+    0%,
+    75% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
 @keyframes cut {
   0% {
     opacity: 0.85;
@@ -1946,10 +2060,26 @@ kbd {
   gap: 14px;
   align-items: center;
   font-size: 11.5px;
-  color: #d8d8d8;
+  color: #e8e8e8;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
   white-space: nowrap;
   pointer-events: none;
+  /* a dark pill: readable on a cream marble floor as on a dark one */
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(10, 10, 14, 0.55);
+  backdrop-filter: blur(6px);
+  /* once you know the keys it steps aside (it comes back on each floor) */
+  animation: ihint 9s ease-in forwards;
+}
+@keyframes ihint {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .ihint span {
   display: inline-flex;
@@ -2166,15 +2296,30 @@ kbd {
   gap: 14px;
   align-items: center;
   font-size: 11.5px;
-  color: #d8d8d8;
+  color: #e8e8e8;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
   white-space: nowrap;
   pointer-events: none;
+  /* the same dark pill as inside: the pavement is light by day */
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(10, 10, 14, 0.55);
+  backdrop-filter: blur(6px);
 }
 .whint span {
   display: inline-flex;
   gap: 4px;
   align-items: center;
+}
+/* keycaps on the dark pills (in or out): light, so they read whatever the floor */
+.whint kbd,
+.ihint kbd {
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #0e0e0e;
+  border: 0;
+  text-shadow: none;
+  font-size: 10.5px;
 }
 .walking:not(.indoors) .whint {
   display: flex;
@@ -2192,10 +2337,6 @@ kbd {
   background: rgba(255, 255, 255, 0.7);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
   pointer-events: none;
-}
-:root[data-theme="day"] .whint {
-  color: #212529;
-  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.9);
 }
 
 /* =================================================================================================
@@ -5740,76 +5881,9 @@ a.srow:hover span {
   line-height: 1.3;
 }
 
-/* ---- phones held upright: ZStreet is played in landscape ---- */
-#rotate {
-  display: none;
-}
-@media (orientation: portrait) and (pointer: coarse) {
-  #rotate {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    display: grid;
-    place-items: center;
-    background: radial-gradient(circle at 50% 40%, rgba(40, 24, 64, 0.94), rgba(8, 6, 14, 0.98));
-    color: #f2f2f6;
-    text-align: center;
-    padding: 24px;
-    font-family: var(--pixel);
-    touch-action: none;
-  }
-  #rotate svg {
-    width: 96px;
-    height: 96px;
-    margin: 0 auto 18px;
-    display: block;
-    animation: rotate-hint 2.4s ease-in-out infinite;
-  }
-  #rotate .ph {
-    fill: none;
-    stroke: #f4b728;
-    stroke-width: 2.5;
-  }
-  #rotate .sc {
-    fill: rgba(244, 183, 40, 0.16);
-  }
-  #rotate .ar {
-    fill: none;
-    stroke: #3ef0ff;
-    stroke-width: 2.5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  #rotate b {
-    display: block;
-    font-size: 17px;
-    letter-spacing: 0.08em;
-    color: #f4b728;
-    text-shadow: 0 0 12px rgba(244, 183, 40, 0.5);
-  }
-  #rotate p {
-    margin: 10px 0 0;
-    font-size: 13px;
-    opacity: 0.75;
-  }
-  /* nothing else to tap behind it */
-  #ui {
-    visibility: hidden;
-  }
-}
-@keyframes rotate-hint {
-  0%, 20% {
-    transform: rotate(0deg);
-  }
-  50%, 80% {
-    transform: rotate(-90deg);
-  }
-  100% {
-    transform: rotate(0deg);
-  }
-}
+/* (phones held upright play too: the HUD's phone layouts are in ui/mobile.css) */
 
-/* ---- phones in landscape (the way ZStreet is played on a phone): a compact HUD that fits ---- */
+/* ---- phones in landscape: a compact HUD that fits ---- */
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
   /* the live strip comes back, smaller, centred at the bottom */
   .strip {

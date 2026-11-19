@@ -1,0 +1,2789 @@
+/* ORCHARD HOLD'EM: The Orchard Room, Orchard Tower's jazz club, after hours.
+ * A lamp over one table: a padded black-leather rail with sand stitching, a walnut racetrack, a deep
+ * glacier-teal felt with its betting line printed on it. Cards on warm stock, clay chips, a cream
+ * dealer puck. Void & Flare: flare for you and for the action, sage for the money coming in.
+ *
+ * Type: Geist for words (600–800, tracked caps for labels), Geist Mono with tabular figures for
+ * every amount, DotGothic16 for the room's Chinese sign. */
+.lh-root {
+  --flare: #ff6b35;
+  --lilac: #c4b1fc;
+  --glacier: #a8d8e8;
+  --sage: #6dbf8a;
+  --sand: #d9bc8a;
+  --pink: #ff5c8a;
+  --paper: #f7f3ea;
+  --content: #e8e6e0;
+  --muted: #8a8784;
+  --ink: #0e0c0b;
+  --hw: calc(var(--av) * 0.5);
+  --chip: 20px;
+  --mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --sans: Geist, "Avenir Next", Roboto, system-ui, sans-serif;
+  --grain: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  background: #090807;
+  color: var(--content);
+  font-family: var(--sans);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+.lh-root * {
+  box-sizing: border-box;
+}
+.lh-root button {
+  font-family: inherit;
+  cursor: pointer;
+}
+.lh-root kbd {
+  font: 600 9.5px/1 var(--mono);
+  letter-spacing: 0;
+  opacity: 0.55;
+}
+
+/* ---- the room: a dark club, a warm lamp over the table, panelled walls lost in the dark ---- */
+.lh-room {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 46% 40% at 50% 48%, rgba(255, 172, 112, 0.09), transparent 72%), radial-gradient(ellipse 70% 34% at 50% -6%, rgba(255, 150, 90, 0.11), transparent 70%),
+    repeating-linear-gradient(90deg, rgba(255, 230, 200, 0.022) 0 1px, transparent 1px 3px, transparent 3px 92px), linear-gradient(#1a1513 0%, #110e0c 38%, #0a0807 70%, #070605 100%);
+}
+.lh-room::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+}
+.lh-lamp {
+  position: absolute;
+  left: 50%;
+  top: -60px;
+  width: 44vw;
+  height: 120px;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 196, 140, 0.16), rgba(255, 196, 140, 0.05) 70%, transparent);
+}
+
+/* ---- the top strip ---- */
+.lh-top {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 14px;
+}
+.lh-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.lh-brand svg {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+.lh-brand b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: #f2ede4;
+}
+.lh-brand small {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.lh-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: #bdb6ab;
+  white-space: nowrap;
+}
+.lh-info b {
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: #f2ede4;
+}
+.lh-info span {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.lh-info .lh-up {
+  color: var(--flare);
+}
+.lh-info > i:last-child {
+  font-style: normal;
+  font: 500 11.5px var(--mono);
+  color: var(--muted);
+}
+.lh-info .lh-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #4a433e;
+}
+.lh-tools {
+  display: flex;
+  gap: 2px;
+}
+.lh-tools button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: #8f877d;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.lh-tools button svg {
+  width: 19px;
+  height: 19px;
+}
+.lh-tools button:hover {
+  background: rgba(255, 240, 220, 0.06);
+  color: #e8e1d6;
+}
+.lh-tools button.on {
+  color: var(--flare);
+}
+.lh-tools .lh-leave:hover {
+  color: #fff;
+  background: rgba(255, 92, 138, 0.18);
+}
+
+/* ---- the table: floor shadow, apron, padded rail, walnut racetrack, felt ---- */
+.lh-stage {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+}
+.lh-table {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.lh-table > i,
+.lh-felt {
+  position: absolute;
+  border-radius: 50%;
+}
+.lh-floor {
+  left: calc(var(--cx) - var(--rx) - var(--wood) - var(--rail) - 30px);
+  top: calc(var(--cy) - var(--ry) - var(--wood) - var(--rail) + 30px);
+  width: calc((var(--rx) + var(--wood) + var(--rail)) * 2 + 60px);
+  height: calc((var(--ry) + var(--wood) + var(--rail)) * 2 + 30px);
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.4) 62%, rgba(0, 0, 0, 0.12) 86%, transparent);
+}
+.lh-apron,
+.lh-rail {
+  left: calc(var(--cx) - var(--rx) - var(--wood) - var(--rail));
+  top: calc(var(--cy) - var(--ry) - var(--wood) - var(--rail));
+  width: calc((var(--rx) + var(--wood) + var(--rail)) * 2);
+  height: calc((var(--ry) + var(--wood) + var(--rail)) * 2);
+}
+/* the table's edge below the rail (its thickness, seen from a little above) */
+.lh-apron {
+  translate: 0 calc(var(--rail) * 0.55);
+  background: linear-gradient(#0d0a09, #050404);
+  box-shadow: 0 2px 0 rgba(255, 220, 190, 0.05);
+}
+.lh-rail {
+  background:
+    radial-gradient(ellipse 52% 26% at 50% 3%, rgba(255, 236, 214, 0.16), transparent 75%), radial-gradient(ellipse 40% 18% at 50% 99%, rgba(255, 236, 214, 0.05), transparent 75%), var(--grain),
+    radial-gradient(ellipse at 50% 50%, #2a2320 72%, #1a1513 88%, #100d0c 100%);
+  background-size:
+    auto,
+    auto,
+    180px 180px,
+    auto;
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 240, 220, 0.12),
+    inset 0 calc(var(--rail) * 0.3) calc(var(--rail) * 0.45) rgba(255, 236, 214, 0.05),
+    inset 0 calc(var(--rail) * -0.35) calc(var(--rail) * 0.6) rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+/* the stitching round the rail's crown */
+.lh-rail::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--rail) * 0.42);
+  border-radius: 50%;
+  border: 1px dashed rgba(217, 188, 138, 0.26);
+}
+.lh-wood {
+  left: calc(var(--cx) - var(--rx) - var(--wood));
+  top: calc(var(--cy) - var(--ry) - var(--wood));
+  width: calc((var(--rx) + var(--wood)) * 2);
+  height: calc((var(--ry) + var(--wood)) * 2);
+  background:
+    radial-gradient(ellipse 60% 30% at 50% 6%, rgba(255, 214, 170, 0.22), transparent 70%),
+    repeating-radial-gradient(ellipse at 50% 50%, #4b2c1a 0 1.6px, #5e3a22 1.6px 2.6px, #452817 2.6px 4.4px, #573420 4.4px 5.2px, #4b2c1a 5.2px 7px), #4b2c1a;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 0 calc(var(--rail) * 0.5) rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px rgba(255, 220, 180, 0.14);
+}
+.lh-felt {
+  left: calc(var(--cx) - var(--rx));
+  top: calc(var(--cy) - var(--ry));
+  width: calc(var(--rx) * 2);
+  height: calc(var(--ry) * 2);
+  overflow: hidden;
+  background: var(--grain), radial-gradient(ellipse 52% 48% at 50% 44%, rgba(255, 206, 160, 0.075), transparent 78%), radial-gradient(ellipse at 50% 45%, #18605f 0%, #114d4d 40%, #0b3a3b 74%, #072829 100%);
+  background-size:
+    150px 150px,
+    auto,
+    auto;
+  background-blend-mode: soft-light, normal, normal;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(0, 0, 0, 0.55),
+    inset 0 calc(var(--ry) * 0.05) calc(var(--ry) * 0.12) rgba(0, 0, 0, 0.5),
+    inset 0 0 calc(var(--rx) * 0.1) rgba(0, 0, 0, 0.35);
+  transition: filter 0.6s;
+}
+/* the betting line, printed */
+.lh-line {
+  position: absolute;
+  inset: 12% 8.5%;
+  border-radius: 50%;
+  border: 1.5px solid rgba(232, 222, 200, 0.13);
+  box-shadow: 0 0 0 4px rgba(232, 222, 200, 0.025);
+}
+.lh-arc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.lh-arc text {
+  fill: rgba(232, 222, 200, 0.12);
+  font-weight: 700;
+  letter-spacing: 0.34em;
+}
+.lh-felt-mark {
+  position: absolute;
+  left: 50%;
+  top: 73%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: rgba(232, 222, 200, 0.1);
+}
+.lh-felt-mark svg {
+  width: calc(var(--cw) * 0.62);
+  height: calc(var(--cw) * 0.62);
+}
+.lh-felt-mark span {
+  display: none;
+  font-size: clamp(8px, calc(var(--cw) * 0.13), 11px);
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(232, 222, 200, 0.2);
+}
+.lh-stage.lh-tense .lh-felt {
+  filter: brightness(0.78) saturate(1.1);
+}
+.lh-stage.lh-tense .lh-slot:empty {
+  animation: lh-throb 0.5s ease-in-out infinite alternate;
+}
+@keyframes lh-throb {
+  to {
+    border-color: rgba(255, 107, 53, 0.75);
+    box-shadow: 0 0 16px rgba(255, 107, 53, 0.45);
+  }
+}
+
+/* ---- the board ---- */
+.lh-board {
+  position: absolute;
+  left: var(--cx);
+  top: var(--cy);
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: calc(var(--cw) * 0.12);
+  z-index: 2;
+}
+.lh-slot {
+  position: relative;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.4);
+  border-radius: 7.5% / 5.4%;
+  border: 1px solid rgba(232, 222, 200, 0.08);
+  background: rgba(0, 0, 0, 0.07);
+}
+
+/* ---- cards ---- */
+.lh-card {
+  position: absolute;
+  width: var(--hw);
+  height: calc(var(--hw) * 1.4);
+  perspective: 600px;
+  transition:
+    filter 0.35s,
+    translate 0.3s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.lh-slot .lh-card {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.lh-flip {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+.lh-card.up .lh-flip {
+  transform: rotateY(180deg);
+}
+.lh-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 7.5% / 5.4%;
+  overflow: hidden;
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.4),
+    0 3px 7px rgba(0, 0, 0, 0.42);
+}
+.lh-front {
+  transform: rotateY(180deg);
+  background: var(--paper);
+}
+.lh-back {
+  background: var(--back) center / 100% 100% no-repeat;
+}
+.lh-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.lh-card.lit .lh-face {
+  box-shadow:
+    0 0 0 2px var(--flare),
+    0 0 16px rgba(255, 107, 53, 0.6),
+    0 6px 12px rgba(0, 0, 0, 0.5);
+}
+.lh-boardcard.lit {
+  translate: 0 -8%;
+}
+.lh-card.dim {
+  filter: brightness(0.5) saturate(0.6);
+}
+
+/* ---- the dealer's deck and the burn pile ---- */
+.lh-deck {
+  position: absolute;
+  z-index: 2;
+  width: calc(var(--cw) * 0.86);
+  height: calc(var(--cw) * 0.86 * 1.4);
+  transform: translate(-50%, -50%) rotate(-6deg);
+  pointer-events: none;
+}
+.lh-stackd,
+.lh-stackd i,
+.lh-half,
+.lh-burn,
+.lh-burn i {
+  position: absolute;
+  inset: 0;
+  border-radius: 7.5% / 5.4%;
+}
+.lh-stackd i,
+.lh-half,
+.lh-burn i {
+  background: var(--back) center / 100% 100% no-repeat;
+}
+.lh-stackd i:nth-child(1) {
+  translate: 3px 4px;
+  filter: brightness(0.55);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+.lh-stackd i:nth-child(2) {
+  translate: 2px 2.7px;
+  filter: brightness(0.7);
+}
+.lh-stackd i:nth-child(3) {
+  translate: 1px 1.3px;
+  filter: brightness(0.85);
+}
+.lh-half {
+  opacity: 0;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+.lh-burn {
+  translate: -56% 2%;
+  rotate: 14deg;
+}
+.lh-burn i {
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  filter: brightness(0.9);
+}
+
+/* ---- seats ---- */
+.lh-seat {
+  position: absolute;
+  width: 0;
+  height: 0;
+  z-index: 4;
+}
+.lh-av {
+  position: absolute;
+  left: calc(var(--av) / -2);
+  top: calc(var(--av) / -2);
+  width: var(--av);
+  height: var(--av);
+  border-radius: 50%;
+  z-index: 2;
+  background: radial-gradient(circle at 50% 30%, #3a312c, #141110 75%);
+  box-shadow:
+    0 0 0 2px #0c0a09,
+    0 0 0 3.5px var(--sc),
+    0 7px 16px rgba(0, 0, 0, 0.65);
+  transition:
+    box-shadow 0.3s,
+    filter 0.3s,
+    opacity 0.3s;
+}
+.lh-av img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  transition: filter 0.3s;
+}
+.lh-ring {
+  position: absolute;
+  left: -8px;
+  top: -8px;
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.lh-ring circle {
+  fill: none;
+  stroke-width: 5;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.lh-track {
+  stroke: rgba(0, 0, 0, 0.55);
+}
+.lh-timer {
+  stroke: var(--sage);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+}
+.lh-acting:not(.lh-hero) .lh-ring circle {
+  opacity: 1;
+}
+.lh-acting:not(.lh-hero) .lh-av {
+  transform: scale(1.04);
+}
+.lh-av {
+  transition:
+    box-shadow 0.3s,
+    filter 0.3s,
+    transform 0.25s;
+}
+.lh-you-turn .lh-av {
+  animation: lh-yours 1.3s ease-in-out infinite alternate;
+}
+@keyframes lh-yours {
+  from {
+    box-shadow:
+      0 0 0 2px #0c0a09,
+      0 0 0 3.5px var(--flare),
+      0 0 10px rgba(255, 107, 53, 0.35),
+      0 7px 16px rgba(0, 0, 0, 0.65);
+  }
+  to {
+    box-shadow:
+      0 0 0 2px #0c0a09,
+      0 0 0 3.5px var(--flare),
+      0 0 28px rgba(255, 107, 53, 0.7),
+      0 7px 16px rgba(0, 0, 0, 0.65);
+  }
+}
+
+/* the plate: the name (or what was just done) over the stack */
+.lh-plate {
+  position: absolute;
+  left: 0;
+  top: calc(var(--av) * 0.36);
+  z-index: 3;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: calc(var(--av) * 1.78);
+  padding: 3px 10px 4px;
+  border-radius: 7px;
+  background: linear-gradient(#211c1a, #141110);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.75),
+    0 6px 14px rgba(0, 0, 0, 0.55);
+  white-space: nowrap;
+  transition:
+    opacity 0.3s,
+    box-shadow 0.3s;
+}
+.lh-line1 {
+  display: grid;
+  justify-items: center;
+  max-width: 128px;
+}
+.lh-line1 > b {
+  grid-area: 1 / 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.2s;
+}
+.lh-name {
+  font-size: clamp(10.5px, calc(var(--av) * 0.18), 12.5px);
+  font-weight: 600;
+  color: #c9c1b5;
+}
+.lh-hero .lh-name {
+  color: var(--flare);
+}
+.lh-word {
+  opacity: 0;
+  font-size: clamp(9.5px, calc(var(--av) * 0.16), 11px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.45;
+  color: #d8d1c6;
+}
+.lh-did .lh-name {
+  opacity: 0;
+}
+.lh-did .lh-word {
+  opacity: 1;
+}
+.lh-word.check {
+  color: var(--glacier);
+}
+.lh-word.call {
+  color: var(--sage);
+}
+.lh-word.bet,
+.lh-word.raise {
+  color: var(--flare);
+}
+.lh-word.allin {
+  color: var(--flare);
+}
+.lh-word.fold {
+  color: #7d756c;
+}
+.lh-word.post {
+  color: #a59d92;
+}
+.lh-stack {
+  font: 700 clamp(12px, calc(var(--av) * 0.22), 15.5px) / 1.25 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: #f6f1e7;
+}
+.lh-folded .lh-av {
+  filter: grayscale(1) brightness(0.42);
+}
+.lh-folded .lh-plate {
+  opacity: 0.6;
+}
+.lh-out .lh-av {
+  filter: grayscale(1) brightness(0.3);
+}
+.lh-out .lh-plate {
+  opacity: 0.4;
+}
+.lh-out .lh-stack {
+  color: var(--muted);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.lh-allin .lh-plate {
+  background: linear-gradient(#3a1b0e, #221109);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 200, 170, 0.15),
+    0 0 0 1px var(--flare),
+    0 0 18px rgba(255, 107, 53, 0.45),
+    0 6px 14px rgba(0, 0, 0, 0.55);
+}
+.lh-allin .lh-stack {
+  color: #ffb594;
+}
+.lh-allin .lh-av {
+  box-shadow:
+    0 0 0 2px #0c0a09,
+    0 0 0 3.5px var(--flare),
+    0 0 22px rgba(255, 107, 53, 0.55),
+    0 7px 16px rgba(0, 0, 0, 0.65);
+}
+.lh-winner .lh-av {
+  box-shadow:
+    0 0 0 2px #0c0a09,
+    0 0 0 3.5px var(--sage),
+    0 0 30px rgba(109, 191, 138, 0.75);
+  filter: none;
+}
+.lh-winner .lh-plate {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.08),
+    0 0 0 1px var(--sage),
+    0 0 16px rgba(109, 191, 138, 0.4),
+    0 6px 14px rgba(0, 0, 0, 0.55);
+}
+.lh-gain {
+  position: absolute;
+  left: 0;
+  top: calc(var(--av) * 0.15);
+  z-index: 7;
+  transform: translateX(-50%);
+  font: 800 clamp(13px, calc(var(--av) * 0.25), 17px) var(--mono);
+  color: #9fe0b6;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.8),
+    0 0 12px rgba(109, 191, 138, 0.6);
+  opacity: 0;
+  pointer-events: none;
+}
+.lh-gain.on {
+  animation: lh-rise 1.7s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes lh-rise {
+  0% {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  15% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    translate: 0 calc(var(--av) * -0.9);
+  }
+}
+
+/* hole cards: tucked behind the zkSNARK's shoulder on the table's side; yours big, beside you */
+.lh-hole {
+  position: absolute;
+  z-index: 1;
+  width: calc(var(--hw) * 1.55);
+  height: calc(var(--hw) * 1.4);
+  transform: translate(-50%, -50%);
+  transition: transform 0.35s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.lh-hole .lh-card:nth-child(1) {
+  left: 0;
+  top: 0;
+}
+.lh-hole .lh-card:nth-child(2) {
+  right: 0;
+  top: 0;
+}
+.lh-hero {
+  --hw: calc(var(--hcw, var(--cw)) * 1.08);
+}
+.lh-hero .lh-hole {
+  width: calc(var(--hw) * 1.8);
+}
+.lh-hero .lh-face {
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.4),
+    0 6px 14px rgba(0, 0, 0, 0.5);
+}
+.lh-shown .lh-hole {
+  z-index: 5;
+  transform: translate(calc(-50% + var(--sx, 0px)), calc(-50% + var(--sy, 0px))) scale(var(--ss, 1.5));
+}
+.lh-portrait .lh-seat {
+  --ss: 1.25;
+}
+.lh-hero.lh-shown .lh-hole {
+  transform: translate(-50%, -62%) scale(1.04);
+}
+.lh-shown .lh-card.lit {
+  translate: 0 -8%;
+}
+
+/* the hand's name, on a paper slip; the odds; what they say */
+.lh-handname {
+  position: absolute;
+  left: 0;
+  top: calc(var(--av) * 0.4 + 44px);
+  z-index: 6;
+  transform: translateX(-50%);
+  padding: 2px 8px 3px;
+  border-radius: 3px;
+  background: var(--paper);
+  color: #1d1714;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.lh-handname.on {
+  opacity: 1;
+}
+.lh-winner .lh-handname {
+  background: var(--flare);
+  color: #1a0a03;
+}
+.lh-seat:not(.lh-hero) .lh-handname {
+  transform: translate(-50%, -50%);
+}
+.lh-odds {
+  position: absolute;
+  left: calc(var(--av) * -0.95);
+  top: calc(var(--av) * -0.5);
+  z-index: 6;
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 3px 6px 6px;
+  border-radius: 5px;
+  background: #0f0d0c;
+  box-shadow:
+    0 0 0 1px rgba(255, 240, 220, 0.12),
+    0 4px 10px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  opacity: 0;
+  transform: translateX(-50%) scale(0.8);
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
+}
+.lh-odds b {
+  font: 800 14px var(--mono);
+}
+.lh-odds small {
+  font: 700 10px var(--mono);
+  color: var(--muted);
+}
+.lh-odds::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--sage) calc(var(--q, 0) * 100%), rgba(255, 255, 255, 0.12) 0);
+}
+.lh-odds.on {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+.lh-bubble {
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--av) * 0.5 + 14px);
+  z-index: 7;
+  transform: translate(-50%, 6px);
+  max-width: 180px;
+  width: max-content;
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: var(--paper);
+  color: #1d1714;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+}
+.lh-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--paper);
+}
+.lh-bubble.on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ---- chips: bets, the pot, the dealer puck ---- */
+.lh-pile {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.55));
+}
+.lh-bet {
+  position: absolute;
+  z-index: 3;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.lh-bet.on {
+  opacity: 1;
+}
+.lh-bet .lh-pile {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -62%);
+}
+.lh-bet b,
+.lh-plabel {
+  position: absolute;
+  white-space: nowrap;
+  font: 700 12px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: #f6f1e7;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.lh-bet b {
+  left: 0;
+  top: calc(var(--chip) * 0.5);
+  transform: translateX(-50%);
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.75),
+    0 0 8px rgba(0, 20, 20, 0.85);
+}
+.lh-pot {
+  position: absolute;
+  left: var(--potx, var(--cx));
+  top: calc(var(--cy) - var(--cw) * 0.7 - 30px);
+  z-index: 3;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.lh-portrait .lh-pot {
+  top: calc(var(--cy) - var(--cw) * 0.7 - 22px);
+}
+.lh-pot.on {
+  opacity: 1;
+}
+.lh-ppile .lh-pile {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -60%);
+}
+.lh-plabel {
+  left: calc(var(--pw, 40px) / 2 + 8px);
+  top: calc(var(--chip) * -0.15);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 15px;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.75),
+    0 0 8px rgba(0, 20, 20, 0.8);
+}
+.lh-plabel small {
+  font: 700 9px/1 var(--sans);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(232, 222, 200, 0.6);
+}
+.lh-pots {
+  position: absolute;
+  left: var(--cx);
+  top: calc(var(--cy) + var(--cw) * 0.7 + 8px);
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.lh-pots span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(232, 222, 200, 0.6);
+}
+.lh-pots b {
+  font: 700 12px var(--mono);
+  letter-spacing: 0;
+  color: #f6f1e7;
+}
+.lh-dealer {
+  position: absolute;
+  z-index: 3;
+  width: calc(var(--chip) * 1.8);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.lh-dealer svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.lh-dealer.on {
+  opacity: 1;
+}
+.lh-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+}
+.lh-fly {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.lh-flyc {
+  transform: translate(-50%, -60%);
+}
+
+/* the hand's result, printed on the felt under the board */
+.lh-banner {
+  position: absolute;
+  left: var(--cx);
+  top: calc(var(--cy) + var(--cw) * 0.7 + 12px);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 94vw;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  transition: opacity 0.3s;
+}
+.lh-banner::before {
+  content: "";
+  position: absolute;
+  inset: -16px -48px;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(4, 22, 22, 0.85), rgba(4, 22, 22, 0.5) 60%, transparent);
+}
+.lh-banner.on {
+  opacity: 1;
+}
+.lh-banner.on b {
+  animation: lh-stamp 0.45s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+@keyframes lh-stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.25);
+    letter-spacing: 0.3em;
+  }
+}
+.lh-banner b {
+  font-size: clamp(17px, calc(var(--cw) * 0.33), 28px);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f7f1e4;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+.lh-banner.big b,
+.lh-banner.allin b {
+  color: var(--flare);
+}
+.lh-banner span {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #d9d2c6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.lh-toast {
+  position: absolute;
+  left: var(--cx);
+  top: calc(var(--cy) - 18px);
+  z-index: 12;
+  padding: 9px 16px 10px;
+  border-radius: 6px;
+  background: #15110f;
+  box-shadow:
+    inset 0 2px 0 var(--flare),
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 12px 30px rgba(0, 0, 0, 0.55);
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: lh-toast 2.6s ease both;
+}
+@keyframes lh-toast {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  10%,
+  85% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+}
+.lh-toast + .lh-toast {
+  margin-top: 44px;
+}
+.lh-seed {
+  position: absolute;
+  left: 14px;
+  bottom: 6px;
+  z-index: 2;
+  font: 500 10.5px var(--mono);
+  color: rgba(138, 135, 132, 0.6);
+}
+.lh-helper {
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  z-index: 5;
+  display: none;
+  min-width: 170px;
+  padding: 8px 12px 10px;
+  border-radius: 8px;
+  background: #15110f;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.07),
+    0 0 0 1px rgba(0, 0, 0, 0.7);
+}
+.lh-helper.on {
+  display: block;
+}
+.lh-helper small {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--glacier);
+}
+.lh-helper b {
+  display: block;
+  margin: 2px 0;
+  font-size: 14px;
+}
+.lh-helper span {
+  font: 600 12px var(--mono);
+  color: #cfc8bd;
+}
+.lh-helper i {
+  display: block;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--sage) calc(var(--q) * 100%), rgba(255, 255, 255, 0.1) 0);
+}
+
+/* ---- the action bar: three keys, and the raise sizer beside them ---- */
+.lh-bar {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 14px;
+  height: calc(94px + env(safe-area-inset-bottom));
+  padding: 8px 16px max(12px, env(safe-area-inset-bottom));
+}
+.lh-btns {
+  display: flex;
+  gap: 8px;
+}
+.lh-act {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 128px;
+  height: 60px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.25),
+    0 2px 0 rgba(0, 0, 0, 0.7),
+    0 10px 20px rgba(0, 0, 0, 0.45);
+  transition:
+    transform 0.08s,
+    filter 0.15s;
+}
+.lh-act small {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+.lh-act b {
+  font-size: 19px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.lh-act kbd {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+}
+.lh-act:hover {
+  filter: brightness(1.08);
+}
+.lh-act:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 0 0 rgba(0, 0, 0, 0.7),
+    0 4px 10px rgba(0, 0, 0, 0.45);
+}
+.lh-act.fold {
+  background: linear-gradient(#2d2725, #1c1817);
+  color: #ddd5ca;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.1),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 2px 0 rgba(0, 0, 0, 0.7),
+    0 10px 20px rgba(0, 0, 0, 0.45);
+}
+.lh-act.fold.dim {
+  opacity: 0.45;
+}
+.lh-act.call {
+  background: linear-gradient(#7ccc9b, #4d9a6c);
+  color: #061a0e;
+}
+.lh-act.call.check {
+  background: linear-gradient(#bfe4ef, #86bdd0);
+  color: #082029;
+}
+.lh-act.raise {
+  background: linear-gradient(#ff8857, #e5521c);
+  color: #1d0a02;
+}
+.lh-act.raise.allin {
+  background: linear-gradient(#ff7aa0, #d8336a);
+  color: #fff;
+}
+.lh-sizer {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 310px;
+  padding: 7px 9px 6px;
+  border-radius: 10px;
+  background: linear-gradient(#1c1816, #131010);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.07),
+    0 0 0 1px rgba(0, 0, 0, 0.65),
+    0 10px 20px rgba(0, 0, 0, 0.4);
+}
+.lh-seg {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-radius: 7px;
+  overflow: hidden;
+  background: #0f0c0b;
+  box-shadow: inset 0 0 0 1px rgba(255, 240, 220, 0.07);
+}
+.lh-seg button {
+  position: relative;
+  height: 30px;
+  border: 0;
+  border-left: 1px solid rgba(255, 240, 220, 0.07);
+  background: transparent;
+  color: #c9c1b5;
+  font-size: 13px;
+  font-weight: 700;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.lh-seg button:first-child {
+  border-left: 0;
+}
+.lh-seg button:hover {
+  background: rgba(255, 240, 220, 0.05);
+}
+.lh-seg button.on {
+  background: rgba(255, 107, 53, 0.14);
+  color: #ffb08f;
+  box-shadow: inset 0 -2px 0 var(--flare);
+}
+.lh-seg .lh-qall.on {
+  background: rgba(255, 92, 138, 0.16);
+  color: #ffa9c2;
+  box-shadow: inset 0 -2px 0 var(--pink);
+}
+.lh-seg kbd {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 8px;
+  opacity: 0.35;
+}
+.lh-slide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lh-slide button {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: linear-gradient(#2f2926, #211c1a);
+  color: #e8e1d6;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.lh-slide input {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 120px;
+  height: 28px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.lh-slide input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--flare) var(--p, 0%), #2e2826 var(--p, 0%));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.lh-slide input::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #2e2826;
+}
+.lh-slide input::-moz-range-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--flare);
+}
+/* the thumb: a flare play chip, its edge spots and all */
+.lh-slide input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -10px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #ffc6ad 0 26%, #f0612c 27% 34%, transparent 35% 56%, #f0612c 57% 62%, transparent 63%), repeating-conic-gradient(from 12deg, #f0612c 0 38deg, #f7f3ea 38deg 52deg, #f0612c 52deg 60deg);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 3px 6px rgba(0, 0, 0, 0.6);
+}
+.lh-slide input::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #ffc6ad 0 26%, #f0612c 27% 34%, transparent 35% 56%, #f0612c 57% 62%, transparent 63%), repeating-conic-gradient(from 12deg, #f0612c 0 38deg, #f7f3ea 38deg 52deg, #f0612c 52deg 60deg);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 3px 6px rgba(0, 0, 0, 0.6);
+}
+.lh-idle,
+.lh-ask {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+  color: #cfc8bd;
+}
+.lh-ask {
+  margin: 0 auto 0 0;
+  color: #f2ede4;
+  font-weight: 700;
+}
+.lh-ask .lh-act {
+  min-width: 112px;
+  height: 52px;
+}
+.lh-autobar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 2px;
+  background: var(--flare);
+  transform-origin: left;
+  animation: lh-drain 5s linear forwards;
+}
+@keyframes lh-drain {
+  to {
+    transform: scaleX(0);
+  }
+}
+.lh-pre {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 44px;
+  padding: 0 16px 0 12px;
+  border-radius: 9px;
+  background: linear-gradient(#211c1a, #161211);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.07),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+  color: #d8d1c6;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lh-pre input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.lh-pre i {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1.5px #5a524b;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.lh-pre.on i {
+  background: var(--glacier);
+  box-shadow: inset 0 0 0 1.5px var(--glacier);
+}
+.lh-pre.on {
+  color: #fff;
+}
+.lh-btn {
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 9px;
+  border: 0;
+  background: linear-gradient(#2d2725, #1c1817);
+  color: #ece6dc;
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.1),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 2px 0 rgba(0, 0, 0, 0.7);
+}
+.lh-btn kbd {
+  margin-left: 6px;
+}
+.lh-btn.small {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13.5px;
+}
+.lh-btn.go {
+  background: linear-gradient(#ff8857, #e5521c);
+  color: #1d0a02;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.22),
+    0 2px 0 rgba(0, 0, 0, 0.7),
+    0 10px 24px rgba(255, 107, 53, 0.22);
+}
+.lh-btn:hover {
+  filter: brightness(1.08);
+}
+.lh-btn:active {
+  transform: translateY(2px);
+}
+
+/* ---- the history ---- */
+.lh-log {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, 94vw);
+  background: #121010;
+  box-shadow:
+    inset 1px 0 0 rgba(255, 240, 220, 0.07),
+    -20px 0 50px rgba(0, 0, 0, 0.55);
+  transform: translateX(105%);
+  transition: transform 0.3s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.lh-log.open {
+  transform: none;
+}
+.lh-log header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 10px 12px 16px;
+  border-bottom: 1px solid rgba(255, 240, 220, 0.07);
+}
+.lh-log header b {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #e8e1d6;
+}
+.lh-log header button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: #8f877d;
+}
+.lh-log header button svg {
+  width: 16px;
+  height: 16px;
+}
+.lh-log-body {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 16px 20px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.lh-log section {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 240, 220, 0.06);
+}
+.lh-log h4 {
+  margin: 0 0 6px;
+  font: 600 11.5px var(--mono);
+  color: var(--sand);
+}
+.lh-log p {
+  margin: 2px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #c9c1b5;
+}
+.lh-log p b {
+  color: #fff;
+}
+.lh-log p em {
+  font-style: normal;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--glacier);
+}
+.lh-mc {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin: 0 2px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 240, 220, 0.06);
+  font: 800 12px var(--mono);
+}
+.lh-mc img {
+  width: 10px;
+  height: 10px;
+}
+
+/* ---- the lobby and the ends: a printed card on the table ---- */
+.lh-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: none;
+  place-items: center;
+  padding: 16px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(8, 6, 5, 0.55), rgba(8, 6, 5, 0.85));
+}
+.lh-modal.open {
+  display: grid;
+}
+.lh-card-modal {
+  position: relative;
+  width: min(740px, 96vw);
+  max-height: 94%;
+  overflow: auto;
+  padding: 28px 30px 22px;
+  border-radius: 12px;
+  background: var(--grain), linear-gradient(#1b1715, #121010);
+  background-size:
+    180px 180px,
+    auto;
+  background-blend-mode: soft-light, normal;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 220, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 30px 80px rgba(0, 0, 0, 0.7);
+  text-align: center;
+  animation: lh-pop 0.35s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+.lh-card-modal::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 64px;
+  height: 3px;
+  translate: -50% 0;
+  border-radius: 0 0 3px 3px;
+  background: var(--flare);
+}
+.lh-confirm {
+  width: min(440px, 94vw);
+}
+.lh-end {
+  width: min(500px, 94vw);
+}
+.lh-end.wide {
+  width: min(580px, 94vw);
+}
+@keyframes lh-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+.lh-kicker {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.34em;
+  color: var(--sand);
+}
+.lh-kicker span {
+  margin-left: 8px;
+  font-family: DotGothic16, var(--sans);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  color: var(--flare);
+}
+.lh-card-modal h1 {
+  margin: 10px 0 6px;
+  font-size: clamp(32px, 6vw, 50px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #f7f1e4;
+}
+.lh-card-modal h2 {
+  margin: 10px 0 8px;
+  font-size: clamp(22px, 4.5vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #f7f1e4;
+}
+.lh-sub {
+  margin: 0 0 18px;
+  font-size: 14px;
+  color: #b8b0a4;
+}
+.lh-sub b {
+  color: #fff;
+}
+.lh-formats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 18px 0 16px;
+}
+.lh-fmt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 14px 12px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #0f0d0c;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 240, 220, 0.07),
+    inset 3px 0 0 #3a332e;
+  color: #e6e0d6;
+  text-align: left;
+  transition:
+    box-shadow 0.15s,
+    background 0.15s;
+}
+.lh-fmt b {
+  font-size: 15px;
+  font-weight: 800;
+  color: #f7f1e4;
+}
+.lh-fmt span {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #a9a196;
+}
+.lh-prize {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: auto 0 0;
+  padding-top: 6px;
+  font: 600 11.5px var(--mono);
+  color: var(--sage);
+}
+.lh-prize em {
+  font: 700 9.5px var(--sans);
+  font-style: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8c8479;
+}
+.lh-fmt:hover {
+  background: #14110f;
+}
+.lh-fmt.on {
+  background: #1d1410;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 107, 53, 0.45),
+    inset 3px 0 0 var(--flare);
+}
+.lh-rivals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 16px;
+  margin: 4px 0 20px;
+  padding: 0;
+  list-style: none;
+}
+.lh-rivals li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 76px;
+}
+.lh-rivals img {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  image-rendering: pixelated;
+  background: radial-gradient(circle at 50% 30%, #3a312c, #141110 75%);
+  box-shadow:
+    0 0 0 2px #0c0a09,
+    0 0 0 3.5px var(--sc);
+}
+.lh-rivals b {
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: #c9c1b5;
+}
+.lh-rivals i {
+  display: flex;
+  gap: 2px;
+}
+.lh-rivals s {
+  width: 9px;
+  height: 3px;
+  border-radius: 1px;
+  background: #3a332e;
+}
+.lh-rivals s.on {
+  background: var(--flare);
+}
+.lh-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.lh-fine {
+  margin: 12px 0 0;
+  font: 500 10.5px var(--mono);
+  color: var(--muted);
+}
+.lh-standings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+.lh-standings li {
+  display: grid;
+  grid-template-columns: 50px 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.lh-standings li + li {
+  box-shadow: inset 0 1px 0 rgba(255, 240, 220, 0.05);
+}
+.lh-standings li.me {
+  background: rgba(255, 107, 53, 0.1);
+  box-shadow: inset 3px 0 0 var(--flare);
+}
+.lh-standings em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sand);
+}
+.lh-standings img {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  image-rendering: pixelated;
+  background: #1d1816;
+}
+.lh-standings span {
+  font: 700 13px var(--mono);
+  color: var(--sage);
+}
+
+/* ---- phones on their side: the keys in a column on the right, the table gets the full height ---- */
+@media (max-height: 520px) and (min-aspect-ratio: 4/3) {
+  .lh-root {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr;
+  }
+  .lh-top {
+    grid-column: 1 / -1;
+    height: 42px;
+  }
+  .lh-stage {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .lh-brand small,
+  .lh-info > i:last-child,
+  .lh-info > i:nth-last-child(2) {
+    display: none;
+  }
+  .lh-tools button {
+    width: 32px;
+    height: 32px;
+  }
+  .lh-bar {
+    grid-column: 2;
+    grid-row: 2;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 8px;
+    width: 178px;
+    height: auto;
+    padding: 6px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) 0;
+  }
+  .lh-btns {
+    flex-direction: column-reverse;
+    gap: 6px;
+  }
+  .lh-act {
+    width: 100%;
+    min-width: 0;
+    height: 46px;
+  }
+  .lh-act b {
+    font-size: 16px;
+  }
+  .lh-sizer {
+    width: 100%;
+    gap: 6px;
+    padding: 7px;
+  }
+  .lh-seg {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lh-seg button {
+    height: 28px;
+  }
+  .lh-seg button:nth-child(3) {
+    border-left: 0;
+  }
+  .lh-seg button:nth-child(n + 3) {
+    border-top: 1px solid rgba(255, 240, 220, 0.07);
+  }
+  .lh-slide {
+    gap: 6px;
+  }
+  .lh-slide button {
+    width: 26px;
+    height: 26px;
+  }
+  .lh-slide input {
+    min-width: 0;
+    height: 24px;
+  }
+  .lh-idle,
+  .lh-ask {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    font-size: 12.5px;
+  }
+  .lh-ask .lh-btns {
+    flex-direction: row;
+  }
+  .lh-ask .lh-act {
+    min-width: 0;
+    flex: 1;
+  }
+  .lh-pre {
+    justify-content: center;
+  }
+  .lh-log {
+    top: 42px;
+  }
+  .lh-act kbd,
+  .lh-seg kbd {
+    display: none;
+  }
+}
+
+/* ---- phones held upright ---- */
+.lh-portrait .lh-top {
+  height: 46px;
+  padding: 0 8px 0 12px;
+}
+.lh-portrait .lh-brand div {
+  display: none;
+}
+.lh-portrait .lh-brand svg {
+  width: 24px;
+  height: 24px;
+}
+.lh-portrait .lh-info {
+  flex: 1;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+}
+.lh-portrait .lh-info b {
+  font-size: 10px;
+}
+.lh-portrait .lh-tools button {
+  width: 32px;
+  height: 32px;
+}
+.lh-portrait .lh-tools button svg {
+  width: 17px;
+  height: 17px;
+}
+.lh-portrait .lh-tools [data-t="helper"] {
+  display: none;
+}
+.lh-portrait .lh-bar {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 8px;
+  height: calc(76px + env(safe-area-inset-bottom));
+  padding: 8px 10px max(10px, env(safe-area-inset-bottom));
+}
+.lh-portrait .lh-btns {
+  width: 100%;
+}
+.lh-portrait .lh-act {
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  padding: 0 6px;
+}
+.lh-portrait .lh-act b {
+  font-size: 17px;
+}
+.lh-portrait .lh-act kbd,
+.lh-portrait .lh-seg kbd {
+  display: none;
+}
+.lh-portrait .lh-sizer {
+  display: none;
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% - 2px);
+  width: auto;
+  padding: 10px;
+}
+.lh-portrait .lh-sizer.open {
+  display: flex;
+}
+.lh-portrait .lh-seg button {
+  height: 36px;
+  font-size: 14px;
+}
+.lh-portrait .lh-slide button {
+  width: 34px;
+  height: 34px;
+}
+.lh-portrait .lh-idle {
+  justify-content: flex-end;
+}
+.lh-portrait .lh-ask {
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 0;
+}
+.lh-portrait .lh-plate {
+  padding: 2px 7px 3px;
+  min-width: calc(var(--av) * 1.6);
+}
+.lh-portrait .lh-line1 {
+  max-width: 78px;
+}
+.lh-portrait .lh-handname {
+  top: calc(var(--av) * 0.4 + 34px);
+  font-size: 10px;
+}
+.lh-portrait .lh-bet b {
+  font-size: 10.5px;
+  padding: 1px 4px;
+}
+.lh-portrait .lh-plabel {
+  font-size: 12px;
+  padding: 3px 6px;
+}
+.lh-portrait .lh-arc {
+  display: none;
+}
+.lh-portrait .lh-felt-mark span {
+  display: block;
+  white-space: normal;
+  width: 9em;
+  text-align: center;
+  line-height: 1.5;
+}
+.lh-portrait .lh-seed {
+  font-size: 9px;
+}
+.lh-portrait .lh-banner span {
+  font-size: 11px;
+}
+.lh-portrait .lh-log {
+  top: 46px;
+}
+/* a phone on its side: the lobby and the ends fit without scrolling */
+@media (max-height: 520px) {
+  .lh-modal {
+    padding: 8px;
+  }
+  .lh-card-modal {
+    max-height: 100%;
+    padding: 14px 18px 12px;
+  }
+  .lh-card-modal h1 {
+    margin: 4px 0 2px;
+    font-size: 28px;
+  }
+  .lh-card-modal h2 {
+    margin: 4px 0;
+    font-size: 22px;
+  }
+  .lh-sub {
+    margin-bottom: 8px;
+    font-size: 12.5px;
+  }
+  .lh-formats {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .lh-fmt {
+    gap: 3px;
+    padding: 9px 10px 8px 12px;
+  }
+  .lh-fmt b {
+    font-size: 13.5px;
+  }
+  .lh-fmt span {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .lh-prize {
+    font-size: 10px;
+    padding-top: 3px;
+  }
+  .lh-rivals {
+    gap: 6px 10px;
+    margin: 2px 0 10px;
+  }
+  .lh-rivals li {
+    width: 56px;
+  }
+  .lh-rivals img {
+    width: 30px;
+    height: 30px;
+  }
+  .lh-rivals b {
+    font-size: 10px;
+  }
+  .lh-fine {
+    display: none;
+  }
+  .lh-standings li {
+    padding: 3px 8px;
+  }
+  .lh-standings img {
+    width: 26px;
+    height: 26px;
+  }
+}
+@media (max-width: 720px) {
+  .lh-formats {
+    grid-template-columns: 1fr;
+  }
+  .lh-card-modal {
+    padding: 22px 16px 16px;
+  }
+  .lh-rivals li {
+    width: 64px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lh-you-turn .lh-av,
+  .lh-banner.on b {
+    animation: none;
+  }
+}
+
+/* ---- touch screens: phones and tablets. A coarse pointer only, so a mouse keeps the room above as it
+ * is. Every target is a finger wide (44 px), no word under 12 px, the notch and the home bar kept clear.
+ * (`.lh-root` in front of each rule: it outranks the `.lh-portrait` rules above.) ---- */
+@media (pointer: coarse) {
+  /* the one column never wider than the screen, however long the strip on top (it decides whether
+   * the table is drawn upright) */
+  .lh-root {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lh-root .lh-brand,
+  .lh-root .lh-info {
+    overflow: hidden;
+  }
+  .lh-root .lh-tools {
+    flex: none;
+  }
+  /* no keyboard to name */
+  .lh-root kbd {
+    display: none;
+  }
+  .lh-root .lh-top {
+    height: calc(52px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) max(10px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
+  }
+  .lh-root .lh-tools {
+    gap: 0;
+  }
+  .lh-root .lh-tools button {
+    width: 44px;
+    height: 44px;
+  }
+  .lh-root .lh-tools button svg {
+    width: 21px;
+    height: 21px;
+  }
+  .lh-root .lh-brand small,
+  .lh-root .lh-info,
+  .lh-root .lh-info > i:last-child {
+    font-size: 12px;
+  }
+  .lh-root .lh-info b {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+  .lh-root .lh-bar {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  /* the felt's small print; the plate as wide as its words (a phone's small avatars made it too narrow
+   * for them at a readable size) */
+  .lh-root .lh-plate {
+    width: max-content;
+  }
+  .lh-root .lh-name {
+    font-size: clamp(12px, calc(var(--av) * 0.18), 13px);
+  }
+  .lh-root .lh-word {
+    font-size: 12px;
+    letter-spacing: 0.05em;
+  }
+  .lh-root .lh-out .lh-stack,
+  .lh-root .lh-handname,
+  .lh-root .lh-bet b,
+  .lh-root .lh-pots b,
+  .lh-root .lh-mc {
+    font-size: 12px;
+  }
+  .lh-root .lh-plabel small,
+  .lh-root .lh-pots span,
+  .lh-root .lh-odds small,
+  .lh-root .lh-helper small {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+  }
+  .lh-root .lh-seed {
+    font-size: 12px;
+    left: max(14px, env(safe-area-inset-left));
+  }
+  .lh-root .lh-felt-mark span {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+  }
+  .lh-root .lh-banner span {
+    font-size: 13px;
+  }
+  .lh-root .lh-helper {
+    right: max(14px, env(safe-area-inset-right));
+  }
+  /* the keys: Check / Fold, the sizer's presets and nudges, a finger wide */
+  .lh-root .lh-act small {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+  }
+  .lh-root .lh-seg button {
+    height: 44px;
+    font-size: 14px;
+  }
+  .lh-root .lh-slide button {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+  }
+  .lh-root .lh-slide input {
+    height: 44px;
+  }
+  .lh-root .lh-slide input::-webkit-slider-thumb {
+    width: 30px;
+    height: 30px;
+    margin-top: -12px;
+  }
+  .lh-root .lh-btn {
+    height: auto;
+    min-height: 48px;
+  }
+  .lh-root .lh-btn.small {
+    min-height: 44px;
+  }
+  .lh-root .lh-pre {
+    min-height: 44px;
+  }
+  /* the history */
+  .lh-root .lh-log {
+    top: calc(52px + env(safe-area-inset-top));
+    padding-right: env(safe-area-inset-right);
+  }
+  .lh-root .lh-log header b,
+  .lh-root .lh-log h4,
+  .lh-root .lh-log p em {
+    font-size: 12px;
+  }
+  .lh-root .lh-log p {
+    font-size: 14px;
+  }
+  .lh-root .lh-log header button {
+    width: 44px;
+    height: 44px;
+  }
+  .lh-root .lh-log header button svg {
+    width: 20px;
+    height: 20px;
+  }
+  .lh-root .lh-log-body {
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
+  }
+  /* the lobby and the ends */
+  .lh-root .lh-kicker,
+  .lh-root .lh-fine,
+  .lh-root .lh-prize,
+  .lh-root .lh-rivals b,
+  .lh-root .lh-standings em {
+    font-size: 12px;
+  }
+  /* (at a readable size a rival's name is wider than its portrait: it takes two lines, not an ellipsis) */
+  .lh-root .lh-rivals b {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.15;
+  }
+  .lh-root .lh-prize em {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+  .lh-root .lh-fmt span {
+    font-size: 13px;
+  }
+  .lh-root .lh-card-modal {
+    overscroll-behavior: contain;
+  }
+}
+
+/* phones (upright or on their side): the cards come up from the bottom as sheets that scroll inside,
+ * their buttons pinned under the thumb; the history takes the whole screen */
+@media (pointer: coarse) and (max-width: 760px), (pointer: coarse) and (max-height: 520px) {
+  .lh-root .lh-modal {
+    place-items: end center;
+    padding: max(10px, env(safe-area-inset-top)) 0 0;
+  }
+  .lh-root .lh-card-modal {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 780px;
+    max-height: 92dvh;
+    padding: 20px max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+    border-radius: 22px 22px 0 0;
+    animation: lh-sheet 0.32s cubic-bezier(0.2, 1, 0.3, 1);
+  }
+  .lh-root .lh-card-modal > * {
+    flex: none;
+  }
+  .lh-root .lh-card-modal h1 {
+    font-size: 30px;
+  }
+  .lh-root .lh-card-modal h2 {
+    font-size: 24px;
+  }
+  .lh-root .lh-sub {
+    font-size: 14px;
+  }
+  /* the buttons: last, and stuck to the bottom while the rest scrolls under them */
+  .lh-root .lh-card-modal .lh-row {
+    order: 10;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    flex-wrap: nowrap;
+    margin: 6px calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left)));
+    padding: 12px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    background: linear-gradient(rgba(19, 16, 16, 0), #131010 14px);
+  }
+  .lh-root .lh-card-modal .lh-btn {
+    flex: 1;
+    min-width: 0;
+    min-height: 50px;
+    padding: 0 14px;
+  }
+  .lh-root .lh-card-modal .lh-btn.ghost {
+    flex: 0.6;
+  }
+  .lh-root .lh-fine {
+    margin-bottom: 4px;
+  }
+  .lh-root .lh-log {
+    top: 0;
+    width: 100%;
+    z-index: 32;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  }
+  .lh-root .lh-log header {
+    padding: 4px 6px 4px 16px;
+  }
+}
+@keyframes lh-sheet {
+  from {
+    transform: translateY(40%);
+    opacity: 0;
+  }
+}
+
+/* phones held upright: a slimmer strip on top, the hand's number left to the history */
+@media (pointer: coarse) and (max-width: 760px) and (orientation: portrait) {
+  .lh-root .lh-top {
+    height: calc(50px + env(safe-area-inset-top));
+    padding-right: max(4px, env(safe-area-inset-right));
+    padding-left: max(12px, env(safe-area-inset-left));
+    gap: 8px;
+  }
+  .lh-root .lh-info > i:last-child,
+  .lh-root .lh-info > i:nth-last-child(2) {
+    display: none;
+  }
+  .lh-root .lh-line1 {
+    max-width: 92px;
+  }
+  /* the felt's printed line would run into the bets at a readable size (the lobby says it already) */
+  .lh-root .lh-felt-mark span {
+    display: none;
+  }
+  .lh-root .lh-sizer {
+    padding: 10px;
+  }
+  .lh-root .lh-act small {
+    font-size: 12px;
+  }
+  .lh-root .lh-formats {
+    gap: 8px;
+    margin: 14px 0 12px;
+  }
+  .lh-root .lh-fmt {
+    padding: 12px 14px 12px 16px;
+  }
+  .lh-root .lh-rivals {
+    gap: 10px 8px;
+    margin-bottom: 8px;
+  }
+  .lh-root .lh-rivals li {
+    width: 68px;
+  }
+  .lh-root .lh-rivals b {
+    max-width: 68px;
+  }
+}
+
+/* a phone held upright, Raise tapped: the sizer takes the bar's own row (the slider beside Raise; Fold
+ * and Call wait behind its ✕) and only its presets float above the bar, a thin strip, so your avatar
+ * and your cards stay in sight while you size the bet */
+.lh-shut {
+  display: none;
+}
+@media (pointer: coarse) and (max-width: 760px) and (orientation: portrait) {
+  .lh-root.lh-portrait .lh-bar:has(.lh-sizer.open) {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .lh-root.lh-portrait .lh-sizer.open {
+    display: contents;
+  }
+  /* (on a short screen the table slides up while it is open, by what the presets would cover: ui.ts) */
+  .lh-root.lh-portrait .lh-stage {
+    transition: translate 0.22s cubic-bezier(0.2, 1, 0.3, 1);
+  }
+  .lh-root.lh-portrait .lh-stage.lh-lifted {
+    translate: 0 calc(-1 * var(--lift, 0px));
+  }
+  .lh-root.lh-portrait .lh-sizer.open .lh-seg {
+    position: absolute;
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    bottom: 100%;
+    grid-template-columns: 44px repeat(4, minmax(0, 1fr));
+    border-radius: 10px;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 240, 220, 0.09),
+      0 -6px 16px rgba(0, 0, 0, 0.45);
+  }
+  .lh-root.lh-portrait .lh-sizer.open .lh-shut {
+    display: block;
+    order: -1;
+    border-left: 0;
+    font-size: 17px;
+  }
+  /* (the ✕ goes first: the first preset gets its divider back) */
+  .lh-root.lh-portrait .lh-sizer.open .lh-seg button:first-child {
+    border-left: 1px solid rgba(255, 240, 220, 0.07);
+  }
+  .lh-root.lh-portrait .lh-sizer.open .lh-slide {
+    flex: 1;
+    min-width: 0;
+  }
+  .lh-root.lh-portrait .lh-sizer.open .lh-slide input {
+    min-width: 0;
+  }
+  .lh-root.lh-portrait .lh-bar:has(.lh-sizer.open) .lh-btns {
+    flex: none;
+    width: auto;
+  }
+  .lh-root.lh-portrait .lh-bar:has(.lh-sizer.open) .lh-act.fold,
+  .lh-root.lh-portrait .lh-bar:has(.lh-sizer.open) .lh-act.call {
+    display: none;
+  }
+  .lh-root.lh-portrait .lh-bar:has(.lh-sizer.open) .lh-act.raise {
+    flex: none;
+    min-width: 116px;
+  }
+  /* (a question over the keys, "Show or muck?", or the sizer's presets stand where the felt's seed line
+   * is: the line steps aside) */
+  .lh-root.lh-portrait:has(.lh-bar .lh-ask) .lh-seed,
+  .lh-root.lh-portrait:has(.lh-bar .lh-idle > span) .lh-seed,
+  .lh-root.lh-portrait:has(.lh-sizer.open) .lh-seed {
+    visibility: hidden;
+  }
+}
+
+/* phones on their side: the strip and the keys' column fit the short screen, the notch side kept clear */
+@media (pointer: coarse) and (max-height: 520px) and (min-aspect-ratio: 4/3) {
+  .lh-root {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+@media (pointer: coarse) and (max-height: 520px) and (orientation: landscape) {
+  .lh-root .lh-top {
+    height: calc(46px + env(safe-area-inset-top));
+  }
+  .lh-root .lh-stage {
+    margin-left: env(safe-area-inset-left);
+  }
+  .lh-root .lh-bar {
+    width: calc(184px + env(safe-area-inset-right));
+    gap: 6px;
+    padding: 4px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) 0;
+  }
+  .lh-root .lh-act {
+    height: 48px;
+  }
+  .lh-root .lh-sizer {
+    gap: 4px;
+    padding: 5px;
+  }
+  .lh-root .lh-seg button {
+    height: 44px;
+  }
+  .lh-root .lh-slide {
+    gap: 2px;
+  }
+  /* the felt's lettering would be too small to read: the plain felt */
+  .lh-root .lh-arc {
+    display: none;
+  }
+  .lh-root .lh-card-modal {
+    max-height: calc(100dvh - max(10px, env(safe-area-inset-top)));
+  }
+  .lh-root .lh-rivals li {
+    width: 64px;
+  }
+  .lh-root .lh-rivals b {
+    max-width: 64px;
+  }
+  .lh-root .lh-log {
+    left: auto;
+    width: min(440px, 100%);
+  }
+}
+
+/* tablets: the room at a tablet's size, not a phone's and not a small desktop */
+@media (pointer: coarse) and (min-width: 761px) and (min-height: 521px) {
+  .lh-root .lh-top {
+    height: calc(60px + env(safe-area-inset-top));
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .lh-root .lh-tools {
+    gap: 4px;
+  }
+  .lh-root .lh-tools button {
+    width: 48px;
+    height: 48px;
+  }
+  .lh-root .lh-tools button svg {
+    width: 23px;
+    height: 23px;
+  }
+  .lh-root .lh-brand b {
+    font-size: 14px;
+  }
+  .lh-root .lh-brand small {
+    font-size: 13px;
+  }
+  .lh-root .lh-info {
+    font-size: 14px;
+  }
+  .lh-root .lh-info b {
+    font-size: 13px;
+  }
+  .lh-root .lh-log {
+    top: calc(60px + env(safe-area-inset-top));
+    width: min(440px, 60vw);
+  }
+  .lh-root .lh-bar {
+    height: calc(108px + env(safe-area-inset-bottom));
+    padding-top: 10px;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+  .lh-root .lh-act {
+    min-width: 150px;
+    height: 68px;
+  }
+  .lh-root .lh-act b {
+    font-size: 22px;
+  }
+  .lh-root .lh-act small {
+    font-size: 13px;
+  }
+  .lh-root .lh-sizer {
+    width: 380px;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .lh-root .lh-seg button {
+    font-size: 16px;
+  }
+  .lh-root .lh-pre {
+    height: 52px;
+    font-size: 15px;
+  }
+  .lh-root .lh-idle,
+  .lh-root .lh-ask {
+    font-size: 16px;
+  }
+  .lh-root .lh-ask .lh-act {
+    height: 60px;
+  }
+  .lh-root .lh-name {
+    font-size: clamp(12px, calc(var(--av) * 0.18), 15px);
+  }
+  .lh-root .lh-word {
+    font-size: clamp(12px, calc(var(--av) * 0.16), 13.5px);
+  }
+  .lh-root .lh-stack {
+    font-size: clamp(12px, calc(var(--av) * 0.22), 18px);
+  }
+  .lh-root .lh-handname,
+  .lh-root .lh-bet b,
+  .lh-root .lh-pots b {
+    font-size: 14px;
+  }
+  .lh-root .lh-plabel {
+    font-size: 17px;
+  }
+  .lh-root .lh-banner span,
+  .lh-root .lh-bubble,
+  .lh-root .lh-toast {
+    font-size: 15px;
+  }
+  .lh-root .lh-helper {
+    min-width: 210px;
+    padding: 10px 14px 12px;
+  }
+  .lh-root .lh-helper b {
+    font-size: 17px;
+  }
+  .lh-root .lh-helper span {
+    font-size: 14px;
+  }
+  /* the lobby and the ends: a big printed card, its type and keys up a size */
+  .lh-root .lh-modal {
+    padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  }
+  .lh-root .lh-card-modal {
+    width: min(820px, 100%);
+    padding: 34px 36px 28px;
+    border-radius: 16px;
+  }
+  .lh-root .lh-confirm {
+    width: min(540px, 100%);
+  }
+  .lh-root .lh-end {
+    width: min(600px, 100%);
+  }
+  .lh-root .lh-end.wide {
+    width: min(680px, 100%);
+  }
+  .lh-root .lh-kicker {
+    font-size: 13px;
+  }
+  .lh-root .lh-card-modal h1 {
+    font-size: 56px;
+  }
+  .lh-root .lh-card-modal h2 {
+    font-size: 32px;
+  }
+  .lh-root .lh-sub {
+    font-size: 16px;
+  }
+  .lh-root .lh-formats {
+    gap: 14px;
+    margin: 24px 0 22px;
+  }
+  .lh-root .lh-fmt {
+    gap: 8px;
+    padding: 18px 18px 16px 20px;
+  }
+  .lh-root .lh-fmt b {
+    font-size: 18px;
+  }
+  .lh-root .lh-fmt span {
+    font-size: 15px;
+  }
+  .lh-root .lh-prize {
+    font-size: 13.5px;
+  }
+  .lh-root .lh-rivals {
+    gap: 14px 22px;
+    margin-bottom: 26px;
+  }
+  .lh-root .lh-rivals li {
+    width: 92px;
+  }
+  .lh-root .lh-rivals img {
+    width: 58px;
+    height: 58px;
+  }
+  .lh-root .lh-rivals b {
+    max-width: 92px;
+    font-size: 13.5px;
+  }
+  .lh-root .lh-rivals s {
+    width: 11px;
+    height: 4px;
+  }
+  .lh-root .lh-row {
+    gap: 14px;
+  }
+  .lh-root .lh-card-modal .lh-btn {
+    min-height: 56px;
+    min-width: 160px;
+    padding: 0 30px;
+    font-size: 17px;
+  }
+  .lh-root .lh-fine {
+    font-size: 13px;
+  }
+  .lh-root .lh-standings li {
+    grid-template-columns: 60px 44px 1fr auto;
+    padding: 9px 14px;
+  }
+  .lh-root .lh-standings img {
+    width: 44px;
+    height: 44px;
+  }
+  .lh-root .lh-standings b {
+    font-size: 16px;
+  }
+  .lh-root .lh-standings em {
+    font-size: 13px;
+  }
+  .lh-root .lh-standings span {
+    font-size: 15px;
+  }
+}
+/* a tablet held upright: the phone's upright table, drawn bigger (ui.ts lifts its caps), with the
+ * desktop's bar: the sizer open beside the three keys */
+@media (pointer: coarse) and (min-width: 761px) and (min-height: 521px) {
+  .lh-root.lh-portrait .lh-brand div {
+    display: block;
+  }
+  .lh-root.lh-portrait .lh-brand svg {
+    width: 28px;
+    height: 28px;
+  }
+  .lh-root.lh-portrait .lh-tools [data-t="helper"] {
+    display: grid;
+  }
+  .lh-root.lh-portrait .lh-bar {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 14px;
+  }
+  .lh-root.lh-portrait .lh-btns {
+    width: auto;
+  }
+  .lh-root.lh-portrait .lh-act {
+    flex: none;
+    min-width: 128px;
+    padding: 0 16px;
+  }
+  .lh-root.lh-portrait .lh-act b {
+    font-size: 21px;
+  }
+  .lh-root.lh-portrait .lh-sizer {
+    position: static;
+    display: flex;
+    width: 340px;
+  }
+  .lh-root.lh-portrait .lh-plate {
+    padding: 3px 10px 4px;
+  }
+  .lh-root.lh-portrait .lh-line1 {
+    max-width: 120px;
+  }
+  .lh-root.lh-portrait .lh-handname {
+    top: calc(var(--av) * 0.4 + 40px);
+  }
+  .lh-root.lh-portrait .lh-plabel {
+    padding: 0;
+  }
+  /* (the felt's printed line runs into your bet here too, as on a phone: the plain mark; the lobby says it) */
+  .lh-root.lh-portrait .lh-felt-mark span {
+    display: none;
+  }
+  /* (the sizer stands in the bar's left corner, over the seed's line: the line goes to the top corner) */
+  .lh-root.lh-portrait .lh-seed {
+    top: 10px;
+    bottom: auto;
+  }
+}

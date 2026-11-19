@@ -11,23 +11,24 @@ import { get } from "../data/zscan";
 
 import { flappy, hockey, invaders, kart, whack } from "./games2";
 import { billiards, bowling, dance, karaoke } from "./games3";
+import { TOUCH } from "../scene/quality";
 
 export type Game = "snake" | "memory" | "quiz" | "stacker" | "kart" | "invaders" | "flappy" | "hockey" | "whack" | "bowling" | "karaoke" | "dance" | "billiards";
 
-const TITLES: Record<Game, { name: string; jp: string; color: string; help: string }> = {
-  snake: { name: "ZEC SNAKE", jp: "ヘビ", color: "#3ee08f", help: "Arrows / WASD / ZQSD · eat ⓩ coins · red leaks and walls end the run" },
-  memory: { name: "zkSNARK MEMORY", jp: "神経衰弱", color: "#b07bff", help: "Click two cards · find all eight pairs in as few moves as you can" },
-  quiz: { name: "ZIP QUIZ", jp: "クイズ", color: "#f4b728", help: "Ten questions from the real ZIPs · 1–4 or click an answer" },
-  stacker: { name: "BLOCK STACKER", jp: "積み木", color: "#3ef0ff", help: "Space or click to drop the block · only what lands on the chain stays" },
-  kart: { name: "ZK KART", jp: "カート", color: "#f4b728", help: "↑ go · ↓ brake · ← → steer · three laps against Orchard and Sapling · a win takes 10 s off your time" },
-  invaders: { name: "SHIELDED INVADERS", jp: "インベーダー", color: "#3ee08f", help: "← → move · Space fire · shoot the transparent leaks before they land" },
-  flappy: { name: "FLAPPY ZEC", jp: "フラッピー", color: "#f4b728", help: "Space / click to flap through the gaps" },
-  hockey: { name: "AIR HOCKEY", jp: "エアホッケー", color: "#3ef0ff", help: "Mouse or ← → · first to five against the house" },
-  bowling: { name: "ZK BOWLING", jp: "ボウリング", color: "#2a78d6", help: "Space: lock the aim, Space again for power · ten frames" },
-  karaoke: { name: "KARAOKE", jp: "カラオケ", color: "#ff7ab0", help: "← ↑ → when a note reaches its line · sing \"Shield me\"" },
-  dance: { name: "DANCE ZK", jp: "ダンス", color: "#3ee08f", help: "← ↓ ↑ → as the arrows reach the top · ten misses and you're out" },
-  billiards: { name: "BILLIARDS", jp: "ビリヤード", color: "#3ee08f", help: "Aim with the mouse, hold and release to shoot · pot all ten, fewest shots" },
-  whack: { name: "WHACK-A-LEAK", jp: "モグラ叩き", color: "#ff3e8a", help: "Click the red T leaks · spare the green Z · 30 seconds" },
+const TITLES: Record<Game, { name: string; jp: string; color: string; help: string; touch: string }> = {
+  snake: { name: "ZEC SNAKE", jp: "ヘビ", color: "#3ee08f", help: "Arrows / WASD / ZQSD · eat ⓩ coins · red leaks and walls end the run", touch: "▲ ◀ ▶ ▼ steer · eat ⓩ coins · red leaks and walls end the run" },
+  memory: { name: "zkSNARK MEMORY", jp: "神経衰弱", color: "#b07bff", help: "Click two cards · find all eight pairs in as few moves as you can", touch: "Tap two cards · find all eight pairs in as few moves as you can" },
+  quiz: { name: "ZIP QUIZ", jp: "クイズ", color: "#f4b728", help: "Ten questions from the real ZIPs · 1–4 or click an answer", touch: "Ten questions from the real ZIPs · tap an answer" },
+  stacker: { name: "BLOCK STACKER", jp: "積み木", color: "#3ef0ff", help: "Space or click to drop the block · only what lands on the chain stays", touch: "Tap A or the screen to drop the block · only what lands on the chain stays" },
+  kart: { name: "ZK KART", jp: "カート", color: "#f4b728", help: "↑ go · ↓ brake · ← → steer · three laps against Orchard and Sapling · a win takes 10 s off your time", touch: "▲ go · ▼ brake · ◀ ▶ steer · three laps against Orchard and Sapling · a win takes 10 s off your time" },
+  invaders: { name: "SHIELDED INVADERS", jp: "インベーダー", color: "#3ee08f", help: "← → move · Space fire · shoot the transparent leaks before they land", touch: "◀ ▶ move · A fire · shoot the transparent leaks before they land" },
+  flappy: { name: "FLAPPY ZEC", jp: "フラッピー", color: "#f4b728", help: "Space / click to flap through the gaps", touch: "Tap the screen to flap through the gaps" },
+  hockey: { name: "AIR HOCKEY", jp: "エアホッケー", color: "#3ef0ff", help: "Mouse or ← → · first to five against the house", touch: "Drag, or ◀ ▶ · first to five against the house" },
+  bowling: { name: "ZK BOWLING", jp: "ボウリング", color: "#2a78d6", help: "Space: lock the aim, Space again for power · ten frames", touch: "Tap A to lock the aim, again for power · ten frames" },
+  karaoke: { name: "KARAOKE", jp: "カラオケ", color: "#ff7ab0", help: "← ↑ → when a note reaches its line · sing \"Shield me\"", touch: "◀ ▲ ▶ when a note reaches its line · sing \"Shield me\"" },
+  dance: { name: "DANCE ZK", jp: "ダンス", color: "#3ee08f", help: "← ↓ ↑ → as the arrows reach the top · ten misses and you're out", touch: "◀ ▼ ▲ ▶ as the arrows reach the top · ten misses and you're out" },
+  billiards: { name: "BILLIARDS", jp: "ビリヤード", color: "#3ee08f", help: "Aim with the mouse, hold and release to shoot · pot all ten, fewest shots", touch: "Aim with a finger, hold and let go to shoot · pot all ten, fewest shots" },
+  whack: { name: "WHACK-A-LEAK", jp: "モグラ叩き", color: "#ff3e8a", help: "Click the red T leaks · spare the green Z · 30 seconds", touch: "Tap the red T leaks · spare the green Z · 30 seconds" },
 };
 
 const best = (g: Game) => {
@@ -110,7 +111,7 @@ export class Arcade {
       <div class="cab">
         <div class="cabtop"><b>${t.name}</b><i>${t.jp}</i><span class="score" data-a="score"></span><button data-a="close" aria-label="Close">×</button></div>
         <div class="screen"></div>
-        <div class="cabfoot"><span>${t.help}</span><span class="best">BEST ${best(g) || "—"}</span></div>
+        <div class="cabfoot"><span>${TOUCH ? t.touch : t.help}</span><span class="best">BEST ${best(g) || "—"}</span></div>
       </div>`;
     const pad = PAD[g];
     if (pad && matchMedia("(pointer: coarse)").matches) this.pad(pad);
@@ -273,7 +274,7 @@ function snake(host: HTMLElement, score: (s: string) => void, over: (n: number) 
   g.fillStyle = "#7dffbe";
   g.font = '700 22px "JetBrains Mono", monospace';
   g.textAlign = "center";
-  g.fillText("PRESS AN ARROW TO START", c.width / 2, c.height / 2 + 8);
+  g.fillText(TOUCH ? "TAP AN ARROW TO START" : "PRESS AN ARROW TO START", c.width / 2, c.height / 2 + 8);
   raf = requestAnimationFrame(tick);
   return () => {
     cancelAnimationFrame(raf);

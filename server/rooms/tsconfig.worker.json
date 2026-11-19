@@ -1,0 +1,18 @@
+{
+  // The Cloudflare Worker (worker.ts): `npx tsc -p server/rooms/tsconfig.worker.json`.
+  // Its runtime's few globals it uses are declared in cf.d.ts (no @cloudflare/workers-types needed).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
+  },
+  "files": ["worker.ts", "cf.d.ts"]
+}

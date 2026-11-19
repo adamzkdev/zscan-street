@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { StreetPay, type Mark, type PayEvent } from "../data/streetpay";
+import { TOUCH } from "../scene/quality";
 
 /**
  * Messages on the ground, like the orange runes of Dark Souls, except each one is the memo of a
@@ -267,7 +268,7 @@ export class Marks {
       return;
     }
     const text = this.near.text.length > 60 ? `${this.near.text.slice(0, 58)}…` : this.near.text;
-    const html = `<q>${text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}</q><span><kbd>E</kbd> read the message</span>`;
+    const html = `<q>${text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}</q>${TOUCH ? "<span>tap to read the message</span>" : "<span><kbd>E</kbd> read the message</span>"}`;
     if (this.prompt.innerHTML !== html) this.prompt.innerHTML = html;
     this.prompt.classList.add("on");
   }

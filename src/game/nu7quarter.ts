@@ -31,6 +31,8 @@ export interface Nu7State {
 export interface Nu7QuarterHooks {
   go(x: number, z: number, zoom?: number): void;
   nu7(): Nu7State;
+  /** ZK PARTY (port): race the NU7 GRAND PRIX (SNARK KART on this circuit), once NU7 is live. */
+  race?(): void;
 }
 
 // ---- the NU7 Tower ----
@@ -696,7 +698,7 @@ class Karting {
       place(this.tar, head + 6);
       place(this.roller, head - 8 - Math.round((0.5 - 0.5 * Math.cos(this.t * 0.6)) * 14));
     }
-    // once NU7 is live, karts lap the finished circuit (the race itself opens later)
+    // once NU7 is live, karts lap the finished circuit (and a click races it: ZK PARTY's SNARK KART)
     if (done && !this.karts.length) this.makeKarts();
     for (const k of this.karts) {
       k.s = (k.s + k.v * dt) % SAMPLES;
@@ -868,13 +870,25 @@ export class Nu7Quarter {
       g.fillText(when, 40, 360);
       g.fillStyle = "#c9c3d8";
       g.font = "400 30px 'DotGothic16', monospace";
-      g.fillText(this.done ? "+ NU7 GRAND PRIX karting · opening soon" : `${FLOORS} floors · ${Math.min(FLOORS, this.tower.built + 1)} going up`, 40, 430);
+      g.fillText(this.done ? (this.hooks.race ? "+ NU7 GRAND PRIX · レース中 · click to race" : "+ NU7 GRAND PRIX karting · opening soon") : `${FLOORS} floors · ${Math.min(FLOORS, this.tower.built + 1)} going up`, 40, 430);
       if (!this.done) g.fillText("+ NU7 GRAND PRIX karting · opens with NU7", 40, 480);
     });
     const m = this.board.material as THREE.MeshBasicMaterial;
     m.map?.dispose();
     m.map = tex;
     m.needsUpdate = true;
+  }
+
+  /**
+   * ZK PARTY (port): a click on the finished circuit or its billboard races it (SNARK KART on the
+   * NU7 GRAND PRIX track). True when it was theirs.
+   */
+  click(ray: THREE.Raycaster) {
+    if (!this.done || !this.hooks.race) return false;
+    const hit = ray.intersectObjects([this.kart.group, this.board], true)[0];
+    if (!hit || hit.distance > 400) return false;
+    this.hooks.race();
+    return true;
   }
 
   /** Take the camera to the quarter. */

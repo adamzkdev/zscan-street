@@ -1,0 +1,109 @@
+/* ---- the swing on foot (src/ui/swing.ts): its reticle and, on touch screens, its button ---------- */
+
+/* the reticle: four pixel corners in Zcash gold, dim until a hold is under them, lit like the
+   street's LED signs when there is one */
+#ui .swing-aim {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  display: none;
+  pointer-events: none;
+  z-index: 30;
+  color: #f4b728;
+  opacity: 0.38;
+  transition: opacity 0.12s;
+}
+#ui .swing-aim.on {
+  display: block;
+}
+#ui .swing-aim svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  transform: scale(1.15);
+  transition: transform 0.12s steps(3);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7));
+}
+#ui .swing-aim.catch {
+  opacity: 1;
+}
+#ui .swing-aim.catch svg {
+  transform: scale(0.85);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 5px rgba(244, 183, 40, 0.75));
+}
+#ui .swing-aim.held svg {
+  transform: scale(0.7);
+}
+/* (the centre dot of the walk already marks the middle: the reticle frames it there) */
+:root[data-theme="day"] #ui .swing-aim {
+  color: #c98a00;
+  opacity: 0.55;
+}
+:root[data-theme="day"] #ui .swing-aim.catch {
+  color: #f4b728;
+  opacity: 1;
+}
+/* photo mode keeps the view clean */
+#ui.photo .swing-aim,
+#ui.photo .swing-btn {
+  display: none !important;
+}
+
+/* the touch button: a square of the city's signage (stepped corners, gold edge, a neon kanji),
+   left of the jump button in the bottom-right corner */
+#ui .swing-btn {
+  all: unset;
+  position: fixed;
+  right: calc(max(24px, env(safe-area-inset-right) + 12px) + 96px);
+  bottom: calc(max(24px, env(safe-area-inset-bottom) + 10px) + 6px);
+  z-index: 40;
+  width: 74px;
+  height: 74px;
+  box-sizing: border-box;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(13, 13, 13, 0.42);
+  border: 1px solid rgba(244, 183, 40, 0.55);
+  box-shadow: 0 0 10px rgba(244, 183, 40, 0.15), inset 0 0 14px rgba(244, 183, 40, 0.06);
+  clip-path: polygon(0 6px, 6px 6px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 6px), 0 calc(100% - 6px));
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#ui .swing-btn.on {
+  display: flex;
+}
+#ui .swing-btn b {
+  font: 400 26px/1 var(--pixel, "DotGothic16", monospace);
+  color: #f4b728;
+  text-shadow: 0 0 8px rgba(244, 183, 40, 0.55);
+  opacity: 0.7;
+}
+#ui .swing-btn span {
+  font: 400 9px/1 var(--pixel, "DotGothic16", monospace);
+  letter-spacing: 0.06em;
+  color: #f4b728;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+#ui .swing-btn.catch b {
+  opacity: 1;
+  text-shadow: 0 0 10px rgba(244, 183, 40, 0.9);
+}
+#ui .swing-btn.held {
+  background: rgba(244, 183, 40, 0.22);
+  border-color: #f4b728;
+}
+#ui .swing-btn.held b {
+  opacity: 1;
+}

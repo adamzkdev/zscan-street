@@ -4,6 +4,7 @@
  * house) and WHACK-A-LEAK. Each takes its screen, a score line and a game-over callback, and
  * returns a stop function.
  */
+import { TOUCH } from "../scene/quality";
 
 type Score = (s: string) => void;
 type Over = (n: number) => void;
@@ -357,7 +358,7 @@ export function flappy(host: HTMLElement, score: Score, over: Over) {
     if (!started) {
       g.fillStyle = "#fff";
       g.font = '700 18px "JetBrains Mono", monospace';
-      g.fillText("SPACE / CLICK TO FLAP", 110, 300);
+      g.fillText(TOUCH ? "TAP TO FLAP" : "SPACE / CLICK TO FLAP", TOUCH ? 150 : 110, 300);
     }
     score(`${passed}`);
     const hit = y > 425 || y < 0 || pipes.some((p) => p.x < 115 && p.x + 52 > 85 && (y - 13 < p.gap - 70 || y + 13 > p.gap + 70));

@@ -8,6 +8,12 @@
  * after a full minute of easy frames, never to a tier it already had to leave, and stops changing
  * after a few moves per session. Frames measured while something heavy and short-lived happens
  * (entering a place, a camera flight, a hidden tab) say nothing about the device and are skipped.
+ *
+ * A frame held up by the processor (the page's own work fills most of the time between frames: a
+ * slow CPU, not a slow GPU) gains nothing from fewer pixels. There the first move is the shadows
+ * (their pass draws the whole street a second time, a fifth of the frame's work), the picture kept
+ * as sharp as it was; only a frame still slow after that, and no longer held by the processor,
+ * goes on down the tiers. (The processor's own governor is scene/load.ts.)
  */
 export interface Tier {
   /** Cap on the device pixel ratio. */
@@ -80,6 +86,12 @@ const CLIMB_AFTER = 24;
 const MAX_CHANGES = 4;
 /** After a transition ends, its aftermath (uploads, first draws) is not measured either (s). */
 const SETTLE = 2;
+/**
+ * The page's own frame work over this share of the time: the processor is what holds it. (A CPU
+ * four times slower than a recent laptop's spends 0.4-0.5 of it in the frame's own code, the rest in
+ * the browser's work around it; a frame held up by the GPU leaves the page idle most of the time.)
+ */
+const CPU_BOUND = 0.3;
 
 export class Quality {
   /** Index into TIERS. Phones start mid-way; desktops at the top. */
@@ -98,6 +110,12 @@ export class Quality {
   private slow = 0;
   private settle = 0;
   private left = new Set<number>();
+  /** The page's own time over the window (ms). */
+  private busyMs = 0;
+  /** Shadows off for a processor that cannot keep up (see above), whatever the tier. */
+  cpuLight = false;
+  /** The share of the last window's time the page spent on its frames. */
+  busyShare = 0;
 
   constructor(private apply: (t: Tier) => void) {
     const q = new URLSearchParams(location.search).get("quality");
@@ -106,16 +124,17 @@ export class Quality {
     apply(TIERS[this.level]);
   }
 
-  get tier() {
-    return TIERS[this.level];
+  get tier(): Tier {
+    const t = TIERS[this.level];
+    return this.cpuLight && t.shadow ? { ...t, shadow: 0 } : t;
   }
 
-  /** Feed the real (unclamped) time of each rendered frame. */
-  sample(dt: number) {
+  /** Feed the real (unclamped) time of each rendered frame, and how long the page worked on the last one (ms). */
+  sample(dt: number, busy = 0) {
     if (this.fixed || this.changes >= MAX_CHANGES) return;
     // a hidden tab, a hitch or a transition says nothing about the device: drop the window
     if (dt <= 0 || dt > 0.5 || (typeof document !== "undefined" && document.hidden) || this.busy()) {
-      this.acc = this.frames = 0;
+      this.acc = this.frames = this.busyMs = 0;
       this.settle = SETTLE;
       return;
     }
@@ -125,11 +144,31 @@ export class Quality {
     }
     this.acc += dt;
     this.frames++;
+    this.busyMs += busy;
     if (this.acc < WINDOW) return;
     const fps = this.frames / this.acc;
+    this.busyShare = this.busyMs / (this.acc * 1000);
+    const cpuBound = this.busyShare > CPU_BOUND;
     this.acc = 0;
     this.frames = 0;
+    this.busyMs = 0;
     const last = TIERS.length - 1;
+    if (fps < 40 && cpuBound && !this.cpuLight && TIERS[this.level].shadow) {
+      this.good = 0;
+      // held by the processor: the shadows go first, at once if really slow, else when it stays slow
+      if (fps < 25 || ++this.slow >= 2) {
+        this.slow = 0;
+        this.cpuLight = true;
+        this.set(this.level);
+      }
+      return;
+    }
+    if (fps < 40 && cpuBound && this.cpuLight) {
+      // (fewer pixels would not help a frame the processor holds: the picture stays as it is)
+      this.good = 0;
+      this.slow = 0;
+      return;
+    }
     if (fps < 40 && this.level < last) {
       this.good = 0;
       // really slow: drop now; borderline: only when the next window is slow too
@@ -141,10 +180,14 @@ export class Quality {
       return;
     }
     this.slow = 0;
-    if (fps > 57 && this.level > 0 && !this.left.has(this.level - 1)) {
+    if (fps > 57 && ((this.level > 0 && !this.left.has(this.level - 1)) || this.cpuLight)) {
       if (++this.good >= CLIMB_AFTER) {
         this.good = 0;
-        this.set(this.level - 1);
+        // the shadows come back first
+        if (this.cpuLight) {
+          this.cpuLight = false;
+          this.set(this.level);
+        } else this.set(this.level - 1);
       }
     } else this.good = 0;
   }
@@ -153,7 +196,7 @@ export class Quality {
     this.level = level;
     this.changes++;
     this.settle = SETTLE;
-    this.apply(TIERS[level]);
-    console.info(`render quality → tier ${level}`, TIERS[level]);
+    this.apply(this.tier);
+    console.info(`render quality → tier ${level}${this.cpuLight ? " (no shadows: the processor is what holds the frame)" : ""}`, this.tier);
   }
 }

@@ -46,6 +46,15 @@ export interface PickInfo {
   wallet?: "zodl" | "vizor" | "noir" | "zlab";
   /** Starts a mini-game (the ZK TOWER's apartments). */
   game?: import("../ui/arcade").Game;
+  /**
+   * ZK PARTY (port): opens the party hall (src/party): `true` on the board, or on one of the hall's
+   * tabs ("tour": the tournament's setup).
+   */
+  party?: boolean | "board" | "quick" | "practice" | "tour";
+  /** With `party`: the mini-game the hall opens its selection on (its key in src/party/games; "*": the selection itself). */
+  partyGame?: string;
+  /** ZK PARTY (port): opens the GAME HOUSE's launcher on a table game (its key in src/tables). */
+  table?: string;
   /** Takes the elevator to this floor (clicking its doors). */
   floor?: number;
   /** Opens a book in the reader (the library's ZIPs). */
@@ -70,7 +79,7 @@ export interface InteriorContext {
 }
 
 export interface Interior {
-  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zlab" | "university" | "zsalab" | "convention";
+  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zlab" | "university" | "zsalab" | "convention" | "gamehouse";
   /** Shown top-left while inside ("MEMPOOL"). */
   readonly title: string;
   readonly scene: THREE.Scene;

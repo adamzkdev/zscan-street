@@ -3,13 +3,13 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { Nav } from "../nav";
 import { addDetail } from "../detail";
 import { blobTexture, concreteTexture, grassTexture, neonTexture, pavingTexture, releaseAfterUpload, roadTexture, waterTexture } from "../textures";
-import { MATERIALS, ownMaterial, toObject } from "../voxel/mesher";
+import { MATERIALS, ownMaterial, sharedFor, toObject } from "../voxel/mesher";
 import { C, E, G, VOX, VoxelModel, type Kind } from "../voxel/model";
 import type { SignSpot } from "../voxel/parts";
 import { mat } from "./kit";
 import { AREAS, BAY, CITY, CORE, CURB, DISTRICTS, GRID, gridCells, nz, PARK, planCity, polePositions, RIVER, SHOTENGAI, ST, streetSegments, type BuildingJob, type DistrictKey } from "./plan";
 import type { Geos } from "./worker";
-import { CUT_VOX } from "./worker";
+import { CUT_VOX } from "./plan";
 import { tunnels } from "./tunnel";
 import { CityCache } from "./cache";
 
@@ -106,6 +106,8 @@ export interface FactorySite extends Interior {
 export interface Venue extends Interior {
   kind: Exclude<import("../../interior/types").Interior["key"], "mempool" | "factory">;
   door: THREE.Vector3;
+  /** Out of the door, toward the street (the way the building faces): unit, flat. */
+  front: THREE.Vector3;
   /** Where the clerk stands. */
   keeper: THREE.Vector3;
   /** Card walls (card shop): opposite corners of each wall, in world space. */
@@ -198,6 +200,19 @@ function half(a: Uint16Array) {
 
 /** Buildings that are the same variant share their geometry. */
 const geoCache = new WeakMap<object, THREE.BufferGeometry>();
+/**
+ * Once on the GPU, the JS copy of an attribute that never changes is dropped: the renderer only
+ * reads it again to update it (or draw a wireframe), and the city's ~470 MB of geometry was held
+ * twice, in the page and on the GPU. (A lost GPU context reloads the page: see main.ts.)
+ */
+function dropOnUpload(a: THREE.BufferAttribute) {
+  a.onUpload(function (this: THREE.BufferAttribute) {
+    // (an empty array of the same type, not null: a batch reads its index's element size every frame)
+    const A = this.array.constructor as new (n: number) => THREE.TypedArray;
+    this.array = new A(0);
+  });
+}
+
 function geometry(d: NonNullable<Geos[Kind]>) {
   const hit = geoCache.get(d);
   if (hit) return hit;
@@ -209,13 +224,41 @@ function geometry(d: NonNullable<Geos[Kind]>) {
   g.setAttribute("color", half(d.col));
   g.setIndex(new THREE.BufferAttribute(d.idx, 1));
   g.computeBoundingSphere();
+  // (positions and indices stay: clicks, the walk and the bridges' decks raycast these meshes)
+  dropOnUpload(g.getAttribute("normal") as THREE.BufferAttribute);
+  dropOnUpload(g.getAttribute("color") as THREE.BufferAttribute);
   return g;
+}
+
+/**
+ * A building's meshes are raycast (clicks, the bridges' decks) on their positions and indices only:
+ * a hit on a mesh reads its normals when it has them, and those are dropped once uploaded.
+ */
+const hitGeos = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+function raycastOnPositions(this: THREE.Mesh, raycaster: THREE.Raycaster, out: THREE.Intersection[]) {
+  const geo = this.geometry;
+  let hit = hitGeos.get(geo);
+  if (!hit) {
+    hit = new THREE.BufferGeometry();
+    hit.setAttribute("position", geo.getAttribute("position"));
+    hit.setIndex(geo.index);
+    hit.boundingSphere = geo.boundingSphere;
+    hit.boundingBox = geo.boundingBox;
+    hitGeos.set(geo, hit);
+  }
+  this.geometry = hit;
+  try {
+    THREE.Mesh.prototype.raycast.call(this, raycaster, out);
+  } finally {
+    this.geometry = geo;
+  }
 }
 
 function objectFrom(geos: Geos, own: boolean) {
   const o = new THREE.Group();
   for (const [kind, d] of Object.entries(geos) as [Kind, NonNullable<Geos[Kind]>][]) {
     const mesh = new THREE.Mesh(geometry(d), own ? ownMaterial(kind) : MATERIALS[kind]);
+    mesh.raycast = raycastOnPositions;
     mesh.castShadow = kind !== "emit";
     mesh.receiveShadow = kind !== "emit";
     o.add(mesh);
@@ -277,7 +320,7 @@ function extBatch(g: THREE.Group, lods: LodSet[], shadows = false) {
         s.i += d.idx.length;
       }
   for (const [kind, s] of size) {
-    const mesh = new THREE.BatchedMesh(s.n, s.v, s.i, MATERIALS[kind]);
+    const mesh = new THREE.BatchedMesh(s.n, s.v, s.i, sharedFor(kind, "batched"));
     // (the far level never casts: shadows are drawn round the focus only, where the near one is)
     mesh.castShadow = shadows && kind !== "emit";
     mesh.receiveShadow = kind !== "emit";
@@ -311,8 +354,12 @@ function extBatch(g: THREE.Group, lods: LodSet[], shadows = false) {
           l.ids.push({ mesh, id, level, copy, shown: false });
         });
       });
+    // (every geometry's own bounds are computed and kept here: the per-instance culling reads them,
+    // never the arrays, which nothing raycasts, so they all go once uploaded)
     mesh.computeBoundingBox();
     mesh.computeBoundingSphere();
+    for (const a of Object.values(mesh.geometry.attributes)) dropOnUpload(a as THREE.BufferAttribute);
+    dropOnUpload(mesh.geometry.index!);
     mesh.matrixAutoUpdate = false;
     g.add(mesh);
   }
@@ -360,21 +407,48 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     if (list) list.push(j);
     else copies.set(k, [j]);
   }
-  // the bundle's file name carries a content hash in production: that is the cache's version
+  // (Vite only bundles the worker when the URL is written inline, like this)
+  const spawn = () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  // the props worker, spawned first: its bundle's file name is the cache's version. That name
+  // carries a hash of the code that builds the city and nothing else, so a release that changes
+  // the HUD or a shop keeps everyone's city cached; one that changes a building starts afresh
   // (not on phones: writing the whole city to IndexedDB copies it all again at the very moment
   // memory peaks, and mobile browsers kill the page for it)
-  const cache = new CityCache(import.meta.env.PROD && !LITE ? new URL(import.meta.url).pathname : null);
+  const propsWorker = spawn();
+  // its answer to "hello" says its script is in: the HTTP cache holds it from then on
+  propsWorker.postMessage({ kind: "hello" });
+  const scriptIn = new Promise<string | null>((resolve) => {
+    const t = setTimeout(() => resolve(null), 20_000);
+    propsWorker.addEventListener("message", (e) => (clearTimeout(t), resolve((e.data as { url?: string }).url ?? null)), { once: true });
+    propsWorker.addEventListener("error", () => (clearTimeout(t), resolve(null)), { once: true });
+  });
+  // the building workers' asked number (`?workers=n` to measure)
+  const asked = Number(new URLSearchParams(location.search).get("workers")) || 0;
+  const want = asked || Math.max(2, Math.min(LITE ? 3 : 8, (navigator.hardwareConcurrency || 4) - 1));
+  // a first visit (nothing cached yet): the workers start loading now, while the version and the
+  // cache are looked up (they were spawned after both, ~1.5 s of a first visit's boot). They start
+  // once the props worker's script is in, from the HTTP cache: spawned together, each fetched the
+  // same script on its own (a slow connection paid for every copy)
+  let early: Promise<Worker[]> = Promise.resolve([]);
+  let first = true;
+  try {
+    first = !localStorage.getItem("zstreet.cityBuild") || !import.meta.env.PROD || LITE;
+  } catch {}
+  if (first) early = scriptIn.then(() => Array.from({ length: want }, spawn));
+  const version =
+    import.meta.env.PROD && !LITE
+      ? await Promise.race([scriptIn.then((url) => url || new URL(import.meta.url).pathname), new Promise<string>((r) => setTimeout(() => r(new URL(import.meta.url).pathname), 3000))])
+      : null;
+  const cache = new CityCache(version);
   const cached = await cache.getAll([...copies.keys()]);
   const unique = [...copies.entries()].filter(([k]) => !cached.has(k)).map(([, l]) => l[0]);
   // (a phone: three at most. Every worker carries its own copy of the builders, the palette and its
   // results until it posts them: seven of them at once added ~300 MB to the boot's memory peak,
   // three cost about what two do and open the city a little sooner)
-  // (`?workers=n` to measure)
-  const asked = Number(new URLSearchParams(location.search).get("workers")) || 0;
-  const n = unique.length ? asked || Math.max(2, Math.min(LITE ? 3 : 8, (navigator.hardwareConcurrency || 4) - 1)) : 0;
-  // (Vite only bundles the worker when the URL is written inline, like this)
-  const spawn = () => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-  const workers = Array.from({ length: n }, spawn);
+  const n = unique.length ? want : 0;
+  const ready = n && first ? await early : [];
+  const workers = Array.from({ length: n }, (_, i) => ready[i] ?? spawn());
+  if (!n && first) void early.then((ws) => ws.forEach((w) => w.terminate()));
   // rough build cost in ms (landmarks are measured: a big one is a second or more)
   const cost = (j: BuildingJob) => (j.type === "landmark" ? ((j.opts as { w: number; d: number }).w * (j.opts as { w: number; d: number }).d) / 4 : j.width * (j.type === "office" ? 3 : 1.5) * (j.ext ? 1.4 : 1));
   const queues: BuildingJob[][] = workers.map(() => []);
@@ -387,6 +461,8 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   let done = 0;
   const total = copies.size + 1;
   const timings: [number, string, number][] = [];
+  /** (`?timings`) when each worker's results and its end reached this thread. */
+  const arrivals: [number, number, number][] = [];
 
   const placeBuilding = (j: BuildingJob, r: { full: Geos; cut: Geos; lod?: Geos; meta: Meta }) => {
     const m = r.meta;
@@ -491,11 +567,12 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       const pts = m.points ?? {};
       const front = new THREE.Vector3(0, 0, 1).applyAxisAngle(Y, ROT[j.face]);
       const w = (k: string) => (pts[k] ? toWorld(...(pts[k] as [number, number, number])) : k === "camPos" ? door.clone().addScaledVector(front, 14).setY(9) : k === "camLook" ? door.clone().setY(4) : door.clone().addScaledVector(front, -1.5));
-      const NAMES: Record<string, string> = { museum: "the zkSNARK MUSEUM", stadium: "BLOCK STADIUM", mall: "the ZK MALL", hotel: "the MARINA ZEC HOTEL", needle: "the ZEC NEEDLE", pyramid: "the GREAT PYRAMID", eiffel: "the TOUR EIFFEL", colosseum: "the COLOSSEUM", arab: "the BURJ AL ZEC", gardens: "GARDENS BY THE BAY", palm: "THE PALM", reserve: "the ZEC RESERVE", opera: "the OPERA HOUSE", bigben: "BIG BEN", statue: "the zkSNARK OF LIBERTY", "tower-orchard": "ZK TOWER ORCHARD", "tower-sapling": "ZK TOWER SAPLING", "tower-halo": "ZK TOWER HALO", zodl: "the ZODL TOWER", vizor: "the VIZOR TOWER", noir: "the NOIR TOWER", zlab: "the ZLAB TOWER", zsalab: "the ZSA LAB", convention: "the ZEC CONVENTION CENTER", university: "ZK UNIVERSITY", library: "the BINHAI LIBRARY", cemetery: "the ZK CEMETERY" };
+      const NAMES: Record<string, string> = { museum: "the zkSNARK MUSEUM", stadium: "BLOCK STADIUM", mall: "the ZK MALL", hotel: "the MARINA ZEC HOTEL", needle: "the ZEC NEEDLE", pyramid: "the GREAT PYRAMID", eiffel: "the TOUR EIFFEL", colosseum: "the COLOSSEUM", arab: "the BURJ AL ZEC", gardens: "GARDENS BY THE BAY", palm: "THE PALM", reserve: "the ZEC RESERVE", opera: "the OPERA HOUSE", bigben: "BIG BEN", statue: "the zkSNARK OF LIBERTY", "tower-orchard": "ZK TOWER ORCHARD", "tower-sapling": "ZK TOWER SAPLING", "tower-halo": "ZK TOWER HALO", zodl: "the ZODL TOWER", vizor: "the VIZOR TOWER", noir: "the NOIR TOWER", zlab: "the ZLAB TOWER", zsalab: "the ZSA LAB", convention: "the ZEC CONVENTION CENTER", university: "ZK UNIVERSITY", library: "the BINHAI LIBRARY", cemetery: "the ZK CEMETERY", gamehouse: "the GAME HOUSE" };
       venues.push({
         kind: venue,
         name: j.type === "landmark" ? (NAMES[venue] ?? "the ZEC RESERVE") : venue === "library" ? "the LIBRARY" : "the ZK TOWER",
         door,
+        front,
         occluder: occ,
         keeper: w("keeper").setY(CURB + VOX),
         camPos: w("camPos"),
@@ -617,23 +694,26 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     ...workers.map(
       (w, i) =>
         new Promise<void>((resolve) => {
+          // the city goes on once this worker's last building is in; the worker itself stays until its
+          // cache writes have committed (a 284 MB commit took up to 2.5 s), then goes
+          let left = queues[i].length;
           w.onmessage = (e) => {
-            const fresh: [string, unknown][] = [];
-            for (const r of e.data.results) {
-              timings.push([r.ms, byId.get(r.id)!.type, i]);
-              try {
-                placeResult(r);
-              } catch (err) {
-                console.error(`city: placing ${byId.get(r.id)!.type} #${r.id} failed`, err);
-                continue;
-              }
-              fresh.push([variantKey(byId.get(r.id)!), r]);
+            if (e.data.kind === "done") {
+              arrivals.push([i, -1, Math.round(performance.now())]);
+              w.terminate();
+              return resolve();
             }
-            void cache.put(fresh);
+            if (--left === 0) resolve();
+            if (e.data.kind === "failed") return;
+            const r = e.data.result;
+            arrivals.push([i, r.ms, Math.round(performance.now())]);
+            timings.push([r.ms, byId.get(r.id)!.type, i]);
+            try {
+              placeResult(r);
+            } catch (err) {
+              console.error(`city: placing ${byId.get(r.id)!.type} #${r.id} failed`, err);
+            }
             progress(done / total);
-            // its job is done: its memory goes now, not once the slowest worker is through
-            w.terminate();
-            resolve();
           };
           // a worker that dies (out of memory, a script error) leaves gaps, not a city that never opens
           w.onerror = (err) => {
@@ -641,12 +721,15 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
             w.terminate();
             resolve();
           };
-          w.postMessage({ kind: "buildings", jobs: queues[i], lite: LITE });
+          w.postMessage({ kind: "buildings", jobs: queues[i], lite: LITE, keys: cache.on ? Object.fromEntries(queues[i].map((j) => [j.id, variantKey(j)])) : undefined });
         }),
     ),
     new Promise<void>((resolve) => {
-      const w = spawn();
+      const w = propsWorker;
       w.onmessage = (e) => {
+        // (a slow network: the worker's script came in after the version's 3 s wait, and its answer
+        // to "hello" arrives here first)
+        if (e.data?.kind !== "props") return;
         // (batched with the others once all is in: see extBatch)
         for (const c of e.data.chunks) propChunks.push({ mats: [new THREE.Matrix4()], levels: [c.geos, c.far], at: [new THREE.Vector3(c.centre[0], 0, c.centre[1])], ids: [] });
         for (const [x, z, r] of e.data.circles) nav.addCircle(x, z, r);
@@ -666,7 +749,6 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       w.postMessage({ kind: "props", props });
     }),
   ]);
-  for (const w of workers) w.terminate();
   extBatch(g, lods);
   extBatch(g, propChunks, true);
   // the batches hold their own copy of every level: the workers' arrays (~85 MB on a phone) were
@@ -674,6 +756,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   for (const l of [...lods, ...propChunks]) l.levels = [];
   if (location.search.includes("timings")) {
     const per = workers.map((_, i) => timings.filter((t) => t[2] === i).reduce((a, t) => a + t[0], 0));
+    console.log(`[t] arrivals ${workers.map((_, i) => arrivals.filter((a) => a[0] === i).map((a) => `${a[1]}@${a[2]}`).join(" ")).join(" | ")}`);
     console.log(`workers ${workers.length}: ${per.join(" ")} ms; variants ${unique.length}; slowest: ${timings.sort((a, b) => b[0] - a[0]).slice(0, 12).map((t) => `${t[1]} ${t[0]}`).join(", ")}`);
   }
   // the landmarks' live bits: chimney plumes and kitchen steam, the statue's torch
@@ -1716,8 +1799,8 @@ function freeSign(text: string, color: string): SignSpot {
 /** Neon text mounted on a sign spot: front fascia, billboard, or both faces of a blade sign. */
 /**
  * The city's neon, one texture per text and colour (the bigger city repeats its variants: the same
- * sign was drawn and uploaded again for every copy). On a phone at half resolution, and its canvas
- * let go once uploaded (see releaseAfterUpload): the city's signs are never disposed.
+ * sign was drawn and uploaded again for every copy). On a phone at half resolution; its canvas let
+ * go once uploaded (see releaseAfterUpload): the city's signs are never disposed.
  */
 const neonCache = new Map<string, ReturnType<typeof neonTexture>>();
 function cityNeon(text: string, color: string, vertical?: boolean) {
@@ -1725,7 +1808,7 @@ function cityNeon(text: string, color: string, vertical?: boolean) {
   let n = neonCache.get(key);
   if (!n) {
     n = neonTexture(text, color, { vertical, scale: LITE ? 0.5 : 1 });
-    if (LITE) releaseAfterUpload(n.texture);
+    releaseAfterUpload(n.texture);
     neonCache.set(key, n);
   }
   return n;

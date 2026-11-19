@@ -5,6 +5,7 @@ import { meshModel } from "../voxel/mesher";
 import { C, half, palette, VOX, type Kind } from "../voxel/model";
 import type { Prop } from "../voxel/props";
 import { buildJob, propModel } from "./build";
+import { workerCache } from "./cache";
 import type { BuildingJob, PropJob } from "./plan";
 
 /**
@@ -27,7 +28,9 @@ export interface GeoData {
 }
 export type Geos = Partial<Record<Kind, GeoData>>;
 
-export const CUT_VOX = 16;
+// (in plan.ts, which the main thread loads anyway: importing it from here pulled every builder into the main bundle)
+export { CUT_VOX } from "./plan";
+import { CUT_VOX } from "./plan";
 
 const toHalf = THREE.DataUtils.toHalfFloat;
 function pack(geos: Partial<Record<Kind, THREE.BufferGeometry>>, out: Transferable[]): Geos {
@@ -72,23 +75,37 @@ function scaled(geos: Partial<Record<Kind, THREE.BufferGeometry>>, k: number) {
 /** Props that block with their whole footprint (a bench is two metres long, not a post). */
 const SOLID = new Set(["bench", "shelter", "stall", "container", "greenhouse", "vending", "bicycle", "crates", "trashBags", "planter", "fence", "mailbox", "barrel"]);
 
-self.onmessage = (e: MessageEvent) => {
-  const msg = e.data as { kind: "buildings"; jobs: BuildingJob[]; lite?: boolean } | { kind: "props"; props: PropJob[] };
+self.onmessage = async (e: MessageEvent) => {
+  const msg = e.data as { kind: "buildings"; jobs: BuildingJob[]; lite?: boolean; keys?: Record<number, string> } | { kind: "props"; props: PropJob[] } | { kind: "hello" };
+  // the main thread asks which bundle this is: its hashed name versions the city cache
+  if (msg.kind === "hello") return void (self as unknown as Worker).postMessage({ url: self.location.pathname });
   const transfer: Transferable[] = [];
   if (msg.kind === "buildings") {
     const lite = !!msg.lite;
-    // one broken building (a builder throwing) must not take the whole queue, or the city, with it
-    const results = msg.jobs.flatMap((j) => {
+    // the city cache (`keys`: the variants' cache keys, when it is on)
+    const cache = msg.keys ? await workerCache() : null;
+    // each building posted as soon as it is meshed, so the main thread places it while the next one
+    // is built (they all came at the end, then were placed in one long stall)
+    for (const j of msg.jobs) {
       const t0 = performance.now();
+      let res;
       try {
-        const res = buildOne(j);
-        return [{ ...res, ms: Math.round(performance.now() - t0) }];
+        res = { ...buildOne(j), ms: 0 };
       } catch (err) {
+        // one broken building (a builder throwing) must not take the whole queue, or the city, with it
         console.error(`city worker: ${j.type} #${j.id} failed`, err);
-        return [];
+        transfer.length = 0;
+        (self as unknown as Worker).postMessage({ kind: "failed", id: j.id });
+        continue;
       }
-    });
-    (self as unknown as Worker).postMessage({ kind: "buildings", results }, transfer);
+      res.ms = Math.round(performance.now() - t0);
+      // into the cache first, while the arrays are still ours (put copies them): posting hands them over
+      cache?.put(msg.keys![j.id], res);
+      (self as unknown as Worker).postMessage({ kind: "building", result: res }, transfer);
+      transfer.length = 0;
+    }
+    await cache?.done();
+    (self as unknown as Worker).postMessage({ kind: "done" });
     return;
     function buildOne(j: BuildingJob) {
       const b = buildJob(j);

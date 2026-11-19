@@ -66,6 +66,14 @@ dialogue are a visual interpretation of those data.
   and Tachyon halls, HashSmash Hall), wallet towers for Zodl, Vizor and Noir fed live from their
   tweets and GitHub, the ZSA Lab, a cinema, a stadium, a prison of crypto's convicted founders, a
   cemetery whose crypt tracks the ZEC still leaving Sprout, a convention center, and more.
+- **Swing across it on foot**: aim at a facade or a roof and hold **R** or the **right mouse
+  button**: a line of Zcash gold goes out to the visible point under the aim (the cursor itself
+  while it is free, the centre reticle on touch screens), never to another building, never higher,
+  never into the sky. Aim up to launch from the street, along the line. Let go to keep your speed
+  into the next swing; the movement keys steer along the arc; a line held against a facade climbs
+  it; land on roofs and run. On a phone in landscape: hold **HOLD · SWING**, drag that thumb to
+  look, the left stick moves. Speed widens the view and draws air trails (softened with reduced
+  motion).
 - **Citizens are AI agents**: every zkSNARK has a persona; walk up to anyone and press E to talk.
   A cast of 12 lives one turn per block. Each 576-block round, agents propose a building, visitors
   voting logic selects a winner, and it is built block by block. The visitor voting panel is

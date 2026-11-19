@@ -27,6 +27,11 @@ export class WalkControls {
   private drag: { x: number; y: number; id: number } | null = null;
   /** Analog move from the touch stick: x strafes right, y walks forward, both in [-1, 1]. */
   readonly stick = { x: 0, y: 0 };
+  /** An on-screen button held like a key (the touch stick's jump: " "). */
+  hold(key: string, on: boolean) {
+    if (on) this.keys.add(key);
+    else this.keys.delete(key);
+  }
   private moved = 0;
   private push = 0;
   /** Jumping (Space): height above the floor and vertical speed. */
@@ -104,6 +109,86 @@ export class WalkControls {
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }
 
+  // ---- walking through a door without a cut (main.ts walkOut) ----
+  /** Momentum from walking out of a door, m/s: it runs out by itself unless the keys keep it up. */
+  private carried: [number, number] | null = null;
+  /** Already moving (out of a door, still walking). */
+  carry(vx: number, vz: number) {
+    this.carried = [vx, vz];
+  }
+
+  /** Look this way, straight off: walking through from a place where you were already looking. */
+  aim(yaw: number, pitch: number) {
+    this.yaw = yaw;
+    this.pitch = pitch;
+    this.camera.rotation.set(pitch, yaw, 0);
+  }
+
+  /** The keys still held from another walker: walking through a door, W stays down. */
+  takeKeys(from: WalkControls) {
+    for (const k of from.keys) this.keys.add(k);
+    from.keys.clear();
+  }
+
+  /** Where the look goes up or down. */
+  get tilt() {
+    return this.pitch;
+  }
+
+  // ---- another mover (the swing on foot, src/scene/swing): it takes the walk over while it runs ----
+  /** Called each update with the keys; true means it moved the camera itself this frame. */
+  mover: ((dt: number, forward: number, right: number, jump: boolean, run: boolean) => boolean) | null = null;
+  /** Lean and nod of the view (radians), on top of the look: the aim stays where it was. */
+  roll = 0;
+  nod = 0;
+  /** Placed somewhere new (a door, a teleport, back from the map): whatever was moving stops. */
+  onPlace?: () => void;
+  /** The walk's own speed (m/s), measured frame to frame: the swing takes it over. */
+  private vel = new THREE.Vector3();
+  private was = new THREE.Vector3();
+  /** Momentum kept on landing, sliding out over a moment. */
+  private glide: [number, number] | null = null;
+
+  /** What the walk is doing now (m/s), jumps included. */
+  velocity(out: THREE.Vector3) {
+    return out.copy(this.vel);
+  }
+
+  /** Back on its own feet on a floor at `floorY`, still going at (vx, vz) m/s for a step or two. */
+  resume(floorY: number, vx: number, vz: number) {
+    this.floorY = floorY;
+    this.hop = this.vy = 0;
+    this.glide = Math.hypot(vx, vz) > 0.2 ? [vx, vz] : null;
+    this.was.copy(this.camera.position);
+  }
+
+  /** Turn the look by radians (a held touch button's own drag). */
+  turn(dyaw: number, dpitch: number) {
+    this.yaw += dyaw;
+    this.pitch = THREE.MathUtils.clamp(this.pitch + dpitch, -1.2, 1.2);
+  }
+
+  /** The glide after a landing, and the speed the walk really went at this frame. */
+  private follow(dt: number) {
+    const p = this.camera.position;
+    if (this.glide) {
+      const [vx, vz] = this.glide;
+      p.x += vx * dt;
+      if (this.blocked(p.x, p.z)) p.x -= vx * dt;
+      p.z += vz * dt;
+      if (this.blocked(p.x, p.z)) p.z -= vz * dt;
+      const k = Math.exp(-dt * 6);
+      this.glide = Math.hypot(vx, vz) * k > 0.2 ? [vx * k, vz * k] : null;
+    }
+    if (dt > 0) this.vel.set((p.x - this.was.x) / dt, this.vy, (p.z - this.was.z) / dt);
+    // (a cut, not a walk)
+    if (this.vel.lengthSq() > 400) this.vel.set(0, 0, 0);
+    this.was.copy(p);
+    this.roll *= Math.exp(-dt * 8);
+    this.nod *= Math.exp(-dt * 8);
+  }
+  // ---- (end of the mover) ----
+
   /** The floor height when there is no special ground under the walker. */
   setBase(y: number) {
     this.baseFloor = y;
@@ -149,6 +234,11 @@ export class WalkControls {
     this.yaw = yaw;
     this.pitch = -0.08;
     this.push = 0;
+    this.carried = null;
+    this.glide = null;
+    this.vel.set(0, 0, 0);
+    this.was.copy(this.camera.position);
+    this.onPlace?.();
   }
 
   update(dt: number) {
@@ -166,7 +256,16 @@ export class WalkControls {
       f += step / (SPEED * dt + 1e-6);
     }
     // the stick pushed all the way out runs, like Shift
-    const speed = SPEED * (k.has("shift") || Math.hypot(this.stick.x, this.stick.y) > 0.92 ? 2 : 1);
+    const run = k.has("shift") || Math.hypot(this.stick.x, this.stick.y) > 0.92;
+    const speed = SPEED * (run ? 2 : 1);
+    // another mover has the walk for now (the swing): it gets the keys and moves the camera itself
+    if (this.mover?.(dt, THREE.MathUtils.clamp(f, -1, 1), THREE.MathUtils.clamp(r, -1, 1), k.has(" "), run)) {
+      this.hop = this.vy = 0;
+      this.glide = null;
+      this.was.copy(this.camera.position);
+      this.camera.rotation.set(this.pitch + this.nod, this.yaw, this.roll);
+      return;
+    }
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
     const move = fwd.multiplyScalar(f).add(right.multiplyScalar(r));
@@ -178,6 +277,19 @@ export class WalkControls {
     if (this.blocked(p.x, p.z)) p.x -= move.x;
     p.z += move.z;
     if (this.blocked(p.x, p.z)) p.z -= move.z;
+    // out of a door with nothing held: a step or two on, slowing to a stop
+    if (this.carried) {
+      const [vx, vz] = this.carried;
+      if (this.walking || Math.hypot(vx, vz) < 0.1) this.carried = null;
+      else {
+        p.x += vx * dt;
+        if (this.blocked(p.x, p.z)) p.x -= vx * dt;
+        p.z += vz * dt;
+        if (this.blocked(p.x, p.z)) p.z -= vz * dt;
+        const k = Math.exp(-dt * 3.5);
+        this.carried = [vx * k, vz * k];
+      }
+    }
     if (this.drift) {
       const [vx, vz] = this.drift;
       p.x += vx * dt;
@@ -200,7 +312,8 @@ export class WalkControls {
     }
     p.y += (this.floorY + EYE - p.y) * Math.min(1, dt * 10);
     p.y += this.hop;
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
+    this.follow(dt);
+    this.camera.rotation.set(this.pitch + this.nod, this.yaw, this.roll);
   }
 
   /** The floor height the walker stands on now. */

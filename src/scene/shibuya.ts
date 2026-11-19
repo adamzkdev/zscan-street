@@ -1,4 +1,5 @@
 import { memeAd } from "./memes";
+import { load } from "./load";
 import * as THREE from "three";
 import { atlasBitmap } from "../data/atlas";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -73,6 +74,9 @@ interface Screen {
   hz: number;
   next: number;
   mesh: THREE.Mesh;
+  /** Where it hangs and how far round (for load.sees), measured the first time it is due. */
+  where?: THREE.Vector3;
+  r?: number;
 }
 
 interface Corner {
@@ -1234,7 +1238,15 @@ export class Shibuya {
       let budget = 3;
       for (const s of this.screens) {
         if (t < s.next || budget <= 0) continue;
-        s.next = t + 1 / s.hz;
+        // (out of the picture: it keeps its frame until it is in view again)
+        if (!s.where) {
+          s.where = s.mesh.getWorldPosition(new THREE.Vector3());
+          s.mesh.geometry.computeBoundingSphere();
+          s.r = (s.mesh.geometry.boundingSphere?.radius ?? 4) * s.mesh.getWorldScale(new THREE.Vector3()).x + 0.5;
+        }
+        if (!load.sees(s.where, s.r!)) continue;
+        // (a processor that cannot keep up, scene/load.ts: at a lower rate)
+        s.next = t + 1 / (s.hz * load.rate);
         budget--;
         s.draw(s.ctx, s.ctx.canvas.width, s.ctx.canvas.height, t);
         s.tex.needsUpdate = true;

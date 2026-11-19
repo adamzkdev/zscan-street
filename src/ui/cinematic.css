@@ -1,0 +1,163 @@
+/*
+ * The entry film (ui/cinematic.ts): black bars, the place's title card in the street's own signage
+ * (DotGothic16, the place's neon colour, a kanji eyebrow), a hint to skip. The HUD steps aside while
+ * it plays (the black cut and the camera bars stay where they are).
+ */
+.cine {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  --bar: clamp(38px, 11vh, 110px);
+}
+.cine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 100% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.cine.on::after {
+  opacity: 1;
+}
+.cine-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--bar);
+  background: #000;
+  transform: translateY(-101%);
+  transition: transform 0.55s cubic-bezier(0.7, 0, 0.3, 1);
+}
+.cine-bar.bot {
+  bottom: 0;
+  transform: translateY(101%);
+}
+.cine-bar.top {
+  top: 0;
+}
+.cine.on .cine-bar {
+  transform: none;
+  transition-duration: 0.45s;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cine.still .cine-bar {
+  transform: translateY(-101%);
+}
+.cine.still .cine-bar.bot {
+  transform: translateY(101%);
+}
+.cine-card {
+  position: absolute;
+  left: max(24px, 6vw);
+  bottom: calc(var(--bar) + clamp(18px, 5vh, 56px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(760px, 80vw);
+  opacity: 0;
+}
+.cine.on .cine-card {
+  animation: cine-card var(--dur, 3s) steps(1, end) forwards, cine-card-move var(--dur, 3s) cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.cine.out .cine-card {
+  transition: opacity 0.25s;
+  opacity: 0;
+}
+@keyframes cine-card-move {
+  0%,
+  10% {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  28% {
+    opacity: 1;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+@keyframes cine-card {
+  /* (the sign flickers on, like a neon tube) */
+  12% { filter: brightness(0.4); }
+  14% { filter: none; }
+  17% { filter: brightness(0.5); }
+  19% { filter: none; }
+}
+.cine-eyebrow {
+  font: 13px/1 var(--pixel, "DotGothic16", monospace);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--c, #f4b728);
+  text-shadow: 0 0 10px var(--c, #f4b728), 0 1px 12px rgba(0, 0, 0, 0.6);
+}
+.cine-title {
+  font: clamp(34px, 6vw, 84px) / 1 var(--pixel, "DotGothic16", monospace);
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 0 2px #fff, 0 0 18px var(--c, #f4b728), 0 6px 40px rgba(0, 0, 0, 0.55);
+  text-wrap: balance;
+}
+.cine-rule {
+  display: block;
+  height: 4px;
+  width: 0;
+  background: repeating-linear-gradient(90deg, var(--c, #f4b728) 0 8px, transparent 8px 12px);
+  box-shadow: 0 0 14px var(--c, #f4b728);
+}
+.cine.on .cine-rule {
+  animation: cine-rule var(--dur, 3s) cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes cine-rule {
+  0%,
+  18% {
+    width: 0;
+  }
+  45%,
+  100% {
+    width: min(220px, 40vw);
+  }
+}
+.cine-sub {
+  font: 500 clamp(13px, 1.5vw, 17px) / 1.4 var(--sans, Roboto, sans-serif);
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.7);
+}
+.cine-sub:empty {
+  display: none;
+}
+.cine-skip {
+  position: absolute;
+  right: max(20px, 4vw);
+  bottom: calc(var(--bar) / 2);
+  transform: translateY(50%);
+  font: 11px var(--pixel, "DotGothic16", monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  opacity: 0;
+  transition: opacity 0.4s 0.6s;
+}
+.cine.on .cine-skip {
+  opacity: 1;
+}
+.cine.still .cine-skip {
+  display: none;
+}
+html.cine-on #ui > :not(.cut):not(.lb) {
+  opacity: 0 !important;
+  transition: opacity 0.25s !important;
+  pointer-events: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cine.on .cine-card {
+    animation: cine-card-move var(--dur, 3s) linear forwards;
+  }
+}

@@ -1,0 +1,173 @@
+/* The browser keeps the collection visible; a native dialog owns details, focus and dismissal. */
+.pt-sel.sel-browser { background: #0b131f; }
+.sel-browser .sel-main { grid-template-columns: minmax(0, 1fr); max-width: 1400px; }
+.sel-browser .sel-grid { grid-template-columns: repeat(auto-fill, minmax(174px, 1fr)); gap: 18px; padding: 18px 6px 28px; }
+.sel-browser .sel-head .pt-chain { display: none; }
+.sel-browser .sel-title small { color: #94a7bd; letter-spacing: .12em; }
+.sel-browser .sel-hints { opacity: .7; }
+
+.pt-sel.sel-browser > dialog.sel-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(480px, 100%);
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid #ffffff20;
+  border-radius: 22px 0 0 22px;
+  background: #111c2a;
+  color: #f0f3f7;
+  font-family: Geist, ui-sans-serif, system-ui, sans-serif;
+  box-sizing: border-box;
+  overflow: hidden;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.pt-sel.sel-browser > dialog.sel-drawer:not([open]) { display: none; }
+.pt-sel.sel-browser > dialog.sel-drawer[open] { display: block; animation: sel-drawer-in .22s ease-out; }
+.sel-drawer::backdrop { background: rgba(3, 8, 15, .7); }
+.sel-drawer .sel-dt {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: linear-gradient(160deg, #202e40, #111b28 65%);
+  transform: none;
+  transition: none;
+  animation: none;
+  overflow: hidden;
+}
+.sel-drawer .sel-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  gap: 12px;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 16px max(18px, env(safe-area-inset-left));
+  border-bottom: 1px solid #ffffff12;
+  background: #152131;
+}
+.sel-drawer-head > div { min-width: 0; }
+.sel-drawer-head small { display: block; color: #ff9d78; font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.sel-drawer-head small span { color: #8da0b8; }
+.sel-drawer-head h2 { margin: 6px 0 0; font-size: 23px; line-height: 1.1; font-weight: 850; letter-spacing: -.035em; }
+.sel-drawer .sel-x {
+  position: static;
+  display: grid;
+  place-items: center;
+  flex: none;
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #ffffff26;
+  border-radius: 13px;
+  background: #243247;
+  color: #f0f3f7 !important;
+  box-shadow: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.sel-drawer .sel-x svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; pointer-events: none; }
+.sel-drawer .sel-x:hover { background: #35475f; }
+.sel-drawer .sel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #41536d transparent;
+  padding: 16px max(18px, env(safe-area-inset-right)) 16px max(18px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.sel-scroll > * { flex-shrink: 0; }
+.sel-drawer .sel-big { width: 100%; height: 150px; aspect-ratio: auto; margin: 0; border-radius: 12px; transform: none; box-shadow: none; }
+.sel-drawer .sel-big .pt-th { border-radius: inherit; }
+.sel-drawer .sel-tag { margin: 0; font-size: 13px; line-height: 1.5; font-weight: 450; color: #b8c5d6; }
+.sel-drawer .sel-arena-picker:empty { display: none; }
+.sel-drawer .sel-tracks > small { margin-bottom: 9px; font-size: 11px; letter-spacing: .08em; color: #bac9db; }
+.sel-drawer .sel-trks { gap: 7px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sel-drawer .sel-trk { min-width: 0; min-height: 44px; padding: 4px; box-shadow: inset 0 0 0 1px #ffffff16; background: #0c1623; border-radius: 9px; }
+.sel-drawer .sel-trk.on { background: color-mix(in srgb, var(--c) 12%, #132033); box-shadow: inset 0 0 0 2px var(--c); }
+.sel-drawer .sel-trk b { font-size: 10px; line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
+.sel-drawer .sel-arena { margin-top: 9px; padding: 8px 10px; border-left-width: 2px; }
+.sel-drawer .sel-arena > span { font-size: 11px; }
+.sel-drawer .sel-arena p { font-size: 12px; line-height: 1.4; }
+.sel-drawer .sel-fold { border: 1px solid #ffffff18; border-radius: 12px; background: #101b2a; overflow: hidden; }
+.sel-drawer .sel-fold summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 10px 13px;
+  box-sizing: border-box;
+  list-style: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  touch-action: manipulation;
+}
+.sel-fold summary::-webkit-details-marker { display: none; }
+.sel-fold summary > span { margin-left: auto; font-size: 11px; color: #8fa4bc; font-weight: 500; }
+.sel-fold summary::after { content: ""; width: 6px; height: 6px; flex: none; border-right: 1.5px solid #a7b9d0; border-bottom: 1.5px solid #a7b9d0; transform: rotate(45deg); margin: -3px 2px 0 4px; }
+.sel-fold[open] summary::after { transform: rotate(225deg); margin-top: 3px; }
+.sel-fold[open] summary { border-bottom: 1px solid #ffffff12; }
+.sel-drawer .sel-fold-body { padding: 13px; }
+.sel-fold-body > p { margin: 0; color: #c5d0df; font-size: 13px; line-height: 1.6; }
+.sel-drawer .sel-ctl { margin-top: 14px; gap: 16px; flex-wrap: wrap; }
+.sel-drawer .sel-opts { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 14px; }
+.sel-drawer .sel-opt { display: flex; flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.sel-drawer .sel-opt small { font-size: 12px; color: #b8c8db; }
+.sel-drawer .pt-seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.sel-drawer .pt-seg button { min-width: 44px; min-height: 44px; padding: 6px 10px; font-size: 12px; }
+.sel-drawer .sel-stake { display: flex; flex-direction: column; gap: 12px; }
+.sel-drawer .sel-stake small { font-size: 12px; color: #a8b9cd; line-height: 1.5; }
+.sel-drawer .pt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sel-drawer .pt-chips button { min-width: 44px; min-height: 44px; flex: 1; }
+.sel-drawer .pt-gold { min-height: 48px; }
+.sel-drawer .sel-drawer-foot {
+  flex: none;
+  padding: 12px max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background: #142032;
+  border-top: 1px solid #ffffff1a;
+  box-shadow: 0 -6px 20px #00000016;
+}
+.sel-drawer .sel-go { width: 100%; height: 52px !important; margin: 0; font-size: 17px !important; border: 0; gap: 10px; }
+.sel-drawer .sel-go span { margin-left: auto; font-size: 12px; font-weight: 550; background: none; padding: 0; }
+.sel-drawer :is(button, summary):focus-visible { outline: 2px solid #ffc4a8; outline-offset: -3px; }
+/* Keep hit targets stationary, even when the user closes immediately after opening. */
+@keyframes sel-drawer-in { from { opacity: .5; } }
+@media (max-width: 600px) and (orientation: portrait) {
+  .pt-sel.sel-browser > dialog.sel-drawer { inset: auto 0 0; width: 100%; height: min(92dvh, 820px); border-left: 0; border-top: 1px solid #ffffff26; border-radius: 22px 22px 0 0; }
+  .sel-drawer .sel-drawer-head { padding-top: 16px; }
+  .sel-drawer .sel-big { height: 120px; }
+  .sel-browser .sel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; padding-top: 12px; }
+  .sel-drawer .sel-scroll { padding-top: 12px; gap: 12px; }
+}
+@media (max-height: 520px) {
+  .sel-drawer .sel-drawer-head { padding-block: max(10px, env(safe-area-inset-top)) 10px; }
+  .sel-drawer-head h2 { font-size: 20px; }
+  .sel-drawer .sel-big { height: 112px; }
+  .sel-drawer .sel-drawer-foot { padding-top: 10px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .sel-drawer .sel-go { height: 48px !important; }
+}
+@media (max-height: 650px) and (orientation: portrait) {
+  .sel-drawer .sel-big { height: 88px; }
+  .sel-drawer .sel-scroll { gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .pt-sel.sel-browser > dialog.sel-drawer[open] { animation: none; } }

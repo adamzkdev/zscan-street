@@ -20,9 +20,43 @@ function open(): Promise<IDBDatabase | null> {
   });
 }
 
+/**
+ * From a city worker: a write into the cache that its results go through before they are posted
+ * (the copy IndexedDB makes is the worker's to pay; on the main thread it was a 0.4 s stall at boot).
+ * `put` copies the value at once, so it can be transferred right after; `done` waits for the commit
+ * (the main thread terminates the worker once it says it is done, and that aborts a transaction
+ * still in flight). Null without IndexedDB.
+ */
+export async function workerCache(): Promise<{ put(k: string, v: unknown): void; done(): Promise<void> } | null> {
+  const db = await open();
+  if (!db) return null;
+  let tx: IDBTransaction | null = null;
+  let finished: Promise<void> = Promise.resolve();
+  return {
+    put(k, v) {
+      try {
+        if (!tx) {
+          const t = (tx = db.transaction(STORE, "readwrite"));
+          finished = new Promise<void>((resolve) => (t.oncomplete = t.onerror = t.onabort = () => resolve()));
+        }
+        tx.objectStore(STORE).put(v, k);
+      } catch {
+        /* quota, or the transaction already closed: fine, it just regenerates next time */
+      }
+    },
+    async done() {
+      await finished;
+      db.close();
+    },
+  };
+}
+
 export class CityCache {
   private db: Promise<IDBDatabase | null>;
+  /** Whether there is a cache at all (the workers then write their results into it). */
+  readonly on: boolean;
   constructor(build: string | null) {
+    this.on = !!build;
     this.db = build ? open() : Promise.resolve(null);
     // a new build: drop what the old one left
     if (build)
@@ -62,16 +96,5 @@ export class CityCache {
       }
     });
     return out;
-  }
-
-  async put(entries: [string, unknown][]) {
-    const db = await this.db;
-    if (!db || !entries.length) return;
-    try {
-      const st = db.transaction(STORE, "readwrite").objectStore(STORE);
-      for (const [k, v] of entries) st.put(v, k);
-    } catch {
-      /* quota: fine, it just regenerates next time */
-    }
   }
 }

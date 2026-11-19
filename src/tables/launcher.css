@@ -1,0 +1,836 @@
+/* THE GAME HOUSE's table launcher (launcher.ts): a card over the room, then the game full screen. */
+.tl-root {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: radial-gradient(90% 80% at 50% 40%, rgba(20, 14, 34, 0.55), rgba(6, 5, 10, 0.82));
+  backdrop-filter: blur(5px) saturate(1.1);
+  -webkit-backdrop-filter: blur(5px) saturate(1.1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+  font-family: Geist, Roboto, ui-sans-serif, system-ui, sans-serif;
+  color: #f2eee6;
+  -webkit-font-smoothing: antialiased;
+}
+.tl-root.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tl-card {
+  --c: #ff6b35;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 22px;
+  width: min(940px, 100%);
+  max-height: calc(100vh - 36px);
+  max-height: calc(100dvh - 36px);
+  overflow: auto;
+  padding: 22px;
+  border-radius: 20px;
+  border: 1px solid rgba(232, 230, 224, 0.12);
+  background:
+    radial-gradient(70% 60% at 0% 0%, color-mix(in srgb, var(--c) 22%, transparent), transparent 70%),
+    radial-gradient(60% 50% at 100% 100%, rgba(196, 177, 252, 0.12), transparent 70%),
+    linear-gradient(160deg, #1b1724 0%, #110f16 55%, #0c0b10 100%);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  scrollbar-width: thin;
+}
+.tl-root.tl-in .tl-card {
+  animation: tl-pop 0.34s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+@keyframes tl-pop {
+  from {
+    transform: translateY(16px) scale(0.96);
+    opacity: 0;
+  }
+}
+.tl-x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(232, 230, 224, 0.16);
+  background: rgba(14, 14, 14, 0.7);
+  color: #f2eee6;
+  cursor: pointer;
+}
+.tl-x svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.tl-x:hover {
+  background: var(--c);
+  color: #0e0e0e;
+}
+.tl-left,
+.tl-right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.tl-art {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0b0a10;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 10px 40px color-mix(in srgb, var(--c) 22%, transparent);
+}
+.tl-art canvas,
+.tl-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tl-art img {
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.tl-art img.ok {
+  opacity: 1;
+}
+.tl-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, transparent 55%, rgba(8, 7, 12, 0.75));
+  pointer-events: none;
+}
+.tl-house,
+.tl-time {
+  position: absolute;
+  z-index: 2;
+  font: 600 11px/1 "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: rgba(8, 7, 12, 0.7);
+  border: 1px solid rgba(232, 230, 224, 0.14);
+}
+.tl-house {
+  top: 10px;
+  left: 10px;
+  color: var(--c);
+}
+.tl-time {
+  bottom: 10px;
+  left: 10px;
+  color: #f2eee6;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+.tl-title h2 {
+  margin: 0;
+  font: 800 clamp(26px, 3.4vw, 36px) / 1.02 Geist, "PingFang SC", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0.01em;
+  color: #fff;
+  text-shadow: 0 0 22px color-mix(in srgb, var(--c) 55%, transparent);
+}
+.tl-title p {
+  margin: 6px 0 0;
+  color: rgba(242, 238, 230, 0.72);
+  font-size: 15px;
+  line-height: 1.35;
+}
+.tl-help {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(232, 230, 224, 0.08);
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(242, 238, 230, 0.8);
+}
+.tl-help b {
+  display: block;
+  margin-bottom: 4px;
+  font: 600 11px/1.2 "Geist Mono", ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c);
+}
+.tl-help p {
+  margin: 0 0 4px;
+}
+.tl-right {
+  padding-top: 26px;
+}
+.tl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.tl-row label {
+  font: 600 11px/1.2 "Geist Mono", ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(242, 238, 230, 0.55);
+}
+.tl-row label em {
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: rgba(242, 238, 230, 0.4);
+  margin-left: 6px;
+}
+.tl-row small {
+  color: rgba(242, 238, 230, 0.5);
+  font-size: 12.5px;
+}
+.tl-seg,
+.tl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tl-seg button,
+.tl-chips button {
+  min-width: 44px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(232, 230, 224, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f2eee6;
+  font: 700 15px/1 Geist, "PingFang SC", sans-serif;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.12s,
+    border-color 0.15s;
+}
+.tl-seg button:hover:not(:disabled),
+.tl-chips button:hover:not(:disabled) {
+  border-color: var(--c);
+  transform: translateY(-1px);
+}
+.tl-seg button.on,
+.tl-chips button.on {
+  background: var(--c);
+  border-color: var(--c);
+  color: #0e0e0e;
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--c) 40%, transparent);
+}
+.tl-seg button:disabled,
+.tl-chips button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.tl-lv button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.tl-pips {
+  display: inline-flex;
+  gap: 2px;
+  align-items: flex-end;
+}
+.tl-pips s {
+  display: block;
+  width: 4px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.8;
+}
+.tl-pips s:nth-child(2) {
+  height: 12px;
+}
+.tl-pips s:nth-child(3) {
+  height: 14px;
+}
+.tl-pips s:nth-child(4) {
+  height: 16px;
+}
+.tl-chips button {
+  border-radius: 999px;
+  padding: 0 16px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+}
+.tl-seats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 6px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(232, 230, 224, 0.07);
+}
+.tl-who {
+  --s: #ff6b35;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--s) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--s) 45%, transparent);
+  animation: tl-seat 0.32s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+@keyframes tl-seat {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+.tl-who img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  image-rendering: pixelated;
+  background: #0e0e0e;
+  box-shadow: 0 0 0 2px var(--s);
+}
+.tl-who b {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tl-who.me b {
+  color: var(--s);
+}
+.tl-shuffle {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(232, 230, 224, 0.16);
+  background: transparent;
+  color: rgba(242, 238, 230, 0.75);
+  cursor: pointer;
+}
+.tl-shuffle svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tl-shuffle:hover {
+  color: var(--c);
+  border-color: var(--c);
+}
+.tl-bal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 2px;
+  font-size: 13px;
+  color: rgba(242, 238, 230, 0.6);
+}
+.tl-bal b {
+  font: 700 18px "Geist Mono", ui-monospace, monospace;
+  color: #fff;
+}
+.tl-play {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 58px;
+  width: 100%;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ff8452 0%, #ff6b35 55%, #e85320 100%);
+  color: #120a06;
+  font: 800 20px/1 Geist, "PingFang SC", sans-serif;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow:
+    0 10px 30px rgba(255, 107, 53, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  transition:
+    transform 0.12s,
+    filter 0.15s;
+}
+.tl-play svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+.tl-play span {
+  font: 700 15px "Geist Mono", ui-monospace, monospace;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+.tl-play:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+.tl-play:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.tl-play:disabled {
+  background: #2a2730;
+  color: rgba(242, 238, 230, 0.5);
+  box-shadow: none;
+  cursor: default;
+  font-size: 16px;
+}
+.tl-play.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f2eee6;
+  border: 1px solid rgba(232, 230, 224, 0.16);
+  box-shadow: none;
+}
+.tl-foot {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgba(242, 238, 230, 0.42);
+}
+.tl-last {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(232, 230, 224, 0.1);
+  animation: tl-pop 0.4s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+.tl-last b {
+  font-size: 17px;
+}
+.tl-last span {
+  font-size: 13.5px;
+  color: rgba(242, 238, 230, 0.75);
+}
+.tl-last.win {
+  background: linear-gradient(120deg, rgba(109, 191, 138, 0.22), rgba(255, 107, 53, 0.14));
+  border-color: rgba(109, 191, 138, 0.45);
+}
+.tl-last.win b {
+  color: #9be3b4;
+}
+.tl-last.lose {
+  background: rgba(238, 110, 90, 0.12);
+  border-color: rgba(238, 110, 90, 0.35);
+}
+.tl-last.left {
+  background: rgba(255, 255, 255, 0.05);
+}
+/* the COMING SOON card: one column, a ribbon across */
+.tl-card.tl-soon {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(560px, 100%);
+  gap: 14px;
+}
+.tl-ribbon {
+  justify-self: center;
+  margin-top: -2px;
+  padding: 10px 28px;
+  border-radius: 10px;
+  font: 800 22px/1 "Geist Mono", ui-monospace, "PingFang SC", monospace;
+  letter-spacing: 0.22em;
+  color: #0e0e0e;
+  background: repeating-linear-gradient(-45deg, var(--c) 0 14px, color-mix(in srgb, var(--c) 78%, #fff) 14px 28px);
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--c) 35%, transparent);
+  transform: rotate(-2deg);
+}
+.tl-soon-p {
+  margin: 0;
+  text-align: center;
+  color: rgba(242, 238, 230, 0.75);
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+.tl-acts {
+  display: flex;
+  gap: 10px;
+}
+/* the game itself, over everything */
+.tl-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 42;
+  background: #07060f;
+  overflow: hidden;
+}
+@media (max-width: 760px) {
+  .tl-root {
+    padding: 10px;
+    place-items: start center;
+  }
+  .tl-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    padding: 14px;
+    max-height: calc(100dvh - 20px);
+    border-radius: 16px;
+  }
+  .tl-right {
+    padding-top: 0;
+  }
+  .tl-art {
+    aspect-ratio: 5 / 2;
+  }
+  .tl-help {
+    font-size: 13px;
+    padding: 10px 12px;
+  }
+  .tl-play {
+    position: sticky;
+    bottom: 0;
+  }
+}
+@media (max-height: 520px) and (min-width: 600px) {
+  .tl-root {
+    padding: 8px;
+  }
+  .tl-card {
+    padding: 12px;
+    gap: 12px;
+    max-height: calc(100dvh - 16px);
+  }
+  .tl-art {
+    aspect-ratio: 16 / 6;
+  }
+  .tl-title h2 {
+    font-size: 24px;
+  }
+  .tl-right {
+    padding-top: 0;
+    gap: 10px;
+  }
+  .tl-seg button,
+  .tl-chips button {
+    min-height: 36px;
+  }
+  .tl-row small,
+  .tl-foot {
+    display: none;
+  }
+  .tl-play {
+    position: sticky;
+    bottom: 0;
+    min-height: 50px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tl-root.tl-in .tl-card,
+  .tl-who,
+  .tl-last {
+    animation: none;
+  }
+}
+
+/* ---- touch screens (phones and tablets) --------------------------------------------------------------
+ * Only a coarse pointer sees these rules, so the desktop card stays exactly as above. On a phone the
+ * table opens on its own page (table.html), so the card takes the whole screen; a tablet gets a bigger
+ * card with bigger type and targets. */
+@media (pointer: coarse) {
+  .tl-x,
+  .tl-shuffle {
+    width: 44px;
+    height: 44px;
+  }
+  .tl-house,
+  .tl-time,
+  .tl-help b,
+  .tl-row label,
+  .tl-row label em {
+    font-size: 12px;
+  }
+  .tl-row small,
+  .tl-who b {
+    font-size: 13px;
+  }
+  .tl-foot {
+    font-size: 12px;
+  }
+  .tl-seg button,
+  .tl-chips button {
+    min-height: 44px;
+  }
+}
+
+/* Phones: the card is the page, edge to edge inside the safe areas; the play button stays in reach at
+ * the bottom of the screen (over a fade) while the card scrolls. The close button sits over the
+ * picture's corner and scrolls away with it, so it never lands on the text below. */
+@media (pointer: coarse) and (max-width: 760px), (pointer: coarse) and (max-height: 520px) {
+  .tl-root {
+    padding: 0;
+    place-items: stretch;
+  }
+  .tl-card {
+    --pt: max(12px, env(safe-area-inset-top));
+    --pr: max(16px, env(safe-area-inset-right));
+    --pb: max(12px, env(safe-area-inset-bottom));
+    --pl: max(16px, env(safe-area-inset-left));
+    --gap: 16px;
+    --play: 52px;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    align-content: start;
+    gap: var(--gap);
+    padding: var(--pt) var(--pr) calc(var(--pb) + var(--play) + 20px) var(--pl);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overscroll-behavior: contain;
+  }
+  /* (no transform on the card: it would pin the fixed buttons to the card instead of the screen) */
+  .tl-root.tl-in .tl-card {
+    animation: none;
+  }
+  .tl-x {
+    position: absolute;
+    top: calc(var(--pt) + 8px);
+    right: calc(var(--pr) + 8px);
+    background: rgba(14, 12, 20, 0.88);
+  }
+  /* (the status bar is see-through on a Home Screen page: the card scrolls under a band, not under the clock) */
+  .tl-card::before {
+    content: "";
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top);
+    background: #0e0d13;
+    pointer-events: none;
+  }
+  .tl-title h2 {
+    font-size: 24px;
+  }
+  .tl-title p,
+  .tl-help {
+    font-size: 14px;
+  }
+  .tl-play {
+    position: fixed;
+    z-index: 3;
+    left: var(--pl);
+    right: var(--pr);
+    bottom: var(--pb);
+    width: auto;
+    min-height: var(--play);
+  }
+  .tl-card::after {
+    content: "";
+    position: fixed;
+    z-index: 2;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(var(--pb) + var(--play) + 24px);
+    background: linear-gradient(180deg, rgba(12, 11, 16, 0), rgba(12, 11, 16, 0.94) 40%);
+    pointer-events: none;
+  }
+  .tl-soon-p {
+    font-size: 14px;
+  }
+}
+
+/* A phone upright: one column, the seat counts in one row, the four levels two by two. */
+@media (pointer: coarse) and (max-width: 760px) and (orientation: portrait) {
+  .tl-art {
+    aspect-ratio: 2 / 1;
+  }
+  .tl-seg:not(.tl-lv) {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(44px, 1fr);
+    gap: 5px;
+  }
+  .tl-lv {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* A phone on its side: two columns side by side; the play button and its fade sit under the right one,
+ * the close button over the picture in the left one. */
+@media (pointer: coarse) and (max-height: 520px) and (orientation: landscape) {
+  .tl-card {
+    --play: 48px;
+    --col: calc((100% - var(--pl) - var(--pr) - var(--gap)) * 0.45);
+    grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+    padding-bottom: var(--pb);
+  }
+  .tl-card.tl-soon {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    padding-bottom: calc(var(--pb) + var(--play) + 20px);
+  }
+  .tl-right {
+    padding-bottom: calc(var(--play) + 12px);
+  }
+  .tl-card:not(.tl-soon) .tl-x {
+    right: calc(var(--pr) + (100% - var(--pl) - var(--pr) - var(--gap)) * 0.55 + var(--gap) + 8px);
+  }
+  .tl-card:not(.tl-soon) .tl-play,
+  .tl-card:not(.tl-soon)::after {
+    left: calc(var(--pl) + var(--col) + var(--gap));
+  }
+  .tl-card:not(.tl-soon)::after {
+    right: var(--pr);
+  }
+}
+@media (pointer: coarse) and (max-height: 520px) and (orientation: landscape) and (max-width: 700px) {
+  .tl-seg {
+    gap: 5px;
+  }
+  .tl-lv {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Tablets: a big card that uses the room, with bigger type and targets. */
+@media (pointer: coarse) and (min-width: 761px) and (min-height: 521px) {
+  .tl-root {
+    padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  }
+  .tl-card {
+    width: min(1100px, 100%);
+    max-height: 100%;
+    gap: 28px;
+    padding: 24px;
+    border-radius: 24px;
+    overscroll-behavior: contain;
+  }
+  .tl-card.tl-soon {
+    width: min(720px, 100%);
+  }
+  .tl-x {
+    top: 14px;
+    right: 14px;
+  }
+  .tl-left,
+  .tl-right {
+    gap: 18px;
+  }
+  .tl-right {
+    padding-top: 32px;
+  }
+  .tl-house,
+  .tl-time,
+  .tl-help b,
+  .tl-row label,
+  .tl-row label em {
+    font-size: 13px;
+  }
+  .tl-title h2 {
+    font-size: 32px;
+  }
+  .tl-title p {
+    font-size: 17px;
+  }
+  .tl-help {
+    padding: 14px 16px;
+    font-size: 15px;
+  }
+  .tl-row small {
+    font-size: 14px;
+  }
+  .tl-seg,
+  .tl-chips {
+    gap: 8px;
+  }
+  .tl-seg button,
+  .tl-chips button {
+    min-width: 52px;
+    min-height: 50px;
+    font-size: 17px;
+  }
+  .tl-who {
+    padding-right: 11px;
+  }
+  .tl-who img {
+    width: 34px;
+    height: 34px;
+  }
+  .tl-who b {
+    font-size: 14px;
+  }
+  .tl-bal {
+    font-size: 15px;
+  }
+  .tl-bal b {
+    font-size: 20px;
+  }
+  .tl-play {
+    min-height: 60px;
+    font-size: 22px;
+  }
+  .tl-play span {
+    font-size: 16px;
+  }
+  .tl-foot {
+    font-size: 13px;
+  }
+  .tl-last b {
+    font-size: 19px;
+  }
+  .tl-last span,
+  .tl-soon-p {
+    font-size: 15px;
+  }
+}
+
+/* A tablet upright: one column, centred, the picture wide. */
+@media (pointer: coarse) and (min-width: 761px) and (min-height: 521px) and (orientation: portrait) {
+  .tl-card {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(720px, 100%);
+    gap: 16px;
+  }
+  .tl-left,
+  .tl-right {
+    gap: 14px;
+  }
+  .tl-right {
+    padding-top: 0;
+  }
+  .tl-art {
+    aspect-ratio: 21 / 9;
+  }
+  .tl-help {
+    padding: 12px 14px;
+  }
+  .tl-play {
+    position: sticky;
+    bottom: 0;
+  }
+}

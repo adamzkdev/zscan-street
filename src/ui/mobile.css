@@ -1,0 +1,1202 @@
+/* ZStreet on phones and tablets: the HUD laid out for a thumb, either way up.
+ *
+ * Loaded after style.css (index.html), so these win over its HUD skin (`#ui .x`) at equal weight.
+ * Every rule here is under a touch-screen media query, except the one hiding the phones' "more"
+ * button on a desktop: a computer sees the city exactly as before.
+ *
+ *   phone held upright   (pointer: coarse) and (orientation: portrait) and (max-width: 600px)
+ *   phone on its side    (pointer: coarse) and (orientation: landscape) and (max-height: 520px)
+ *   tablet               (pointer: coarse), the rest
+ */
+
+/* the corner's "more" (hud.ts): phones only; the stick's jump (joystick.ts): touch only */
+#ui .hbtn.more,
+#ui .stick-jump {
+  display: none;
+}
+
+/* ================================================================================================
+ * every touch screen: the walking stick (ui/joystick.ts) and its jump, the safe edges
+ * ============================================================================================== */
+@media (pointer: coarse) {
+  #ui {
+    --st: env(safe-area-inset-top, 0px);
+    --sb: env(safe-area-inset-bottom, 0px);
+    --sl: env(safe-area-inset-left, 0px);
+    --sr: env(safe-area-inset-right, 0px);
+    /* the screen's edges belong to the system's swipes (back, the notification centre): 24 px kept */
+    --edge-l: max(24px, calc(var(--sl) + 12px));
+    --edge-r: max(24px, calc(var(--sr) + 12px));
+    --edge-b: max(24px, calc(var(--sb) + 10px));
+  }
+
+  /* the stick: a thumb anywhere in the lower left brings it under it */
+  #ui .stick {
+    position: fixed;
+    left: var(--edge-l);
+    bottom: var(--edge-b);
+    width: min(42vw, 330px);
+    height: min(58vh, 380px);
+    display: none;
+    z-index: 40;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #ui .stick.on {
+    display: block;
+  }
+  #ui .stick-pad {
+    position: absolute;
+    /* at rest: the zone's lower-left corner (the thumb's natural place) */
+    left: 70px;
+    top: calc(100% - 70px);
+    width: 132px;
+    height: 132px;
+    margin: -66px 0 0 -66px;
+    border: 2px solid rgba(255, 255, 255, 0.42);
+    border-radius: 50%;
+    clip-path: none;
+    background: radial-gradient(circle, rgba(13, 13, 13, 0.16) 36%, rgba(13, 13, 13, 0.46));
+    box-shadow: 0 0 0 1px rgba(244, 183, 40, 0.35), 0 10px 28px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    pointer-events: none;
+    opacity: 0.72;
+    transition: opacity 0.15s, box-shadow 0.15s, border-color 0.15s;
+  }
+  #ui .stick-pad::before,
+  #ui .stick-pad::after {
+    display: none;
+  }
+  #ui .stick.held .stick-pad {
+    opacity: 1;
+  }
+  /* pushed to the rim: it runs */
+  #ui .stick.run .stick-pad {
+    border-color: #f4b728;
+    box-shadow: 0 0 0 3px rgba(244, 183, 40, 0.5), 0 0 26px rgba(244, 183, 40, 0.5);
+  }
+  #ui .stick-knob {
+    left: 50%;
+    top: 50%;
+    width: 60px;
+    height: 60px;
+    margin: -30px 0 0 -30px;
+    box-sizing: border-box;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    clip-path: none;
+    background: linear-gradient(180deg, #ffffff, #fff1c9);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3), 0 0 14px rgba(244, 183, 40, 0.4);
+    transition: transform 0.14s ease-out;
+  }
+  #ui .stick.held .stick-knob {
+    transition: none;
+    background: linear-gradient(180deg, #ffe08a, #f4b728);
+  }
+  #ui .stick-hint {
+    position: absolute;
+    left: 70px;
+    top: calc(100% - 70px - 66px - 22px);
+    transform: translateX(-50%);
+    /* (the city's signage: its pixel font, its gold) */
+    font: 400 10.5px/1 var(--pixel, "DotGothic16", monospace);
+    letter-spacing: 0.06em;
+    color: var(--gold);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    opacity: 0.85;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  #ui .stick.held .stick-hint {
+    opacity: 0;
+  }
+  /* the jump, under the right thumb */
+  #ui .stick-jump {
+    display: none;
+  }
+  #ui .stick-jump.on-foot {
+    all: unset;
+    position: fixed;
+    right: var(--edge-r);
+    bottom: calc(var(--edge-b) + 6px);
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    width: 76px;
+    height: 76px;
+    box-sizing: border-box;
+    /* the mailbox's square, a size up: the city's dark glass, its gold edge */
+    background: var(--hud);
+    border: 1px solid var(--gold);
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(12px) saturate(1.3);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
+    color: var(--gold);
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.06s, background 0.06s, color 0.06s;
+  }
+  #ui .stick-jump.on-foot.on {
+    transform: translateY(3px);
+    background: var(--gold);
+    color: #0d0b08;
+  }
+  #ui .stick-jump svg {
+    width: 34px;
+    height: 34px;
+    fill: currentColor;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  /* on foot, the mailbox and the elevator step up over the jump */
+  #ui.walking .mailbtn,
+  #ui:has(.stick.on) .mailbtn {
+    bottom: calc(var(--edge-b) + 100px);
+  }
+  #ui:has(.stick.on) .lift {
+    bottom: calc(var(--edge-b) + 100px);
+  }
+  /* the prompts on foot (a door, someone to talk to, a message on the ground): big enough for a thumb */
+  #ui .door-prompt,
+  #ui .talk-prompt {
+    min-height: 52px;
+    /* (over the stick's zone where they meet: a tap on a prompt is the prompt's) */
+    z-index: 42;
+  }
+}
+
+/* ================================================================================================
+ * tablets (a touch screen bigger than a phone): the desktop's layout, a size up everywhere — held
+ * at arm's length and hit with a finger, the desktop's 11 px labels and 34 px buttons were tiny
+ * ============================================================================================== */
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 521px) {
+  #ui {
+    --t-edge: 20px;
+    --hb: 50px;
+  }
+  /* you, top left */
+  /* the corner, top right */
+  #ui .corner {
+    top: calc(var(--st) + var(--t-edge));
+    right: calc(var(--sr) + var(--t-edge));
+    gap: 10px;
+  }
+  #ui .hbtn,
+  #ui .hbtn.sound {
+    width: 50px;
+    height: 50px;
+  }
+  #ui .hbtn svg {
+    width: 22px;
+    height: 22px;
+  }
+  #ui .seg {
+    padding: 4px;
+  }
+  #ui .seg button {
+    width: 44px;
+    height: 42px;
+  }
+  #ui .seg svg {
+    width: 21px;
+    height: 21px;
+  }
+  /* the rail, right */
+  #ui .rail {
+    right: calc(var(--sr) + var(--t-edge));
+    padding: 5px;
+  }
+  #ui .rail > button {
+    width: 50px;
+    height: 48px;
+  }
+  #ui .rail > button svg {
+    width: 22px;
+    height: 22px;
+  }
+  /* the mailbox, bottom right */
+  #ui .mailbtn {
+    right: calc(var(--sr) + var(--t-edge));
+    bottom: calc(var(--sb) + var(--t-edge));
+    width: 62px;
+    height: 62px;
+  }
+  #ui .mailbtn svg.px {
+    width: 30px;
+    height: 23px;
+  }
+  /* the live strip and the dock, bottom centre: wider, taller, readable */
+  #ui .strip {
+    bottom: calc(var(--sb) + var(--t-edge));
+    max-width: calc(100vw - 2 * var(--t-edge) - 2 * 76px);
+  }
+  #ui .strip .bar {
+    height: 66px;
+    padding: 0 8px 0 18px;
+  }
+  #ui .strip .live {
+    font-size: 13px;
+  }
+  #ui .rd {
+    padding: 0 16px 0 14px;
+    gap: 11px;
+  }
+  #ui .rv small {
+    font-size: 12px;
+  }
+  #ui .rv .v b {
+    font-size: 20px;
+  }
+  #ui .rv .v em {
+    font-size: 13px;
+  }
+  #ui .tile {
+    width: 40px;
+    height: 40px;
+  }
+  #ui .sdetails {
+    font-size: 14px;
+  }
+  #ui .toast {
+    top: calc(var(--st) + var(--t-edge) + 6px);
+    font-size: 13.5px;
+    padding: 9px 16px 9px 12px;
+  }
+  /* the windows: a size up, rows a finger hits */
+  #ui .campop {
+    width: 320px;
+    padding: 8px;
+    font-size: 15px;
+  }
+  #ui .campop .row {
+    min-height: 46px;
+    padding: 8px 12px;
+    gap: 12px;
+  }
+  #ui .campop .row svg.i {
+    width: 19px;
+    height: 19px;
+  }
+  #ui .inbox {
+    right: calc(var(--sr) + var(--t-edge));
+    bottom: calc(var(--sb) + var(--t-edge) + 76px);
+    width: min(440px, calc(100vw - 2 * var(--t-edge)));
+    padding: 16px 18px;
+    font-size: 15px;
+  }
+  #ui .inbox li {
+    padding: 10px 4px;
+  }
+  #ui .inbox li time {
+    font-size: 12.5px;
+  }
+  #ui .inbox li p {
+    font-size: 14px;
+  }
+  #ui .mailread {
+    width: min(680px, calc(100vw - 48px));
+    font-size: 15.5px;
+  }
+  #ui .track-pop {
+    top: calc(var(--st) + var(--t-edge) + 66px);
+    right: calc(var(--sr) + var(--t-edge));
+    width: min(520px, calc(100vw - 2 * var(--t-edge)));
+    padding: 16px;
+    font-size: 15px;
+  }
+  #ui .track-pop input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  #ui .track-pop button {
+    min-height: 44px;
+  }
+  #ui .panel {
+    width: 430px;
+    font-size: 15px;
+  }
+  #ui .panel .x,
+  #ui .venue .x {
+    width: 44px;
+    height: 44px;
+  }
+  #ui .venue {
+    font-size: 15px;
+  }
+  /* on foot: the radar on the right (left of the rail), the stick and the jump at the bottom */
+  #ui .minimap {
+    width: 210px;
+    height: 144px;
+    top: calc(var(--st) + var(--t-edge) + 160px);
+    left: auto;
+    right: calc(var(--sr) + var(--t-edge) + 74px);
+  }
+  /* a big window open: the dock and the strip step aside */
+  #ui:has(.campop:not(.hidden)) .strip {
+    display: none !important;
+  }
+  #ui .stick-pad {
+    width: 156px;
+    height: 156px;
+    margin: -78px 0 0 -78px;
+    left: 84px;
+    top: calc(100% - 84px);
+  }
+  #ui .stick-knob {
+    width: 70px;
+    height: 70px;
+    margin: -35px 0 0 -35px;
+  }
+  #ui .stick-hint {
+    left: 84px;
+    top: calc(100% - 84px - 78px - 24px);
+    font-size: 12px;
+  }
+  #ui .stick-jump.on-foot {
+    width: 88px;
+    height: 88px;
+  }
+  #ui .stick-jump svg {
+    width: 40px;
+    height: 40px;
+  }
+  #ui .ihead {
+    top: calc(var(--st) + var(--t-edge));
+    left: calc(var(--sl) + var(--t-edge));
+    padding: 10px 20px 10px 10px;
+  }
+  #ui .ihead b {
+    font-size: 16px !important;
+  }
+  #ui .ihead .it > span {
+    font-size: 14px;
+  }
+  #ui .door-prompt b,
+  #ui .talk-prompt b {
+    font-size: 16.5px;
+  }
+}
+
+/* ================================================================================================
+ * phones, either way up
+ * ============================================================================================== */
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 520px) {
+  /* the camera's zoom and turn are the fingers' (a pinch, a two-finger twist): the rail keeps
+     home, the camera menu and the walk */
+  #ui .rail > button[data-act="zoom-in"],
+  #ui .rail > button[data-act="zoom-out"],
+  #ui .rail > button[data-act="turn-l"],
+  #ui .rail > button[data-act="turn-r"],
+  #ui .rail > i:first-of-type {
+    display: none;
+  }
+  #ui .rail {
+    padding: 4px;
+    gap: 2px;
+  }
+  #ui .rail > button {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* the corner's buttons: a thumb's size */
+  #ui .hbtn,
+  #ui .hbtn.sound {
+    width: 44px;
+    height: 44px;
+  }
+  #ui .seg button {
+    width: 40px;
+    height: 38px;
+  }
+
+  /* a window open: the dock and the live strip step aside (they sat over its foot) */
+  #ui:has(.campop:not(.hidden)) .strip,
+  #ui:has(.inbox.open) .strip {
+    display: none !important;
+  }
+
+  /* the camera menu's rows: a finger's height */
+  #ui .campop .row {
+    min-height: 44px;
+  }
+
+  /* the windows that open from the HUD: inside the screen, scrolling inside themselves */
+  #ui .inbox {
+    max-height: min(460px, calc(100% - var(--st) - var(--sb) - 90px));
+  }
+  /* (over the mailbox and the rail, which sit in the right column under the corner) */
+  #ui .track-pop {
+    z-index: 60;
+  }
+
+}
+
+/* ================================================================================================
+ * phones, and tablets held upright: the corner keeps what is used every minute in sight, the
+ * rest folds behind "more" (hud.ts)
+ * ============================================================================================== */
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 520px), (pointer: coarse) and (orientation: portrait) and (max-width: 1024px) {
+  /* the corner: what is used every minute in sight (the exit, the sound off), the rest behind "more" */
+  #ui .hbtn.more {
+    display: grid;
+    place-items: center;
+  }
+  #ui .corner {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 6px;
+    width: var(--corner-w, 236px);
+    pointer-events: none;
+  }
+  #ui .corner > * {
+    order: 1;
+  }
+  #ui .corner > .hbtn.exit {
+    order: 0;
+  }
+  #ui .corner > .photo-btn,
+  #ui .corner > .track-btn,
+  #ui .corner > .seg,
+  #ui .corner > .hbtn.sound {
+    order: 3;
+    display: none;
+  }
+  #ui .corner > .hbtn.more {
+    order: 2;
+  }
+  #ui.more .corner > .photo-btn,
+  #ui.more .corner > .track-btn,
+  #ui.more .corner > .hbtn.sound {
+    display: grid;
+  }
+  #ui.more .corner > .seg {
+    display: flex;
+  }
+  #ui.more .hbtn.more {
+    background: var(--gold);
+    color: #fff;
+  }
+  /* (the lesser switches on rows of their own under the top row, over whatever is under them) */
+  #ui .corner::after {
+    content: "";
+    order: 2;
+    flex-basis: 100%;
+    height: 0;
+  }
+  #ui.more .corner {
+    z-index: 60;
+  }
+
+}
+@media (pointer: coarse) and (orientation: portrait) and (min-width: 601px) and (max-width: 1024px) {
+  #ui {
+    --corner-w: 330px;
+  }
+  /* (the strip's five readings in the width between the edges and the mailbox) */
+  #ui .rv .v em {
+    display: none;
+  }
+}
+
+/* ================================================================================================
+ * a phone held upright
+ * ============================================================================================== */
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  /* top: the corner on the right */
+  #ui .corner {
+    top: calc(var(--st) + 10px);
+    right: 12px;
+  }
+  /* the block toasts, the place's header: under the top row */
+  #ui .toast {
+    top: calc(var(--st) + 70px);
+    max-width: calc(100vw - 24px);
+    box-sizing: border-box;
+  }
+  #ui .ihead {
+    top: calc(var(--st) + 10px);
+    left: 12px;
+    max-width: calc(100vw - 24px - 160px);
+  }
+  /* the right column: the mailbox, then the camera rail */
+  #ui .mailbtn {
+    top: calc(var(--st) + 66px);
+    bottom: auto;
+    right: 12px;
+    width: 48px;
+    height: 48px;
+  }
+  #ui .rail {
+    top: calc(var(--st) + 124px);
+    bottom: auto;
+    right: 12px;
+    transform: none;
+  }
+  /* (on foot the column is the jump's and the stick's: the mailbox stays up top) */
+  #ui.walking .mailbtn,
+  #ui:has(.stick.on) .mailbtn {
+    bottom: auto;
+  }
+  /* the camera menu opens down from the rail (now near the top), never off the screen */
+  #ui .campop {
+    top: 0;
+    bottom: auto;
+    max-height: calc(100vh - var(--st) - 124px - var(--sb) - 16px);
+    max-height: calc(100dvh - var(--st) - 124px - var(--sb) - 16px);
+  }
+  /* the inbox: a sheet the width of the screen */
+  #ui .inbox {
+    left: 8px;
+    right: 8px;
+    bottom: calc(var(--sb) + 8px);
+    width: auto;
+    z-index: 50;
+  }
+  /* on foot, from the top: the corner; the radar; the stick and the jump at the bottom, under the thumbs */
+  #ui .minimap {
+    top: calc(var(--st) + 108px);
+  }
+  #ui .stick {
+    width: min(56vw, 330px);
+    height: min(40vh, 380px);
+  }
+  /* bottom: the chain's live strip, the dock above it */
+  #ui .strip {
+    display: block !important;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--sb) + 10px);
+    width: auto;
+    max-width: none;
+    transform: none;
+    overflow: hidden;
+  }
+  #ui .strip .bar {
+    height: 50px;
+    padding: 0 4px 0 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  #ui .strip .bar::-webkit-scrollbar {
+    display: none;
+  }
+  #ui .rd {
+    flex: none;
+    padding: 0 10px;
+    gap: 7px;
+  }
+  #ui .rv .v b {
+    font-size: 15px;
+  }
+  #ui .tile {
+    width: 28px;
+    height: 28px;
+  }
+  #ui.indoors .strip,
+  #ui.walking .strip,
+  #ui.inspecting .strip,
+  #ui.letterbox .strip,
+  #ui:has(.panel.open) .strip,
+  #ui:has(.venue.open) .strip,
+  #ui:has(.talk.on) .strip,
+  #ui:has(.track-card.on) .strip {
+    display: none !important;
+  }
+  #ui .sdetails {
+    left: 12px !important;
+    right: 12px;
+    width: auto !important;
+    transform: none;
+    bottom: calc(var(--sb) + 68px);
+    max-height: 55vh;
+    overflow-y: auto;
+  }
+}
+
+/* ================================================================================================
+ * a phone on its side
+ * ============================================================================================== */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  #ui .corner {
+    top: calc(var(--st) + 8px);
+    right: calc(var(--sr) + 12px);
+  }
+  #ui .toast {
+    top: calc(var(--st) + 10px);
+    max-width: calc(100vw - 2 * (var(--sl) + 12px) - 2 * 240px);
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  #ui .rail {
+    top: calc(var(--st) + 62px);
+    bottom: auto;
+    right: calc(var(--sr) + 12px);
+    transform: none;
+  }
+  #ui .mailbtn {
+    right: calc(var(--sr) + 12px);
+    bottom: calc(var(--sb) + 10px);
+    width: 48px;
+    height: 48px;
+  }
+  /* the bottom: the dock and the live strip side by side, between the left edge and the mailbox */
+  #ui .strip {
+    display: block !important;
+    left: calc(var(--sl) + 12px);
+    bottom: calc(var(--sb) + 10px);
+    transform: none;
+    max-width: calc(100vw - 2 * (var(--sl) + 12px) - 60px);
+  }
+  #ui.indoors .strip,
+  #ui.walking .strip,
+  #ui.inspecting .strip,
+  #ui.letterbox .strip,
+  #ui:has(.panel.open) .strip,
+  #ui:has(.venue.open) .strip,
+  #ui:has(.talk.on) .strip,
+  #ui:has(.campop:not(.hidden)) .strip,
+  #ui:has(.track-card.on) .strip {
+    display: none !important;
+  }
+  #ui .strip .bar {
+    height: 48px;
+    padding: 0 4px 0 10px;
+  }
+  #ui .rd {
+    padding: 0 9px;
+    gap: 7px;
+  }
+  #ui .rv .v b {
+    font-size: 15px;
+  }
+  #ui .rv .v em {
+    display: none;
+  }
+  #ui .tile {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 400px) {
+  /* a small phone (667 × 375): the strip keeps its two first readings */
+  #ui .strip .rd:nth-of-type(n + 4) {
+    display: none;
+  }
+}
+
+/* ================================================================================================
+ * the shared scale on touch screens: body text 14 px, titles 21 px (phones) / 28 px (tablets),
+ * buttons 44 px high, closes 44 × 44, icons 22 px, windows padded 16 px (phones) / 22 px
+ * (tablets); on a phone held upright the windows are bottom sheets, on a tablet the big ones are
+ * centred, 720 px at most
+ * ============================================================================================== */
+@media (pointer: coarse) {
+  html body #ui .btn,
+  html body #ui .tabs button,
+  html body #ui .inbox li button,
+  html body #ui .venue button,
+  html body #ui .panel .actions button,
+  html body #ui .track-pop button,
+  html body #ui .track-pop input,
+  html body #ui .mailread button,
+  html body #ui .talk button,
+  html body #ui .tk-form input,
+  html body #ui .carpanel button,
+  html body #ui .choice button,
+  html body #ui .photo-bar button {
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+  html body #ui .panel .x,
+  html body #ui .venue .x,
+  html body #ui .tk-x,
+  html body #ui .track-card .x,
+  html body #ui .inbox header button,
+  html body #ui .mailread header button {
+    min-width: 44px;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+  html body #ui .hbtn svg,
+  html body #ui .rail > button svg {
+    width: 22px;
+    height: 22px;
+  }
+  html body #ui .panel,
+  html body #ui .venue,
+  html body #ui .inbox,
+  html body #ui .mailread,
+  html body #ui .track-pop,
+  html body #ui .track-card,
+  html body #ui .campop,
+  html body #ui .talk {
+    font-size: 14px;
+  }
+}
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 520px) {
+  html body #ui .panel h2,
+  html body #ui .venue h2,
+  html body #ui .tk-name,
+  html body #ui .mailread h2 {
+    font-size: 21px;
+  }
+  html body #ui .panel,
+  html body #ui .venue,
+  html body #ui .inbox,
+  html body #ui .track-card,
+  html body #ui .track-pop {
+    padding: 16px;
+  }
+  /* the HUD's chips: 40 px at least */
+  html body #ui .toast {
+    min-height: 40px;
+    box-sizing: border-box;
+    font-size: 13px;
+  }
+}
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  /* the sheets: from the bottom edge, the full width, over the home bar */
+  html body #ui .inbox,
+  html body #ui .panel,
+  html body #ui .venue,
+  html body #ui .campop {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    max-height: 92vh;
+    max-height: 92dvh;
+    margin: 0;
+    border-radius: 4px 4px 0 0;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
+    z-index: 55;
+  }
+  html body #ui .campop {
+    padding: 10px 10px max(16px, env(safe-area-inset-bottom));
+  }
+  /* (the rail's glass would hold its menu inside it: off while the menu is open) */
+  html body #ui .rail:has(.campop:not(.hidden)) {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 521px) {
+  html body #ui .panel h2,
+  html body #ui .venue h2,
+  html body #ui .tk-name,
+  html body #ui .mailread h2 {
+    font-size: 28px;
+  }
+  html body #ui .panel,
+  html body #ui .venue,
+  html body #ui .inbox,
+  html body #ui .track-card,
+  html body #ui .track-pop,
+  html body #ui .mailread {
+    padding: 22px;
+  }
+  html body #ui .panel,
+  html body #ui .venue,
+  html body #ui .mailread {
+    font-size: 15px;
+  }
+  /* the big windows: centred, 720 px at most */
+  html body #ui .panel,
+  html body #ui .venue {
+    left: 0;
+    right: 0;
+    margin-inline: auto;
+    width: min(720px, calc(100vw - 40px));
+    box-sizing: border-box;
+  }
+}
+
+/* ================================================================================================
+ * every touch screen: no text under 12 px (the city's own sheets set 9.5–11.5 px labels for a
+ * desktop at arm's reach). Generated from style.css: every rule
+ * whose font is under 12 px, raised to 12.5 px (`html body` before it so it wins over the sheets
+ * injected after this one; the half pixel keeps a label sized by its box from reading 11.9). The places of the other games (casino, works, jobs, cases,
+ * time travel) are sized in game/touch.css.
+ * ============================================================================================== */
+@media (pointer: coarse) {
+  html body #ui .cell dt,
+  html body #ui .eyebrow,
+  html body #ui .mh,
+  html body #ui .stats dt {
+    font-size: 12.5px !important;
+  }
+}
+
+/* ================================================================================================
+ * last touches, from the screenshots of the whole pass
+ * ============================================================================================== */
+
+/* a phone held upright: the three ways to play share the width; their names go on two lines in
+ * full (TREASURE / HUNT) rather than cut short, and the keyboard letters (G, F, P) mean nothing to a thumb */
+
+/* ================================================================================================
+ * the measured pass (audit: no text under 12 px, no target under 44 px, nothing covered or cut
+ * where it matters), on every touch screen, then by size
+ * ============================================================================================== */
+@media (pointer: coarse) {
+  /* the theme's three switches: a finger's size */
+  #ui .seg button {
+    width: 44px;
+    height: 44px;
+  }
+}
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 520px) {
+  /* the corner's fold open: the mailbox and the camera rail under it step aside until it closes */
+  #ui.more .rail,
+  #ui.more .mailbtn {
+    visibility: hidden;
+  }
+}
+
+@media (pointer: coarse) {
+  /* the links that sit in a sentence: a finger's height without moving the words */
+  html body #ui .sdetails a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-block: -12px;
+    vertical-align: middle;
+  }
+  /* an inbox mail's "Go": as wide as it is high */
+  html body #ui .inbox li button {
+    min-width: 44px;
+    justify-content: center;
+  }
+  html body #ui .mailread header em {
+    font-size: 12.5px;
+  }
+  /* (no Esc under a thumb) */
+  html body #ui .shots kbd {
+    display: none;
+  }
+  /* the follow search open from the corner's fold: the fold closes under it */
+  #ui.more:has(.track-pop.open) .corner > :is(.photo-btn, .track-btn, .seg, .hbtn.sound) {
+    display: none;
+  }
+}
+
+/* a phone held upright: the live strip fits its width rather than scrolling sideways (the fourth
+   reading ran past the edge, half cut, out of reach): the dot for the status, three readings by
+   their names, no icons */
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  #ui .strip .bar {
+    overflow: hidden;
+    padding: 0 2px 0 12px;
+  }
+  #ui .strip .live b {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  #ui .strip .rd .logo,
+  #ui .strip .rv .v em,
+  #ui .strip .rd:nth-of-type(n + 4) {
+    display: none;
+  }
+  #ui .strip .rd {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 6px;
+  }
+}
+/* a tablet held upright: the four readings and the chevron inside the strip's width */
+@media (pointer: coarse) and (orientation: portrait) and (min-width: 601px) and (max-width: 1024px) {
+  #ui .strip .rd {
+    padding: 0 10px;
+    gap: 8px;
+  }
+}
+/* A window open over the city on a touch screen (a sheet on a phone, a panel on a tablet, a modal
+ * anywhere): the HUD under it steps aside until it closes. Half hidden under the window, its buttons
+ * could still be hit through the gaps, and its labels showed through the glass. */
+@media (pointer: coarse) {
+  #ui:has(> :is(.panel.open, .venue.open, .inbox.open, .mailread.open, .talk.on, .arcade:not(.hidden), .reader:not(.hidden), .casino.open, .genesis.open, .jobboard.open, .casepanel.open, .works.open, .paper.open, .choice, .track-pop.open, .bigmap.on))
+    > :not(.panel.open, .venue.open, .inbox.open, .mailread.open, .talk.on, .arcade:not(.hidden), .reader:not(.hidden), .casino.open, .genesis.open, .jobboard.open, .casepanel.open, .works.open, .paper.open, .choice, .track-pop.open, .bigmap.on),
+  /* (the camera menu lives in the rail: the rest of it steps aside) */
+  #ui:has(.campop:not(.hidden)) > :not(.rail),
+  #ui .rail:has(> .campop:not(.hidden)) > :not(.campop),
+  /* (the "turn your phone" card, game/orient.ts, is the page's, over the whole HUD) */
+  body:has(> .or-card) #ui {
+    visibility: hidden !important;
+  }
+  /* small links inside rows and sentences: a finger's height, the lines around them unmoved */
+  html body #ui :is(.toast, .tr, .line, .cell, .dvrows, .wcard, .pbody, .stats) a,
+  html body #ui .panel a.mono {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-block: -14px;
+    vertical-align: middle;
+  }
+  /* the mempool's rows: the eye that follows a carrier */
+  html body #ui .tr .eye {
+    min-width: 44px;
+    min-height: 44px;
+    margin: -15px -11px;
+  }
+  /* the card shop's venue: its strip of minis, its pager */
+  html body #ui .venue .strip-cards .mini,
+  html body #ui .venue .pager button {
+    min-width: 44px;
+  }
+  html body #ui .venue input,
+  html body #ui .paydesk input,
+  html body #ui .paydesk textarea {
+    min-height: 44px;
+    box-sizing: border-box;
+    font-size: 16px;
+  }
+  /* the talk's microphone */
+  html body #ui .talk .tk-mic {
+    min-width: 44px;
+  }
+}
+@media (pointer: coarse) {
+  /* the arcade: its close, the quiz's answers */
+  html body #ui .cabtop button {
+    min-width: 44px;
+    height: 44px;
+    line-height: 44px;
+    padding: 0;
+    text-align: center;
+  }
+  html body #ui .quiz .opts button {
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+  /* the reader: its close, its pages, its source */
+  html body #ui .reader .spine-top button,
+  html body #ui .reader .nav button {
+    min-width: 44px;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+  html body #ui .reader .src a,
+  html body #ui .casino label a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-block: -14px;
+    vertical-align: middle;
+  }
+}
+/* a phone held upright: the arcade cabinet the screen's width, its pad under it (beside it, the two
+   ran off both edges) */
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  #ui .arcade:has(.arcpad) {
+    grid-auto-flow: row;
+    align-content: center;
+    gap: 10px;
+  }
+  #ui .arcade .cab {
+    width: calc(100vw - 24px);
+    padding: 10px;
+    box-sizing: border-box;
+  }
+  #ui .arcade .cabtop b {
+    font-size: 17px;
+    white-space: nowrap;
+  }
+  #ui .arcade .cabtop i {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #ui .arcade .cabtop .score {
+    flex: none;
+  }
+}
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) and (max-height: 700px) {
+  /* (a small phone: the screen a little narrower, so the pad still fits under it) */
+  #ui .arcade:has(.arcpad) .cab {
+    width: min(calc(100vw - 24px), calc(100dvh - 300px));
+  }
+}
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 520px) {
+  /* the corner's fold: the camera, the search and the three skies on one row, the rest under it */
+  #ui {
+    --corner-w: 252px;
+  }
+}
+
+@media (pointer: coarse) {
+  /* (the venue scrolls as a whole: its rows keep their height, the strip of minis was squeezed to
+     nothing under the tabs when the list ran long) */
+  html body #ui .venue > * {
+    flex-shrink: 0;
+  }
+}
+/* a small phone held upright (an iPhone SE): the stick's zone a little lower; the thumb still lands
+   on it in the lower left */
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) and (max-height: 700px) {
+  #ui .stick {
+    height: 196px;
+  }
+}
+@media (pointer: coarse) {
+  /* the boot screen's line, read at arm's length */
+  html body #boot,
+  html body .loading {
+    font-size: 13px;
+  }
+}
+
+@media (pointer: coarse) {
+  /* the bank's address field: the sheet's width (an address is long) */
+  html body #ui .venue .vk input {
+    width: 100%;
+  }
+}
+@media (pointer: coarse) {
+  /* the strip's details: their head line and its "ago" read like the rest (12 px were 11.9) */
+  html body #ui .sdetails .dh,
+  html body #ui .sdetails .dh b {
+    font-size: 12.5px;
+  }
+}
+
+@media (pointer: coarse) {
+  /* the stick's hint: read at a glance (its 10.5 px label was the desktop's) */
+  #ui .stick-hint {
+    font-size: 12.5px;
+  }
+}
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 521px) {
+  #ui .stick-hint {
+    font-size: 13px;
+  }
+}
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 520px) {
+  /* (the hint over the stick, from the zone's left edge: centred on the pad it ran off the screen) */
+  #ui .stick-hint {
+    left: 0;
+    transform: none;
+    white-space: nowrap;
+  }
+}
+/* a tablet on its side, on foot: the stick's zone a little lower */
+@media (pointer: coarse) and (orientation: landscape) and (min-width: 601px) and (min-height: 521px) {
+  #ui .stick {
+    height: min(42vh, 330px);
+  }
+}
+@media (pointer: coarse) and (max-width: 600px) {
+  /* the photo bar on a narrow phone: its filters a row that wraps inside the screen (one line ran
+     off both edges of 375 px) */
+  #ui .photo-bar .pb-filters {
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 100%;
+  }
+}
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  /* the strip's details open: the camera rail and the mailbox over them step aside */
+  #ui:has(.sdetails:not(.hidden)) :is(.rail, .mailbtn) {
+    visibility: hidden;
+  }
+}
+@media (pointer: coarse) {
+  /* the reader's header line: the book's width, its long title cut inside it (it set the book's
+     width instead and ran off both edges) */
+  html body #ui .reader .tome {
+    max-width: calc(100vw - 16px);
+  }
+  html body #ui .reader .spine-top {
+    width: calc(var(--pw) + 20px);
+    max-width: 100%;
+    min-width: 0;
+  }
+  /* a store's button inside the info panel (the gift shop's way to the casino) */
+  html body #ui .pbody .paperbtn {
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+  /* (a venue closed slides away but stays in the page: it takes no tap meanwhile) */
+  html body #ui .venue:not(.open) {
+    pointer-events: none;
+  }
+}
+/* a phone on its side: the book as tall as the screen allows, its page turns in a column on the
+   right (under it, they and the header left the page 205 px, its cover cut) */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  html body #ui .reader .tome {
+    --ph: calc(100dvh - 86px - var(--st) - var(--sb));
+    --pw: min(560px, calc(100vw - 150px - var(--sl) - var(--sr)));
+    gap: 6px;
+  }
+  html body #ui .reader .nav {
+    position: fixed;
+    top: 50%;
+    right: calc(var(--sr) + 12px);
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 10px;
+  }
+  html body #ui .reader .cover {
+    gap: 4px;
+  }
+  html body #ui .reader .cover .crest b {
+    font-size: 40px;
+    line-height: 1;
+  }
+  html body #ui .reader .cover h1 {
+    font-size: 18px;
+    margin: 2px 0;
+  }
+  html body #ui .reader .pg {
+    padding: 18px 26px 20px;
+  }
+}
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  /* (the page measured for the text, reader.ts: the size of the page shown) */
+  html body #ui .reader .pg.probe {
+    width: min(560px, calc(100vw - 150px - var(--sl) - var(--sr)));
+    height: calc(100dvh - 86px - var(--st) - var(--sb));
+  }
+}
+
+@media (pointer: coarse) {
+  /* (the block toast fading out: its link goes at once, not a target half seen through the fade) */
+  #ui .toast.hidden a {
+    visibility: hidden;
+  }
+}
+@media (pointer: coarse) {
+  /* the "turn your phone" card up (game/orient.ts): everything else on the page waits under it
+     (anything drawn above the card's layer would cover its words and its way back) */
+  body:has(> .or-card) > :not(.or-card, #scene, script, style) {
+    visibility: hidden !important;
+  }
+}
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  /* the block toast, under the top row: it waits while the corner's fold is open (it lay over it) */
+  #ui.more .toast {
+    visibility: hidden;
+  }
+}

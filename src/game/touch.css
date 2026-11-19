@@ -1,0 +1,572 @@
+/* The game's panels over the city (casino, Genesis Line, jobs, the case, the works, the inbox's
+ * reader, the paper, the shift bar, the game toast) on phones and tablets.
+ *
+ * Imported by game/ui.ts, so it comes after style.css and ui/mobile.css: `#ui .x` here wins over
+ * their skin at equal weight. Every rule is under a touch-screen media query: a computer sees the
+ * panels exactly as before. The sizes follow the shared touch scale (text 14–15 px, never under
+ * 12; buttons 44 px, the main one 48; sheets from the bottom edge).
+ *
+ *   phone held upright   (pointer: coarse) and (orientation: portrait) and (max-width: 600px)
+ *   phone on its side    (pointer: coarse) and (orientation: landscape) and (max-height: 520px)
+ *   tablet               (pointer: coarse) and (min-width: 601px) and (min-height: 521px)
+ */
+
+/* ================================================================================================
+ * every touch screen: what is inside the panels, sized for a finger
+ * ============================================================================================== */
+@media (pointer: coarse) {
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works, .mailread) {
+    position: fixed;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    font-size: 14px;
+    line-height: 1.4;
+    gap: 12px;
+    /* (a sheet over the city: the city dims behind it, the HUD's buttons included) */
+    box-shadow:
+      inset 0 0 0 1px var(--g-edge),
+      0 0 0 100vmax rgba(0, 0, 0, 0.32);
+    z-index: 70;
+  }
+  /* the panels' headers: the label, then a close button a thumb hits */
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works, .mailread) header {
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+  }
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works) header label,
+  #ui .mailread header label {
+    font-size: 13px;
+  }
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works, .mailread, .inbox) header button {
+    box-sizing: border-box;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 6px;
+    margin: -6px -8px -6px 0;
+    display: inline-grid;
+    place-items: center;
+    font-size: 26px;
+    line-height: 1;
+    text-align: center;
+  }
+  #ui .mailread header button {
+    margin: -6px 0;
+  }
+  #ui .mailread header button[data-x] {
+    margin-right: -8px;
+  }
+  #ui .mailread header em,
+  #ui .inbox li time {
+    font-size: 12.5px;
+  }
+  /* (one sheet at a time: an opened mail covers the list it came from) */
+  #ui:has(.mailread.open) .inbox {
+    display: none;
+  }
+
+  /* the Block Casino: the stakes, the bets, the digits in a grid */
+  #ui .casino p {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  #ui .casino .sub {
+    font-size: 12.5px;
+    margin-top: 2px;
+  }
+  #ui .casino .row {
+    gap: 6px;
+  }
+  #ui .casino .row button {
+    box-sizing: border-box;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 10px;
+    display: grid;
+    place-items: center;
+    font-size: 15px;
+    white-space: nowrap;
+  }
+  #ui .casino .row.digits {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+  #ui .casino .digits button {
+    width: auto;
+    padding: 0;
+  }
+  #ui .casino .bets,
+  #ui .casino .res {
+    font-size: 13px;
+  }
+  #ui .casino .res code {
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+  }
+
+  /* the Genesis Line: one era a tap */
+  #ui .genesis h3 {
+    font-size: 20px;
+  }
+  #ui .genesis p {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  #ui .genesis .eras {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 6px;
+  }
+  #ui .genesis .eras button {
+    box-sizing: border-box;
+    min-height: 56px;
+    padding: 8px 10px;
+  }
+  #ui .genesis .eras button b {
+    font-size: 17px;
+  }
+  #ui .genesis .eras button span {
+    font-size: 12.5px;
+  }
+
+  /* the job board */
+  #ui .jobboard [data-job] {
+    box-sizing: border-box;
+    min-height: 64px;
+    padding: 12px 14px;
+    gap: 4px;
+  }
+  #ui .jobboard [data-job] b {
+    font-size: 17px;
+  }
+  #ui .jobboard [data-job] span {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  /* the case: the clues, the height to give (16 px: iOS zooms into a smaller field) */
+  #ui .casepanel h3 {
+    font-size: 20px;
+  }
+  #ui .casepanel p {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  #ui .casepanel ol {
+    gap: 8px;
+  }
+  #ui .casepanel li {
+    font-size: 14px;
+  }
+  #ui .casepanel li b {
+    font-size: 12.5px;
+  }
+  #ui .casepanel input {
+    box-sizing: border-box;
+    height: 48px;
+    font-size: 16px;
+  }
+  #ui .casepanel form button,
+  #ui .casepanel .arch {
+    box-sizing: border-box;
+    min-height: 48px;
+    height: auto;
+    padding: 0 16px;
+    font-size: 15px;
+  }
+
+  /* the works (its vote is closed for now; its sheet is ready) */
+  #ui .works .cards {
+    grid-template-columns: 1fr;
+  }
+  #ui .works ul,
+  #ui .works .chips span,
+  #ui .works .bar span {
+    font-size: 12.5px;
+  }
+  #ui .works article button,
+  #ui .works .sites button {
+    box-sizing: border-box;
+    min-height: 44px;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+  }
+
+  /* one mail, read big */
+  #ui .mailread h3 {
+    font-size: 20px;
+  }
+  #ui .mailread time {
+    font-size: 12.5px;
+  }
+  #ui .mailread p {
+    font-size: 15px;
+  }
+  #ui .mailread .go {
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 0 20px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 15px;
+  }
+
+  /* the inbox's list: its text and its buttons (where it sits is ui/mobile.css's) */
+  #ui .inbox li p {
+    font-size: 13px;
+  }
+  #ui .inbox li {
+    padding: 10px 4px;
+  }
+  #ui .inbox li button {
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 0 4px;
+    display: inline-grid;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  /* the paper: its close button a thumb hits, and stays in sight while it scrolls */
+  #ui .paper article > button {
+    position: sticky;
+    top: 0;
+    float: right;
+    z-index: 1;
+    width: 44px;
+    height: 44px;
+    margin: -14px -16px 0 8px;
+    display: grid;
+    place-items: center;
+    font-size: 30px;
+    border-radius: 50%;
+    background: rgba(243, 236, 220, 0.92);
+  }
+
+  /* the shift bar (miner, bus driver): its two buttons for a thumb */
+  #ui .jobbar {
+    box-sizing: border-box;
+    min-height: 56px;
+    padding: 6px 6px 6px 14px;
+    gap: 10px;
+  }
+  #ui .jobbar label {
+    font-size: 12.5px;
+  }
+  #ui .jobbar span {
+    font-size: 13px;
+  }
+  #ui .jobbar button {
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 0 18px;
+    display: grid;
+    place-items: center;
+    font-size: 15px;
+  }
+  #ui .jobbar button[data-quit] {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    font-size: 24px;
+  }
+
+  /* the game's news under the block toast: two lines rather than cut */
+  #ui .gtoast {
+    box-sizing: border-box;
+    min-height: 40px;
+    /* (the clamp cuts at the padding's edge: transparent borders keep a third line out of sight) */
+    padding: 0 14px;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    font-size: 13px;
+    line-height: 1.35;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+  /* the rune's message: never wider than the screen */
+  #ui .mark-prompt q {
+    max-width: min(420px, calc(100vw - 64px));
+    font-size: 13px;
+  }
+  #ui .mark-prompt span {
+    font-size: 13px;
+  }
+}
+
+/* ================================================================================================
+ * phones, either way up: the panels are sheets, rising from the bottom edge
+ * ============================================================================================== */
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 520px) {
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works, .mailread) {
+    top: auto;
+    bottom: 0;
+    transform: none;
+    padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+    border-radius: 4px 4px 0 0;
+    background: var(--g-solid);
+  }
+  /* a sheet open: the dock and the live strip under it step aside */
+  #ui:has(:is(.casino, .genesis, .jobboard, .casepanel, .works).open) :is(.strip, .gtoast) {
+    display: none !important;
+  }
+
+  /* the paper fills the screen, no tilt, its edges clear of the notch and the home bar */
+  #ui .paper {
+    padding: 0;
+  }
+  #ui .paper article {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+    transform: none;
+    font-size: 16px;
+    overscroll-behavior: contain;
+  }
+  #ui .paper article > button {
+    margin: -6px -6px 0 8px;
+  }
+  #ui .paper header small {
+    font-size: 12.5px;
+  }
+  #ui .paper h3 {
+    font-size: 18px;
+  }
+  #ui .paper footer b {
+    font-size: 12.5px;
+  }
+}
+
+/* ================================================================================================
+ * a phone held upright
+ * ============================================================================================== */
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 600px) {
+  /* the sheet: the width of the screen, up to under the top row (you, the corner) */
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works, .mailread) {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top) - 64px));
+  }
+  /* sixteen digits: two rows of eight are too narrow for a thumb, four rows of four are not */
+  #ui .casino .row.digits {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  #ui .genesis .eras {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  #ui .mailread .head .k {
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
+  }
+
+  /* the shift bar: across the screen, over the jump button; its words above, its meter and its
+     buttons under the right thumb */
+  #ui .jobbar {
+    left: 12px;
+    right: 12px;
+    bottom: calc(max(24px, env(safe-area-inset-bottom) + 10px) + 100px);
+    transform: none;
+    max-width: none;
+    flex-wrap: wrap;
+    white-space: normal;
+    row-gap: 4px;
+  }
+  #ui .jobbar label {
+    flex: 1 1 100%;
+    padding-top: 4px;
+  }
+  #ui .jobbar .meter {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 80px;
+  }
+  #ui .jobbar span {
+    flex: none;
+  }
+  /* the game toast: under the top row, left of the mailbox's column */
+  #ui .gtoast {
+    top: calc(env(safe-area-inset-top) + 118px);
+    left: 12px;
+    right: 72px;
+    transform: none;
+    max-width: none;
+  }
+  #ui .gtoast.hidden {
+    transform: translateY(-8px);
+  }
+}
+
+/* ================================================================================================
+ * a phone on its side: the sheet in the middle, the city on both sides
+ * ============================================================================================== */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works, .mailread) {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(580px, calc(100vw - 2 * max(env(safe-area-inset-left), env(safe-area-inset-right), 12px)));
+    max-height: calc(100dvh - 10px);
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  #ui .genesis .eras {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  #ui .jobboard.open {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+  }
+  #ui .jobboard header {
+    grid-column: 1 / -1;
+  }
+  #ui .jobboard [data-job] {
+    justify-content: flex-start;
+  }
+  /* the shift bar: low in the middle, between the stick and the jump */
+  #ui .jobbar {
+    bottom: max(12px, env(safe-area-inset-bottom));
+    max-width: calc(100vw - 2 * max(env(safe-area-inset-left), 12px) - 240px);
+  }
+  #ui .jobbar .meter {
+    width: 120px;
+    flex: 1 1 auto;
+    min-width: 60px;
+  }
+  #ui .jobbar label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  /* the game toast: below the top row, clear of the rail on the right */
+  #ui .gtoast {
+    top: calc(env(safe-area-inset-top) + 58px);
+    max-width: calc(100vw - 2 * max(env(safe-area-inset-left), env(safe-area-inset-right), 12px) - 180px);
+  }
+}
+
+/* ================================================================================================
+ * tablets: a card in the middle of the screen, the type a size up
+ * ============================================================================================== */
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 521px) {
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works, .mailread) {
+    top: 50%;
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, -50%);
+    width: min(640px, calc(100vw - 64px));
+    max-height: min(860px, calc(100dvh - 160px));
+    padding: 18px 24px 24px;
+    gap: 14px;
+    font-size: 15px;
+    background: var(--g-solid);
+  }
+  #ui .works {
+    width: min(920px, calc(100vw - 64px));
+  }
+  #ui .works .cards {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  #ui :is(.casino, .genesis, .jobboard, .casepanel, .works) header label,
+  #ui .mailread header label {
+    font-size: 14px;
+  }
+  #ui :is(.genesis, .casepanel) h3,
+  #ui .mailread h3 {
+    font-size: 26px;
+  }
+  #ui .casino p,
+  #ui .genesis p,
+  #ui .casepanel p,
+  #ui .casepanel li {
+    font-size: 15px;
+  }
+  #ui .mailread p {
+    font-size: 16px;
+  }
+  #ui .casino .row button {
+    min-height: 52px;
+    font-size: 16px;
+  }
+  #ui .genesis .eras {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  #ui .genesis .eras button {
+    min-height: 68px;
+  }
+  #ui .genesis .eras button b {
+    font-size: 20px;
+  }
+  #ui .genesis .eras button span {
+    font-size: 13px;
+  }
+  /* the three jobs side by side */
+  #ui .jobboard {
+    width: min(760px, calc(100vw - 64px));
+  }
+  #ui .jobboard.open {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+  }
+  #ui .jobboard header {
+    grid-column: 1 / -1;
+  }
+  #ui .jobboard [data-job] {
+    justify-content: flex-start;
+    min-height: 140px;
+    padding: 16px;
+  }
+  #ui .jobboard [data-job] b {
+    font-size: 20px;
+  }
+  #ui .jobboard [data-job] span {
+    font-size: 14px;
+  }
+  #ui .jobbar {
+    bottom: max(110px, calc(env(safe-area-inset-bottom) + 100px));
+  }
+  #ui .jobbar .meter {
+    width: 220px;
+  }
+  #ui .gtoast {
+    font-size: 14px;
+    max-width: min(640px, calc(100vw - 280px));
+  }
+  /* the paper: a broadsheet with room around it */
+  #ui .paper {
+    padding: max(24px, env(safe-area-inset-top)) 32px max(24px, env(safe-area-inset-bottom));
+  }
+  #ui .paper article {
+    max-height: calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding: 30px 36px 28px;
+    font-size: 16px;
+    overscroll-behavior: contain;
+  }
+  #ui .paper h3 {
+    font-size: 19px;
+  }
+  /* (the article fits on a tablet: the close button stays in its corner, clear of the masthead) */
+  #ui .paper article > button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    float: none;
+    margin: 0;
+  }
+  #ui .paper header {
+    padding-top: 18px;
+  }
+}

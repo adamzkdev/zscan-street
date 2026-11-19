@@ -1,0 +1,19 @@
+{
+  // The rooms in Node (main.ts) and their test (test.ts): `npx tsc -p server/rooms`.
+  // The Worker has its own (tsconfig.worker.json): Cloudflare's globals are not Node's.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true
+  },
+  "files": ["main.ts", "test.ts"]
+}

@@ -577,7 +577,31 @@ const eiffel = (wind: number, paris: number, lp: number): Preset => ({
   },
 });
 
+// ZK PARTY (port): the GAME HOUSE, a games café: the floor's murmur, dice, riffled chips, cards on felt
+const gamehouse: Preset = {
+  room: HALL,
+  rain: 0.05,
+  build(s) {
+    loop(s, "casino", 0.6);
+    loop(s, "arcade", 0.4);
+    loop(s, "restaurant", 0.3);
+    // dice: a few quick clicks of noise, bouncing to a stop
+    s.every("dice", 5, 12, (t) => {
+      const p = side();
+      for (let i = 0, at = 0; i < 5; i++, at += 0.07 + i * 0.03) burst(s, t + at, "white", "bandpass", 2600 + Math.random() * 900, 4, 0.05 / (1 + i * 0.5), 0.025, 0.25, p);
+    });
+    // chips riffled: tiny high clacks in a run
+    s.every("chips", 4, 9, (t) => {
+      const p = side();
+      for (let i = 0; i < 6; i++) tone(s, t + i * 0.045, 2800 + Math.random() * 700, "square", 0.012, 0.03, 0.2, { pan: p, lp: 5000 });
+    });
+    // a card snapped down on the felt
+    s.every("card", 6, 14, (t) => burst(s, t, "pink", "bandpass", 1400, 1.2, 0.06, 0.05, 0.2, side()));
+  },
+};
+
 export const PRESETS: Record<string, Preset> = {
+  gamehouse,
   stadium,
   colosseum,
   hypogeum,
@@ -799,6 +823,8 @@ export function presetFor(key: string, floor: number, name: string): string {
       return has("press", "news") ? "press-room" : "stacks";
     case "university":
       return has("library") ? "stacks" : "quiet-hall";
+    case "gamehouse":
+      return "gamehouse";
     default:
       return "quiet-hall";
   }

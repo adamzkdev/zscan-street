@@ -5,6 +5,7 @@ import type { NftItem, Tx, TxKind } from "../data/types";
 import { ZScan } from "../data/zscan";
 import { blobTexture } from "./textures";
 import { sayAt } from "./speech";
+import { load } from "./load";
 import { GRID, POSE, bubbleSprite, drawHat, drawVest, hatClear, lapSprite, legSprite, poseSprites, type Emote, type Hat, type HeadFit, type ItemKind, type PoseSpec, type Px } from "./sprites";
 
 /** Parcel colours per transaction kind: restrained, readable at a glance. */
@@ -290,6 +291,13 @@ export const poseCell = (c: number, r: number) => new THREE.Vector3((c + 0.5 - G
 /** The arms' plane, laid on the portrait's grid (POSE in portrait cells; row 32 is the ground). */
 const POSE_GEO = new THREE.PlaneGeometry(POSE.w * PX, POSE.h * PX).translate((POSE.x0 + POSE.w / 2 - GRID / 2) * PX, (32 - POSE.y0 - POSE.h / 2) * PX, 0);
 const tmpQ = new THREE.Quaternion();
+const tmpD = new THREE.Vector3();
+const tmpW = new THREE.Vector3();
+const IDENTITY = new THREE.Matrix4();
+/** Beyond this (m), a figure's animation may step on its own turn only at a weak processor's levels (scene/load.ts). */
+const FAR_ANIM = 30;
+/** Each figure's turn among the frames (load.turn): spread so they don't all step on the same one. */
+let animSlots = 0;
 
 /** Silhouette glow drawn behind the selected sprite: the art's alpha, filled with one colour. */
 function glowMaterial(map: THREE.Texture, near: { value: number }) {
@@ -783,13 +791,27 @@ export class Snark {
   update(dt: number, t: number, camQuat: THREE.Quaternion, camRight: THREE.Vector3) {
     if (this.ghostFor > 0) this.ghostFor -= dt;
     if (this.seekSeat > 0 && --this.seekSeat === 0 && !this.findSeat()) this.seekSeat = 30;
+    // Out of the picture (or hidden), only where it is and where it goes are kept up: the figure's
+    // own animation (billboard, waddle, arms) is set again the frame it is in view, from the same
+    // clock, so it looks no different. (On the street itself, the world's place and turn are its
+    // own: no walk up the tree to make the matrices again.)
+    const par = this.root.parent;
+    const top = par !== null && (par as THREE.Scene).isScene === true && par.parent === null && par.matrixWorld.equals(IDENTITY);
+    let seen = this.root.visible && load.sees(top ? tmpW.copy(this.root.position) : tmpW.setFromMatrixPosition(this.root.matrixWorld), 2.5);
+    // (a processor that cannot keep up: far off, the figure's animation steps on its own turn only,
+    // every other frame or less; where it walks still moves every frame)
+    if (seen && load.level > 0 && !load.turn(this.animSlot) && tmpW.distanceToSquared(load.eye) > FAR_ANIM * FAR_ANIM) seen = false;
     // billboard in world space, whatever the root is parented to (the street or a bus)
-    this.visual.quaternion.copy(this.root.getWorldQuaternion(tmpQ).invert().multiply(camQuat));
+    if (seen) {
+      if (top) tmpQ.copy(this.root.quaternion);
+      else this.root.getWorldQuaternion(tmpQ);
+      this.visual.quaternion.copy(tmpQ.invert().multiply(camQuat));
+    }
     let moving = false;
     if (this.walking && this.path.length && !this.paused) {
       const target = this.path[0];
       const pos = this.root.position;
-      const d = new THREE.Vector3().subVectors(target, pos);
+      const d = tmpD.subVectors(target, pos);
       d.y = 0;
       const dist = d.length();
       const step = this.speed * this.rush * dt;
@@ -824,6 +846,10 @@ export class Snark {
 
     // Among Us waddle on the pixel grid: legs step in turn, the bust bobs one pixel, all snapped.
     const p = (this.phase += dt * (moving ? 9 * this.rush : 2));
+    if (!seen) {
+      this.unseen(dt);
+      return;
+    }
     const base = LEG_H + BODY / 2;
     if (moving) {
       const s = Math.sin(p);
@@ -870,6 +896,22 @@ export class Snark {
     this.hold.position.y = this.body.position.y - base;
     this.hold.rotation.z = this.body.rotation.z * 0.5;
     this.visual.scale.set(this.facing * this.scaleK, this.scaleK, this.scaleK);
+    this.ring.rotation.z += dt;
+  }
+
+  /** Its turn among the frames for a far figure's animation (load.turn). */
+  private animSlot = animSlots++ % 6;
+
+  /** The part of update() that goes on out of sight: a speech bubble's time, the ring's turn. */
+  private unseen(dt: number) {
+    if (this.bubble) {
+      this.bubbleFor -= dt;
+      this.bubbleAge += dt;
+      if (this.bubbleFor <= 0) {
+        dropPlane(this.bubble);
+        this.bubble = null;
+      }
+    }
     this.ring.rotation.z += dt;
   }
 }

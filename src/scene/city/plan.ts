@@ -93,7 +93,10 @@ export const SHOTENGAI = { x: ST.shotengai, z0: -39.4 + 1, z1: 32 - 1, half: 4 +
  * The landmarks' lots: whole blocks (merged across the small streets inside them) kept for a
  * building of their own, placed like a city planner would.
  */
-export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "plots" | "works" | "nu7" | "zodl" | "vizor" | "noir" | "zlab" | "university" | "zsalab" | "convention";
+/** Buildings are cut at this height (voxels) when the camera looks over them (the cut models, see worker.ts). */
+export const CUT_VOX = 16;
+
+export type LotKind = "stadium" | "museum" | "foodhall" | "reserve" | "mall" | "needle" | "marina" | "gardens" | "port" | "green" | "pyramid" | "eiffel" | "colosseum" | "flyer" | "parliament" | "shibuya" | "zkorchard" | "zksapling" | "zkhalo" | "binhai" | "cemetery" | "plots" | "works" | "nu7" | "zodl" | "vizor" | "noir" | "zlab" | "university" | "zsalab" | "convention" | "gamehouse";
 /** A player plot: 32 × 32 voxels (5.3 m) of ground, its front centre and which way it faces. */
 export interface PlotSlot {
   id: number;
@@ -173,6 +176,8 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
   { kind: "museum", x0: -115, x1: -58, z0: -116, z1: CORE.minZ - 8 },
   // the hawker centre, two blocks west of the shōtengai, on the avenue
   { kind: "foodhall", x0: -154, x1: -129, z0: 2.6, z1: 32 },
+  // ZK PARTY (port): THE GAME HOUSE, on the avenue across from the hawker centre
+  { kind: "gamehouse", x0: -154, x1: -129, z0: -39.4, z1: -5.4 },
   // Wall Street: the ZEC Reserve on the avenue east of the heart, the mall further on
   { kind: "reserve", x0: 90, x1: 115, z0: 2.6, z1: 32 },
   { kind: "mall", x0: 129, x1: 190, z0: -39.4, z1: -5.4 },
@@ -918,9 +923,9 @@ export function planCity() {
 
   // ---- the landmarks, each on its lot (or out on the water) ----
   /** Which way each lot's front faces (towards the street that matters). */
-  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e", zkorchard: "s", zksapling: "n", zkhalo: "s", binhai: "n", cemetery: "s", zodl: "s", vizor: "n", noir: "s", zlab: "s", university: "s", zsalab: "n", convention: "n" };
+  const LOT_FACE: Partial<Record<LotKind, BuildingJob["face"]>> = { stadium: "s", museum: "e", foodhall: "n", reserve: "n", mall: "s", needle: "s", marina: "n", gardens: "n", port: "n", pyramid: "s", eiffel: "s", colosseum: "s", parliament: "s", shibuya: "e", zkorchard: "s", zksapling: "n", zkhalo: "s", binhai: "n", cemetery: "s", zodl: "s", vizor: "n", noir: "s", zlab: "s", university: "s", zsalab: "n", convention: "n", gamehouse: "s" };
   /** The landmarks you can walk into, and the place each one opens. */
-  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben", gardens: "gardens", zkorchard: "tower-orchard", zksapling: "tower-sapling", zkhalo: "tower-halo", binhai: "library", cemetery: "cemetery", zodl: "zodl", vizor: "vizor", noir: "noir", zlab: "zlab", university: "university", zsalab: "zsalab", convention: "convention" };
+  const VENUE: Partial<Record<LotKind, string>> = { museum: "museum", reserve: "reserve", stadium: "stadium", mall: "mall", marina: "hotel", needle: "needle", pyramid: "pyramid", eiffel: "eiffel", colosseum: "colosseum", parliament: "bigben", gardens: "gardens", zkorchard: "tower-orchard", zksapling: "tower-sapling", zkhalo: "tower-halo", binhai: "library", cemetery: "cemetery", zodl: "zodl", vizor: "vizor", noir: "noir", zlab: "zlab", university: "university", zsalab: "zsalab", convention: "convention", gamehouse: "gamehouse" };
   const landmarkJob = (kind: string, x0: number, x1: number, z0: number, z1: number, face: BuildingJob["face"], venue?: string, dy?: number) => {
     const ns = face === "s" || face === "n";
     const w = ns ? x1 - x0 : z1 - z0,

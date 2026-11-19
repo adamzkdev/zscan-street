@@ -1,6 +1,6 @@
 import type { LiftDecl, Plan, StairDecl } from "./lift";
 import type { Interior, Rect } from "./types";
-import { universityStairs } from "./university/stairs";
+import { universityStairs } from "./university/stairplan";
 
 /**
  * How each walk-in place's floors are joined (see lift.ts): its lifts (shafts, styles, spots) and

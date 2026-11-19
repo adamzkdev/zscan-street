@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { getNoirWallet, verifyMessageSignature, type NoirWalletProvider } from "@noir-wallet/sdk";
 import { myRefs, StreetPay, type Intent, type Mark, type PayAction, type PayStatus } from "../data/streetpay";
 import { EXPLORER } from "../data/zscan";
+import { TOUCH } from "../scene/quality";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const X = '<svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -287,7 +288,7 @@ export class PayDesk {
           ? `<div class="acts">
         <button class="btn" data-v="do:guestbook"><b>Sign the guestbook</b><span>${info.min.guestbook} ZEC · a line on the gilded wall</span></button>
         <button class="btn" data-v="do:tip"><b>Tip the city</b><span>from ${info.min.tip} ZEC · fireworks for all</span></button>
-        <div class="hint">On foot anywhere in the city, press <kbd>N</kbd> to leave a sealed message on the ground. City Works: vote with your wallet from the works panel.</div>
+        <div class="hint">${TOUCH ? "From a computer, on foot anywhere in the city, you can leave a sealed message on the ground." : "On foot anywhere in the city, press <kbd>N</kbd> to leave a sealed message on the ground."} City Works: vote with your wallet from the works panel.</div>
       </div>`
           : `<div class="note lock">The city's wallet desk is closed for now.</div>`
       }
@@ -302,7 +303,7 @@ export class PayDesk {
 
   private composeHtml(view: Extract<View, { v: "compose" }>) {
     const c = COPY[view.action];
-    const where = view.action === "mark" ? (view.here ? `<div class="muted small">Here: ${esc(placeName(view.here))}</div>` : `<div class="err">Messages are left on foot: walk somewhere and press N.</div>`) : "";
+    const where = view.action === "mark" ? (view.here ? `<div class="muted small">Here: ${esc(placeName(view.here))}</div>` : `<div class="err">${TOUCH ? "Messages are left on foot, from a computer for now." : "Messages are left on foot: walk somewhere and press N."}</div>`) : "";
     const field = c.max
       ? `<label class="mh" for="pd-text">${c.field}</label>
          <textarea id="pd-text" name="text" rows="${c.max > 40 ? 4 : 1}" maxlength="${c.max}" placeholder="${c.ph}" spellcheck="true"></textarea>

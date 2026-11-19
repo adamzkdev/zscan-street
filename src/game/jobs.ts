@@ -3,6 +3,7 @@ import type { Tx } from "../data/types";
 import type { ChainClock } from "./clock";
 import { profile } from "./profile";
 import type { GameHud } from "./ui";
+import { TOUCH } from "../scene/quality";
 
 export interface JobHooks {
   /** Put the visitor on foot at `at`. */
@@ -118,12 +119,12 @@ export class Jobs {
       this.streak = 0;
       this.band = 0.18;
       this.hooks.factory();
-      this.hud.say("<b>MINER</b> · hit SPACE (or HASH) when the needle is in the gold window. Shares are paid when the next block lands.");
+      this.hud.say(`<b>MINER</b> · ${TOUCH ? "tap HASH" : "hit SPACE (or HASH)"} when the needle is in the gold window. Shares are paid when the next block lands.`);
     } else {
       this.braked = null;
       this.driving = false;
       this.hooks.rideNextBus();
-      this.hud.say("<b>BUS DRIVER</b> · you take the next block's bus. Hit SPACE (or BRAKE) right on the stop line.");
+      this.hud.say(`<b>BUS DRIVER</b> · you take the next block's bus. ${TOUCH ? "Tap BRAKE" : "Hit SPACE (or BRAKE)"} right on the stop line.`);
     }
     this.bar.classList.add("on");
     this.render();

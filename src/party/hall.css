@@ -1,0 +1,69 @@
+/* One collection per kind of game; setup stays in a drawer until a game is selected. */
+.pt-hub .pt-grid {
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-areas: "practice practice" "library library" "modes side";
+}
+.pt-library { grid-area: library; min-width: 0; background: #111b28; }
+.pt-library .pt-ch { flex-wrap: wrap; gap: 8px 12px; padding: 18px 18px 14px; }
+.pt-library .pt-ch > b { display: flex; align-items: center; gap: 10px; font-size: 19px; text-transform: uppercase; }
+.pt-library .pt-ch em { padding: 4px 8px; border-radius: 7px; background: #a8d8e820; color: #a8d8e8; font-size: 13px; font-style: normal; }
+.pt-library .pt-ch small { color: #9eb1c8; font-size: 12px; }
+.pt-library-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 6px 18px 20px; }
+.pt-library .pt-library-game { min-width: 0; color: #f0f3f7; text-decoration: none; font-family: inherit; cursor: pointer; touch-action: manipulation; }
+.pt-library-game > b { white-space: normal; padding-bottom: 5px; text-transform: uppercase; line-height: 1.3; }
+.pt-library-game > small { display: block; padding: 0 12px 13px; color: #a9b9cc; font-size: 12px; line-height: 1.4; }
+.pt-library-game > small span { white-space: nowrap; }
+.pt-library-game:focus-visible { outline: 2px solid #ffc4a8; outline-offset: 3px; }
+.pt-hub .pt-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+
+.pt-onl.is-coming-soon { filter: grayscale(1); background: linear-gradient(145deg, #27313f, #131b27); box-shadow: inset 0 0 0 1px #ffffff20; }
+.pt-onl.is-coming-soon .pt-body { padding-top: 66px; opacity: .58; }
+.pt-onl.is-coming-soon button { cursor: not-allowed; transform: none; }
+.pt-coming-soon { position: absolute; top: 0; left: 0; right: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; background: repeating-linear-gradient(135deg, #ffffff07 0 10px, transparent 10px 20px), #35404e; border-bottom: 1px solid #ffffff25; color: #f0f3f7; font-size: 12px; font-weight: 850; letter-spacing: .16em; text-transform: uppercase; }
+.pt-coming-soon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+
+.pt-board-dialog {
+  position: fixed; inset: 0 0 0 auto; margin: 0; padding: 0;
+  width: min(480px, 100%); max-width: 100vw; height: 100dvh; max-height: 100dvh;
+  box-sizing: border-box; overflow: hidden; border: 1px solid #ffffff20; border-radius: 22px 0 0 22px;
+  background: #111c2a; color: #f0f3f7; font-family: inherit;
+}
+.pt-board-dialog[open] { display: flex; flex-direction: column; }
+.pt-board-dialog::backdrop { background: #03080fb3; }
+.pt-setup-head { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 16px max(18px, env(safe-area-inset-left)); background: #152131; border-bottom: 1px solid #ffffff12; }
+.pt-setup-head small { color: #ff9d78; font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.pt-setup-head h2 { margin: 6px 0 0; font-size: 23px; line-height: 1.1; letter-spacing: -.035em; text-transform: uppercase; }
+.pt-setup-head .pt-close { position: static; flex: none; width: 44px; height: 44px; margin: 0; padding: 0; touch-action: manipulation; }
+.pt-setup-head .pt-close svg { pointer-events: none; }
+.pt-setup-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 16px max(18px, env(safe-area-inset-right)) 18px max(18px, env(safe-area-inset-left)); }
+.pt-board-dialog .pt-hero { border: 0; box-shadow: none; background: none; border-radius: 0; }
+.pt-board-dialog .pt-art { border-radius: 12px; aspect-ratio: 16 / 7; }
+.pt-board-dialog .pt-body { padding: 14px 0 0; }
+.pt-board-dialog .pt-row { flex-direction: column; align-items: stretch; gap: 12px; }
+.pt-board-dialog .pt-tables { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pt-board-dialog .pt-seg { flex-wrap: wrap; }
+.pt-setup-foot { flex: none; padding: 12px max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: #142032; border-top: 1px solid #ffffff1a; }
+.pt-setup-foot .pt-play { width: 100%; height: 52px; margin: 0; }
+.pt-board-dialog button:focus-visible { outline: 2px solid #ffc4a8; outline-offset: -3px; }
+@media (max-width: 1000px) {
+  .pt-hub .pt-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "practice" "library" "modes" "side"; }
+}
+@media (max-width: 600px) {
+  .pt-library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; padding: 4px 14px 18px; }
+  .pt-library .pt-ch > b { font-size: 17px; }
+  .pt-library .pt-ch { padding: 16px 14px 12px; }
+  .pt-library .pt-ch small { flex-basis: 100%; }
+  .pt-library-game > b { padding: 10px 10px 5px; font-size: 12px; }
+  .pt-library-game > small { padding: 0 10px 12px; font-size: 11px; }
+  .pt-hub .pt-modes { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  .pt-board-dialog { inset: auto 0 0; width: 100%; height: min(92dvh, 820px); border-radius: 22px 22px 0 0; }
+  .pt-setup-head { padding-top: 16px; }
+}
+@media (max-height: 520px) {
+  .pt-setup-head { padding-block: max(10px, env(safe-area-inset-top)) 10px; }
+  .pt-setup-head h2 { font-size: 20px; }
+  .pt-setup-foot { padding-top: 10px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .pt-setup-foot .pt-play { height: 48px; }
+}

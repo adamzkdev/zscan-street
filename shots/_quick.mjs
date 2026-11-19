@@ -1,0 +1,27 @@
+// node shots/_quick.mjs [url]: open the city, collect console errors, a screenshot of the map, walk in and out of a place
+import puppeteer from "puppeteer-core";
+const [URL = "http://localhost:3021/?debug"] = process.argv.slice(2);
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1440, height: 900 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push("pageerror " + e.message));
+p.on("console", (m) => (m.type() === "error" ? errs.push("console " + m.text()) : /built in|city up|warmed|render quality|processor/.test(m.text()) && console.log("  log:", m.text())));
+const t0 = Date.now();
+await p.goto(URL);
+await p.waitForFunction(() => window.__streetUp && window.street, { timeout: 240000, polling: 100 });
+console.log("up", (Date.now() - t0) / 1000);
+await p.waitForFunction(() => !document.getElementById("boot"), { timeout: 60000, polling: 100 });
+console.log("boot gone", (Date.now() - t0) / 1000);
+await new Promise((r) => setTimeout(r, 4000));
+await p.screenshot({ path: "shots/port-stability/quick-map.png" });
+await p.evaluate(() => street.enter("museum"));
+await p.waitForFunction(() => street.interiors.active, { timeout: 60000 });
+await new Promise((r) => setTimeout(r, 1200));
+await p.screenshot({ path: "shots/port-stability/quick-museum.png" });
+await p.evaluate(() => street.hud && document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+await p.keyboard.press("Escape");
+await new Promise((r) => setTimeout(r, 1500));
+console.log("still inside after Escape:", await p.evaluate(() => !!street.interiors.active));
+await p.screenshot({ path: "shots/port-stability/quick-out.png" });
+console.log("errors:", errs.length ? errs.slice(0, 10).join("\n  ") : "none");
+await b.close();
