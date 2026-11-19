@@ -9,7 +9,14 @@ export default defineConfig({
     workersDev: true,
     previewUrls: false,
     observability: { enabled: true, redactQueryString: true, logs: { invocationLogs: false }, traces: { enabled: false } },
-    assets: { htmlHandling: "none", notFoundHandling: "none", runWorkerFirst: true },
+    // The city is static: Cloudflare serves its files without running the Worker (those requests
+    // are free and don't count against the Workers quota). The Worker only answers what needs
+    // code: a transaction's share card, the films from R2 and ZK PARTY's online rooms.
+    assets: {
+      htmlHandling: "auto-trailing-slash",
+      notFoundHandling: "single-page-application",
+      runWorkerFirst: ["/tx/*", "/video.mp4", "/10-years.mp4", "/rooms", "/rooms/*", "/rooms-health"],
+    },
     env: {
       ASSETS: bindings.assets(),
       MEDIA: bindings.r2({ name: "zstreet-media" }),
