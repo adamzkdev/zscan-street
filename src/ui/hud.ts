@@ -168,6 +168,7 @@ export const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string 
   university: { icon: "book", color: "#e2b448" },
   cemetery: { icon: "vault", color: "#7dff9a" },
   gamehouse: { icon: "cards", color: "#ff6b35" },
+  nu7tower: { icon: "tower", color: "#b07bff" },
 };
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */

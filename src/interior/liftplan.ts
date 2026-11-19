@@ -222,6 +222,19 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
   // the university: its lifts by the doors and on each floor's west wall; its stair hall behind the front wall (university/stairs.ts)
   university: { style: "stone", stairs: universityStairs(6), lifts: per({ 0: [lobby(-7, -0.2, Math.PI)], 1: [lobby(-13.8, -3.8, Math.PI / 2)], 2: [lobby(-13.8, -3.8, Math.PI / 2)], 3: [lobby(-13.8, -3.8, Math.PI / 2)], 4: [lobby(-13.8, -3.8, Math.PI / 2)], 5: [lobby(-13.8, -3.8, Math.PI / 2)] }) },
   vizor: { style: "steel", lifts: per({ 0: [lobby(-13.8, -21, Math.PI / 2)], 1: [lobby(-15.8, -6, Math.PI / 2)], 2: [lobby(-13.8, -6, Math.PI / 2)], 3: [lobby(0, -21.8, 0)] }) },
+  // the NU7 TOWER (interior/nu7tower, its LIFT walls): the hall's west wall, the pit garage's east wall,
+  // the vault's, the clock's and the observatory's south walls, the crown's south face on the sky deck
+  nu7tower: {
+    style: "nu7",
+    lifts: per({
+      0: [lobby(-14.8, -20, Math.PI / 2)],
+      1: [lobby(13.8, -13, -Math.PI / 2)],
+      2: [lobby(0, -0.2, Math.PI)],
+      3: [lobby(0, -0.2, Math.PI)],
+      4: [lobby(0, -2.2, Math.PI)],
+      5: [lobby(0, -9.8, 0)],
+    }),
+  },
   "tower-halo": {
     style: "neon",
     lifts: per({ 0: [lobby(-14.8, -24, Math.PI / 2)], 1: [lobby(-17.8, -7, Math.PI / 2)], 2: [lobby(-13.7, -7, Math.PI / 2)], 3: [lobby(0, 1.68, Math.PI)] }),

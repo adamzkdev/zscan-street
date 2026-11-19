@@ -55,6 +55,8 @@ export interface PickInfo {
   partyGame?: string;
   /** ZK PARTY (port): opens the GAME HOUSE's launcher on a table game (its key in src/tables). */
   table?: string;
+  /** Races the NU7 GRAND PRIX (ZK PARTY's SNARK KART on the NU7 quarter's circuit): the NU7 TOWER's pit garage. */
+  race?: boolean;
   /** Takes the elevator to this floor (clicking its doors). */
   floor?: number;
   /** Opens a book in the reader (the library's ZIPs). */
@@ -70,16 +72,16 @@ export interface InteriorContext {
   onBlock(fn: (height: number, pool: string | null) => void): void;
   /**
    * The real city seen from a walk-in place: a panorama of the street rendered from the place's
-   * position, `up` metres above the pavement (`back` metres behind its door). Use it as the
-   * scene's background so the windows look onto ZStreet itself.
+   * position, `up` metres above the pavement (`back` metres behind its door, `side` metres along
+   * world x from it). Use it as the scene's background so the windows look onto ZStreet itself.
    */
-  cityView(place: string, up: number, back?: number): import("three").Texture | null;
+  cityView(place: string, up: number, back?: number, side?: number): import("three").Texture | null;
   /** A letter to the inbox (the NEWS square): what a place announced while you were inside. */
   mail(kind: import("../game/ui").MailKind, title: string, text: string, act?: { label: string; fn: () => void }): void;
 }
 
 export interface Interior {
-  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zlab" | "university" | "zsalab" | "convention" | "gamehouse";
+  readonly key: "mempool" | "factory" | "library" | "tower" | "museum" | "stadium" | "prison" | "mall" | "hotel" | "needle" | "pyramid" | "eiffel" | "colosseum" | "reserve" | "opera" | "bigben" | "statue" | "arab" | "gardens" | "palm" | "tower-orchard" | "tower-sapling" | "tower-halo" | "cemetery" | "zodl" | "vizor" | "noir" | "zlab" | "university" | "zsalab" | "convention" | "gamehouse" | "nu7tower";
   /** Shown top-left while inside ("MEMPOOL"). */
   readonly title: string;
   readonly scene: THREE.Scene;

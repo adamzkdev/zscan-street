@@ -46,6 +46,8 @@ const PAL = {
   gold: E("#f4b728", 2.2),
   door: G("#1c2433"),
   concrete: C("#9a958c"),
+  /** The lobby's glass, lit from inside. */
+  lobby: E("#ffd89a", 1.25),
 };
 
 /** Half the tower's side (voxels) at floor `f`: it steps back three times on the way up. */
@@ -87,10 +89,18 @@ function floorModel(f: number) {
         m.set(x, y, z, c);
       }
     }
-  // the lobby: a tall glass door on the front (south) and a gold canopy over it
+  // the lobby: its hall lit behind a wall of glass, the doors in gold, violet neon up the frame,
+  // a gold canopy over them (the NU7 TOWER is a walk-in place: interior/nu7tower)
   if (f === 0) {
     const front = MID + h - 1;
-    m.box(MID - 7, 2, front, MID + 7, 15, front + 1, PAL.door);
+    // the hall seen through the glass, warm; the doors darker in the middle, gold mullions, a transom
+    m.box(MID - 11, 2, front - 1, MID + 11, 15, front, PAL.lit);
+    m.box(MID - 11, 2, front, MID + 11, 15, front + 1, PAL.lobby);
+    m.box(MID - 4, 2, front, MID + 4, 12, front + 1, PAL.door);
+    for (const x of [MID - 11, MID - 8, MID - 5, MID - 1, MID, MID + 4, MID + 7, MID + 10]) m.box(x, 2, front, x + 1, 15, front + 1, PAL.fin);
+    m.box(MID - 11, 12, front, MID + 11, 13, front + 1, PAL.fin);
+    m.box(MID - 11, 2, front, MID + 11, 3, front + 1, PAL.slab);
+    for (const x of [MID - 13, MID + 12]) m.box(x, 2, front, x + 1, 15, front + 1, PAL.neon);
     m.box(MID - 11, 15, front - 1, MID + 11, 17, N, PAL.gold);
   }
   return m;
@@ -328,7 +338,7 @@ class Tower {
     this.pctSign = g;
   }
 
-  /** NU7 in neon on all four faces of the crown, once it is finished. */
+  /** NU7 in neon on all four faces of the crown, once it is finished; the tower's name over its doors. */
   private makeNames() {
     if (this.names) return;
     const mat = neonText("NU7", 512, 220, VIOLET, 190);
@@ -341,6 +351,9 @@ class Tower {
       s.rotation.y = a;
       g.add(s);
     }
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.1), neonText("NU7 TOWER · 七", 1024, 176, VIOLET, 120));
+    door.position.set(0, 3.45, halfAt(0) * VOX + 0.08);
+    g.add(door);
     this.group.add(g);
     this.names = g;
   }
@@ -349,8 +362,11 @@ class Tower {
 // ---- the NU7 Grand Prix karting ----
 
 const K = NU7Q.kart;
+/** The pit gate (on the east fence, facing the tower) and its width. */
+const PIT = NU7Q.pit;
+const GATE = 3.4;
 /** The circuit's line (metres into the lot): a long straight past the stands, hairpins behind. */
-const LINE = [
+export const LINE = [
   [10, 54],
   [30, 55],
   [46, 52],
@@ -392,6 +408,7 @@ class Karting {
   private banner: THREE.Mesh;
   private bannerKey = "";
   private t = 0;
+  private gate: { arm: THREE.Object3D; lit: THREE.Object3D[] };
 
   constructor(parent: THREE.Object3D) {
     parent.add(this.group);
@@ -520,6 +537,7 @@ class Karting {
     this.tar = this.machine("#ff7a1a", false);
     this.group.add(this.roller, this.tar);
     this.makeFence();
+    this.gate = this.makeGate();
     this.banner = new THREE.Mesh(new THREE.PlaneGeometry(22, 1.7), new THREE.MeshBasicMaterial());
     this.banner.position.set((K.x0 + K.x1) / 2, y0 + 1.15, K.z1 + 0.06);
     this.group.add(this.banner);
@@ -629,17 +647,105 @@ class Karting {
     };
     const W = K.x1 - K.x0,
       D = K.z1 - K.z0;
+    // the east side leaves a gap for the pit gate, facing the tower
+    const g0 = PIT.z - GATE / 2,
+      g1 = PIT.z + GATE / 2;
     for (const [x, z, len, ry] of [
       [(K.x0 + K.x1) / 2, K.z0, W, 0],
       [(K.x0 + K.x1) / 2, K.z1, W, 0],
       [K.x0, (K.z0 + K.z1) / 2, D, Math.PI / 2],
-      [K.x1, (K.z0 + K.z1) / 2, D, Math.PI / 2],
+      [K.x1, (K.z0 + g0) / 2, g0 - K.z0, Math.PI / 2],
+      [K.x1, (g1 + K.z1) / 2, K.z1 - g1, Math.PI / 2],
     ]) {
       const f = new THREE.Mesh(new THREE.PlaneGeometry(len, 2.2), mk(len));
       f.position.set(x, CURB + 1.1, z);
       f.rotation.y = ry;
       this.group.add(f);
     }
+  }
+
+  /**
+   * The pit gate on the east fence, facing the tower across the plaza: gold posts, PIT in neon on its
+   * beam, the race's sign, a barrier arm (down while the circuit is being built), a chequered mat.
+   * Walking up to it races the NU7 GRAND PRIX (main.ts: the street's prompt).
+   */
+  private makeGate() {
+    const g = new THREE.Group();
+    const x = K.x1;
+    const steel = new THREE.MeshStandardMaterial({ color: "#2a2838", roughness: 0.5, metalness: 0.5 });
+    const gold = new THREE.MeshStandardMaterial({ color: "#d9a63a", roughness: 0.35, metalness: 0.8 });
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.42, 3.6, 0.42), steel);
+      post.position.set(x, CURB + 1.8, PIT.z + s * (GATE / 2 + 0.21));
+      post.castShadow = true;
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.46), gold);
+      band.position.set(x, CURB + 1.2, post.position.z);
+      const neon = new THREE.Mesh(new THREE.BoxGeometry(0.05, 3.0, 0.06), new THREE.MeshBasicMaterial({ color: new THREE.Color(VIOLET).multiplyScalar(2.4), toneMapped: false }));
+      neon.position.set(x + 0.24, CURB + 1.9, post.position.z);
+      g.add(post, band, neon);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, GATE + 0.84), steel);
+    beam.position.set(x, CURB + 3.6 + 0.35, PIT.z);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.06, GATE + 0.9), gold);
+    lip.position.set(x, CURB + 3.6, PIT.z);
+    g.add(beam, lip);
+    const pit = new THREE.Mesh(new THREE.PlaneGeometry(GATE + 0.6, 0.66), neonText("PIT · ピット", 1024, 224, VIOLET, 150));
+    pit.position.set(x + 0.27, CURB + 3.95, PIT.z);
+    pit.rotation.y = Math.PI / 2;
+    const back = pit.clone();
+    back.position.x = x - 0.27;
+    back.rotation.y = -Math.PI / 2;
+    g.add(pit, back);
+    // the race's sign on the post that faces the tower's doors
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.5, 0.9),
+      new THREE.MeshBasicMaterial({
+        toneMapped: false,
+        map: canvasTex(400, 240, (c) => {
+          c.fillStyle = "#0b0913";
+          c.fillRect(0, 0, 400, 240);
+          c.fillStyle = VIOLET;
+          c.fillRect(0, 0, 400, 10);
+          c.fillRect(0, 230, 400, 10);
+          c.textAlign = "center";
+          c.font = "400 46px 'DotGothic16', monospace";
+          c.fillStyle = "#ffffff";
+          c.fillText("NU7 GRAND PRIX", 200, 92);
+          c.font = "400 64px 'DotGothic16', monospace";
+          c.fillStyle = "#f4b728";
+          c.fillText("▶ RACE", 200, 178);
+          c.fillStyle = "rgba(0,0,0,0.25)";
+          for (let y = 0; y < 240; y += 4) c.fillRect(0, y, 400, 1);
+        }),
+      }),
+    );
+    sign.position.set(x + 0.22, CURB + 2.3, PIT.z + GATE / 2 + 0.21);
+    sign.rotation.y = Math.PI / 2;
+    g.add(sign);
+    // the barrier arm, pivoting on the north post: down while the circuit is built, up once it is open
+    const arm = new THREE.Group();
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, GATE), new THREE.MeshStandardMaterial({ color: "#f2f2f2", roughness: 0.5 }));
+    bar.position.z = GATE / 2;
+    arm.add(bar);
+    for (let i = 0; i < 4; i++) {
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, GATE / 8), new THREE.MeshStandardMaterial({ color: "#d8303a", roughness: 0.5 }));
+      stripe.position.z = GATE / 16 + (i * GATE) / 4;
+      arm.add(stripe);
+    }
+    arm.position.set(x + 0.3, CURB + 1.05, PIT.z - GATE / 2);
+    g.add(arm);
+    // the chequered mat on the plaza side
+    const chk = canvasTex(64, 128, (c) => {
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 8; j++) (c.fillStyle = (i + j) % 2 ? "#111" : "#f2f2f2"), c.fillRect(i * 16, j * 16, 16, 16);
+    });
+    chk.magFilter = THREE.NearestFilter;
+    const mat = new THREE.Mesh(new THREE.PlaneGeometry(1.4, GATE), new THREE.MeshStandardMaterial({ map: chk, roughness: 0.8 }));
+    mat.rotation.x = -Math.PI / 2;
+    mat.position.set(x + 0.9, CURB + 0.02, PIT.z);
+    mat.receiveShadow = true;
+    g.add(mat);
+    this.group.add(g);
+    return { arm, lit: [pit, back, sign, mat] as THREE.Object3D[] };
   }
 
   private drawBanner(done: boolean) {
@@ -684,6 +790,10 @@ class Karting {
     this.roof.visible = done || p > 0.95;
     this.gantry.visible = done || p > 0.82;
     this.drawBanner(done);
+    // the pit gate: its barrier up and its signs lit once the circuit is open
+    const up = done ? -1.35 : 0;
+    this.gate.arm.rotation.x += (up - this.gate.arm.rotation.x) * Math.min(1, dt * 2);
+    for (const o of this.gate.lit) o.visible = done;
     // the road crew at the head of the asphalt: the sprayer ahead, the roller going back and forth
     const working = !done && lay > 0 && lay < 1;
     this.roller.visible = this.tar.visible = working;
@@ -770,7 +880,11 @@ export class Nu7Quarter {
     this.board.position.set(B.x, CURB + 3.2 + 2.42, B.z + 0.18);
     const back = new THREE.Mesh(new THREE.BoxGeometry(8.8, 5, 0.3), legs);
     back.position.set(B.x, this.board.position.y, B.z);
-    this.root.add(back, this.board);
+    // its north face, towards the tower's doors, shows the board too
+    const north = new THREE.Mesh(this.board.geometry, this.board.material);
+    north.position.set(B.x, this.board.position.y, B.z - 0.18);
+    north.rotation.y = Math.PI;
+    this.root.add(back, this.board, north);
     this.tick();
   }
 
@@ -797,7 +911,7 @@ export class Nu7Quarter {
   }
 
   private news() {
-    let seen: { start?: boolean; open?: boolean } = {};
+    let seen: { start?: boolean; open?: boolean; walk?: boolean } = {};
     try {
       seen = JSON.parse(localStorage.getItem(SEEN) ?? "{}") as typeof seen;
     } catch {
@@ -805,8 +919,11 @@ export class Nu7Quarter {
     }
     const go = { label: "Go", fn: () => this.go() };
     if (this.done && !seen.open) {
-      seen.open = seen.start = true;
-      this.hud.mail("works", "NU7 Tower opened", "NU7 is live: the NU7 Tower has its crown and the NU7 Grand Prix circuit is finished, east of Midtown.", go);
+      seen.open = seen.start = seen.walk = true;
+      this.hud.mail("works", "NU7 Tower opened", "NU7 is live: the NU7 Tower has its crown and its doors are open, east of Midtown. The NU7 Grand Prix circuit at its foot races from its pit gate.", go);
+    } else if (this.done && !seen.walk) {
+      seen.walk = true;
+      this.hud.mail("works", "NU7 Tower: doors open", "Walk into the NU7 Tower from its plaza: the NU7 HALL, the NSM VAULT, the 25-SECOND CLOCK, the HALVING OBSERVATORY, the SKY DECK, and the PIT GARAGE on the circuit.", go);
     } else if (!this.done && !seen.start) {
       seen.start = true;
       this.hud.mail("works", "NU7 Tower: under construction", `East of Midtown, the NU7 Tower and the NU7 Grand Prix karting go up as NU7 gets closer: ${this.pct}% done. They open with NU7.`, go);
@@ -881,14 +998,66 @@ export class Nu7Quarter {
 
   /**
    * ZK PARTY (port): a click on the finished circuit or its billboard races it (SNARK KART on the
-   * NU7 GRAND PRIX track). True when it was theirs.
+   * NU7 GRAND PRIX track). True when it was theirs (the tower in front of it is the tower's: main
+   * walks into it).
    */
   click(ray: THREE.Raycaster) {
+    if (!this.raceAt(ray)) return false;
+    this.hooks.race!();
+    return true;
+  }
+
+  /** The finished circuit or its billboard under a ray (nearer than the tower). */
+  raceAt(ray: THREE.Raycaster) {
     if (!this.done || !this.hooks.race) return false;
+    // (a box round the lot and the billboard first: the meshes only when the ray goes near them)
+    if (!ray.ray.intersectsBox(this.lotBox)) return false;
     const hit = ray.intersectObjects([this.kart.group, this.board], true)[0];
     if (!hit || hit.distance > 400) return false;
-    this.hooks.race();
-    return true;
+    const t = this.towerHit(ray);
+    return t === null || hit.distance < t;
+  }
+
+  private lotBox = new THREE.Box3(new THREE.Vector3(K.x0 - 1, CURB - 0.5, K.z0 - 1), new THREE.Vector3(NU7Q.board.x + 5, CURB + 9, K.z1 + 1));
+  private towerBox = new THREE.Box3();
+  private boxAt = new THREE.Vector3();
+  /** The NU7 TOWER under a ray (its whole volume, a box: no triangle-by-triangle test): the distance, or null. */
+  towerHit(ray: THREE.Raycaster) {
+    if (!this.tower.built) return null;
+    const T = NU7Q.tower;
+    const hw = halfAt(0) * VOX;
+    this.towerBox.min.set(T.x - hw, CURB, T.z - hw);
+    this.towerBox.max.set(T.x + hw, CURB + this.tower.topY + (this.done ? 21 : 0), T.z + hw);
+    const p = ray.ray.intersectBox(this.towerBox, this.boxAt);
+    if (!p) return null;
+    const d = p.distanceTo(ray.ray.origin);
+    return d < 700 ? d : null;
+  }
+
+  /** The tower's building (hidden for the panoramas taken from inside it). */
+  get towerGroup() {
+    return this.tower.group;
+  }
+
+  /**
+   * On foot at (x, z), heading `heading`: at the pit gate and turned to it (the street's prompt
+   * races the NU7 GRAND PRIX from there).
+   */
+  nearGate(x: number, z: number, heading: number) {
+    if (!this.done || !this.hooks.race) return false;
+    const dx = K.x1 + 1.1 - x,
+      dz = PIT.z - z;
+    const d = Math.hypot(dx, dz);
+    if (d > 3.6) return false;
+    const fx = -Math.sin(heading),
+      fz = -Math.cos(heading);
+    return d < 1.5 || (dx * fx + dz * fz) / d > 0.25;
+  }
+
+  /** Read NU7's state now (the city's frame, which polls it, pauses while you are inside a place). */
+  refresh() {
+    this.poll = 0;
+    this.update(0);
   }
 
   /** Take the camera to the quarter. */
@@ -897,9 +1066,11 @@ export class Nu7Quarter {
     this.hooks.go(T.x - 26, T.z + 4, zoom);
   }
 
+  /** On the map: the circuit's pit gate once it races (the tower has its own door), else the tower going up. */
   blip() {
     const T = NU7Q.tower;
-    return { x: T.x, z: T.z, label: `NU7 Tower · ${this.pct}%` };
+    if (this.done && this.hooks.race) return { x: K.x1 + 1, z: PIT.z, label: "NU7 GRAND PRIX · RACE", icon: "走" };
+    return { x: T.x, z: T.z, label: `NU7 Tower · ${this.pct}%`, icon: "七" };
   }
 
   update(dt: number) {

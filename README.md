@@ -78,7 +78,10 @@ dialogue are a visual interpretation of those data.
   A cast of 12 lives one turn per block. Each 576-block round, agents propose a building, visitors
   voting logic selects a winner, and it is built block by block. The visitor voting panel is
   currently disabled; its payment integration remains in the source.
-- **NU7**: a quarter whose tower and karting circuit rise with the countdown to the upgrade.
+- **NU7**: the quarter that rose with the countdown to the upgrade. NU7 is live: walk into the
+  NU7 TOWER (the activation monument, the NSM vault where each block's burned fees fall in, a
+  25-second clock that ticks with the real blocks, the halving observatory, a sky deck with a glass
+  floor over the circuit) and race the NU7 GRAND PRIX from its pit garage or its pit gate (E on foot).
 - **Daily events**: the Apparition parade at 12:00 and 20:00 New York time, with a crowd of phones.
 - **Multiplayer**: see other visitors walk around.
 - **Phones**: landscape, touch joystick, adaptive quality.

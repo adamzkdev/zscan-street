@@ -27,6 +27,8 @@ export interface Level {
   yaw: number;
   /** Height of the city panorama (metres above the street), for floors with windows. */
   view?: number;
+  /** …taken this far along world x from the tower's axis (a floor looking out from somewhere else on its lot). */
+  side?: number;
 }
 
 export interface LiftStyle {
@@ -698,7 +700,7 @@ export class SkyKit {
     const bgColor = scene.background instanceof THREE.Color ? scene.background.clone() : new THREE.Color("#07060c");
     const view = (n: number) => {
       const v = levels[n].view;
-      const bg = v != null ? ctx.cityView(key, v, back) : null;
+      const bg = v != null ? ctx.cityView(key, v, back, levels[n].side) : null;
       scene.background = bg ?? bgColor;
       takenAt = performance.now();
       stale = v != null && takenAt < 45_000;

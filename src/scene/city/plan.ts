@@ -152,6 +152,9 @@ export const NU7Q = {
   tower: { x: 205.5, z: -84, half: 8 },
   board: { x: 205.5, z: -54.5 },
   kart: { x0: 131, x1: 187, z0: -113, z1: -50.5 },
+  /** The NU7 TOWER's doors on its south face (a walk-in place once NU7 is live), and the circuit's pit gate on the east fence, facing the tower. */
+  door: { x: 205.5, z: -75.6 },
+  pit: { x: 187, z: -84 },
 };
 
 /** The agents' quarter: two columns of five sites, filled from the south end (nearest the heart). */

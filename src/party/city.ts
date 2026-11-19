@@ -24,6 +24,8 @@ export interface CityHooks {
   soundStart(): void;
   /** The walk-in place the visitor is in (its key), if any: a phone comes back to it. */
   place(): string | null;
+  /** More of where the visitor is (the floor inside; on foot, the spot): a phone comes back there too. */
+  where?(): Record<string, string>;
   /** Give the controls back to where the visitor was (inside, on foot, the map), or take them. */
   controls(on: boolean): void;
   /** A line on the game HUD (with a click). */
@@ -50,7 +52,7 @@ export const partyOpen = () => partyUp || tableUp;
 export function openPartyHall(tab?: PartyTab, game?: string) {
   const h = hooks;
   if (!h || partyUp || tableUp || h.busy?.()) return;
-  if (SOLO) return void location.assign(soloUrl("party", { tab, game }, h.place() ?? undefined));
+  if (SOLO) return void location.assign(soloUrl("party", { tab, game }, h.place() ?? undefined, h.where?.()));
   if (document.pointerLockElement) document.exitPointerLock();
   partyUp = true;
   h.controls(false);
@@ -89,7 +91,7 @@ export function openPartyHall(tab?: PartyTab, game?: string) {
 export function openTableGame(key: string) {
   const h = hooks;
   if (!h || partyUp || tableUp || h.busy?.()) return;
-  if (SOLO) return void location.assign(soloUrl("table", { t: key }, h.place() ?? undefined));
+  if (SOLO) return void location.assign(soloUrl("table", { t: key }, h.place() ?? undefined, h.where?.()));
   if (document.pointerLockElement) document.exitPointerLock();
   tableUp = true;
   h.controls(false);

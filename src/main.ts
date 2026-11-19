@@ -10,7 +10,7 @@ import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
 import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
-import { RIVER, ST } from "./scene/city/plan";
+import { NU7Q, RIVER, ST } from "./scene/city/plan";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
 import { buildDecor } from "./scene/decor";
@@ -673,6 +673,7 @@ const PLACE_SUB: Partial<Record<Interior["key"], string>> = {
   university: "courses · Zakura · Tachyon · the library · HashSmash",
   gamehouse: "ZK PARTY · table games · The Orchard Room",
   cemetery: "the crypt · zombies inside",
+  nu7tower: "NU7 HALL · NSM VAULT · 25 s CLOCK · HALVING OBSERVATORY · SKY DECK · PIT",
 };
 
 /** What each walk-in place is, for the people who work there. */
@@ -701,6 +702,8 @@ const PLACE_ABOUT: Record<string, string> = {
   zsalab: "The ZSA LAB is the white laboratory with the glass dome on the avenue east of the heart, where anyone can mint their own Zcash Shielded Asset (ZIPs 226 and 227) on the public ZSA test network, proved and signed in their own browser: the MINT counter, the reactor the live tokens orbit, a wall of every token on the testnet, a live feed, the furnace to burn and the seal to fix a supply for good. Test tokens have no value; ZSAs reach mainnet with a future upgrade.",
   university: "ZK UNIVERSITY is the campus next to the city works, built like Stanford's Main Quad (sandstone, round arches, red tile roofs, a bell tower): free video courses on cryptography, zkSNARKs and Zcash, every claim with its source. G: the Main Quad hall and the course catalogue; 1: the Lecture Hall (theory); 2: Zakura Hall, about the Zakura node, with its real releases and announcements; 3: Tachyon Hall, about scaling Zcash with Tachyon and Ragu, with the team's real blog posts and commits; 4: the Library, where every lesson can be read; 5: HashSmash Hall, live from HashSmash (yukon.org/hashsmash, Eigen Labs with Shielded Labs, Zcash, Project Eleven and the Ethereum Foundation), the open challenge to find collisions in reduced-round SHA-256, SHA3-256, BLAKE3 and Orchard's Poseidon: a column of rounds per hash, the broken ones knocked out, the collision frontier, the solvers, every new attack as it comes.",
   vizor: "The VIZOR TOWER is the crimson tower of Vizor, the Zcash wallet from the Keplr team, across the avenue from ZK TOWER HALO: the wallet's card in the lobby, a wall of its tweets on 8, the lab of its releases on 16, its silver knight's helmet turning over the roof.",
+  nu7tower:
+    "The NU7 TOWER is the violet and gold tower of the NU7 quarter, east of Midtown, finished when NU7 went live on mainnet at block 3,543,405 on 6 November 2026 at 02:34 UTC (consensus branch id 0x77190AD9, ZIP 259). NU7 brought 25-second blocks (ZIP 218) with the block subsidy divided by 3 (1.5625 to 0.52083333 ZEC), so issuance per unit of time is unchanged; 60 % of each block's fees are burned to the Network Sustainability Mechanism (ZIP 235), with NSM reissuance in ZIP 237; the third halving moved to block 6,132,390. G: the NU7 HALL, the activation monument and the 25 s era board; P: the PIT GARAGE on the NU7 GRAND PRIX circuit, where you race SNARK KART and the mining pools of the last 100 blocks are the teams; 7: the NSM VAULT, where each block's burned fees fall in; 25: the 25-SECOND CLOCK, which ticks with the real blocks, the old 75-second dial retired beside it; 35: the HALVING OBSERVATORY, the next halving counted down; R: the SKY DECK, telescopes and the SKY BAR over the city and the circuit.",
   cemetery: "The ZK Cemetery is the Père-Lachaise of ZStreet, on the hill at the north-east edge: crooked graves with epitaphs about lost seed phrases and transparent addresses, a chapel, and the CRYPT under the mausoleum, where Zcash buries what it retired (the Sprout pool, BCTV14, the trusted setup, the Founders' Reward). Only zombie zkSNARKs live here; more of them climb out at night.",
 };
 
@@ -840,6 +843,7 @@ const PLACES: Record<Interior["key"], string> = {
   convention: "CONVENTION CENTER",
   university: "ZK UNIVERSITY",
   gamehouse: "GAME HOUSE",
+  nu7tower: "NU7 TOWER",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
@@ -850,7 +854,7 @@ const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 const views = new Map<string, { rt: THREE.WebGLCubeRenderTarget; at: number; used: number; theme?: Theme }>();
 const VIEW_POOL = worldLevel() >= 3 ? 3 : 6;
 /** What each place showed last (place → its cityView arguments and texture). */
-const shownView = new Map<string, { up: number; back: number; tex: THREE.Texture }>();
+const shownView = new Map<string, { up: number; back: number; side?: number; tex: THREE.Texture }>();
 // The GPU was reset (driver update, sleep, too many tabs): three.js re-uploads geometry and
 // textures by itself, but rendered panoramas come back empty, so they are all taken again (the one
 // on screen right away, the others when their place asks).
@@ -860,30 +864,33 @@ canvas.addEventListener("webglcontextrestored", () => {
   const i = interiors?.active;
   const s = i && shownView.get(i.key);
   if (i && s && i.scene.background === s.tex) {
-    const tex = cityView(i.key, s.up, s.back);
+    const tex = cityView(i.key, s.up, s.back, s.side);
     if (tex) i.scene.background = tex;
   }
 });
 function refreshView(i: Interior) {
   const s = shownView.get(i.key);
-  if (!s || views.has(`${i.key}:${s.up}`) || i.scene.background !== s.tex) return;
-  const tex = cityView(i.key, s.up, s.back);
+  if (!s || views.has(viewKey(i.key, s.up, s.side)) || i.scene.background !== s.tex) return;
+  const tex = cityView(i.key, s.up, s.back, s.side);
   if (tex) i.scene.background = tex;
 }
-function cityView(place: string, up: number, back = 3): THREE.Texture | null {
+const viewKey = (place: string, up: number, side = 0) => `${place}:${up}${side ? `:${side}` : ""}`;
+function cityView(place: string, up: number, back = 3, side = 0): THREE.Texture | null {
   // the Proof Factory and the MEMPOOL HQ aren't venues (they have their own sites): look out from their doors
   const f = city.factory;
   const hq = city.shops[0];
-  const v = place === "factory" && f?.door ? { door: f.door, occluder: f.occluder } : place === "mempool" && hq ? { door: hq.door, occluder: hq.occluder } : city.venues.find((x) => x.kind === place);
+  // the NU7 TOWER is the game layer's (game/nu7quarter.ts): looking out from its axis, its building hidden
+  const nu7v = place === "nu7tower" ? { door: new THREE.Vector3(NU7Q.door.x, CURB, NU7Q.door.z), occluder: { full: nu7Quarter.towerGroup, cut: nu7Hidden, extras: nu7Hidden } } : null;
+  const v = nu7v ?? (place === "factory" && f?.door ? { door: f.door, occluder: f.occluder } : place === "mempool" && hq ? { door: hq.door, occluder: hq.occluder } : city.venues.find((x) => x.kind === place));
   if (!v) return null;
-  const key = `${place}:${up}`;
+  const key = viewKey(place, up, side);
   let e = views.get(key);
   const now = performance.now();
   // a panorama is a 6-face render of the whole city (~9,000 draw calls, a visible hitch): kept
   // ten minutes for the same day/night, only a minute if it was taken while the city still loaded
   if (e && e.theme === theme && (now - e.at < 60_000 || (e.at > 45_000 && now - e.at < 600_000))) {
     e.used = now;
-    shownView.set(place, { up, back, tex: e.rt.texture });
+    shownView.set(place, { up, back, side, tex: e.rt.texture });
     return e.rt.texture;
   }
   if (!e) {
@@ -902,9 +909,9 @@ function cityView(place: string, up: number, back = 3): THREE.Texture | null {
   e.at = e.used = now;
   e.theme = theme;
   views.set(key, e);
-  shownView.set(place, { up, back, tex: e.rt.texture });
+  shownView.set(place, { up, back, side, tex: e.rt.texture });
   const cam = new THREE.CubeCamera(0.5, 600, e.rt);
-  cam.position.copy(v.door).add(new THREE.Vector3(0, up, -back));
+  cam.position.copy(v.door).add(new THREE.Vector3(side, up, -back));
   // the place itself must not block its own view
   const o = v.occluder;
   const was = [o.full.visible, o.cut.visible, o.extras.visible];
@@ -926,6 +933,8 @@ function cityView(place: string, up: number, back = 3): THREE.Texture | null {
   [o.full.visible, o.cut.visible, o.extras.visible] = was;
   return e.rt.texture;
 }
+/** (stands in for the parts of a building the NU7 TOWER doesn't have, in cityView) */
+const nu7Hidden = new THREE.Object3D();
 // gameHud is made further down: the letters are posted once the city runs
 const ictx: InteriorContext = { renderer, director, theme, onBlock: (fn) => blockListeners.push(fn), cityView, mail: (...a) => gameHud.mail(...a) };
 themeHook = (t) => {
@@ -968,6 +977,7 @@ const PLACE_CODE: Record<Interior["key"], () => Promise<PlaceBuilder>> = {
   university: () => import("./interior/university").then((m) => m.buildUniversity),
   cemetery: () => import("./interior/cemetery").then((m) => m.buildCemetery),
   gamehouse: () => import("./interior/gamehouse").then((m) => m.buildGameHouse),
+  nu7tower: () => import("./interior/nu7tower").then((m) => m.buildNu7Tower),
 };
 const placeBuilders: Partial<Record<Interior["key"], PlaceBuilder>> = {};
 const placeLoads = new Map<Interior["key"], Promise<void>>();
@@ -1212,6 +1222,8 @@ const doors: { key: Interior["key"]; at: THREE.Vector3; front: THREE.Vector3 }[]
   ...(city.shops[0] ? [{ key: "mempool" as const, at: city.shops[0].door, front: away(city.shops[0].door, city.shops[0].inside) }] : []),
   ...city.venues.map((v) => ({ key: v.kind, at: v.door, front: v.front })),
   ...(city.factory?.door ? [{ key: "factory" as const, at: city.factory.door, front: away(city.factory.door, city.factory.hall) }] : []),
+  // the NU7 TOWER's doors on its plaza (the tower is game/nu7quarter.ts's: open once NU7 is live)
+  { key: "nu7tower" as const, at: new THREE.Vector3(NU7Q.door.x, CURB, NU7Q.door.z), front: new THREE.Vector3(0, 0, 1) },
 ];
 /** Out of a door: from a point inside the building to the door, flat. */
 function away(door: THREE.Vector3, inside: THREE.Vector3) {
@@ -1320,6 +1332,7 @@ function throughDoors(dt: number) {
   let best: { d: (typeof doors)[number]; dist: number; facing: number } | null = null;
   for (const d of doors) {
     if (d === doorLeft) continue;
+    if (d.key === "nu7tower" && !nu7Quarter.done) continue;
     const dx = d.at.x - p.x,
       dz = d.at.z - p.z;
     const dist = Math.hypot(dx, dz);
@@ -1379,6 +1392,7 @@ hud.setPlaces([
     at: v.door.clone().setY(v.kind === "library" ? 7.8 : 5.6),
   })),
   ...(city.factory ? [{ key: "factory", label: "PROOF FACTORY", sub: "shielded tx proved here", at: (city.factory.roof ?? city.factory.hall).clone().add(new THREE.Vector3(0, 3, 0)) }] : []),
+  { key: "nu7tower", label: "NU7 TOWER", sub: PLACE_SUB.nu7tower ?? "", at: new THREE.Vector3(NU7Q.door.x, 5.6, NU7Q.door.z) },
 ]);
 
 /** The stadium asks first: a seat in the stands, or boots on the pitch. */
@@ -1438,6 +1452,8 @@ function goIn(key: string, floor?: number) {
   const k = key as Interior["key"];
   loadPlace(k).then(
     () => {
+      // the NU7 TOWER: its quarter reads NU7's state first (its panoramas are taken from the city as it stands)
+      if (k === "nu7tower") nu7Quarter.refresh();
       interiors.enter(k, floor ?? 0);
       caseBook?.visit(key);
     },
@@ -1576,6 +1592,8 @@ canvas.addEventListener("pointerup", (e) => {
     }
     // ZK PARTY (port): the ZK TOWER's party cabinets, the GAME HOUSE's wall, desk and tables
     if (info?.party) return void openPartyHall(info.party === true ? "board" : info.party, info.partyGame);
+    // the NU7 TOWER's pit garage: its RACE terminal and its karts race the NU7 GRAND PRIX
+    if (info?.race) return void raceNu7();
     if (info?.table) return void openTableGame(info.table);
     // a book in the library: open it and read
     if (info?.book) {
@@ -1662,7 +1680,9 @@ canvas.addEventListener("pointermove", (e) => {
   const poster = hit || item || bus || train ? null : posterAtCity(e.clientX, e.clientY);
   const store = hit || item || bus || poster ? null : storeAt(e.clientX, e.clientY);
   const place = hit || item || bus || store || poster ? null : placeAt(e.clientX, e.clientY);
-  canvas.style.cursor = hit || item || place || bus || store || train || poster ? "pointer" : "";
+  // the NU7 GRAND PRIX, once open: a click races it
+  const racing = hit || item || bus || store || poster || place || train ? false : raceHover(e.clientX, e.clientY);
+  canvas.style.cursor = hit || item || place || bus || store || train || poster || racing ? "pointer" : "";
   // hovering a place lights it up, with its name and the way in over its door
   if (place) hud.hoverPlace(place);
   highlight(place);
@@ -1673,6 +1693,7 @@ canvas.addEventListener("pointermove", (e) => {
   else if (store) hud.hoverText(`<b>${store.name}</b><span>click for the counter</span>`, e.clientX, e.clientY);
   else if (poster) hud.hoverText(poster.hover, e.clientX, e.clientY);
   else if (bus) hud.hoverText(`<b>Block bus${bus.blockHeight ? ` ${bus.blockHeight.toLocaleString("en-US")}` : ""}</b><span>click to ride inside</span>`, e.clientX, e.clientY);
+  else if (racing) hud.hoverText(`<b>NU7 GRAND PRIX</b><span>click to race</span>`, e.clientX, e.clientY);
   else {
     const flying = place ? null : skyAt(e.clientX, e.clientY);
     if (flying) canvas.style.cursor = "pointer";
@@ -1684,6 +1705,14 @@ canvas.addEventListener("pointerleave", () => {
   hud.hover(null);
   highlight(null);
 });
+
+/** The NU7 GRAND PRIX under the cursor (the map, or on foot), once it races. */
+function raceHover(x: number, y: number) {
+  if (!nu7Quarter.done) return false;
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, viewCam());
+  return nu7Quarter.raceAt(ray);
+}
 
 /** A car of a metro train under the cursor. */
 function trainCarAt(x: number, y: number) {
@@ -1791,6 +1820,11 @@ function highlight(key: Interior["key"] | null) {
 function placeAt(x: number, y: number): Interior["key"] | null {
   if (rig.mode === "inspect" || rig.mode === "follow") return null;
   const v = venueAt(x, y);
+  // the NU7 TOWER (the game layer's), once open: nearer than any venue behind it
+  if (nu7Quarter.done) {
+    const t = nu7Quarter.towerHit(ray);
+    if (t !== null && (!v || t < venueD)) return "nu7tower";
+  }
   if (v) return v.kind;
   if (factoryAt(x, y)) return "factory";
   return shopAt(x, y) ? "mempool" : null;
@@ -1813,8 +1847,11 @@ function venueAt(x: number, y: number) {
     const h = ray.intersectObject(o.full.visible ? o.full : o.cut, true)[0];
     if (h && (!best || h.distance < best.d)) best = { v, d: h.distance };
   }
+  venueD = best?.d ?? Infinity;
   return best?.v ?? null;
 }
+/** How far the venue venueAt found is (the ray it cast stays in `ray`). */
+let venueD = Infinity;
 
 /** Only the drawn pixels of the portrait are clickable, not its transparent corners. */
 function opaqueAt(h: THREE.Intersection) {
@@ -2026,8 +2063,17 @@ const nu7Quarter = new Nu7Quarter(scene, gameHud, {
   },
   nu7: () => ({ date: nu7.date, height: nu7.height, activated: nu7.activated, tip: director.blockHeight || null }),
   // ZK PARTY (port): NU7 is live, the circuit races: SNARK KART on the NU7 GRAND PRIX track
-  race: () => openPartyHall("practice", "kart@astana"),
+  race: () => raceNu7(),
 });
+/**
+ * The NU7 GRAND PRIX: ZK PARTY's SNARK KART on the NU7 quarter's circuit. From a click on the
+ * circuit, the pit gate on foot, the NU7 TOWER's pit garage. The hall opens over the city and
+ * gives the controls back where you were when it closes (on a phone its page comes back there:
+ * wireParty's `where`).
+ */
+function raceNu7() {
+  openPartyHall("practice", "kart@astana");
+}
 
 // the activation as a live event: countdown banner, last blocks called out, the first NU7 blocks
 const nu7Night = new Nu7Night(document.getElementById("ui")!, decor, {
@@ -2108,6 +2154,15 @@ wireParty({
   soundStop: () => sound.stop(),
   soundStart: () => void sound.start(),
   place: () => interiors.active?.key ?? null,
+  // inside: the floor you were on; on foot: the spot and the way you faced
+  where: (): Record<string, string> => {
+    if (interiors.active) return { floor: String(interiors.floor) };
+    if (walking) {
+      const p = onFoot.camera.position;
+      return { foot: `${p.x.toFixed(1)},${p.z.toFixed(1)},${onFoot.heading.toFixed(2)}` };
+    }
+    return {};
+  },
   controls: (on) => {
     if (!on) {
       interiors.walk.enabled = false;
@@ -2192,6 +2247,7 @@ const PLACE_ICON: Record<Interior["key"], string> = {
   convention: "車",
   university: "学",
   gamehouse: "遊",
+  nu7tower: "七",
 };
 const placeBlips: Blip[] = doors.map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));
 function mapBlips(): Blip[] {
@@ -2205,7 +2261,7 @@ function mapBlips(): Blip[] {
   const wb = works.blip();
   if (wb) out.push({ x: wb.x, z: wb.z, kind: "place", label: wb.label, icon: "建" });
   const nb = nu7Quarter.blip();
-  out.push({ x: nb.x, z: nb.z, kind: "place", label: nb.label, icon: "七" });
+  out.push({ x: nb.x, z: nb.z, kind: "place", label: nb.label, icon: nb.icon });
   for (const p of visitors.positions()) out.push({ x: p.x, z: p.z, kind: "visitor" });
   for (const s of director.snarks) if (s.state === "resident" && s.root.visible && s.root.parent === scene) out.push({ x: s.root.position.x, z: s.root.position.z, kind: "agent" });
   return out;
@@ -2248,12 +2304,14 @@ function findTalker(): TalkTarget | null {
   }
   return best;
 }
+/** On foot at the NU7 GRAND PRIX's pit gate: the prompt races it (E, or a tap on the prompt). */
+let raceNear = false;
 function showTalkPrompt(t: TalkTarget | null) {
-  if (!t || talk.open || doorPrompt.classList.contains("on")) {
+  if ((!t && !raceNear) || talk.open || doorPrompt.classList.contains("on")) {
     talkPrompt.classList.remove("on");
     return;
   }
-  const html = `<span><kbd>E</kbd> talk</span>`;
+  const html = raceNear ? `<b>RACE · NU7 GRAND PRIX</b><span><kbd>E</kbd> race</span>` : `<span><kbd>E</kbd> talk</span>`;
   if (talkPrompt.innerHTML !== html) talkPrompt.innerHTML = html;
   talkPrompt.classList.add("on");
 }
@@ -2287,10 +2345,19 @@ function talkUpdate(dt: number) {
   if (talkWith && talk.open && Math.hypot(talkWith.at.x - onFoot.camera.position.x, talkWith.at.z - onFoot.camera.position.z) > 7) talk.close();
   if ((talkScan -= dt) > 0) return;
   talkScan = 0.12;
-  talkNear = talk.open ? null : findTalker();
+  raceNear = !talk.open && nu7Quarter.nearGate(onFoot.camera.position.x, onFoot.camera.position.z, onFoot.heading);
+  talkNear = talk.open || raceNear ? null : findTalker();
   showTalkPrompt(talkNear);
 }
-talkPrompt.addEventListener("click", () => talkNear && talkTo(talkNear));
+talkPrompt.addEventListener("click", () => {
+  if (raceNear) return raceAtGate();
+  if (talkNear) talkTo(talkNear);
+});
+function raceAtGate() {
+  raceNear = false;
+  talkPrompt.classList.remove("on");
+  raceNu7();
+}
 // everyone round you on foot: now and then someone notices you and says something
 const npcs = new Npcs(scene, agents!, {
   snarks: () => [...director.snarks].filter((s) => s.root.parent === scene),
@@ -2303,9 +2370,10 @@ const npcs = new Npcs(scene, agents!, {
   open: (x, z) => !city.nav.wall(x, z),
 });
 window.addEventListener("keydown", (e) => {
-  if (e.code !== "KeyE" || !walking || interiors.active || talk.open || !talkNear || (e.target as HTMLElement).closest?.("input,textarea")) return;
+  if (e.code !== "KeyE" || !walking || interiors.active || talk.open || (!talkNear && !raceNear) || (e.target as HTMLElement).closest?.("input,textarea")) return;
   e.preventDefault();
-  talkTo(talkNear);
+  if (raceNear) return raceAtGate();
+  if (talkNear) talkTo(talkNear);
 });
 visitors.onEvent((e) => {
   if (WHALE_ON && e.k === "whale") whale.remote();
@@ -2337,6 +2405,13 @@ connectFeed({
       first = false;
       const q = new URLSearchParams(location.search).get("interior");
       if (q) setTimeout(() => enterPlace(q, Number(new URLSearchParams(location.search).get("floor") ?? 0)), 800);
+      // back from a game's own page (a phone): on foot where you left the street
+      const foot = (new URLSearchParams(location.search).get("foot") ?? "").split(",").map(Number);
+      if (!q && foot.length === 3 && foot.every(Number.isFinite))
+        setTimeout(() => {
+          setWalking(true);
+          onFoot.place(new THREE.Vector3(foot[0], CURB, foot[1]), foot[2]);
+        }, 800);
       setTimeout(() => hud.ready(), 700);
       setTimeout(() => tracker.fromUrl(), 1200);
     }

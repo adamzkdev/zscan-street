@@ -9,7 +9,7 @@ p.on("pageerror", (e) => errs.push(e.message));
 p.on("console", (m) => m.type() === "error" && !/Failed to load resource|WebSocket connection/.test(m.text()) && errs.push(m.text().slice(0, 200)));
 await p.goto(URL);
 await p.waitForFunction(() => window.__streetUp && window.capture, { timeout: 240000, polling: 100 });
-const keys = ["mempool", "factory", "library", "tower", "museum", "stadium", "prison", "mall", "hotel", "needle", "pyramid", "eiffel", "colosseum", "reserve", "opera", "bigben", "statue", "arab", "gardens", "palm", "tower-orchard", "tower-sapling", "tower-halo", "zodl", "vizor", "noir", "zlab", "zsalab", "convention", "university", "cemetery"];
+const keys = ["mempool", "factory", "library", "tower", "museum", "stadium", "prison", "mall", "hotel", "needle", "pyramid", "eiffel", "colosseum", "reserve", "opera", "bigben", "statue", "arab", "gardens", "palm", "tower-orchard", "tower-sapling", "tower-halo", "zodl", "vizor", "noir", "zlab", "zsalab", "convention", "university", "cemetery", "nu7tower"];
 const times = [];
 for (const k of keys) {
   const n = errs.length;

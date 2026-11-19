@@ -825,6 +825,9 @@ export function presetFor(key: string, floor: number, name: string): string {
       return has("library") ? "stacks" : "quiet-hall";
     case "gamehouse":
       return "gamehouse";
+    case "nu7tower":
+      // NU7 HALL, PIT GARAGE, NSM VAULT, 25-SECOND CLOCK, HALVING OBSERVATORY, SKY DECK
+      return ["hotel-lobby", "factory", "vault", "clock-room", "quiet-hall", "rooftop"][floor] ?? "quiet-hall";
     default:
       return "quiet-hall";
   }

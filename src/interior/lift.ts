@@ -110,7 +110,7 @@ export interface Plan {
 
 // ---- styles ---------------------------------------------------------------------------------------
 
-export type StyleName = "steel" | "gold" | "brass" | "wood" | "industrial" | "eiffel" | "garden" | "palm" | "stone" | "sport" | "neon" | "white";
+export type StyleName = "steel" | "gold" | "brass" | "wood" | "industrial" | "eiffel" | "garden" | "palm" | "stone" | "sport" | "neon" | "white" | "nu7";
 interface Style {
   shell: string;
   trim: string;
@@ -135,6 +135,8 @@ const STYLES: Record<StyleName, Style> = {
   sport: { shell: "#2b3036", trim: "#e9ecef", door: "#4a5058", wall: "#7a8088", floor: "#30353b", ceil: "#dfe3e8", light: "#ffffff", accent: "#3ad06a", metal: 0.3 },
   neon: { shell: "#15121f", trim: "#c86bff", door: "#3a3352", wall: "#2e2842", floor: "#141119", ceil: "#3b3452", light: "#f0e4ff", accent: "#5ef0ff", metal: 0.6 },
   white: { shell: "#d9dde2", trim: "#8b96a3", door: "#c3cad2", wall: "#b4bcc5", floor: "#5a626b", ceil: "#f6f8fa", light: "#ffffff", accent: "#3aa0ff", metal: 0.4 },
+  // the NU7 TOWER: plum-black, Zcash gold trim, the tower's violet
+  nu7: { shell: "#16121e", trim: "#f4b728", door: "#2a2238", wall: "#221c2e", floor: "#141119", ceil: "#2e2640", light: "#f6e9ff", accent: "#b07bff", metal: 0.75 },
 };
 
 const matCache = new Map<string, THREE.Material>();

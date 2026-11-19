@@ -13,13 +13,16 @@ export const SOLO = typeof matchMedia === "function" && matchMedia("(pointer: co
 
 /**
  * The game page's address (`party.html` or `table.html`). `place` is the walk-in place you are in
- * (the Game House), so the way back lands there.
+ * (the Game House), so the way back lands there; `back` says more (its floor, or on foot the spot:
+ * `foot=x,z,heading`).
  */
-export function soloUrl(page: "party" | "table", params: Record<string, string | undefined>, place?: string) {
+export function soloUrl(page: "party" | "table", params: Record<string, string | undefined>, place?: string, back: Record<string, string> = {}) {
   const ret = new URLSearchParams(location.search);
   ret.delete("interior");
   ret.delete("floor");
+  ret.delete("foot");
   if (place) ret.set("interior", place);
+  for (const [k, v] of Object.entries(back)) if (k === "floor" ? place : true) ret.set(k, v);
   const s = ret.toString();
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
