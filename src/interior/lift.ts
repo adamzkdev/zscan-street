@@ -915,6 +915,9 @@ interface Ride {
   dur: number;
   switched: boolean;
   path: number[];
+  /** The floor the cabin's display shows on the way, and the way it goes (1 up, −1 down). */
+  at?: number;
+  dir?: number;
 }
 
 /**
@@ -1233,6 +1236,8 @@ export class Circulation {
         const i = Math.min(r.path.length - 1, Math.floor(k * r.path.length));
         const dir = F[r.to].y > F[r.path[0]].y ? 1 : -1;
         c.indicate(F[r.path[i]].label, dir);
+        r.at = r.path[i];
+        r.dir = dir;
         c.slide(dt);
         // turn to face out on the way, and drift onto the doors' axis: the doorway is narrow, and
         // someone who rode in a corner would walk straight into a jamb on the way out
@@ -1258,6 +1263,8 @@ export class Circulation {
           r.phase = "opening";
           r.t = 0;
           r.car.indicate(F[r.to].label, 0);
+          r.at = r.to;
+          r.dir = 0;
           this.host.ding?.();
         }
       } else if (r.phase === "opening" && r.car.open >= 1) this.ride = null;
@@ -1336,6 +1343,13 @@ export class Circulation {
 
   // ---- the panel of floor buttons (only while you're in a car) -----------------------------------------
 
+  private ledKey = "";
+
+  /**
+   * The car's operating panel: its display (the floor, counting on the way, the way it goes, the
+   * floor's name), the lift's plate, a round button a floor with the floor engraved beside it.
+   * The floor you're on is spent; the one you pressed stays lit until you're there.
+   */
   private syncPanel(car: Car | null) {
     const F = this.place.floors;
     if (!car) {
@@ -1345,7 +1359,7 @@ export class Circulation {
     }
     if (!this.panel) {
       const el = document.createElement("nav");
-      el.className = "carpanel hud";
+      el.className = "carpanel";
       el.setAttribute("aria-label", "Lift");
       el.addEventListener("click", (e) => {
         const b = (e.target as HTMLElement).closest<HTMLElement>("[data-go]");
@@ -1355,21 +1369,45 @@ export class Circulation {
       this.panel = el;
     }
     const list = this.servedBy(car);
-    const at = this.ride ? -1 : car.floor;
-    const key = `${car.shaft}|${car.floor}|${this.ride?.to ?? ""}|${list.join(",")}`;
+    const r = this.ride;
+    const at = r ? -1 : car.floor;
+    const key = `${car.shaft}|${car.floor}|${r?.to ?? ""}|${list.join(",")}`;
     this.panel.hidden = false;
-    if (key === this.panelKey) return;
-    this.panelKey = key;
-    const name = this.place.title;
-    this.panel.innerHTML = `<div class="cph"><b>${car.name}</b><span>${esc(name)}</span></div>${list
-      .map((n, k) => ({ n, k }))
-      .reverse()
-      .map(({ n, k }) => {
-        const [main, sub] = F[n].name.split(" · ");
-        const cls = n === at ? "here" : this.ride?.to === n ? "go" : "";
-        return `<button data-go="${n}" class="${cls}" ${this.ride || n === at ? "disabled" : ""}><i>${esc(F[n].label)}</i><span><strong>${esc(main)}</strong>${sub ? `<small>${esc(sub)}</small>` : ""}</span>${k < 10 ? `<kbd>${k}</kbd>` : ""}</button>`;
-      })
-      .join("")}<div class="cpf">${this.ride ? "▲▼ riding…" : "press a floor · keys 0–9"}</div>`;
+    if (key !== this.panelKey) {
+      this.panelKey = key;
+      this.ledKey = "";
+      const keys = list
+        .map((n, k) => ({ n, k }))
+        .reverse()
+        .map(({ n, k }) => {
+          const [main, sub] = F[n].name.split(" · ");
+          const cls = n === at ? "here" : r?.to === n ? "go" : "";
+          return `<button data-go="${n}" class="${cls}" ${r || n === at ? "disabled" : ""}${k < 10 ? ` title="${k}"` : ""}><i>${esc(F[n].label)}</i><span><strong>${esc(main)}</strong>${sub ? `<small>${esc(sub)}</small>` : ""}</span></button>`;
+        })
+        .join("");
+      this.panel.innerHTML = `<div class="cp-led"><i class="cp-dir"></i><b class="cp-num"></b><span class="cp-name"><span></span></span></div><div class="cp-plate"><b>${esc(car.name)}</b><span>${esc(this.place.title)}</span></div><div class="cp-keys">${keys}</div>`;
+    }
+    // the display: where the car is (counting floors on the way) and the way it goes
+    const shown = r ? (r.at ?? r.car.floor) : car.floor;
+    const dir = r?.phase === "moving" ? (r.dir ?? 0) : 0;
+    const lk = `${shown}|${dir}`;
+    if (lk === this.ledKey) return;
+    this.ledKey = lk;
+    const led = this.panel.querySelector<HTMLElement>(".cp-led")!;
+    led.querySelector(".cp-num")!.textContent = F[shown]?.label ?? "";
+    led.querySelector(".cp-dir")!.className =
+      `cp-dir${dir > 0 ? " up" : dir < 0 ? " down" : ""}`;
+    const nm = led.querySelector<HTMLElement>(".cp-name > span")!;
+    nm.textContent = (F[shown]?.name ?? "").split(" · ")[0];
+    nm.classList.remove("scroll");
+    // a name longer than the window runs through it, as on the real display
+    requestAnimationFrame(() => {
+      const over = nm.scrollWidth - (nm.parentElement?.clientWidth ?? 0);
+      if (over > 2) {
+        nm.style.setProperty("--over", `${over + 6}px`);
+        nm.classList.add("scroll");
+      }
+    });
   }
 }
 

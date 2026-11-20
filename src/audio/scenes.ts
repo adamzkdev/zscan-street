@@ -9,6 +9,7 @@
 import { bell, brass, burst, clank, drum, type Room, type Scene, tone, whistle } from "./lib";
 import { loop, preload, shot } from "./samples";
 import { pyramidMusic } from "./egypt";
+import { DOME, planetariumMusic } from "./fedos";
 
 export interface SceneEnv {
   night: boolean;
@@ -142,6 +143,16 @@ const museum: Preset = {
   rain: 0.05,
   build(s) {
     loop(s, "museum", 1);
+  },
+};
+
+/** The Louvre's FedosArt Planetarium: a hushed dome, its own music (./fedos.ts). */
+const planetarium: Preset = {
+  room: DOME,
+  rain: 0,
+  build(s) {
+    loop(s, "museum", 0.18, { lp: 1400 });
+    planetariumMusic(s);
   },
 };
 
@@ -606,6 +617,7 @@ export const PRESETS: Record<string, Preset> = {
   colosseum,
   hypogeum,
   museum,
+  planetarium,
   "quiet-hall": quietHall,
   "hotel-lobby": hotelLobby,
   atrium,
@@ -723,7 +735,7 @@ export function presetFor(key: string, floor: number, name: string): string {
     case "colosseum":
       return has("hypogeum") ? "hypogeum" : "colosseum";
     case "museum":
-      return "museum";
+      return has("planetarium") ? "planetarium" : "museum";
     case "hotel":
       if (has("casino")) return "casino";
       if (has("spa")) return "spa";

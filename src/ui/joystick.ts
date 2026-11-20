@@ -129,6 +129,6 @@ export class Joystick {
     this.base.style.left = this.base.style.top = "";
     this.set(0, 0, 0, 0);
     this.el.classList.toggle("on", !!w);
-    this.jump.classList.toggle("on-foot", !!w);
+    this.jump.classList.toggle("on-foot", !!w && w.canJump);
   }
 }

@@ -17,7 +17,7 @@ import type { InteriorContext, PickInfo, Rect } from "../types";
  * portrait atlas, one for every wall label), light pools and washes, visitors and guards.
  */
 
-export const FLOOR_Y = [0, 40, 80, 120, 160, 200];
+export const FLOOR_Y = [0, 40, 80, 120, 160, 200, 240];
 export const LIGHTS = 6;
 
 export type Tick = (dt: number, t: number) => void;

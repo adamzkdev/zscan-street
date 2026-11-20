@@ -34,6 +34,8 @@ export class WalkControls {
   }
   private moved = 0;
   private push = 0;
+  /** Space jumps on the street; inside a place the walk keeps its feet on the floor (a jump went through ceilings). */
+  canJump = true;
   /** Jumping (Space): height above the floor and vertical speed. */
   private hop = 0;
   private vy = 0;
@@ -304,7 +306,7 @@ export class WalkControls {
     // stairs, platforms, bridges: the floor follows the ground under you
     if (this.ground) this.floorY = this.ground(p.x, p.z) ?? this.baseFloor;
     // Space jumps
-    if (k.has(" ") && this.hop <= 0.001 && this.vy <= 0) this.vy = 4.6;
+    if (this.canJump && k.has(" ") && this.hop <= 0.001 && this.vy <= 0) this.vy = 4.6;
     if (this.vy !== 0 || this.hop > 0) {
       this.vy -= 13 * dt;
       this.hop = Math.max(0, this.hop + this.vy * dt);

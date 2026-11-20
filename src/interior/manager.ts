@@ -44,6 +44,7 @@ export class InteriorManager {
     private ev: InteriorEvents,
   ) {
     this.walk = new WalkControls(dom);
+    this.walk.canJump = false;
     this.walk.onExit = () => this.exit();
     this.ray.far = 30;
   }

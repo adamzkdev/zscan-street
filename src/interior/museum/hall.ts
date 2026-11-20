@@ -202,9 +202,9 @@ export function hall(k: MuseumKit, data: Collection) {
 
   // ---- by the entrance, the plan of the house: a click on a level takes the lift there ----------
   const PLAN_W = 1200,
-    PLAN_H = 1500,
     ROW0 = 300,
-    ROW = 200;
+    ROW = 200,
+    PLAN_H = ROW0 + FLOORS.length * ROW;
   const plan = k.panel(
     f,
     PLAN_W,
@@ -225,7 +225,7 @@ export function hall(k: MuseumKit, data: Collection) {
         const y = ROW0 + i * ROW;
         c.fillStyle = "rgba(255,255,255,0.08)";
         c.fillRect(60, y + ROW - 4, w - 120, 2);
-        c.fillStyle = i === FLOORS.length - 1 || fl.name.startsWith("Aile") || fl.name.startsWith("Memorial") ? "#f4b728" : "#ffffff";
+        c.fillStyle = fl.name.startsWith("FedosArt") ? "#e8585a" : fl.name.startsWith("Aile") || fl.name.startsWith("Memorial") ? "#f4b728" : "#ffffff";
         c.font = `800 120px ${SANS}`;
         c.fillText(fl.label, 60, y + 140);
         c.fillStyle = "#ffffff";

@@ -13,6 +13,7 @@ export const FLOORS = [
   { label: "3", name: "Appartements Napoléon III", sub: "Grand salon · salle à manger" },
   { label: "4", name: "Aile des Apparitions", sub: "The purge · La Fusion · 26 Apparitions" },
   { label: "5", name: "Memorial of the Purged", sub: "The 676 · the flame · the Unknown Purged" },
+  { label: "6", name: "FedosArt Planetarium", sub: "The artist behind zkSNARKs · 33 works" },
 ];
 
 /** A cylinder from a to b (radius r), as a geometry. */

@@ -257,6 +257,7 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
       3: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
       4: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
       5: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
+      6: [{ at: { x: 0, z: -1.4, yaw: 0 } }],
     }),
   },
   // the stands and the pitch: a lift in a south vomitory (x 20: the middle one is the way out) down

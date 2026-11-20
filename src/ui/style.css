@@ -4075,122 +4075,246 @@ a.srow:hover span {
   align-self: center;
 }
 
-/* ---- lift car panel: only while you stand in a lift car (interior/lift.ts) ---- */
+/* ---- lift car panel: only while you stand in a lift car (interior/lift.ts) ----
+   A car operating panel: a brushed steel plate with stepped corners, the amber dot-matrix display,
+   round steel buttons whose ring lights when pressed, each floor engraved beside its button. */
 .carpanel {
+  --amber: #ff9a3c;
   position: absolute;
-  right: 16px;
+  right: 18px;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 6;
+  width: 272px;
+  max-height: 78vh;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px;
-  min-width: 190px;
-  max-height: 70vh;
-  overflow-y: auto;
-  font-family: var(--mono);
-  z-index: 6;
+  padding: 14px 14px 12px;
+  color: #d6d9de;
+  font-family: var(--pixel);
+  pointer-events: auto;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 24%, rgba(0, 0, 0, 0) 76%, rgba(0, 0, 0, 0.28)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.028) 0 1px, rgba(0, 0, 0, 0.04) 1px 2px, transparent 2px 4px),
+    #24262b;
+  clip-path: var(--step);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 2px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.5);
 }
 .carpanel[hidden] {
   display: none;
 }
-.carpanel .cph {
+/* four screws in the corners */
+.carpanel::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  --screw: radial-gradient(circle, #9a9ea6 0 1.4px, #4a4d54 1.6px 2.6px, transparent 3px);
+  background:
+    var(--screw) top left / 7px 7px no-repeat,
+    var(--screw) top right / 7px 7px no-repeat,
+    var(--screw) bottom left / 7px 7px no-repeat,
+    var(--screw) bottom right / 7px 7px no-repeat;
+}
+/* the display: black glass, amber LEDs (the dark grid between them laid over) */
+.carpanel .cp-led {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: 12px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  height: 54px;
+  padding: 0 12px;
+  background: #070608;
+  color: var(--amber);
+  text-shadow: 0 0 6px rgba(255, 140, 40, 0.55);
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.08);
+  clip-path: polygon(0 3px, 3px 3px, 3px 0, calc(100% - 3px) 0, calc(100% - 3px) 3px, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 3px calc(100% - 3px), 0 calc(100% - 3px));
+  overflow: hidden;
+}
+.carpanel .cp-led::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 0 0.8px, rgba(7, 6, 8, 0.6) 1.1px) 0 0 / 3px 3px;
+}
+.carpanel .cp-num {
+  font: 400 34px/1 var(--pixel);
+  min-width: 1ch;
+  text-align: center;
+}
+.carpanel .cp-name {
+  overflow: hidden;
+  white-space: nowrap;
+  font: 400 12px/1 var(--pixel);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffb26a;
+}
+.carpanel .cp-name > span {
+  display: inline-block;
+}
+.carpanel .cp-name > span.scroll {
+  animation: cp-run 7s linear infinite;
+}
+@keyframes cp-run {
+  0%,
+  18% {
+    transform: translateX(0);
+  }
+  82%,
+  100% {
+    transform: translateX(calc(-1 * var(--over, 0px)));
+  }
+}
+.carpanel .cp-dir {
+  width: 12px;
+  height: 10px;
+  background: var(--amber);
+  visibility: hidden;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.carpanel .cp-dir.up,
+.carpanel .cp-dir.down {
+  visibility: visible;
+  animation: carpanel-blink 0.8s steps(2) infinite;
+}
+.carpanel .cp-dir.down {
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+/* the maker's plate */
+.carpanel .cp-plate {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 2px 9px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.carpanel .cp-plate b {
+  font: 400 11px var(--pixel);
+  letter-spacing: 0.24em;
+  color: #e4e6ea;
+}
+.carpanel .cp-plate span {
+  min-width: 0;
+  font: 400 10px var(--pixel);
+  letter-spacing: 0.04em;
+  color: #868a92;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the buttons, top floor first */
+.carpanel .cp-keys {
   display: flex;
   flex-direction: column;
-  padding: 0 4px 6px;
-  margin-bottom: 2px;
-  border-bottom: 1px solid var(--line);
+  gap: 3px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
-.carpanel .cph b {
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--gold);
-}
-.carpanel .cph span {
-  font-size: 10px;
-  color: var(--muted);
-}
-.carpanel button {
+.carpanel .cp-keys button {
   all: unset;
+  box-sizing: border-box;
   cursor: pointer;
   display: grid;
-  grid-template-columns: 30px 1fr auto;
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  padding: 5px 6px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  color: var(--text);
+  gap: 10px;
+  padding: 3px 2px;
 }
-.carpanel button i {
+.carpanel .cp-keys i {
+  font: 400 13px/1 var(--pixel);
   font-style: normal;
-  font-weight: 800;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
+  margin: 2px;
   border-radius: 50%;
-  border: 1px solid var(--line-strong);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  color: #2b2d32;
+  background: radial-gradient(circle at 38% 32%, #f2f3f5 0, #c6cad0 36%, #90959d 72%, #6f737a 100%);
+  box-shadow:
+    0 0 0 2px #141518,
+    0 0 0 3px #3c3f46,
+    inset 0 -2px 3px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7);
+  transition:
+    box-shadow 0.12s,
+    transform 0.08s;
 }
-.carpanel button span {
+.carpanel .cp-keys span {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.carpanel button strong {
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 600;
+.carpanel .cp-keys strong {
+  font: 400 12px var(--pixel);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #d8dbe0;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 190px;
 }
-.carpanel button small {
-  font-family: var(--sans);
-  font-size: 10.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 190px;
-}
-.carpanel button kbd {
-  font-size: 10px;
-  color: var(--faint);
-}
-.carpanel button:hover:not(:disabled) {
-  border-color: var(--gold);
-}
-.carpanel button:hover:not(:disabled) i {
-  border-color: var(--gold);
-  color: var(--gold);
-}
-.carpanel button.here {
-  cursor: default;
-  opacity: 0.85;
-}
-.carpanel button.here i {
-  background: var(--gold);
-  border-color: var(--gold);
-  color: #111;
-}
-.carpanel button.go i {
-  border-color: var(--gold);
-  color: var(--gold);
-  animation: carpanel-blink 0.8s steps(2) infinite;
-}
-.carpanel button:disabled:not(.here):not(.go) {
-  opacity: 0.5;
-  cursor: default;
-}
-.carpanel .cpf {
-  padding: 6px 4px 0;
-  font-size: 10px;
-  color: var(--faint);
-  border-top: 1px solid var(--line);
+.carpanel .cp-keys small {
   margin-top: 2px;
+  font: 400 10px var(--pixel);
+  color: #82868e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.carpanel .cp-keys button:hover:not(:disabled) i,
+.carpanel .cp-keys button:focus-visible i {
+  box-shadow:
+    0 0 0 2px #141518,
+    0 0 0 3px rgba(255, 154, 60, 0.8),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7);
+}
+.carpanel .cp-keys button:hover:not(:disabled) strong {
+  color: #ffffff;
+}
+.carpanel .cp-keys button:active:not(:disabled) i {
+  transform: translateY(1px) scale(0.96);
+}
+/* pressed: the ring lit amber until the car is there */
+.carpanel .cp-keys button.go i {
+  color: #b84f06;
+  box-shadow:
+    0 0 0 2px #141518,
+    0 0 0 3px var(--amber),
+    0 0 12px rgba(255, 154, 60, 0.65),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.7);
+}
+.carpanel .cp-keys button.go strong {
+  color: var(--amber);
+}
+/* the floor you're on, and every button while riding: no use pressing */
+.carpanel .cp-keys button:disabled {
+  cursor: default;
+}
+.carpanel .cp-keys button.here i {
+  background: radial-gradient(circle at 38% 32%, #a9adb4 0, #868a92 50%, #5d6168 100%);
+}
+.carpanel .cp-keys button.here strong,
+.carpanel .cp-keys button:disabled:not(.go) strong {
+  color: #8e929a;
 }
 @keyframes carpanel-blink {
   50% {
@@ -4200,10 +4324,10 @@ a.srow:hover span {
 @media (max-width: 640px) {
   .carpanel {
     right: 8px;
-    min-width: 0;
+    width: auto;
     max-width: 62vw;
   }
-  .carpanel button small {
+  .carpanel .cp-keys small {
     display: none;
   }
 }
@@ -6183,48 +6307,40 @@ a.srow:hover span {
     font-size: 16px;
   }
 
-  /* the lift car's floor buttons: two columns, every floor in sight */
+  /* the lift car's panel: a smaller display, the buttons in two columns, every floor in sight */
   .carpanel {
     top: var(--sheet-top);
     right: calc(10px + var(--sr));
     transform: none;
     max-height: var(--sheet-h);
+    width: min(360px, 54vw);
     max-width: none;
-    min-width: 0;
+    padding: 8px 10px 8px;
+  }
+  .carpanel .cp-led {
+    height: 40px;
+  }
+  .carpanel .cp-num {
+    font-size: 26px;
+  }
+  .carpanel .cp-plate {
+    padding: 5px 2px 6px;
+    margin-bottom: 4px;
+  }
+  .carpanel .cp-keys {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 3px;
-    padding: 6px;
+    gap: 2px 8px;
   }
-  .carpanel .cph,
-  .carpanel .cpf {
-    grid-column: 1 / -1;
+  .carpanel .cp-keys button {
+    grid-template-columns: 36px minmax(0, 1fr);
+    min-height: 42px;
   }
-  .carpanel .cph {
-    flex-direction: row;
-    align-items: baseline;
-    gap: 8px;
+  .carpanel .cp-keys strong {
+    font-size: 11px;
+    letter-spacing: 0.02em;
   }
-  .carpanel .cph b,
-  .carpanel .cph span,
-  .carpanel .cpf {
-    font-size: 12px;
-  }
-  .carpanel .cpf {
-    display: none;
-  }
-  .carpanel button {
-    grid-template-columns: 30px 1fr;
-    min-height: 40px;
-    padding: 2px 6px 2px 4px;
-    box-sizing: border-box;
-  }
-  .carpanel button strong {
-    max-width: 110px;
-    font-size: 13px;
-  }
-  .carpanel button small,
-  .carpanel button kbd {
+  .carpanel .cp-keys small {
     display: none;
   }
 
@@ -6327,7 +6443,7 @@ a.srow:hover span {
   .tc-eyebrow,
   .tk-eyebrow,
   .tc-kind,
-  .carpanel button i,
+  .carpanel .cp-keys i,
   .ihead em {
     font-size: 12px;
   }
