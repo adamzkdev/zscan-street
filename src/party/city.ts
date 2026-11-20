@@ -145,8 +145,9 @@ export function wireParty(h: CityHooks) {
   hooks = h;
   // PLAY beside the NEWS mailbox, bottom right, level with the live strip (the game HUD builds the
   // mailbox after the HUD: it may come a moment later). It follows the mailbox wherever the layout
-  // puts it (desktop, tablet, phone upright or sideways), left of it when the strip leaves room,
-  // above it otherwise, and shows and hides with it (on foot, inside the places).
+  // puts it: left of it when the strip leaves room (desktop, tablet, phone sideways), over the
+  // strip at the right edge when the mailbox sits up top (phone upright), and shows and hides with
+  // it (on foot, inside the places).
   const addPlay = () => {
     const ui = document.getElementById("ui");
     const mail = ui?.querySelector<HTMLElement>(".mailbtn");
@@ -176,16 +177,24 @@ export function wireParty(h: CityHooks) {
       if (b.hidden) return;
       const gap = 8;
       const size = r.width;
-      let left = r.left - gap - size;
-      let top = r.top;
       const strip = ui.querySelector<HTMLElement>(".strip");
       const sr = strip && getComputedStyle(strip).display !== "none" ? strip.getBoundingClientRect() : null;
-      const spot = new DOMRect(left, top, size, size);
-      if (left < gap || (sr && sr.width > 0 && overlaps(spot, sr))) {
+      let left: number;
+      let top: number;
+      if (r.top < innerHeight / 2) {
+        // the mailbox up top (a phone held upright): PLAY goes where the thumb is, bottom right,
+        // just over the live strip
         left = r.left;
-        top = r.top - gap - size;
-        // (the mailbox near the top, phones upright: under it instead)
-        if (top < gap) top = r.bottom + gap;
+        top = (sr && sr.height > 0 ? sr.top : innerHeight - 12) - gap - size;
+      } else {
+        // the mailbox bottom right: PLAY beside it, level with the strip, unless the strip runs that
+        // far (then over the mailbox)
+        left = r.left - gap - size;
+        top = r.top;
+        if (left < gap || (sr && sr.width > 0 && overlaps(new DOMRect(left, top, size, size), sr))) {
+          left = r.left;
+          top = r.top - gap - size;
+        }
       }
       Object.assign(b.style, { left: `${left}px`, top: `${top}px`, width: `${size}px`, height: `${size}px` });
     };
@@ -196,11 +205,15 @@ export function wireParty(h: CityHooks) {
       requestAnimationFrame(() => ((queued = false), place()));
     };
     place();
+    // moved only when the layout does: the window, the HUD's modes (on foot, inside, the fold), the
+    // mailbox and the strip (it opens and folds), the fonts arriving
     addEventListener("resize", later);
     new MutationObserver(later).observe(ui, { attributes: true, attributeFilter: ["class"] });
-    new ResizeObserver(later).observe(mail);
-    // (the strip opens and folds, the layout settles after fonts load)
-    setInterval(later, 1000);
+    const sizes = new ResizeObserver(later);
+    sizes.observe(mail);
+    const strip = ui.querySelector<HTMLElement>(".strip");
+    if (strip) sizes.observe(strip);
+    void document.fonts?.ready.then(later);
     // a dot when a finished mission waits in the hall
     const dot = () => b.classList.toggle("has-news", progress.ready > 0);
     progress.on(dot);
