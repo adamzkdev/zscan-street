@@ -60,7 +60,13 @@ export class Agents {
     clock: ChainClock,
     private director: Director,
   ) {
-    clock.onBlock((b) => setTimeout(() => void this.load(b.height), 3000));
+    // (a turn per block, asked once the API has the block; blocks in a burst, the indexer catching up:
+    // only the newest is asked, not one request and one re-plan of the street per block)
+    let next: ReturnType<typeof setTimeout> | undefined;
+    clock.onBlock((b) => {
+      clearTimeout(next);
+      next = setTimeout(() => void this.load(b.height), 3000);
+    });
     void this.load();
   }
 

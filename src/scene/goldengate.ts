@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { City } from "./city";
 import { BAY, CURB, ST } from "./city/plan";
-import { toObject } from "./voxel/mesher";
+import { sharedObject } from "./voxel/mesher";
 import { sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
 
 /**
@@ -106,8 +106,18 @@ export class GoldenGate {
     const li = Math.floor(Math.random() * 4);
     const dir: 1 | -1 = li < 2 ? -1 : 1;
     const r = Math.random();
-    const model = r < 0.15 ? taxiModel() : r < 0.3 ? truckModel(["#e8e4dc", "#2e5ab8", "#c0302e"][Math.floor(Math.random() * 3)], Math.random() < 0.5 ? "proof" : "depot") : sedanModel(...PAINTS[Math.floor(Math.random() * PAINTS.length)]);
-    const obj = toObject(model);
+    // (a car every second or two: each body meshed once and shared, not meshed again for every car
+    // and left on the GPU once it had crossed)
+    let obj: THREE.Group;
+    if (r < 0.15) obj = sharedObject("gg:taxi", taxiModel);
+    else if (r < 0.3) {
+      const livery = ["#e8e4dc", "#2e5ab8", "#c0302e"][Math.floor(Math.random() * 3)];
+      const label = Math.random() < 0.5 ? "proof" : "depot";
+      obj = sharedObject(`gg:truck:${livery}:${label}`, () => truckModel(livery, label));
+    } else {
+      const p = Math.floor(Math.random() * PAINTS.length);
+      obj = sharedObject(`gg:sedan:${p}`, () => sedanModel(...PAINTS[p]));
+    }
     obj.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
     const z = anywhere ? this.z0 + Math.random() * (this.z1 - this.z0) : dir > 0 ? this.z0 : this.z1;
     const car: Car = { obj, lane: LANES[li], dir, z, v: 9 + Math.random() * 4 };

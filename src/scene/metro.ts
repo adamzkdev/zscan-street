@@ -6,8 +6,8 @@ import type { Block, Tx } from "../data/types";
 import { CITY, CURB, GRID, RIVER, ST } from "./city/plan";
 import type { Nav } from "./nav";
 import { KIND_COLOR } from "./snark";
-import { busSign, canvasTexture, updateCanvasTexture } from "./textures";
-import { toObject } from "./voxel/mesher";
+import { busSign, canvasTexture } from "./textures";
+import { freeObject, sharedObject } from "./voxel/mesher";
 import { C, E, G, VOX, VoxelModel } from "./voxel/model";
 
 /**
@@ -297,7 +297,8 @@ export class Train {
     const band = (WIN[1] - WIN[0]) * VOX;
     for (let i = 0; i < n; i++) {
       const car = new THREE.Group();
-      car.add(toObject(carModel(i === 0, line.stripe)));
+      // (each car's body meshed once per line and end: a train a block, each meshed again before)
+      car.add(sharedObject(`metro:${line.stripe}:${i === 0 ? "head" : "car"}`, () => carModel(i === 0, line.stripe)));
       for (const z of [0.02, CAR.d - 0.02]) {
         const pane = new THREE.Mesh(new THREE.PlaneGeometry(CAR_LEN - 6 * VOX, band), glass);
         pane.position.copy(carLocal(CAR.w / 2, (WIN[0] + WIN[1]) / 2, z));
@@ -388,8 +389,10 @@ export class Train {
     this.slots.instanceMatrix.needsUpdate = true;
   }
 
+  /** Off the line for good: its sign, glass and windows freed (the bodies are shared; riders still aboard are the director's). */
   dispose() {
-    updateCanvasTexture(this.signTex, busSign(""));
+    this.group.removeFromParent();
+    freeObject(this.group);
   }
 }
 

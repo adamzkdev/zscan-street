@@ -3059,7 +3059,7 @@ function frameBody(stepDt?: number) {
   }
   hall?.update(t, dt);
   press?.update(t, dt);
-  lightBudget.update();
+  lightBudget.update(load.eye);
   bubbles.update(dt, cam, window.innerWidth, window.innerHeight);
   // the swing's hands, line and reticle, and the camera kept for its next pick (src/scene/swing)
   swing.update(dt, cam);

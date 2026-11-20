@@ -16,9 +16,12 @@ export class Gossip {
   private fns: ((g: { height: number; lines: GossipLine[] }) => void)[] = [];
 
   constructor(clock: ChainClock) {
+    // (blocks in a burst: only the newest one's gossip is asked)
+    let next: ReturnType<typeof setTimeout> | undefined;
     clock.onBlock((b) => {
       // let the API see the block first
-      setTimeout(() => void this.fetch(b.height), 2500);
+      clearTimeout(next);
+      next = setTimeout(() => void this.fetch(b.height), 2500);
     });
   }
 

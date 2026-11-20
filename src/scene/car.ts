@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { busSign, canvasTexture } from "./textures";
 import { trackLight } from "./lights";
-import { toObject } from "./voxel/mesher";
+import { freeObject, sharedObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
 import { limoModel, scooterModel, sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
 
@@ -12,6 +12,29 @@ const SPEC = {
   limo: { w: 46, d: 12, wheels: [7, 39], door: 30, tint: "#0e0e14" },
   sedan: { w: 24, d: 11, wheels: [5, 18], door: 10, tint: "#3a3a44" },
 };
+/**
+ * What every copy of a vehicle shares: its wheels, door leaf, shutter (one geometry and material each,
+ * never freed). Vehicles come and go all day; each made its own and left them on the GPU once gone.
+ */
+const keep = <T extends { userData: Record<string, unknown> }>(x: T) => ((x.userData.shared = true), x);
+const once = <T>(make: () => T) => {
+  let v: T | undefined;
+  return () => (v ??= make());
+};
+const TYRE = once(() => keep(new THREE.MeshStandardMaterial({ color: "#101014", roughness: 0.9 })));
+const CAR_WHEEL = once(() => keep(new THREE.CylinderGeometry(0.3, 0.3, 0.22, 14)));
+const CAR_LEAF = once(() => keep(new THREE.BoxGeometry(5 * VOX, 6 * VOX, 0.06)));
+const leafPaint = new Map<string, THREE.MeshStandardMaterial>();
+const LEAF_PAINT = (tint: string) => {
+  let m = leafPaint.get(tint);
+  if (!m) leafPaint.set(tint, (m = keep(new THREE.MeshStandardMaterial({ color: tint, roughness: 0.35, metalness: 0.5 }))));
+  return m;
+};
+const TRUCK_WHEEL = once(() => keep(new THREE.CylinderGeometry(0.34, 0.34, 0.24, 14)));
+const SHUTTER = once(() => keep(new THREE.PlaneGeometry(12 * VOX, 12 * VOX)));
+const SHUTTER_PAINT = once(() => keep(new THREE.MeshBasicMaterial({ color: new THREE.Color(0.5, 0.42, 0.32), toneMapped: false })));
+const SCOOTER_WHEEL = once(() => keep(new THREE.CylinderGeometry(0.2, 0.2, 0.14, 12)));
+
 const PAINTS = [
   ["#c8ccd4", "#3ef0ff"],
   ["#2a2a34", "#ff3e8a"],
@@ -38,11 +61,11 @@ export class Car {
     this.kind = kind;
     const s = SPEC[kind];
     this.length = s.w * VOX;
-    const [paint, glowc] = PAINTS[Math.floor(Math.random() * PAINTS.length)];
-    const model = kind === "taxi" ? taxiModel() : kind === "limo" ? limoModel() : sedanModel(paint, glowc);
-    this.group.add(toObject(model));
-    const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.22, 14);
-    const wheelMat = new THREE.MeshStandardMaterial({ color: "#101014", roughness: 0.9 });
+    const p = Math.floor(Math.random() * PAINTS.length);
+    const [paint, glowc] = PAINTS[p];
+    this.group.add(sharedObject(kind === "sedan" ? `car:sedan:${p}` : `car:${kind}`, () => (kind === "taxi" ? taxiModel() : kind === "limo" ? limoModel() : sedanModel(paint, glowc))));
+    const wheelGeo = CAR_WHEEL();
+    const wheelMat = TYRE();
     for (const vx of s.wheels)
       for (const side of [-1, 1]) {
         const w = new THREE.Mesh(wheelGeo, wheelMat);
@@ -55,7 +78,7 @@ export class Car {
     // rear passenger door on the +z side, hinged at its front edge
     const hinge = new THREE.Group();
     hinge.position.set((s.door + 4 - s.w / 2) * VOX, 0, (s.d / 2) * VOX);
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(5 * VOX, 6 * VOX, 0.06), new THREE.MeshStandardMaterial({ color: s.tint, roughness: 0.35, metalness: 0.5 }));
+    const leaf = new THREE.Mesh(CAR_LEAF(), LEAF_PAINT(s.tint));
     leaf.position.set((-5 / 2) * VOX, 4 * VOX, 0.04);
     leaf.castShadow = true;
     hinge.add(leaf);
@@ -66,6 +89,12 @@ export class Car {
       glow.position.set(0, 1.2, 0);
       this.group.add(glow);
     }
+  }
+
+  /** Gone for good (it drove off): what is its own is freed (the roof sign), the shared parts stay. */
+  dispose(skip: THREE.Object3D[] = []) {
+    this.group.removeFromParent();
+    freeObject(this.group, skip);
   }
 
   /** A lit sign on the roof, both sides (the block number, when it carries a block). */
@@ -128,9 +157,9 @@ export class Truck {
   private shutTarget = 0;
 
   constructor(readonly source: "proof" | "depot") {
-    this.group.add(toObject(truckModel(source === "proof" ? "#5a3a8a" : "#c0782a", source)));
-    const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 14);
-    const wheelMat = new THREE.MeshStandardMaterial({ color: "#101014", roughness: 0.9 });
+    this.group.add(sharedObject(`truck:${source}`, () => truckModel(source === "proof" ? "#5a3a8a" : "#c0782a", source)));
+    const wheelGeo = TRUCK_WHEEL();
+    const wheelMat = TYRE();
     for (const vx of [7, 33])
       for (const side of [-1, 1]) {
         const w = new THREE.Mesh(wheelGeo, wheelMat);
@@ -139,7 +168,7 @@ export class Truck {
         this.group.add(w);
         this.wheels.push(w);
       }
-    this.shutter = new THREE.Mesh(new THREE.PlaneGeometry(12 * VOX, 12 * VOX), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.5, 0.42, 0.32), toneMapped: false }));
+    this.shutter = new THREE.Mesh(SHUTTER(), SHUTTER_PAINT());
     this.shutter.position.set(-20 * VOX - 0.01, 11 * VOX, 0);
     this.shutter.rotation.y = -Math.PI / 2;
     this.shutter.visible = false;
@@ -148,6 +177,12 @@ export class Truck {
 
   spin(distance: number) {
     for (const w of this.wheels) w.rotation.y -= distance / 0.34;
+  }
+
+  /** Gone for good: nothing of its own to free but its group (all its parts are shared). */
+  dispose(skip: THREE.Object3D[] = []) {
+    this.group.removeFromParent();
+    freeObject(this.group, skip);
   }
 
   /** On the kerb by the cab's passenger door, where the driver gets out (world). */
@@ -197,10 +232,11 @@ export class Scooter {
   private wheels: THREE.Mesh[] = [];
 
   constructor() {
-    const [paint, box] = LIVERIES[Math.floor(Math.random() * LIVERIES.length)];
-    this.group.add(toObject(scooterModel(paint, box)));
-    const geo = new THREE.CylinderGeometry(0.2, 0.2, 0.14, 12);
-    const mat = new THREE.MeshStandardMaterial({ color: "#101014", roughness: 0.9 });
+    const l = Math.floor(Math.random() * LIVERIES.length);
+    const [paint, box] = LIVERIES[l];
+    this.group.add(sharedObject(`scooter:${l}`, () => scooterModel(paint, box)));
+    const geo = SCOOTER_WHEEL();
+    const mat = TYRE();
     for (const vx of [2.5, 10]) {
       const w = new THREE.Mesh(geo, mat);
       w.rotation.x = Math.PI / 2;
@@ -213,5 +249,11 @@ export class Scooter {
 
   spin(distance: number) {
     for (const w of this.wheels) w.rotation.y -= distance / 0.2;
+  }
+
+  /** Gone for good (its rider, `skip`, is the director's to free). */
+  dispose(skip: THREE.Object3D[] = []) {
+    this.group.removeFromParent();
+    freeObject(this.group, skip);
   }
 }

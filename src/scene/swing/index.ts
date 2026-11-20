@@ -99,6 +99,21 @@ export class StreetSwing {
     w.onPlace = () => this.reset();
   }
 
+  /** The view the reticle was last asked for (the camera, where the reticle points). */
+  private lastView = new Float32Array(18);
+  private viewMoved(cam: THREE.Camera) {
+    const e = cam.matrixWorld.elements,
+      v = this.lastView,
+      ndc = this.controls.ndc(this.ndc);
+    let moved = Math.abs(ndc.x - v[16]) > 1e-4 || Math.abs(ndc.y - v[17]) > 1e-4;
+    for (let i = 0; i < 16 && !moved; i++) moved = Math.abs(e[i] - v[i]) > 1e-4;
+    if (!moved) return false;
+    v.set(e);
+    v[16] = ndc.x;
+    v[17] = ndc.y;
+    return true;
+  }
+
   /** On the line, in the air or on a roof: the walker's doors and talks wait. */
   get active() {
     return this.physics.active;
@@ -151,6 +166,8 @@ export class StreetSwing {
    * stall), then this frame's camera is kept for the next pick.
    */
   update(dt: number, cam: THREE.Camera) {
+    // (the reticle's last pick, read back once the GPU is through with it: aim.ts)
+    this.picker.poll();
     const now = performance.now();
     const gap = now - this.lastUpdate > 250;
     this.lastUpdate = now;
@@ -177,7 +194,9 @@ export class StreetSwing {
     if (!this.field && before < 0.15 && this.walked >= 0.15) this.builder.watch();
     if (!this.field && this.walked > 0.8) this.prepareField();
     // the reticle: is there a hold under it? (asked of the last frame, answered a frame or two later)
-    if (free && this.picker.captured && (this.polled -= dt) <= 0) {
+    // (asked ten times a second while the view moves; a view held still, twice a second: each answer
+    // is a read back from the GPU)
+    if (free && this.picker.captured && (this.polled -= dt) <= 0 && (this.viewMoved(cam) || this.polled <= -0.4)) {
       this.polled = 0.1;
       const ask = ++this.asked;
       void this.picker.hitLater(this.controls.ndc(this.ndc), this.spot).then((hit) => {

@@ -736,6 +736,7 @@ export class Works {
 	private focus = -1;
 	private loading = false;
 	private again = 0;
+	private afterBlock = 0;
 	private anchor = new THREE.Object3D();
 
 	constructor(
@@ -781,7 +782,9 @@ export class Works {
 				else if (b.txs.length >= 15) this.say(site, "Packed block! Double shift!", true);
 				else if (crew.length && Math.random() < 0.3) this.say(site, "Next layer!");
 			}
-			setTimeout(() => void this.load(), 3000);
+			// (blocks in a burst: the site's state asked once, after the newest)
+			clearTimeout(this.afterBlock);
+			this.afterBlock = window.setTimeout(() => void this.load(), 3000);
 		});
 		void this.load();
 	}

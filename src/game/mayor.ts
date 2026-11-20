@@ -33,6 +33,7 @@ export class Mayor {
   current: Decree | null = null;
   readonly treasure: Treasure;
   private festivalAt = 0;
+  private next: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     scene: THREE.Scene,
@@ -43,7 +44,11 @@ export class Mayor {
   ) {
     this.treasure = new Treasure(scene, hud);
     clock.onBlock((b) => {
-      if (!this.current || b.height >= this.current.until) setTimeout(() => void this.fetch(), 3000);
+      // (blocks in a burst: asked once, after the newest)
+      if (!this.current || b.height >= this.current.until) {
+        clearTimeout(this.next);
+        this.next = setTimeout(() => void this.fetch(), 3000);
+      }
       else if (this.current.decree.effect === "festival" && b.txs.length) this.hooks.party(3);
     });
     hud.root.addEventListener("click", (e) => {

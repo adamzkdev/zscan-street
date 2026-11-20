@@ -369,7 +369,53 @@ export function sharedFor(kind: Kind, use: "instanced" | "batched") {
 
 /** A model as a group of up to three meshes (solid, glass, light). */
 export function toObject(m: VoxelModel, opts: { shadows?: boolean; own?: boolean } = {}) {
-  const geos = meshModel(m);
+  return objectOf(meshModel(m), opts);
+}
+
+/**
+ * The meshes of a model that comes back again and again (the vehicles: a car every few seconds, a bus
+ * or a taxi every block), meshed the first time only and shared by every copy: each one was meshed
+ * again (a few ms of the frame), and its GPU copy never freed once it had driven off.
+ * `key` names the model and everything it was made from (kind, paint…).
+ */
+const sharedMeshes = new Map<string, Partial<Record<Kind, THREE.BufferGeometry>>>();
+export function sharedObject(key: string, make: () => VoxelModel, opts: { shadows?: boolean } = {}) {
+  let geos = sharedMeshes.get(key);
+  if (!geos) {
+    geos = meshModel(make());
+    for (const g of Object.values(geos)) if (g) g.userData.shared = true;
+    sharedMeshes.set(key, geos);
+  }
+  return objectOf(geos, opts);
+}
+
+const isShared = (x: { userData: Record<string, unknown> }) => x.userData.shared === true;
+/**
+ * A thing that is gone for good (a vehicle that drove off): its geometries, materials and their
+ * textures are freed, except what it shares with others (the shared meshes above, the city's
+ * MATERIALS, anything marked `userData.shared`). `skip`: branches inside it that are not its own
+ * (people riding it), left alone.
+ */
+export function freeObject(root: THREE.Object3D, skip: THREE.Object3D[] = []) {
+  const shared = new Set<THREE.Material>(Object.values(MATERIALS));
+  const walk = (o: THREE.Object3D) => {
+    // (never the people: a zkSNARK riding it is freed with its own, scene/snark.ts)
+    if (skip.includes(o) || o.userData.snarkRef || o.userData.snark) return;
+    const m = o as THREE.Mesh;
+    if (m.geometry && !isShared(m.geometry)) m.geometry.dispose();
+    // (an instanced mesh's own matrices and colours too)
+    if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose();
+    for (const mat of m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : []) {
+      if (shared.has(mat) || isShared(mat)) continue;
+      for (const v of Object.values(mat)) if ((v as THREE.Texture | null)?.isTexture && !isShared(v as THREE.Texture)) (v as THREE.Texture).dispose();
+      mat.dispose();
+    }
+    for (const c of o.children) walk(c);
+  };
+  walk(root);
+}
+
+function objectOf(geos: Partial<Record<Kind, THREE.BufferGeometry>>, opts: { shadows?: boolean; own?: boolean }) {
   const g = new THREE.Group();
   for (const [kind, geo] of Object.entries(geos) as [Kind, THREE.BufferGeometry][]) {
     const mat = opts.own ? ownMaterial(kind) : MATERIALS[kind];

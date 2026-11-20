@@ -176,7 +176,14 @@ export class Director {
           const p = s.root.position;
           if (s.root.parent !== this.scene || !s.root.visible) continue;
           // only someone actually on the asphalt: people at the kerb wait for a gap (waitToCross)
-          if (Math.abs(p.x - zx) < 1.8 && p.z > CITY.road.z0 - 0.1 && p.z < CITY.road.z1 + 0.1) return true;
+          if (Math.abs(p.x - zx) < 1.8 && p.z > CITY.road.z0 - 0.1 && p.z < CITY.road.z1 + 0.1) {
+            // (a crowd waiting at the kerb jostles its front row a step onto the road: standing there,
+            // they are still waiting. Counted, they stopped the cars at the stripes, a car waiting at
+            // the stripes kept them from crossing, and the avenue locked for good, the more often the
+            // more people a block sends across: with 25-second blocks, within minutes)
+            if (!s.isWalking && (p.z < CITY.road.z0 + 0.7 || p.z > CITY.road.z1 - 0.7)) continue;
+            return true;
+          }
         }
         return false;
       },
@@ -318,6 +325,8 @@ export class Director {
   }
 
   private busQueue: Block[] = [];
+  /** The bus handed to the listeners for a block settled without its show (never on the street). */
+  private unseenBus: BlockBus | null = null;
   private lastBusAt = -Infinity;
   private pumping = false;
 
@@ -657,6 +666,7 @@ export class Director {
     await this.drivePath(truck, [v(cx + 1.6, CITY.laneWest, 0), v(cx + 1.1, CITY.laneWest - 3, 0), v(cx + 1.1, ring + 2, 0), v(cx - 3, ring, 0), v(CITY.minX - 10, ring, 0)], 7);
     this.scene.remove(truck.group);
     this.trucks.delete(truck);
+    truck.dispose();
   }
 
   /** A truck backed onto each district dock, waiting for its next load. */
@@ -744,6 +754,7 @@ export class Director {
       // the dock is taken: round the back of the sheds
       this.scene.remove(truck.group);
       this.trucks.delete(truck);
+      truck.dispose();
       return;
     }
     const lane = path[1].clone().setY(0),
@@ -754,6 +765,7 @@ export class Director {
     if (this.atDock[source] || this.parked[source]) {
       this.scene.remove(truck.group);
       this.trucks.delete(truck);
+      truck.dispose();
     } else this.parked[source] = truck;
   }
 
@@ -877,6 +889,7 @@ export class Director {
         this.traffic.remove(veh);
         this.scene.remove(car.group);
         this.cars.delete(car);
+        car.dispose();
       });
     }
   }
@@ -908,6 +921,7 @@ export class Director {
     await veh.leaveTo(lane === "eastFast" ? EDGE : -EDGE);
     this.traffic.remove(veh);
     this.scene.remove(scooter.group);
+    scooter.dispose(rider ? [rider.root] : []);
     if (rider) {
       this.snarks.delete(rider);
       this.ev.removed(rider);
@@ -1010,6 +1024,7 @@ export class Director {
     this.traffic.remove(veh);
     this.scene.remove(car.group);
     this.cars.delete(car);
+    car.dispose();
     vip.ready = true;
     if (vip.pending) void this.convoy(vip);
   }
@@ -1043,6 +1058,7 @@ export class Director {
     this.traffic.remove(veh);
     this.scene.remove(car.group);
     this.cars.delete(car);
+    car.dispose();
     for (const s of [vip.s, ...vip.guards]) this.remove(s);
     for (const t of vip.s.txs) this.vips.delete(t.txid);
   }
@@ -1071,11 +1087,13 @@ export class Director {
     this.emitStats();
     const vipRides = [...new Set([...this.vips.entries()].filter(([txid]) => included.has(txid)).map(([, vp]) => vp))];
 
-    const bus = new BlockBus();
-    bus.setBlock(b.height);
     if (!animate) {
       for (const s of riders) this.settle(s, b.height);
-      this.ev.bus("confirmed", b, carried, bus, null);
+      // (a block settled without its show: no bus is built for it, the listeners get a stand-in that
+      // never drives, as they got an unseen bus before)
+      const unseen = (this.unseenBus ??= new BlockBus());
+      unseen.blockHeight = b.height;
+      this.ev.bus("confirmed", b, carried, unseen, null);
       return;
     }
     // riders anywhere in the chain hurry
@@ -1083,6 +1101,9 @@ export class Director {
     const kind = vehicleFor(b.txs.length, !!this.metro);
     if (kind === "metro") return void this.runMetro(b, riders, carried, vipRides);
     if (kind !== "bus") return void this.runTaxi(b, riders, carried, vipRides, kind === "empty");
+    // (built only for the blocks a bus carries: every block built one, taxi and metro blocks too)
+    const bus = new BlockBus();
+    bus.setBlock(b.height);
     while (!this.traffic.clearAt("east", -EDGE, bus.length)) await sleep(300);
     this.buses.add(bus);
     this.scene.add(bus.group);
@@ -1131,6 +1152,9 @@ export class Director {
       }
     for (const s of riders) if (this.snarks.has(s) && s.state !== "riding") this.settle(s, b.height);
     this.ev.bus("confirmed", b, carried, bus, null);
+    // off the board for good: its signs, glass and doors freed (the riders still in its cabin are
+    // freed with their people, ev.removed)
+    bus.dispose();
   }
 
   /** A small block: a taxi with the block number on its roof picks its few riders up at the stop. */
@@ -1178,6 +1202,7 @@ export class Director {
     this.traffic.remove(veh);
     this.scene.remove(car.group);
     this.cars.delete(car);
+    car.dispose();
     for (const s of riders) if (this.snarks.has(s) && s.state !== "riding") this.settle(s, b.height);
     this.ev.bus("confirmed", b, carried, null, null);
   }

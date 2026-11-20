@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { CITY } from "./city";
 import { trackLight } from "./lights";
 import { busSign, canvasTexture, updateCanvasTexture, zcashBadge } from "./textures";
-import { toObject } from "./voxel/mesher";
+import { freeObject, sharedObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
 import { BUS, BUS_SEATS, BUS_STANDING, busModel } from "./voxel/vehicles";
 
@@ -38,7 +38,8 @@ export class BlockBus {
 
   constructor() {
     const g = this.group;
-    g.add(toObject(busModel()));
+    // (the body meshed once for every bus: a bus a block, each one meshed again)
+    g.add(sharedObject("bus", busModel));
 
     // glass panes over the window openings (both sides) and the windscreen
     const glass = new THREE.MeshPhysicalMaterial({ color: "#ffe2b8", transparent: true, opacity: 0.12, roughness: 0.05, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
@@ -149,6 +150,15 @@ export class BlockBus {
     const path = [busLocal(doorX, fl, BUS.d - 3), busLocal(doorX, fl, 7.5), busLocal(sx, fl, 7.5)];
     path.push(seated ? busLocal(sx - 0.5, BUS.floor + 4, sz) : busLocal(sx, fl, sz));
     return { path, seated };
+  }
+
+  /**
+   * Gone for good (it drove off with its block): its own textures, materials and geometries are
+   * freed (the body's meshes are shared); the riders in the cabin are the director's.
+   */
+  dispose() {
+    this.group.removeFromParent();
+    freeObject(this.group, [this.cabin]);
   }
 
   /** A fresh bus for a new block. */

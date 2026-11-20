@@ -33,8 +33,74 @@ export class SwingAim {
     depthWrite: false,
   });
   private quad = new FullScreenQuad(this.material);
+  /**
+   * The pick on its way back from the GPU: a pixel buffer kept for it, the fence after it, and who
+   * waits. three.js's readRenderTargetPixelsAsync made a buffer each time, probed its fence on a 4 ms
+   * timer and read it from a timer task, mid-flight of the next frame: the read waited for the GPU to
+   * get through that frame (12 ms, 30 at worst, ten times a second on foot at night). Here the fence
+   * is looked at once a frame, before the frame is drawn, and the pixel read once it is through.
+   */
+  private gl: WebGL2RenderingContext;
+  private pbo: WebGLBuffer | null = null;
+  private flight: { sync: WebGLSync; px: Uint8Array; done: (ok: boolean) => void; frames: number } | null = null;
 
-  constructor(private renderer: THREE.WebGLRenderer) {}
+  constructor(private renderer: THREE.WebGLRenderer) {
+    this.gl = renderer.getContext() as WebGL2RenderingContext;
+    // (a lost context takes its buffer and fence with it)
+    renderer.domElement.addEventListener("webglcontextlost", () => {
+      this.pbo = null;
+      this.flight?.done(false);
+      this.flight = null;
+    });
+  }
+
+  /** Once a frame, before it is drawn: the pick on its way back is read once the GPU is through with it, never waited for. */
+  poll() {
+    const f = this.flight;
+    if (!f) return;
+    const gl = this.gl;
+    if (gl.getSyncParameter(f.sync, gl.SYNC_STATUS) !== gl.SIGNALED) {
+      // (a GPU far behind: given up after half a second, as the pick before it was)
+      if (++f.frames < 30) return;
+      return this.land(false);
+    }
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, f.px);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.land(true);
+  }
+
+  private land(ok: boolean) {
+    const f = this.flight;
+    if (!f) return;
+    this.flight = null;
+    this.gl.deleteSync(f.sync);
+    f.done(ok);
+  }
+
+  /** The one-pixel target into `px`, a frame or more later (false: lost or overtaken). */
+  private readLater(px: Uint8Array): Promise<boolean> {
+    this.land(false);
+    const gl = this.gl;
+    const { state, properties } = this.renderer;
+    if (!this.pbo) {
+      this.pbo = gl.createBuffer();
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+      gl.bufferData(gl.PIXEL_PACK_BUFFER, 4, gl.STREAM_READ);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    }
+    const fb = (properties.get(this.rt) as { __webglFramebuffer?: WebGLFramebuffer }).__webglFramebuffer;
+    if (!fb) return Promise.resolve(false);
+    state.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    const current = this.renderer.getRenderTarget();
+    state.bindFramebuffer(gl.FRAMEBUFFER, current ? ((properties.get(current) as { __webglFramebuffer?: WebGLFramebuffer }).__webglFramebuffer ?? null) : null);
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (!sync) return Promise.resolve(false);
+    return new Promise((done) => (this.flight = { sync, px, done, frames: 0 }));
+  }
 
   /** The camera that drew the frame now on screen, and that frame's depth. */
   capture(camera: THREE.Camera, depth: THREE.Texture | null) {
@@ -108,7 +174,7 @@ export class SwingAim {
     const world = this.world.clone();
     const px = new Uint8Array(4);
     try {
-      await this.renderer.readRenderTargetPixelsAsync(this.rt, 0, 0, 1, 1, px);
+      if (!(await this.readLater(px))) return undefined;
       return ask === this.asked ? this.unproject(at, unpack(px), out, inverse, world) : undefined;
     } catch {
       return undefined;
@@ -118,6 +184,9 @@ export class SwingAim {
   }
 
   dispose() {
+    this.land(false);
+    if (this.pbo) this.gl.deleteBuffer(this.pbo);
+    this.pbo = null;
     this.rt.dispose();
     this.material.dispose();
     this.quad.dispose();

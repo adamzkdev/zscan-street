@@ -88,7 +88,9 @@ export class MiningHall {
         m.scale.setScalar(1 - k * 0.6);
       } else {
         this.parent.remove(m);
-        (m.material as THREE.Material[]).forEach((x) => x.dispose());
+        // (its block's labels and its box too: one of each a block, never freed before)
+        (m.material as THREE.MeshStandardMaterial[]).forEach((x) => (x.map?.dispose(), x.dispose()));
+        m.geometry.dispose();
         this.boxes.splice(this.boxes.indexOf(b), 1);
       }
     }

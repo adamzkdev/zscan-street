@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CITY, CURB, GRID, RIVER, ST, streetSegments } from "./city/plan";
 import type { Traffic } from "./traffic";
-import { toObject } from "./voxel/mesher";
+import { freeObject, sharedObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
 import { policeModel, sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
 import { busSign, canvasTexture } from "./textures";
@@ -76,8 +76,17 @@ class Mover {
   ) {
     this.kind = kind;
     this.len = kind === "truck" ? 7 : 4.3;
-    const model = kind === "taxi" ? taxiModel() : kind === "police" ? policeModel() : kind === "truck" ? truckModel(LIVERIES[Math.floor(Math.random() * LIVERIES.length)], Math.random() < 0.5 ? "proof" : "depot") : sedanModel(...PAINTS[Math.floor(Math.random() * PAINTS.length)]);
-    const body = toObject(model);
+    // (each body meshed once, shared by every car of its kind and paint: a car every few seconds was
+    // meshed again, and left on the GPU once it had driven off)
+    let body: THREE.Group;
+    if (kind === "truck") {
+      const l = Math.floor(Math.random() * LIVERIES.length);
+      const label = Math.random() < 0.5 ? "proof" : "depot";
+      body = sharedObject(`traffic:truck:${l}:${label}`, () => truckModel(LIVERIES[l], label));
+    } else if (kind === "sedan") {
+      const p = Math.floor(Math.random() * PAINTS.length);
+      body = sharedObject(`traffic:sedan:${p}`, () => sedanModel(...PAINTS[p]));
+    } else body = sharedObject(`traffic:${kind}`, () => (kind === "taxi" ? taxiModel() : policeModel()));
     this.group.add(body);
     if (kind === "police") {
       // the light bar: red on the left, blue on the right, flashing in turn
@@ -345,6 +354,8 @@ export class CityTraffic {
       if (c.done && !this.turn(c)) {
         this.cars.delete(c);
         this.group.remove(c.group);
+        // (gone for good: what is its own, the police car's light bar and door plates, freed)
+        freeObject(c.group);
         if (c === this.police) this.police = null;
       }
   }
