@@ -1311,6 +1311,9 @@ class Forge implements Mini {
       m.lastSup = m.sup;
       m.fy = a.pos.y;
       if (m.cell >= 0) this.touch(m, m.cell);
+      // a forgery gives way under a foot anywhere on it, its rim included: it only answered to its
+      // middle, so hopping from rim to rim crossed a field of forgeries without ever setting one off
+      if (m.sup >= 0 && m.sup !== m.cell && this.kind[m.sup] >= SLOPPY_K) this.touch(m, m.sup);
       const c = m.sup;
       if (c >= 0 && this.st[c] === SHAKE && this.kind[c] >= SLOPPY_K) m.rooted = true;
       if (c < 0) {
