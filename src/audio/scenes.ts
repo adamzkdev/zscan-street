@@ -6,7 +6,7 @@
  * one-shots of the place (a cell door slamming, the goal roar, Big Ben on the hour, the lift's
  * ding) and handlers for its events (a goal, a blow in the arena, a new block).
  */
-import { bell, brass, burst, clank, drum, type Room, type Scene, tone, whistle } from "./lib";
+import { bell, brass, burst, clank, clap, drum, type Room, type Scene, tone, whistle } from "./lib";
 import { loop, preload, shot } from "./samples";
 import { pyramidMusic } from "./egypt";
 import { DOME, planetariumMusic } from "./fedos";
@@ -143,6 +143,27 @@ const museum: Preset = {
   rain: 0.05,
   build(s) {
     loop(s, "museum", 1);
+  },
+};
+
+/** The Reserve's auction room: a full saleroom murmuring; the bid's stir, the gavel, the applause. */
+const auctionRoom: Preset = {
+  room: HALL,
+  rain: 0,
+  build(s) {
+    loop(s, "museum", 0.85);
+    const murmur = loop(s, "restaurant", 0.22, { lp: 1600 });
+    s.on.bid = (t) => swell(murmur, t, 0.22, 0.55, 1.2);
+    s.on.gavel = (t) => {
+      for (const d of [0, 0.32]) {
+        burst(s, t + d, "pink", "lowpass", 900, 0.8, 0.5, 0.06, 0.35);
+        tone(s, t + d, 210, "sine", 0.35, 0.12, 0.35, { to: 150 });
+      }
+    };
+    s.on.applause = (t) => {
+      for (let i = 0; i < 70; i++) clap(s, t + Math.random() * 3.5 * Math.sqrt(Math.random()), 0.05 + Math.random() * 0.05, 0.45, 3);
+      swell(murmur, t, 0.22, 0.7, 4);
+    };
   },
 };
 
@@ -618,6 +639,7 @@ export const PRESETS: Record<string, Preset> = {
   hypogeum,
   museum,
   planetarium,
+  auction: auctionRoom,
   "quiet-hall": quietHall,
   "hotel-lobby": hotelLobby,
   atrium,
@@ -776,6 +798,7 @@ export function presetFor(key: string, floor: number, name: string): string {
     case "prison":
       return "prison";
     case "reserve":
+      if (has("auction")) return "auction";
       if (has("trading")) return "trading";
       if (has("museum")) return "quiet-hall";
       if (has("terrace")) return "wind-mid";

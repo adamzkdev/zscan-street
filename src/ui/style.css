@@ -1078,6 +1078,17 @@ kbd {
 .actions .btn {
   flex: 1;
 }
+/* the zkSNARK's page link: a small square, it fits beside the others */
+.actions .btn.sharebtn {
+  flex: 0 0 auto;
+  width: 38px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+.actions .btn.sharebtn.copied {
+  color: var(--good);
+}
 .note {
   margin-top: 10px;
   color: var(--faint);

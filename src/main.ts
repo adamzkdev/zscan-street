@@ -101,6 +101,8 @@ import { Works } from "./game/works";
 import { Nu7Quarter } from "./game/nu7quarter";
 import { Nu7Night } from "./game/nu7night";
 import { Parade } from "./game/parade";
+import { DroneShowEvent } from "./game/droneshow";
+import { LedTower } from "./scene/ledtower";
 import { Factions } from "./game/factions";
 import { LiveEvents } from "./game/events";
 import { Disasters } from "./game/disasters";
@@ -216,6 +218,8 @@ const decor = buildDecor(scene, city);
 // the NU7 upgrade: countdown on the screens, fireworks when it activates
 const nu7 = new Nu7(scene, city, decor);
 const anniversary = new Anniversary(scene, nu7, city);
+// the Needle's LED screen: the last zkSNARKs sold on Zilk Road (src/scene/ledtower.ts)
+const ledTower = new LedTower(scene, city, decor);
 // the MEMPOOL shop's shelves hold the last blocks
 const shelf = city.shops[0] ? new BlockShelf(scene, city.shops[0]) : null;
 void get<BlockSummary[]>("/v1/blocks?limit=100").then((b) => b && shelf?.set(b));
@@ -1872,8 +1876,22 @@ let first = true;
 talk = new Talk(document.getElementById("ui")!);
 
 // "follow your transaction": paste a txid or open zstreet.cash/?tx=…
+/** zstreet.cash/snark/<id>, or #id in the search: the camera finds that zkSNARK and follows it. */
+async function findSnark(id: number) {
+  if (interiors.active) interiors.exit();
+  if (walking) setWalking(false);
+  const s = await residents.summon(id);
+  if (!s) return;
+  select(s);
+  rig.follow(s);
+  hud.follow(s);
+  syncCamera();
+  history.replaceState(null, "", `/snark/${id}`);
+}
+
 const tracker = new Tracker(document.getElementById("ui")!, director, {
   grab: (fn) => grabbers.push(fn),
+  snark: (id) => void findSnark(id),
   follow: (s) => {
     if (interiors.active) interiors.exit();
     if (walking) setWalking(false);
@@ -2087,6 +2105,18 @@ const nu7Night = new Nu7Night(document.getElementById("ui")!, decor, {
 blockListeners.push((h) => nu7Night.block(h));
 
 // the daily star parade: the Apparition of the day down the north boulevard, noon and 8 PM New York
+// THE 676: a drone show over the bay every hour at half past (src/game/droneshow.ts)
+const drones = new DroneShowEvent(scene, {
+  decor,
+  mail: (k, title, text, act) => gameHud.mail(k, title, text, act),
+  go: (x, z, zoom = 0.42) => {
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    rig.district(new THREE.Vector3(x, 1, z), zoom);
+  },
+});
+const droneEye = new THREE.Vector3();
+
 const parade = new Parade(scene, {
   decor,
   mail: (k, title, text, act) => gameHud.mail(k, title, text, act),
@@ -2540,6 +2570,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       sound,
       nu7,
       anniversary,
+      drones,
       onFoot,
       get swing() {
         return swing;
@@ -3030,9 +3061,12 @@ function frameBody(stepDt?: number) {
   const lb = director.lastBlockTime;
   if (lb) decor.setLive({ since: (Date.now() - lb) / 1000 });
   anniversary.update(dt, !interiors.active);
+  if (!interiors.active) ledTower.update(dt, theme === "night");
   nu7.update(dt, capturing && capShot ? fireworkFocus.set(...capShot.look) : focus, cam);
   nu7Night.update(dt);
   parade.update(sim, cam);
+  if (!interiors.active) drones.update(sim, cam.getWorldPosition(droneEye), renderer.domElement.height);
+  anniversary.quiet = drones.active;
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   // close-ups keep full detail further out; the whole-city view is mostly simplified
   if (wide) city.lod(focus, 0, 50);

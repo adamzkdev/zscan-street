@@ -35,6 +35,8 @@ interface TxStatus {
 export interface TrackCallbacks {
   /** Point the camera at this zkSNARK and keep it there. */
   follow(s: Snark): void;
+  /** Find zkSNARK #id in the city (out of a door if it isn't out) and follow it. */
+  snark(id: number): void;
   /** Open the Block Archive on this height. */
   archive(height: number): void;
   /** Hands over the canvas right after the next frame is drawn (for the clip). */
@@ -69,22 +71,30 @@ export class Tracker {
     // the button sits first in the top-right corner, before the theme switch
     const btn = document.createElement("button");
     btn.className = "hbtn track-btn";
-    btn.title = "Follow a transaction";
-    btn.setAttribute("aria-label", "Follow a transaction");
+    btn.title = "Follow a transaction or find a zkSNARK";
+    btn.setAttribute("aria-label", "Follow a transaction or find a zkSNARK");
     btn.innerHTML = SEARCH;
     root.querySelector(".corner")?.prepend(btn);
     btn.addEventListener("click", () => this.openPop());
 
     this.pop = document.createElement("form");
     this.pop.className = "track-pop hud";
-    this.pop.innerHTML = `<label>追跡 · FOLLOW YOUR TRANSACTION</label>
-      <div class="row"><input name="txid" spellcheck="false" autocomplete="off" placeholder="paste a transaction id (64 hex)" /><button class="go">Follow</button></div>
+    this.pop.innerHTML = `<label>追跡 · FIND YOUR zkSNARK · FOLLOW YOUR TRANSACTION</label>
+      <div class="row"><input name="txid" spellcheck="false" autocomplete="off" placeholder="#1234 or a transaction id" /><button class="go">Find</button></div>
       <small class="err"></small>`;
     root.append(this.pop);
     this.pop.addEventListener("submit", (e) => {
       e.preventDefault();
       const v = (this.pop.querySelector("input") as HTMLInputElement).value.trim().toLowerCase();
-      if (!isTxid(v)) return this.err("That isn't a transaction id (64 hex characters).");
+      const n = /^#?\s*(\d{1,5})$/.exec(v);
+      if (n) {
+        const id = Number(n[1]);
+        if (id < 1 || id > 10000) return this.err("zkSNARKs go from #1 to #10,000.");
+        this.pop.classList.remove("open");
+        this.stop();
+        return this.cb.snark(id);
+      }
+      if (!isTxid(v)) return this.err("Type a zkSNARK number (#1234) or a transaction id (64 hex).");
       this.pop.classList.remove("open");
       void this.track(v);
     });
@@ -111,6 +121,9 @@ export class Tracker {
   fromUrl() {
     const q = new URLSearchParams(location.search).get("tx") ?? location.pathname.match(/\/tx\/([0-9a-f]{64})/i)?.[1];
     if (q && isTxid(q)) void this.track(q.toLowerCase());
+    // a zkSNARK's own page: zstreet.cash/snark/1234 (or ?snark=1234)
+    const id = Number(new URLSearchParams(location.search).get("snark") ?? location.pathname.match(/^\/snark\/(\d{1,5})\/?$/)?.[1] ?? NaN);
+    if (id >= 1 && id <= 10000) this.cb.snark(id);
   }
 
   private openPop() {

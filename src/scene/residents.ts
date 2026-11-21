@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { CITY } from "./city";
 import { DISTRICTS, nz } from "./city/plan";
 import type { Director } from "./director";
-import type { Snark } from "./snark";
+import { loadArt, Snark } from "./snark";
 import type { Emote, LifeItem } from "./sprites";
 
 /**
@@ -311,6 +311,8 @@ interface Resident {
   s: Snark;
   /** Told to head home (to make room for someone of the day's cast). */
   leave?: boolean;
+  /** Summoned by its page (zstreet.cash/snark/<id>): stays out a long while. */
+  vip?: boolean;
   node: number;
   alive: boolean;
   born: number;
@@ -375,6 +377,31 @@ export class Residents {
         if (phase === "departing" && Math.random() < 0.25) r.s.emote(pick(["note", "heart"] as Emote[]), 2);
       }, delay);
     }
+  }
+
+  /**
+   * zkSNARK `id` on the street (zstreet.cash/snark/<id>, the search): the one already out (carrying a
+   * transaction, living here), or it comes out of a door now and lives its day among the others,
+   * staying out a long while.
+   */
+  async summon(id: number): Promise<Snark | null> {
+    const out = [...this.director.snarks].find((s) => s.id === id && s.root.parent);
+    if (out) return out;
+    let s: Snark;
+    try {
+      s = new Snark(id, await loadArt(id));
+    } catch {
+      return null;
+    }
+    const door = pick(DOORS);
+    s.role = "Neighbour";
+    s.root.position.copy(door.p);
+    this.director.adopt(s);
+    const r: Resident = { s, node: named.get(door.via)!, alive: true, born: performance.now(), umbrella: null, busy: false, vip: true };
+    this.list.add(r);
+    this.dress(r);
+    void this.life(r, door);
+    return s;
   }
 
   /** Everyone within `radius` of `at` reacts with `e` (some of them). */
@@ -464,7 +491,7 @@ export class Residents {
       const oldest = [...this.list].filter((x) => x.alive).sort((a, b) => a.born - b.born)[0] === r;
       const want = this.brain?.wants(s.id) ?? null;
       // the day's cast lives by its plan; the extras run a few errands and go home
-      if (r.leave || want === "home" || (want === null && ((over && oldest) || errands > 7))) break;
+      if (r.leave || want === "home" || (want === null && ((over && oldest && !r.vip) || errands > (r.vip ? 40 : 7)))) break;
       const act = want ? (this.acts[ACT_KEYS.indexOf(want as ActKey)] ?? this.choose()) : this.choose();
       const sp = act && this.freeSpot(act, this.partnerSpot(s.id));
       if (!act || !sp) {

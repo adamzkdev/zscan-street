@@ -41,8 +41,9 @@ export const LEVELS: Level[] = [
   { label: "R", name: "Observation terrace · the city", y: 78, h: 0, x0: -16, x1: 16, z0: -30, z1: 0, spawn: [-10.8, -15], yaw: -Math.PI / 2, view: 100 },
   { label: "-1", name: "Gold vault · the pool cages", y: -12, h: 6, x0: -22, x1: 22, z0: -48, z1: 0, spawn: [0, -3], yaw: 0 },
   { label: "-2", name: "Safe deposit · lockbox, coin room", y: -22, h: 4.5, x0: -16, x1: 16, z0: -30, z1: 0, spawn: [-13.8, -15], yaw: -Math.PI / 2 },
+  { label: "10", name: "Auction room · Zilk Road", y: 46, h: 9, x0: -18, x1: 18, z0: -40, z1: 0, spawn: [0, -3.2], yaw: 0 },
 ];
-export const F = { hall: 0, trading: 1, museum: 2, exec: 3, roof: 4, vault: 5, deposit: 6 } as const;
+export const F = { hall: 0, trading: 1, museum: 2, exec: 3, roof: 4, vault: 5, deposit: 6, auction: 7 } as const;
 /** The floors bottom to top (the lift panel and its up / down cars follow this). */
 export const ORDER = LEVELS.map((_, i) => i).sort((a, b) => LEVELS[a].y - LEVELS[b].y);
 export const LIGHTS_PER_FLOOR = 6;

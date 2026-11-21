@@ -530,6 +530,22 @@ export class Hud {
 
   // ---- events ---------------------------------------------------------------------------------
 
+  /** A zkSNARK's own page (zstreet.cash/snark/<id>): the share sheet on phones, else copied. */
+  private async shareSnark(id: number, btn: HTMLElement) {
+    const url = `https://zstreet.cash/snark/${id}`;
+    try {
+      if (navigator.share && matchMedia("(pointer: coarse)").matches) await navigator.share({ title: `zkSNARKs #${id} · ZStreet`, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        btn.classList.add("copied");
+        btn.title = "Link copied";
+        setTimeout(() => btn.classList.remove("copied"), 1600);
+      }
+    } catch {
+      /* the visitor closed the sheet */
+    }
+  }
+
   private onClick(e: MouseEvent) {
     const t = e.target as HTMLElement;
     const el = t.closest<HTMLElement>("[data-shop],[data-act],[data-tab],[data-sec],[data-shot],[data-district],[data-tx],[data-theme],[data-bus],[data-place],[data-floor]");
@@ -605,6 +621,9 @@ export class Hud {
         return;
       case "talk":
         if (this.selected) this.cb.talk(this.selected);
+        return;
+      case "share-snark":
+        if (this.selected) void this.shareSnark(this.selected.id, el);
         return;
       case "unfollow":
       case "exit":
@@ -1184,6 +1203,7 @@ export class Hud {
         <button class="btn primary talkbtn" data-act="talk">💬 Talk</button>
         <button class="btn ${following ? "" : "primary"}" data-act="${following ? "unfollow" : "follow"}">${icon("follow")}${following ? "Stop following" : "Follow"}</button>
         <a class="btn" href="${s.txs[0] ? links.tx(s.txs[0].txid) : it?.url ?? "https://zilkroad.com"}" target="_blank" rel="noopener">${s.txs[0] ? "ZScan" : "Zilkroad"} ${icon("ext")}</a>
+        <button class="btn sharebtn" data-act="share-snark" title="Share this zkSNARK's page (zstreet.cash/snark/${s.id})" aria-label="Share"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13M6 9l6-6 6 6M5 14v6h14v-6"/></svg></button>
       </div>`;
   }
 }

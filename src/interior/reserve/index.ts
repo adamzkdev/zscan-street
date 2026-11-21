@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { makeScene } from "../kit";
 import type { Interior, InteriorContext } from "../types";
+import { auction } from "./auction";
 import { hall } from "./hall";
 import { trading } from "./trading";
 import { executive, museum, roof } from "./upper";
@@ -14,6 +15,7 @@ import { governorsStair, VAULT_STAIR } from "./stair";
  * bell rings on every block; the museum of money; the executive floor with the boardroom and the
  * governor's office; the observation terrace on the tower; and underground the gold vault, one
  * cage per value pool sized by what the chain holds, and the safe deposit floor with the lockbox.
+ * And on 10, Zilk Road's auction room (./auction.ts), live when an auction runs.
  * Only the floor you are on is drawn, lit and animated (by the governors' stair between the hall and
  * the vault, the floor at its other end is drawn too, unlit).
  */
@@ -31,6 +33,7 @@ export function buildReserve(ctx: InteriorContext): Interior {
   museum(k);
   executive(k);
   roof(k);
+  auction(k);
   governorsStair(k);
   k.flush();
   k.padLights();

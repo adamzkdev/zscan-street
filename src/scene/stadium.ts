@@ -1,3 +1,4 @@
+import { CardStunt } from "./cardstunt";
 import * as THREE from "three";
 import { Market } from "../data/market";
 import type { Block, Tx } from "../data/types";
@@ -29,6 +30,8 @@ interface Player {
 export class StadiumLive {
   readonly group = new THREE.Group();
   private crowd: Fans | null = null;
+  /** The north stand's card stunt (./cardstunt.ts). */
+  cards: CardStunt | null = null;
   private shouts: Shouts | null = null;
   private cam: THREE.Camera | null = null;
   private nextLine = 1;
@@ -144,6 +147,12 @@ export class StadiumLive {
       Object.assign(this.shouts, { size: 0.03, minH: 0.8, maxH: 3, range: 120 });
       this.group.add(this.shouts.group);
       this.placeCrowd();
+      // the north stand, facing the pitch (and the map's camera): the card stunt
+      const north = this.seats.filter((x) => x.tier.startsWith("N"));
+      if (north.length > 200) {
+        this.cards = new CardStunt(north, new THREE.Vector3(0, 0, 1));
+        this.group.add(this.cards.group);
+      }
     }
     // ---- the jumbotrons ----
     const size = raw.screenSize ? [raw.screenSize[0] * VOX, raw.screenSize[1] * VOX] : [16, 7.3];
@@ -372,6 +381,7 @@ export class StadiumLive {
     this.t += dt;
     if (!this.ok) return;
     this.group.visible = visible;
+    this.cards?.update(dt, visible);
     if (!visible) return;
     this.play(dt);
     const live = this.t - this.waveAt < 7 || this.t - this.goalAt < 4.5;

@@ -349,6 +349,7 @@ export const PLANS: Partial<Record<Interior["key"], Plan>> = {
       4: [lobby(-12.38, -15, Math.PI / 2)],
       5: [lobby(0, -0.16, Math.PI)],
       6: [lobby(-15.95, -15, Math.PI / 2)],
+      7: [lobby(0, -0.16, Math.PI)],
     }),
     // the governors' stair (reserve/stair.ts: VAULT_STAIR.zone): a stair hall west of the banking hall,
     // one straight flight from the vault's north-west doorway up to the hall's doorway under the pools board

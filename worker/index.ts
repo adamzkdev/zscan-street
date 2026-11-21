@@ -7,6 +7,41 @@ export { Room };
 const videos = new Set(["/video.mp4", "/10-years.mp4"]);
 const site = "https://zstreet.cash";
 const card = "https://api.zscan.cash/v1/street/card/tx";
+const api = "https://api.zscan.cash";
+
+/**
+ * Zilk Road's live auction for the Auction Room (src/data/auction.ts): Zilk Road sends no CORS
+ * header, so the city reads it here. One path only (no open proxy), shared by everyone through the
+ * edge cache for 15 s.
+ */
+async function zilk(request: Request): Promise<Response> {
+  const cache = (caches as unknown as { default: Cache }).default;
+  const key = new Request(new URL("/zilk/live-auction", request.url).toString());
+  const hit = await cache.match(key);
+  if (hit) return hit;
+  let body = '{"auction":null}';
+  let status = 200;
+  try {
+    const r = await fetch("https://zilkroad.com/api/market/live-auction", { headers: { Accept: "application/json" } });
+    if (r.ok) {
+      // only what the room shows (the viewer's own fields — payment, signedIn — dropped)
+      const d = (await r.json()) as { auction?: Record<string, unknown> | null };
+      const a = d.auction;
+      if (a) {
+        const keep = ["id", "phase", "tokenId", "name", "apparition", "startsAt", "endsAt", "startingPriceZec", "highestBidZec", "incrementPercent", "extensionSeconds", "bufferSeconds", "bids", "result"];
+        const out: Record<string, unknown> = {};
+        for (const k of keep) out[k] = a[k];
+        out.bids = Array.isArray(a.bids) ? (a.bids as { amountZec: string; receivedAt: string; status: string }[]).map((b) => ({ amountZec: b.amountZec, receivedAt: b.receivedAt, status: b.status })) : [];
+        body = JSON.stringify({ auction: out });
+      }
+    } else status = 502;
+  } catch {
+    status = 502;
+  }
+  const response = new Response(body, { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=15" } });
+  if (status === 200) await cache.put(key, response.clone());
+  return response;
+}
 
 function secure(response: Response): Response {
   const headers = new Headers(response.headers);
@@ -59,9 +94,13 @@ async function handle(request: Request): Promise<Response> {
   try { path = decodeURIComponent(url.pathname); }
   catch { return new Response("Not found", { status: 404 }); }
   if (videos.has(path)) return video(request, path);
+  if (path === "/zilk/live-auction") return zilk(request);
+  // a zkSNARK's own page: the city finds it (src/game/finder.ts); the card is its portrait
+  const snark = /^\/snark\/(\d{1,5})\/?$/.exec(path);
+  const snarkId = snark && Number(snark[1]) >= 1 && Number(snark[1]) <= 10000 ? Number(snark[1]) : null;
 
   const tx = /^\/tx\/([0-9a-fA-F]{64})\/?$/.exec(path);
-  if (!tx) {
+  if (!tx && snarkId == null) {
     const asset = await env.ASSETS.fetch(request);
     if (asset.status !== 404) return asset;
     if (path.startsWith("/assets/") || /\.[a-z0-9]{2,5}$/i.test(path)) return asset;
@@ -84,6 +123,18 @@ async function handle(request: Request): Promise<Response> {
       ["name", "twitter:description", description], ["name", "twitter:image", image],
     ]) html = html.replace(new RegExp(`(<meta\\s+${attribute}="${key}"\\s+content=")[^"]*(")`), `$1${value}$2`);
     html = html.replace(/(<meta\s+name="twitter:image"[^>]*>)/, `$1\n<meta property="og:image:width" content="1200" />\n<meta property="og:image:height" content="630" />\n<meta name="twitter:image:alt" content="ZStreet card for Zcash transaction ${short}" />`);
+  } else if (snarkId != null) {
+    const title = `zkSNARKs #${snarkId} · ZStreet`;
+    const description = `Find zkSNARKs #${snarkId} living in ZStreet, the Zcash chain as a city.`;
+    const image = `${api}/v1/collections/zksnarks/items/${snarkId}/image`;
+    html = html.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
+    for (const [attribute, key, value] of [
+      ["property", "og:title", title], ["property", "og:description", description],
+      ["property", "og:image", image], ["property", "og:url", `${site}/snark/${snarkId}`],
+      // a square portrait: the small card shows it whole
+      ["name", "twitter:card", "summary"], ["name", "twitter:title", title],
+      ["name", "twitter:description", description], ["name", "twitter:image", image],
+    ]) html = html.replace(new RegExp(`(<meta\\s+${attribute}="${key}"\\s+content=")[^"]*(")`), `$1${value}$2`);
   }
   return new Response(request.method === "HEAD" ? null : html, {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" },

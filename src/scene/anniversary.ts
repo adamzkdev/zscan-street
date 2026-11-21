@@ -227,6 +227,9 @@ export class Anniversary {
     this.group.add(bulbs, new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(wires), golden));
   }
 
+  /** No fireworks for now (the drone show has the sky). */
+  quiet = false;
+
   update(dt: number, outside: boolean) {
     this.group.visible = outside;
     if (!outside) return;
@@ -236,7 +239,7 @@ export class Anniversary {
       g.rotation.z = Math.sin(this.clock * 0.65 + i * 1.7) * 0.025;
       g.rotation.y = Math.sin(this.clock * 0.4 + i) * 0.06;
     });
-    if (this.clock >= this.nextParty) {
+    if (this.clock >= this.nextParty && !this.quiet) {
       // Reuse the city's bounded particle pool. No extra lights, timers or particle systems.
       this.fireworks.party(8);
       this.nextParty = this.clock + 18;

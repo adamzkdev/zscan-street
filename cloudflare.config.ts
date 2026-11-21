@@ -15,7 +15,7 @@ export default defineConfig({
     assets: {
       htmlHandling: "auto-trailing-slash",
       notFoundHandling: "single-page-application",
-      runWorkerFirst: ["/tx/*", "/video.mp4", "/10-years.mp4", "/rooms", "/rooms/*", "/rooms-health"],
+      runWorkerFirst: ["/tx/*", "/snark/*", "/zilk/*", "/video.mp4", "/10-years.mp4", "/rooms", "/rooms/*", "/rooms-health"],
     },
     env: {
       ASSETS: bindings.assets(),
