@@ -86,8 +86,13 @@ export interface NftItem {
   traits: { trait_type: string; value: string }[];
   rank: number | null;
   ask: number | null;
+  bid?: number | null;
   last: number | null;
   url: string;
+  /** How common each of its traits is in the collection (%), and that trait's floor. */
+  trait_stats?: { trait_type: string; value: string; pct: number; floor: number | null }[];
+  /** Its rarity band: ranks, floor, recent sales. */
+  tier?: { from_rank: number; to_rank: number; floor: number | null; listed: number; sales_7d: number; median_7d: number | null } | null;
 }
 
 /** A transaction as Street tracks it. */

@@ -222,6 +222,17 @@ function stageOf(s: Snark, done = false): number {
 
 const STAGES = ["Mempool", "Picked up", "At the stop", "On the bus", "Confirmed"];
 
+/** The collection's rarity bands (ranks), the card's frame colour. */
+const BANDS = [
+  { to: 10, name: "Legendary", color: "#f4b728" },
+  { to: 100, name: "Epic", color: "#c17bff" },
+  { to: 500, name: "Rare", color: "#5aa8ff" },
+  { to: 1000, name: "Superior", color: "#2fd0b0" },
+  { to: 2500, name: "Uncommon", color: "#8ad66a" },
+  { to: 5000, name: "Common", color: "#b8b4c4" },
+  { to: 10000, name: "Core", color: "#8a849c" },
+];
+
 export class Hud {
   private root = document.getElementById("ui")!;
   private $ = <T extends HTMLElement>(sel: string) => this.root.querySelector<T>(sel)!;
@@ -1168,42 +1179,45 @@ export class Hud {
       stage < 0
         ? ""
         : `<ol class="steps">${STAGES.map((t, i) => `<li class="${i < stage ? "done" : i === stage ? "now" : ""}"><i></i><span>${t}${i === 3 && mined ? `<small>${num(mined)}</small>` : ""}</span></li>`).join("")}</ol>`;
-    this.$(".panel").innerHTML = `
-      <header class="hero" style="--c:${c}">
-        <div class="portrait"><img src="${ZScan.zkSnarkImage(s.id)}" alt="" /></div>
-        <div class="grow">
-          <div class="eyebrow">zkSNARK · ${role}</div>
-          <h2>${esc(s.name)}</h2>
-          <div class="badges">${rank ? `<span class="rank ${rank <= 500 ? "gold" : ""}">#${num(rank)}</span>` : ""}<span class="muted">${esc(trait("Lineage"))}</span></div>
+    // the card: a collectible, framed in its rarity band's colour
+    const band = rank ? BANDS.find((b) => rank <= b.to) : null;
+    const stats = it?.trait_stats ?? [];
+    const statOf = (k: string) => stats.find((x) => x.trait_type === k);
+    const order = ["Lineage", "Skin", "Eyes", "Head", "Accessory"];
+    const traits = order
+      .map((k) => ({ k, v: trait(k), st: statOf(k) }))
+      .filter((x) => x.v !== "—")
+      .map(({ k, v, st }) => `<li class="${st && st.pct < 5 ? "rare" : ""}"><span>${esc(k)}</span><b>${esc(v)}</b><em>${st ? `${st.pct < 10 ? st.pct.toFixed(1) : Math.round(st.pct)}%` : ""}</em></li>`)
+      .join("");
+    const market = [
+      it?.ask ? ["Listed", zec(it.ask, 3)] : null,
+      it?.bid ? ["Best bid", zec(it.bid, 3)] : null,
+      it?.last ? ["Last sale", zec(it.last, 3)] : null,
+      it?.tier?.floor ? [`${band?.name ?? "Tier"} floor`, zec(it.tier.floor, 3)] : null,
+    ].filter((x): x is [string, string] => !!x);
+    const panel = this.$(".panel");
+    panel.dataset.item = "snark";
+    panel.innerHTML = `
+      <button class="x" data-act="close" aria-label="Close">${icon("close")}</button>
+      <div class="sc-card" style="--band:${band?.color ?? "#8a849c"};--c:${c}">
+        <div class="sc-pic"><img src="${ZScan.zkSnarkImage(s.id)}" alt="" /></div>
+        <div class="sc-plate">
+          <b>#${s.id}</b>
+          <span>${band ? `${band.name.toUpperCase()}${rank ? ` · RANK ${num(rank)}` : ""}` : rank ? `RANK ${num(rank)}` : ""}</span>
         </div>
-        <button class="x" data-act="close" aria-label="Close">${icon("close")}</button>
-      </header>
-      <div class="state"><span class="pill ${tone}"><i></i>${st}</span><span class="muted">${stv}</span></div>
-      ${steps}
-      <dl class="stats three">
-        <div><dt>Carrying</dt><dd>${s.txs.length} tx</dd></div>
-        <div><dt>Fees</dt><dd>${s.txs.length ? zec(fees, 6).replace(" ZEC", "") : "—"}</dd></div>
-        <div><dt>Block</dt><dd>${mined ? num(mined) : s.txs.length ? "next" : "—"}</dd></div>
-      </dl>
-      <div class="tabs">
-        <button data-tab="txs" class="${tab === "txs" ? "on" : ""}">Transactions <small>${s.txs.length}</small></button>
-        <button data-tab="traits" class="${tab === "traits" ? "on" : ""}">Traits</button>
       </div>
-      <div class="pbody">${
-        tab === "txs"
-          ? s.txs.length
-            ? s.txs.map((t) => this.txRow(t)).join("")
-            : `<div class="note">Not carrying anything.</div>`
-          : `<div class="chips">${(it?.traits ?? [])
-              .filter((t) => t.trait_type !== "Background")
-              .map((t) => `<div><small>${esc(t.trait_type)}</small><b>${esc(t.value)}</b></div>`)
-              .join("")}${it ? "" : `<div><small>Traits</small><b>Loading…</b></div>`}</div>${it?.last ? `<div class="note">Last sale ${zec(it.last, 3)} on Zilkroad.</div>` : ""}`
-      }</div>
-      <div class="actions">
-        <button class="btn primary talkbtn" data-act="talk">💬 Talk</button>
-        <button class="btn ${following ? "" : "primary"}" data-act="${following ? "unfollow" : "follow"}">${icon("follow")}${following ? "Stop following" : "Follow"}</button>
-        <a class="btn" href="${s.txs[0] ? links.tx(s.txs[0].txid) : it?.url ?? "https://zilkroad.com"}" target="_blank" rel="noopener">${s.txs[0] ? "ZScan" : "Zilkroad"} ${icon("ext")}</a>
-        <button class="btn sharebtn" data-act="share-snark" title="Share this zkSNARK's page (zstreet.cash/snark/${s.id})" aria-label="Share"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13M6 9l6-6 6 6M5 14v6h14v-6"/></svg></button>
+      <div class="sc-now ${tone}"><i></i><b>${esc(st)}</b>${stv ? `<span>${esc(stv)}</span>` : ""}<em>${role}</em></div>
+      ${steps}
+      ${s.txs.length ? `<div class="sc-txs">${s.txs.map((t) => this.txRow(t)).join("")}</div>` : ""}
+      <ul class="sc-traits">${traits || `<li><span>Traits</span><b>…</b><em></em></li>`}</ul>
+      ${market.length ? `<dl class="sc-market">${market.map(([k, v]) => `<div><dt>${k}</dt><dd>${v.replace(" ZEC", "")}<small>ZEC</small></dd></div>`).join("")}</dl>` : ""}
+      <div class="sc-actions">
+        <button class="btn primary" data-act="talk">Talk</button>
+        <button class="btn" data-act="${following ? "unfollow" : "follow"}">${icon("follow")}${following ? "Stop" : "Follow"}</button>
+        <a class="btn" href="${s.txs[0] ? links.tx(s.txs[0].txid) : (it?.url ?? "https://zilkroad.com")}" target="_blank" rel="noopener">${s.txs[0] ? "ZScan" : "Zilkroad"} ${icon("ext")}</a>
+        <button class="btn sq" data-act="share-snark" title="Share zstreet.cash/snark/${s.id}" aria-label="Share"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13M6 9l6-6 6 6M5 14v6h14v-6"/></svg></button>
       </div>`;
+    void fees;
+    void tab;
   }
 }
