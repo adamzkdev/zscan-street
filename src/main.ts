@@ -85,12 +85,16 @@ import { Visitors } from "./scene/visitors";
 import { crowdSpeaker, npcSpeaker, snarkSpeaker, Talk } from "./ui/talk";
 import { Minimap, type Blip } from "./ui/minimap";
 import { get } from "./data/zscan";
-import type { BlockSummary, Tx } from "./data/types";
+import type { BlockSummary, Tx, TxDetail } from "./data/types";
 import { ChainClock } from "./game/clock";
 import { GameWorld } from "./game/world";
 import { GameHud } from "./game/ui";
 import { profile } from "./game/profile";
 import { Whale } from "./scene/whale";
+import { Titan, type TitanCall } from "./scene/titan";
+import { Wingsuit } from "./game/wingsuit";
+import { ProofDive } from "./scene/proofdive";
+import { SwingSound } from "./scene/swing/sound";
 import { CaseBook } from "./game/cases";
 import { Gossip } from "./game/gossip";
 import { PaperView } from "./game/paper";
@@ -469,6 +473,13 @@ director.metro = metro;
 const tram = new Tram(scene, city.nav);
 // traffic lights at the junctions, cars and a police car on the other streets
 const cityTraffic = new CityTraffic(scene, director.traffic, [44, 36, 26, 16, 10][worldLevel()], city.nav);
+/** What stops the cars: the parade's closed road, the Titan's feet. */
+let paradeBlocks: { x: number; z: number }[] = [];
+let titanBlocks: () => { x: number; z: number }[] = () => [];
+cityTraffic.blockers = () => {
+  const t = titanBlocks();
+  return t.length ? paradeBlocks.concat(t) : paradeBlocks;
+};
 // Shibuya: the scramble crossing, its crowd and its screens
 const shibuya = new Shibuya(scene, city, cityTraffic, { count: [300, 260, 200, 140, 90][worldLevel()], director });
 rainListeners.push((on) => shibuya.setRain(on));
@@ -784,6 +795,7 @@ hud = new Hud(
     },
     leave: () => leavePlace(),
     talk: (s) => talk.show(snarkSpeaker(s, director, agents)),
+    dive: (s, tx) => void diveInto(s, tx),
     walk: (on) => setWalking(on),
   },
   director,
@@ -1557,6 +1569,9 @@ canvas.addEventListener("pointerdown", (e) => {
   rig.interrupt();
 });
 canvas.addEventListener("pointerup", (e) => {
+  if (wing.active) return;
+  // a click in a proof: back out to the street
+  if (dive.active) return void dive.leave();
   // on foot in the street the right button is the swing's (src/scene/swing)
   if (e.button === 2 && walking && !interiors.active) return;
   // inside a place: a click (not a look-around drag) inspects what is under it
@@ -1602,6 +1617,8 @@ canvas.addEventListener("pointerup", (e) => {
     if (info?.party) return void openPartyHall(info.party === true ? "board" : info.party, info.partyGame);
     // the NU7 TOWER's pit garage: its RACE terminal and its karts race the NU7 GRAND PRIX
     if (info?.race) return void raceNu7();
+    // the Needle's base jump: its desk in the lobby, the board on the 150 m terrace
+    if (info?.jump) return void jumpFromNeedle();
     if (info?.table) return void openTableGame(info.table);
     // a book in the library: open it and read
     if (info?.book) {
@@ -2116,6 +2133,7 @@ const drones = new DroneShowEvent(scene, {
   },
 });
 const droneEye = new THREE.Vector3();
+const isoOff = new THREE.Vector3();
 
 const parade = new Parade(scene, {
   decor,
@@ -2131,7 +2149,7 @@ const parade = new Parade(scene, {
     rig.follow(s);
     hud.follow(s);
   },
-  closeRoad: (pts) => (cityTraffic.blockers = pts ? () => pts : () => []),
+  closeRoad: (pts) => (paradeBlocks = pts ?? []),
   tier: worldLevel(),
 });
 
@@ -2413,8 +2431,77 @@ visitors.onEvent((e) => {
   if (WHALE_ON && e.k === "whale") whale.remote();
   if (e.k === "egg" && e.n) eggs.taken(e.n);
 });
+// the Titan: a big shielding brings a giant zkSNARK out of the bay, up to the Needle (src/scene/titan.ts)
+const TITAN_ZAT = 10e8;
+const titan = new Titan(scene, {
+  stomp: (at, k, dist) => {
+    sound.stomp(k, dist);
+    void at;
+  },
+  roar: (dist) => sound.roar(dist),
+  react: (at) => residents.react("!", at, 0.85, 110),
+  dark: (at, r) => gameWorld?.blackout(r, new THREE.Vector2(at.x, at.z)),
+  needle: () => city.landmarks.get("needle")?.occluder.full ?? null,
+  night: () => theme === "night",
+  risen: (c) => {
+    decor.alert({ kind: "game", title: `TITAN #${c.id}  巨`, big: `${Math.round(titan.height)} M`, line: `IN THE BAY · ${c.zec.toLocaleString("en-US", { maximumFractionDigits: 2 })} ZEC SHIELDING`, color: "#f4b728" });
+    gameHud.mail("titan", "A Titan in the bay", `zkSNARK #${c.id}, ${Math.round(titan.height)} m tall, out of the sea for ${c.zec.toLocaleString("en-US", { maximumFractionDigits: 2 })} ZEC just shielded${c.replay && c.height ? ` (block ${c.height.toLocaleString("en-US")})` : ""}. It is walking to the Needle.`, {
+      label: "Watch",
+      fn: watchTitan,
+    });
+  },
+  shielded: (c) => {
+    sound.crowd(true);
+    decor.alert({ kind: "game", title: `TITAN #${c.id}  巨`, big: `${c.zec.toLocaleString("en-US", { maximumFractionDigits: 2 })} ZEC`, line: c.height ? `SHIELDED · BLOCK ${c.height.toLocaleString("en-US")}` : "SHIELDED · INTO THE POOL", color: "#f4b728" });
+  },
+});
+titanBlocks = () => titan.blockers();
+/**
+ * The map camera on the Titan, all of it in the frame (the whole Needle and the beam when it
+ * climbs), riding along until it is back in the sea or you move the map yourself.
+ */
+let titanWatch = false;
+function titanShot() {
+  const f = titan.frame();
+  // the map looks down from the south-east at 34°: the ground point under the middle of the action on screen
+  const back = f.at.y / Math.tan((34 * Math.PI) / 180);
+  const az = (34 * Math.PI) / 180;
+  return { to: new THREE.Vector3(f.at.x - Math.sin(az) * back, 1, f.at.z - Math.cos(az) * back), zoom: 30 / f.view };
+}
+function watchTitan() {
+  if (!titan.active) return;
+  if (interiors.active) interiors.exit();
+  if (walking) setWalking(false);
+  const s = titanShot();
+  rig.district(s.to, s.zoom);
+  titanWatch = true;
+}
+for (const ev of ["pointerdown", "wheel"]) renderer.domElement.addEventListener(ev, () => (titanWatch = false), { passive: true });
+/** The zkSNARK a transaction brings: its id from the txid. */
+const titanFor = (txid: string) => (parseInt(txid.slice(0, 8), 16) % 10000) + 1;
+function callTitan(c: TitanCall) {
+  if (titan.active || Date.now() - titan.lastEnd < 4 * 60_000) return;
+  void titan.call(c);
+}
+// a Titan for the visitor who has not met one: after two minutes, the biggest shielding of the last
+// three hours comes back (its block in the banner), once per visit
+setTimeout(async () => {
+  if (titan.active || titan.lastEnd) return;
+  const list = await get<{ txid: string; height: number | null; time: string; kind: string; transparent_in: number | null; transparent_out: number | null }[]>("/v1/txs?kind=shielding&limit=100");
+  const since = Date.now() - 3 * 3600_000;
+  const best = (list ?? [])
+    .filter((t) => t.kind === "shielding" && Date.parse(t.time) > since)
+    .map((t) => ({ t, zat: Math.max(t.transparent_in ?? 0, t.transparent_out ?? 0) }))
+    .filter((x) => x.zat >= TITAN_ZAT)
+    .sort((a, b) => b.zat - a.zat)[0];
+  if (best) callTitan({ id: titanFor(best.t.txid), zec: best.zat / 1e8, txid: best.t.txid, height: best.t.height, replay: true });
+}, new URLSearchParams(location.search).get("titan") === "now" ? 6_000 : 120_000);
+
 /** The glass whale over the avenue: off (it glitched); big public amounts still ride a limousine. */
 const WHALE_ON = false;
+director.onTx((tx) => {
+  if (tx.kind === "shielding" && (tx.visible ?? 0) >= TITAN_ZAT) callTitan({ id: titanFor(tx.txid), zec: (tx.visible ?? 0) / 1e8, txid: tx.txid, height: tx.height ?? null });
+});
 director.onTx((tx) => {
   if (!WHALE_ON || whale.active || tx.kind === "shielded" || (tx.visible ?? 0) < WHALE_ZAT) return;
   whale.spawn(tx, visitors.others_count);
@@ -2571,6 +2658,16 @@ if (new URLSearchParams(location.search).has("debug")) {
       nu7,
       anniversary,
       drones,
+      titan,
+      callTitan: (id = 9593, zec = 53, height: number | null = null) => titan.call({ id, zec, txid: "test-titan", height }),
+      watchTitan,
+      get wing() {
+        return wing;
+      },
+      jump: () => jumpFromNeedle(),
+      get dive() {
+        return dive;
+      },
       onFoot,
       get swing() {
         return swing;
@@ -2816,6 +2913,90 @@ const swing = new StreetSwing({
   ],
   sound: () => sound.on,
 });
+// the Needle's base jump (src/game/wingsuit.ts): off the 150 m deck in a wingsuit, through a ring per
+// recent block, down into Block Stadium
+const wingSound = new SwingSound(() => sound.on);
+const wing = new Wingsuit(scene, document.getElementById("ui")!, {
+  height: (x, z) => {
+    const f = swing.heights();
+    const i = Math.floor((x - f.x0) / f.cell),
+      j = Math.floor((z - f.z0) / f.cell);
+    return i < 0 || j < 0 || i >= f.size || j >= f.size ? 0 : Math.max(0, f.h[j * f.size + i]);
+  },
+  needle: () => city.landmarks.get("needle")?.occluder.full ?? null,
+  blocks: () => {
+    const h = chainClock.height || director.blockHeight || 0;
+    return h ? Array.from({ length: 8 }, (_, i) => h - i) : [];
+  },
+  avatar: () => profile.p.avatar,
+  air: (l) => wingSound.air(l),
+  ring: (n) => sound.ring(n),
+  thud: (k) => sound.stomp(k * 1.4, 0),
+  cheer: () => sound.crowd(true),
+  done: (r) => {
+    const z = r.rings * 10 + (r.end === "bullseye" ? 100 : r.end === "stadium" ? 50 : 0);
+    if (z) profile.pay(z, "wingsuit");
+  },
+  flying: (on) => {
+    document.getElementById("ui")!.classList.toggle("flying", on);
+    if (on) {
+      rig.controls.enabled = false;
+      return;
+    }
+    // back on the map, over where you came down
+    wingSound.hush();
+    rig.controls.enabled = !walking;
+    rig.district(wing.landed.clone().setY(1), 0.9);
+  },
+});
+// the dive into a proof (src/scene/proofdive.ts): from the zkSNARK carrying a shielded transaction,
+// through its parcel and into its proof, and back out
+const dive = new ProofDive(document.getElementById("ui")!, {
+  ring: (n) => sound.ring(n),
+  boom: () => sound.stomp(0.6, 0),
+  diving: (on) => {
+    document.getElementById("ui")!.classList.toggle("diving", on);
+    rig.controls.enabled = !on && !walking;
+  },
+});
+async function diveInto(s: Snark, tx: Tx) {
+  if (dive.active || wing.active || interiors.active) return;
+  if (tx.pool !== "orchard" && tx.pool !== "sapling") return;
+  // its real counts (the mempool's summary does not split spends from outputs)
+  const d = await get<TxDetail>(`/v1/tx/${tx.txid}`);
+  const orchard = d?.orchard_actions?.length ?? 0;
+  const spends = d?.sapling_spends?.length ?? 0;
+  const outputs = d?.sapling_outputs?.length ?? 0;
+  if (tx.pool === "sapling" && !d) return;
+  const at = s.root.getWorldPosition(new THREE.Vector3());
+  if (walking) setWalking(false);
+  dive.start({ txid: tx.txid, pool: tx.pool, actions: orchard || tx.actions || 1, spends, outputs }, at, rig.camera.position);
+}
+
+/** Off the Needle: out of the tower (through the black) and into the air. */
+function jumpFromNeedle() {
+  if (wing.active || jumping) return;
+  wingSound.start();
+  const go = () => {
+    if (walking) setWalking(false);
+    select(null);
+    // the city's heights, for the walls and the rings (drawn once, under the black)
+    swing.heights();
+    void wing.start().then(() => hud.cut());
+  };
+  if (interiors.active) {
+    interiors.walk.enabled = false;
+    throughBlack(() => {
+      interiors.exit();
+      go();
+    });
+  } else throughBlack(go);
+}
+if (new URLSearchParams(location.search).has("wingsuit")) {
+  const wait = () => (document.getElementById("boot") === null ? setTimeout(jumpFromNeedle, 1500) : setTimeout(wait, 500));
+  wait();
+}
+
 
 /** Advance the director by `sim` seconds in steps of at most 50 ms. */
 function runDirector(sim: number, t: number, q: THREE.Quaternion, right: THREE.Vector3) {
@@ -2894,6 +3075,24 @@ function frameBody(stepDt?: number) {
     if (!CAPTURE) requestAnimationFrame(() => frame());
   };
 
+  // in a proof (the dive): its own place, its own camera; the city keeps living (but unseen)
+  if (dive.inProof) {
+    dive.update(dt);
+    runDirector(sim, t, dive.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(dive.camera.quaternion));
+    load.view(dive.camera);
+    renderPass.scene = dive.scene;
+    renderPass.camera = finish.camera = dive.camera;
+    tilt.set(0);
+    bloom.threshold = bloomThreshold;
+    composer.render();
+    if (grabbers.length) {
+      const g = grabbers;
+      grabbers = [];
+      for (const fn of g) fn(canvas);
+    }
+    hud.frame(() => null);
+    return again();
+  }
   // inside a place: its own scene and the walking camera; the city keeps living (but unseen)
   if (interiors.active) {
     // the street's little map has nothing to say inside
@@ -2957,20 +3156,24 @@ function frameBody(stepDt?: number) {
     const far = sky.riding ? 1100 : 400;
     if (rig.persp.far !== far) (rig.persp.far = far), rig.persp.updateProjectionMatrix();
   }
+  if (wing.active) wing.update(dt);
+  if (dive.inCity) dive.update(dt);
   const capturing = CAPTURE && capShot;
   if (capturing) {
     aimCapture(capCam, capShot!);
     // lights and shadows follow the point the shot looks at
     rig.controls.target.set(capShot!.look[0], 1, capShot!.look[2]);
   }
-  const cam = capturing ? capCam : walking ? onFoot.camera : rig.camera;
+  const cam = capturing ? capCam : dive.inCity || dive.inProof ? dive.camera : wing.active ? wing.camera : walking ? onFoot.camera : rig.camera;
   // the fog is measured from the camera: the iso camera stands far back, so push it out by as much
   if (scene.fog instanceof THREE.Fog) {
     const iso = cam === rig.iso;
     // up high (the wheel, the blimp) the ground is far away: the fog recedes with the height
     const up = iso ? 0 : Math.max(0, cam.position.y - 15) * 3.5;
-    scene.fog.near = (theme === "day" ? 170 : 150) + (iso ? 260 : 0) + up;
-    scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 : 0) + up * 1.6;
+    // (the iso camera usually stands 320 m back; a Titan pushes it farther: the fog goes with it)
+    const back = iso ? cam.position.distanceTo(rig.controls.target) - 320 : 0;
+    scene.fog.near = (theme === "day" ? 170 : 150) + (iso ? 260 + back : 0) + up;
+    scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 + back : 0) + up * 1.6;
     load.fog(scene.fog.near, scene.fog.far);
   } else load.fog(1e9, 1e9);
   renderPass.camera = finish.camera = cam;
@@ -2981,7 +3184,7 @@ function frameBody(stepDt?: number) {
 
   // lights and shadows follow what the camera looks at
   // on foot, lights and shadows follow a point a few steps ahead
-  const focus = walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
+  const focus = dive.active ? dive.focus : wing.active ? wing.focus : walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
   lampLights.update(t, focus);
   // the whole-city map: the lamps' pools are a few pixels there, the lights cost a third of the frame
   lampLights.setOn(!(cam === rig.iso && pxPerMetre(renderer, rig.iso) < 6));
@@ -3007,12 +3210,12 @@ function frameBody(stepDt?: number) {
 
   // miniature look: strong tilt-shift on cinematic shots, a hint of it in iso
   if (capturing) tilt.set(capShot!.tilt ?? 0, 0.5, 0.22);
-  else if (walking) tilt.set(0);
+  else if (walking || wing.active || dive.active) tilt.set(0);
   else if (rig.shot === "inside" || rig.shot === "shop") tilt.set(0.3, 0.5, 0.3);
   else if (rig.shot) tilt.set(1, 0.48, 0.14);
   else tilt.set(wide ? 0 : theme === "day" ? 0.32 : 0.55, 0.5, theme === "day" ? 0.3 : 0.26);
 
-  if (!capturing) wallsDown(dt, walking);
+  if (!capturing) wallsDown(dt, walking || wing.active || dive.active);
   runDirector(sim, t, camQuat, camRight);
   visitors.update(dt, t, camQuat, camRight);
   critters.update(dt, cam);
@@ -3066,6 +3269,24 @@ function frameBody(stepDt?: number) {
   nu7Night.update(dt);
   parade.update(sim, cam);
   if (!interiors.active) drones.update(sim, cam.getWorldPosition(droneEye), renderer.domElement.height);
+  if (!interiors.active) titan.update(sim, droneEye);
+  // the beam and the shield rise past the map camera (it stands 320 m off its target): while a
+  // Titan is out it stands farther back along the same line (an orthographic view: the picture is
+  // the same; the fog below is measured from the target, so it does not move either)
+  const isoBack = titan.active ? 1400 : 320;
+  isoOff.copy(rig.iso.position).sub(rig.controls.target);
+  if (Math.abs(isoOff.length() - isoBack) > 1) {
+    rig.iso.position.copy(rig.controls.target).addScaledVector(isoOff.normalize(), isoBack);
+    rig.iso.far = isoBack + 1700;
+    rig.iso.updateProjectionMatrix();
+  }
+  if (titanWatch) {
+    if (!titan.active || interiors.active || walking || rig.mode !== "district") titanWatch = false;
+    else {
+      const ts = titanShot();
+      rig.flyTo(ts.to, ts.zoom);
+    }
+  }
   anniversary.quiet = drones.active;
   decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   // close-ups keep full detail further out; the whole-city view is mostly simplified
@@ -3100,10 +3321,13 @@ function frameBody(stepDt?: number) {
   // an earthquake shakes whichever camera draws this frame
   const quake = disasters?.shake(dt) ?? null;
   if (quake) cam.position.add(quake);
+  const stomp = interiors.active ? null : titan.shake(dt);
+  if (stomp) cam.position.add(stomp);
   thrift.update(cam, window.innerHeight * renderer.getPixelRatio());
   composer.render();
   drawBubbles(renderer, scene, cam);
   if (quake) cam.position.sub(quake);
+  if (stomp) cam.position.sub(stomp);
   // a photo is read from the canvas right after the frame is drawn (the buffer isn't kept)
   if (grabbers.length) {
     const g = grabbers;

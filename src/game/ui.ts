@@ -4,7 +4,7 @@ import { pix } from "../ui/hud";
 import "./touch.css";
 
 /** What kind of news a message is: its sign and colour in the inbox. */
-export type MailKind = "mayor" | "paper" | "power" | "storm" | "quake" | "whale" | "secret" | "event" | "city" | "works" | "chain" | "dev" | "smash";
+export type MailKind = "mayor" | "paper" | "power" | "storm" | "quake" | "whale" | "titan" | "secret" | "event" | "city" | "works" | "chain" | "dev" | "smash";
 const MAIL: Record<MailKind, { k: string; c: string }> = {
   mayor: { k: "令", c: "#f4b728" },
   paper: { k: "新", c: "#e8e4dc" },
@@ -12,6 +12,7 @@ const MAIL: Record<MailKind, { k: string; c: string }> = {
   storm: { k: "雷", c: "#9fb4ff" },
   quake: { k: "震", c: "#ff4d6a" },
   whale: { k: "鯨", c: "#5fb4ee" },
+  titan: { k: "巨", c: "#f4b728" },
   secret: { k: "秘", c: "#fff3c4" },
   event: { k: "祭", c: "#ff7aa8" },
   city: { k: "市", c: "#5fd7ff" },

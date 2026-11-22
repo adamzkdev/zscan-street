@@ -387,6 +387,19 @@ export function sky(k: NeedleKit) {
   }, 999);
   plaque.position.set(0, y + 1.6, -c - 0.05);
   plaque.rotation.y = Math.PI;
+  // the base jump: a gold-edged board out over the city by the terrace door (src/game/wingsuit.ts)
+  {
+    const a = 1.54;
+    const board = new THREE.Group();
+    board.position.set((R2 - 0.4) * Math.sin(a), y, (R2 - 0.4) * Math.cos(a));
+    board.rotation.y = a;
+    box(board, 1.1, 0.1, 3.0, std("#1a1820", 0.5), 0, -0.1, 1.5);
+    for (const sx of [-0.55, 0.55]) box(board, 0.06, 0.12, 3.0, k.gold, sx, -0.06, 1.5);
+    box(board, 1.1, 0.02, 0.18, glowMat(GOLD, 2), 0, 0.0, 2.92);
+    g.add(board);
+    k.label(f, "BASE JUMP", (R2 - 1.2) * Math.sin(a + 0.16), 1.9, (R2 - 1.2) * Math.cos(a + 0.16), { h: 0.3, color: GOLD, rot: a + Math.PI });
+    k.hit(f, 1.4, 2.2, 3.4, (R2 + 0.9) * Math.sin(a), 0, (R2 + 0.9) * Math.cos(a), "<b>Base jump</b><span>wingsuit from here</span>", () => ({ eyebrow: "Wingsuit · 150 m", title: "Base jump", jump: true }), a);
+  }
   // a jazz trio plays for the lounge: trumpet, double bass, drums (src/interior/music)
   trio(g, { x: -5.8, y, z: 2.6, yaw: 1.0 }, { place: "needle", floor: f, track: "jazz-combo", ids: [3360, 3361, 3362], level: 0.9 });
   k.rects[f].push([-7.8, 1.2, -4.6, 4.0]);

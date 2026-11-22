@@ -57,6 +57,8 @@ export interface PickInfo {
   table?: string;
   /** Races the NU7 GRAND PRIX (ZK PARTY's SNARK KART on the NU7 quarter's circuit): the NU7 TOWER's pit garage. */
   race?: boolean;
+  /** The Needle's base jump: off the 150 m deck in a wingsuit (src/game/wingsuit.ts). */
+  jump?: boolean;
   /** Takes the elevator to this floor (clicking its doors). */
   floor?: number;
   /** Opens a book in the reader (the library's ZIPs). */

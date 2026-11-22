@@ -394,6 +394,120 @@ export class Soundscape {
     n.start(t);
   }
 
+  /** Through a ring: a bright two-note bell, a step higher each ring (`n` 1…). */
+  ring(n: number) {
+    if (!this.on || !this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.01;
+    const base = 660 * Math.pow(2, (Math.min(12, n - 1) * 2) / 12);
+    for (const [f, at, v] of [
+      [base, 0, 0.16],
+      [base * 1.5, 0.07, 0.12],
+      [base * 3, 0.07, 0.04],
+    ]) {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t + at);
+      g.gain.linearRampToValueAtTime(v, t + at + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.7);
+      o.connect(g).connect(this.sfxGain);
+      o.start(t + at);
+      o.stop(t + at + 0.75);
+    }
+  }
+
+  /** A giant's footstep `dist` metres away (`k` how heavy): a deep thud and the ground's rattle. */
+  stomp(k: number, dist: number) {
+    if (!this.on || !this.ctx) return;
+    const ctx = this.ctx;
+    const near = (this.indoors ? 0.3 : 1) * Math.min(1.4, k) / (1 + dist / 140);
+    if (near < 0.02) return;
+    // sound takes its time over a few hundred metres
+    const t = ctx.currentTime + 0.02 + Math.min(0.6, dist / 340);
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(58, t);
+    o.frequency.exponentialRampToValueAtTime(24, t + 0.55);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.6 * near, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+    o.connect(g).connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 1.05);
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise(1.4, true);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(900 / (1 + dist / 300), t);
+    lp.frequency.exponentialRampToValueAtTime(70, t + 1.1);
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0, t);
+    g2.gain.linearRampToValueAtTime(0.34 * near, t + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+    n.connect(lp).connect(g2).connect(this.sfxGain);
+    n.start(t);
+  }
+
+  /** A giant's roar `dist` metres away: two low detuned voices through a closing filter, a rasp of breath. */
+  roar(dist: number) {
+    if (!this.on || !this.ctx) return;
+    const ctx = this.ctx;
+    const near = (this.indoors ? 0.25 : 1) / (1 + dist / 220);
+    if (near < 0.03) return;
+    const t = ctx.currentTime + 0.05 + Math.min(0.8, dist / 340);
+    const D = 3.2;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.Q.value = 6;
+    lp.frequency.setValueAtTime(260, t);
+    lp.frequency.linearRampToValueAtTime(1500 / (1 + dist / 500), t + 0.5);
+    lp.frequency.exponentialRampToValueAtTime(180, t + D);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.2 * near, t + 0.35);
+    g.gain.setValueAtTime(0.2 * near, t + D * 0.55);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+    lp.connect(g).connect(this.sfxGain);
+    for (const [f, det] of [
+      [55, 0],
+      [82, 13],
+      [110, -9],
+    ]) {
+      const o = ctx.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.linearRampToValueAtTime(f * 1.12, t + 0.6);
+      o.frequency.exponentialRampToValueAtTime(f * 0.7, t + D);
+      o.detune.value = det;
+      // a growl: the pitch shakes
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 23 + det * 0.3;
+      const lg = ctx.createGain();
+      lg.gain.value = f * 0.05;
+      lfo.connect(lg).connect(o.frequency);
+      o.connect(lp);
+      o.start(t);
+      lfo.start(t);
+      o.stop(t + D + 0.1);
+      lfo.stop(t + D + 0.1);
+    }
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise(D, false);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 700;
+    bp.Q.value = 0.7;
+    const gn = ctx.createGain();
+    gn.gain.setValueAtTime(0, t);
+    gn.gain.linearRampToValueAtTime(0.07 * near, t + 0.3);
+    gn.gain.exponentialRampToValueAtTime(0.0001, t + D);
+    n.connect(bp).connect(gn).connect(this.sfxGain);
+    n.start(t);
+  }
+
   /** The crowd reacts: a short swell of voices (cheer when `up`, a groan otherwise). */
   crowd(up: boolean) {
     if (!this.on || !this.ctx) return;

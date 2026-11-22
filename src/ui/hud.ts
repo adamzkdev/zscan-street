@@ -130,6 +130,8 @@ export interface HudCallbacks {
   leave(): void;
   /** Open a conversation with this zkSNARK. */
   talk(s: Snark): void;
+  /** Dive into the proof of a shielded transaction it carries (src/scene/proofdive.ts). */
+  dive?(s: Snark, tx: Tx): void;
 }
 
 type Section = "block" | "mempool" | "market" | "supply" | "network";
@@ -636,6 +638,11 @@ export class Hud {
       case "share-snark":
         if (this.selected) void this.shareSnark(this.selected.id, el);
         return;
+      case "dive": {
+        const tx = this.selected?.txs.find((t) => t.pool === "orchard" || t.pool === "sapling");
+        if (this.selected && tx) this.cb.dive?.(this.selected, tx);
+        return;
+      }
       case "unfollow":
       case "exit":
         return this.cb.exitFollow();
@@ -1209,6 +1216,7 @@ export class Hud {
       <div class="sc-now ${tone}"><i></i><b>${esc(st)}</b>${stv ? `<span>${esc(stv)}</span>` : ""}<em>${role}</em></div>
       ${steps}
       ${s.txs.length ? `<div class="sc-txs">${s.txs.map((t) => this.txRow(t)).join("")}</div>` : ""}
+      ${s.txs.some((t) => t.pool === "orchard" || t.pool === "sapling") ? `<button class="btn sc-dive" data-act="dive">Dive into its proof ▸</button>` : ""}
       <ul class="sc-traits">${traits || `<li><span>Traits</span><b>…</b><em></em></li>`}</ul>
       ${market.length ? `<dl class="sc-market">${market.map(([k, v]) => `<div><dt>${k}</dt><dd>${v.replace(" ZEC", "")}<small>ZEC</small></dd></div>`).join("")}</dl>` : ""}
       <div class="sc-actions">

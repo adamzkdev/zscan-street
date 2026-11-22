@@ -7310,3 +7310,179 @@ a.srow:hover span {
 .sc-actions .btn.sq.copied {
   color: var(--good);
 }
+
+/* ---- the Needle's base jump (src/game/wingsuit.ts): only its own figures while you fly ---- */
+#ui.flying > *:not(.wing):not(.cut),
+#ui.diving > *:not(.dive-cap):not(.dive-flash):not(.cut) {
+  display: none !important;
+}
+#ui .wing {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  font-family: var(--pixel, monospace);
+  color: var(--text);
+}
+#ui .wing-count {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  font: 400 120px/1 var(--pixel, monospace);
+  color: var(--gold, #f4b728);
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.45);
+}
+#ui .wing-keys {
+  position: absolute;
+  left: 50%;
+  bottom: calc(28px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+#ui .wing-keys kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin: 0 2px;
+  padding: 1px 4px;
+  font: inherit;
+  text-align: center;
+  color: var(--gold, #f4b728);
+  border: 1px solid rgba(244, 183, 40, 0.5);
+}
+#ui .wing-bar {
+  position: absolute;
+  left: 50%;
+  top: calc(16px + env(safe-area-inset-top));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+}
+#ui .wing-bar span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 78px;
+  padding: 6px 12px 7px;
+}
+#ui .wing-bar span + span {
+  border-left: 1px solid var(--line);
+}
+#ui .wing-bar em,
+#ui .wing-card dt {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+#ui .wing-bar b {
+  font: 400 24px/1.1 var(--pixel, monospace);
+  color: var(--text);
+}
+#ui .wing-bar small,
+#ui .wing-card small {
+  margin-left: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+#ui .wing-bar span:nth-child(3) b {
+  color: var(--gold, #f4b728);
+}
+#ui .wing-card {
+  position: absolute;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(380px, calc(100vw - 32px));
+  padding: 18px;
+  pointer-events: auto;
+}
+#ui .wing-card.bad {
+  --c: #f06b76;
+}
+#ui .wing-card > em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--gold, #f4b728);
+}
+#ui .wing-card.bad > em {
+  color: #f06b76;
+}
+#ui .wing-card > b {
+  display: block;
+  margin: 6px 0 12px;
+  font: 400 24px/1.15 var(--pixel, monospace);
+  color: var(--text);
+}
+#ui .wing-card dl {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0 0 14px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+#ui .wing-card dl div {
+  padding: 8px 0;
+}
+#ui .wing-card dd {
+  margin: 2px 0 0;
+  font: 400 22px/1.1 var(--pixel, monospace);
+  color: var(--text);
+}
+#ui .wing-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* ---- the dive into a proof (src/scene/proofdive.ts): its stage, the white through the parcel ---- */
+#ui .dive-cap {
+  left: 50%;
+  bottom: calc(26px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 300px;
+  padding: 10px 18px 12px;
+  pointer-events: none;
+  text-align: center;
+}
+#ui .dive-cap.on {
+  display: flex;
+}
+#ui .dive-cap em {
+  font: 400 11px var(--pixel, monospace);
+  font-style: normal;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+}
+#ui .dive-cap b {
+  font: 400 22px/1.1 var(--pixel, monospace);
+  color: var(--text);
+}
+#ui .dive-cap span {
+  font-size: 13px;
+  color: var(--muted);
+}
+#ui .dive-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  background: #fff6dc;
+  opacity: 0;
+}
+.panel[data-item="snark"] .sc-dive {
+  flex: none;
+  align-self: stretch;
+  box-sizing: border-box;
+  width: auto;
+  justify-content: center;
+}

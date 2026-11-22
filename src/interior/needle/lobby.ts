@@ -437,6 +437,28 @@ export function lobby(k: NeedleKit) {
   void k.person(f, 7007, [9.4, -6.6], "Security", { face: new THREE.Vector3(0, 0, 1) });
   void k.person(f, 7070, [4.4, -9.4], "Security", { face: new THREE.Vector3(1, 0, 0) });
   k.hit(f, 6, 2.4, 1, 9.4, -8.2, 0, "<b>Security</b><span>bags on the belt</span>", () => ({ eyebrow: "Security", title: "Cleared ✓", tag: ["Zero knowledge", "ok"], body: "<p>Checked. Nothing disclosed.</p>" }));
+  // the base jump: a sign on the east wall by the lifts; a click and the lift takes you up and out
+  // (src/game/wingsuit.ts)
+  const jump = k.screen(f, 3.2, 2.0, (gc, W, H) => {
+    gc.fillStyle = "#0b0a10";
+    gc.fillRect(0, 0, W, H);
+    gc.strokeStyle = GOLD;
+    gc.lineWidth = 6;
+    gc.strokeRect(8, 8, W - 16, H - 16);
+    gc.textAlign = "center";
+    gc.fillStyle = GOLD;
+    gc.font = `800 58px ${MONO}`;
+    gc.fillText("BASE JUMP", W / 2, H * 0.34);
+    gc.font = `600 26px ${MONO}`;
+    gc.fillStyle = "#e9d8b0";
+    gc.fillText("WINGSUIT · L41 · 150 m", W / 2, H * 0.55);
+    gc.fillText("8 rings · land in the stadium", W / 2, H * 0.72);
+    gc.textAlign = "left";
+  }, 999);
+  jump.position.set(LX1 - 0.06, y + 2.0, -25.9);
+  jump.rotation.y = -Math.PI / 2;
+  k.hit(f, 0.6, 2.4, 3.4, LX1 - 0.4, -25.9, 0.8, "<b>Base jump</b><span>wingsuit from 150 m</span>", () => ({ eyebrow: "Wingsuit", title: "Base jump", jump: true }));
+
   // the queue: belts in a serpentine, visitors in it
   for (const [i, zq] of [-11.2, -13.8, -16.4, -19.0].entries()) {
     const x0 = i % 2 ? 6.5 : 8.0,
