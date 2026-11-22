@@ -91,7 +91,8 @@ import { GameWorld } from "./game/world";
 import { GameHud } from "./game/ui";
 import { profile } from "./game/profile";
 import { Whale } from "./scene/whale";
-import { Titan, type TitanCall } from "./scene/titan";
+import { Titan } from "./scene/titan";
+import { TitanDay } from "./game/titanday";
 import { Wingsuit } from "./game/wingsuit";
 import { ProofDive } from "./scene/proofdive";
 import { SwingSound } from "./scene/swing/sound";
@@ -2431,8 +2432,8 @@ visitors.onEvent((e) => {
   if (WHALE_ON && e.k === "whale") whale.remote();
   if (e.k === "egg" && e.n) eggs.taken(e.n);
 });
-// the Titan: a big shielding brings a giant zkSNARK out of the bay, up to the Needle (src/scene/titan.ts)
-const TITAN_ZAT = 10e8;
+// the Titan of the day: every day at 20:00 UTC the biggest shielding of the last 24 hours brings a
+// giant zkSNARK out of the bay, up to the Needle (src/scene/titan.ts, src/game/titanday.ts)
 const titan = new Titan(scene, {
   stomp: (at, k, dist) => {
     sound.stomp(k, dist);
@@ -2444,8 +2445,8 @@ const titan = new Titan(scene, {
   needle: () => city.landmarks.get("needle")?.occluder.full ?? null,
   night: () => theme === "night",
   risen: (c) => {
-    decor.alert({ kind: "game", title: `TITAN #${c.id}  巨`, big: `${Math.round(titan.height)} M`, line: `IN THE BAY · ${c.zec.toLocaleString("en-US", { maximumFractionDigits: 2 })} ZEC SHIELDING`, color: "#f4b728" });
-    gameHud.mail("titan", "A Titan in the bay", `zkSNARK #${c.id}, ${Math.round(titan.height)} m tall, out of the sea for ${c.zec.toLocaleString("en-US", { maximumFractionDigits: 2 })} ZEC just shielded${c.replay && c.height ? ` (block ${c.height.toLocaleString("en-US")})` : ""}. It is walking to the Needle.`, {
+    decor.alert({ kind: "game", title: `TITAN #${c.id}  巨`, big: `${Math.round(titan.height)} M`, line: `THE DAY'S BIGGEST SHIELDING · ${c.zec.toLocaleString("en-US", { maximumFractionDigits: 2 })} ZEC`, color: "#f4b728" });
+    gameHud.mail("titan", "The Titan of the day", `zkSNARK #${c.id}, ${Math.round(titan.height)} m tall: the biggest shielding of the last 24 hours, ${c.zec.toLocaleString("en-US", { maximumFractionDigits: 2 })} ZEC${c.height ? ` at block ${c.height.toLocaleString("en-US")}` : ""}. It is walking to the Needle.`, {
       label: "Watch",
       fn: watchTitan,
     });
@@ -2476,32 +2477,32 @@ function watchTitan() {
   rig.district(s.to, s.zoom);
   titanWatch = true;
 }
-for (const ev of ["pointerdown", "wheel"]) renderer.domElement.addEventListener(ev, () => (titanWatch = false), { passive: true });
+for (const ev of ["pointerdown", "wheel"]) renderer.domElement.addEventListener(ev, () => (titanWatch = titanSoon = false), { passive: true });
 /** The zkSNARK a transaction brings: its id from the txid. */
 const titanFor = (txid: string) => (parseInt(txid.slice(0, 8), 16) % 10000) + 1;
-function callTitan(c: TitanCall) {
-  if (titan.active || Date.now() - titan.lastEnd < 4 * 60_000) return;
-  void titan.call(c);
-}
-// a Titan for the visitor who has not met one: after two minutes, the biggest shielding of the last
-// three hours comes back (its block in the banner), once per visit
-setTimeout(async () => {
-  if (titan.active || titan.lastEnd) return;
-  const list = await get<{ txid: string; height: number | null; time: string; kind: string; transparent_in: number | null; transparent_out: number | null }[]>("/v1/txs?kind=shielding&limit=100");
-  const since = Date.now() - 3 * 3600_000;
-  const best = (list ?? [])
-    .filter((t) => t.kind === "shielding" && Date.parse(t.time) > since)
-    .map((t) => ({ t, zat: Math.max(t.transparent_in ?? 0, t.transparent_out ?? 0) }))
-    .filter((x) => x.zat >= TITAN_ZAT)
-    .sort((a, b) => b.zat - a.zat)[0];
-  if (best) callTitan({ id: titanFor(best.t.txid), zec: best.zat / 1e8, txid: best.t.txid, height: best.t.height, replay: true });
-}, new URLSearchParams(location.search).get("titan") === "now" ? 6_000 : 120_000);
+/** Watching from the bay before it rises: the camera goes onto it when it does. */
+let titanSoon = false;
+const titanDay = new TitanDay(titan, {
+  decor,
+  mail: (k, title, text, act) => gameHud.mail(k, title, text, act),
+  watch: () => {
+    if (titan.active) return watchTitan();
+    if (interiors.active) interiors.exit();
+    if (walking) setWalking(false);
+    rig.district(new THREE.Vector3(60, 1, 120), 0.2);
+    titanSoon = true;
+  },
+  biggest: async () => {
+    const since = Math.floor(Date.now() / 1000) - 86_400;
+    const list = await get<{ txid: string; height: number | null; transparent_in: number | null; transparent_out: number | null }[]>(`/v1/txs?kind=shielding&sort=value&since=${since}&limit=1`);
+    const t = list?.[0];
+    if (!t) return null;
+    return { id: titanFor(t.txid), zec: Math.max(t.transparent_in ?? 0, t.transparent_out ?? 0) / 1e8, txid: t.txid, height: t.height };
+  },
+});
 
 /** The glass whale over the avenue: off (it glitched); big public amounts still ride a limousine. */
 const WHALE_ON = false;
-director.onTx((tx) => {
-  if (tx.kind === "shielding" && (tx.visible ?? 0) >= TITAN_ZAT) callTitan({ id: titanFor(tx.txid), zec: (tx.visible ?? 0) / 1e8, txid: tx.txid, height: tx.height ?? null });
-});
 director.onTx((tx) => {
   if (!WHALE_ON || whale.active || tx.kind === "shielded" || (tx.visible ?? 0) < WHALE_ZAT) return;
   whale.spawn(tx, visitors.others_count);
@@ -2661,6 +2662,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       titan,
       callTitan: (id = 9593, zec = 53, height: number | null = null) => titan.call({ id, zec, txid: "test-titan", height }),
       watchTitan,
+      titanDay,
       get wing() {
         return wing;
       },
@@ -3269,6 +3271,11 @@ function frameBody(stepDt?: number) {
   nu7Night.update(dt);
   parade.update(sim, cam);
   if (!interiors.active) drones.update(sim, cam.getWorldPosition(droneEye), renderer.domElement.height);
+  titanDay.update();
+  if (titanSoon && titan.active) {
+    titanSoon = false;
+    watchTitan();
+  }
   if (!interiors.active) titan.update(sim, droneEye);
   // the beam and the shield rise past the map camera (it stands 320 m off its target): while a
   // Titan is out it stands farther back along the same line (an orthographic view: the picture is

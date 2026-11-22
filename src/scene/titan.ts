@@ -2,14 +2,15 @@ import * as THREE from "three";
 import { makeSnarkBody, preloadSnarks, type SnarkBody } from "./snarkbody";
 
 /**
- * The Titan: when a big amount is shielded (public ZEC going into the shielded pool, the one moment
- * the amount shows), a zkSNARK 85 to 140 metres tall rises out of the bay, wades ashore and
+ * The Titan: once a day (src/game/titanday.ts) the day's biggest shielding (public ZEC going into
+ * the shielded pool, the one moment the amount shows) brings a zkSNARK 85 to 140 metres tall out
+ * of the bay: it wades ashore and
  * walks up Boulevard East to the Needle, the ground shaking under each step. It climbs the tower,
  * raises its fist and fires a gold beam into the sky while a shield closes over the city (and the
  * city's power goes), slides back down and walks into the sea again. Which zkSNARK: the
  * transaction picks it; how tall: the amount.
  *
- *   titan.call({ id, zec, txid, height }); titan.update(dt, eye); titan.shake(dt, eye)
+ *   titan.call({ id, zec, txid, height }, dueAt?); titan.update(dt, eye); titan.shake(dt, eye)
  */
 
 /** Boulevard East, the bay's open water, the Needle (src/scene/city/plan.ts GRID, BAY; the needle lot). */
@@ -32,8 +33,6 @@ export interface TitanCall {
   zec: number;
   txid: string;
   height?: number | null;
-  /** A shielding from earlier in the day, brought back for a visitor who has not seen one. */
-  replay?: boolean;
 }
 
 export interface TitanHooks {
@@ -318,13 +317,26 @@ export class Titan {
     return { at: new THREE.Vector3(p.x, Math.max(0, p.y) + this.tall * 0.5, p.z), view: this.tall * 1.9 };
   }
 
-  /** A Titan for this shielding (ignored while one is out). */
-  async call(c: TitanCall) {
+  /**
+   * A Titan for this shielding (ignored while one is out). `since`: when it was due (ms); a
+   * visitor who comes in late meets it where it has got to by now (run on, silently).
+   */
+  async call(c: TitanCall, since?: number) {
     if (this.active) return false;
     this.loading = true;
     try {
       await preloadSnarks([c.id], 9000);
       this.start(c);
+      const late = since ? (Date.now() - since) / 1000 : 0;
+      if (late > 1) {
+        const real = this.hooks;
+        const quiet = () => {};
+        this.hooks = { ...real, stomp: quiet, roar: quiet, react: quiet, dark: quiet, shielded: quiet };
+        const far = new THREE.Vector3(0, 5000, 0);
+        for (let k = 0; k < late && this.mode !== "off"; k += 0.1) this.update(0.1, far);
+        this.hooks = real;
+        this.shakeAmp = 0;
+      }
     } finally {
       this.loading = false;
     }
