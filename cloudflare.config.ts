@@ -15,14 +15,16 @@ export default defineConfig({
     assets: {
       htmlHandling: "auto-trailing-slash",
       notFoundHandling: "single-page-application",
-      runWorkerFirst: ["/tx/*", "/snark/*", "/zilk/*", "/video.mp4", "/10-years.mp4", "/rooms", "/rooms/*", "/rooms-health"],
+      runWorkerFirst: ["/tx/*", "/snark/*", "/zilk/*", "/video.mp4", "/10-years.mp4", "/rooms", "/rooms/*", "/rooms-health", "/world/*"],
     },
     env: {
       ASSETS: bindings.assets(),
       MEDIA: bindings.r2({ name: "zstreet-media" }),
       // ZK PARTY's online rooms (server/rooms/worker.ts), exported by this worker
       ROOMS: bindings.durableObject({ worker: "zscan-street", exportName: "Room" }),
+      // the game's shared city (worker/world.ts)
+      WORLD: bindings.durableObject({ worker: "zscan-street", exportName: "World" }),
     },
-    exports: { Room: exports.durableObject({ storage: "sqlite" }) },
+    exports: { Room: exports.durableObject({ storage: "sqlite" }), World: exports.durableObject({ storage: "sqlite" }) },
   }),
 });

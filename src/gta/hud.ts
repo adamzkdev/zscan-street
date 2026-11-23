@@ -56,6 +56,9 @@ export interface HudState {
   live: { height: number; since: number; mempool: number };
   heat: { stars: number; chasing: boolean; losing: number; pin: number };
   cops: { x: number; z: number }[];
+  /** The other players in this city, and how many of you there are (0: offline). */
+  players: { x: number; z: number }[];
+  online: number;
 }
 
 export interface MenuHost {
@@ -241,7 +244,7 @@ export class GtaHud {
       this.$(".gh-live-t").innerHTML = s.live.height
         ? TOUCH
           ? `<b>${s.live.height.toLocaleString("en-US")}</b> · ${left > 0 ? `~${left}s` : "any second"}`
-          : `Block <b>${s.live.height.toLocaleString("en-US")}</b> · ${left > 0 ? `next ~${left}s` : "next any second"} · <b>${s.live.mempool}</b> tx waiting`
+          : `Block <b>${s.live.height.toLocaleString("en-US")}</b> · ${left > 0 ? `next ~${left}s` : "next any second"} · <b>${s.live.mempool}</b> tx waiting${s.online ? ` · <b>${s.online}</b> in town` : ""}`
         : "Connecting to the chain…";
       this.$(".gh-where .gh-dist").textContent = s.district;
       this.$(".gh-where .gh-st").textContent = s.street;
@@ -369,6 +372,18 @@ export class GtaHud {
         g.arc(cx + rx, cy + ry, 1.6 * dpr, 0, Math.PI * 2);
         g.fill();
       }
+    }
+    // the other players: gold rings
+    for (const o of s.players) {
+      const [rx, ry] = to(o.x, o.z);
+      if (rx * rx + ry * ry > (R - 6 * dpr) ** 2) continue;
+      g.beginPath();
+      g.arc(cx + rx, cy + ry, 4 * dpr, 0, Math.PI * 2);
+      g.fillStyle = "#0b0b11";
+      g.fill();
+      g.lineWidth = 2 * dpr;
+      g.strokeStyle = "#ffd56b";
+      g.stroke();
     }
     // the police: red and blue, pinned to the rim
     const blink = Math.floor(performance.now() / 250) % 2 === 0;

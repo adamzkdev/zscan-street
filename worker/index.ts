@@ -1,8 +1,12 @@
 import { env } from "cloudflare:workers";
 import { Room, isRoomsPath, roomsFetch, type Env as RoomsEnv } from "../server/rooms/worker";
 
+import { World, isWorldPath, worldFetch } from "./world";
+
 // ZK PARTY's online rooms: one Durable Object per room, on this origin (/rooms/*, src/net/rooms.ts)
 export { Room };
+// the game's shared city (src/gta/net.ts): one Durable Object per world (/world/*)
+export { World };
 
 const videos = new Set(["/video.mp4", "/10-years.mp4"]);
 const site = "https://zstreet.cash";
@@ -144,7 +148,9 @@ async function handle(request: Request): Promise<Response> {
 export default {
   async fetch(request: Request) {
     // the rooms answer WebSocket upgrades (a 101 can't be rebuilt by secure())
-    if (isRoomsPath(new URL(request.url).pathname)) return roomsFetch(request, env as unknown as RoomsEnv);
+    const path = new URL(request.url).pathname;
+    if (isRoomsPath(path)) return roomsFetch(request, env as unknown as RoomsEnv);
+    if (isWorldPath(path)) return worldFetch(request, (env as unknown as { WORLD: DurableObjectNamespace }).WORLD);
     return secure(await handle(request));
   },
 };

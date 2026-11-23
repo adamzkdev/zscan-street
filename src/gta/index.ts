@@ -11,6 +11,7 @@ import { Garage } from "./garage";
 import { DEFAULTS, GtaHud, type Settings } from "./hud";
 import { GtaInput } from "./input";
 import { Missions } from "./missions";
+import { WorldNet } from "./net";
 import { Heat } from "./police";
 import { Roads } from "./roads";
 import { GtaSound, type AudioOut } from "./sound";
@@ -101,6 +102,7 @@ export class GtaMode {
   readonly heat: Heat;
   readonly solid: StreetSolid;
   readonly doors: Doors;
+  readonly net: WorldNet;
   car: DriveCar | null = null;
   /** Cars you left (and your own ZK-GT), parked where you got out. */
   parked: DriveCar[] = [];
@@ -173,11 +175,12 @@ export class GtaMode {
     };
     this.apply(this.settings);
     this.doors = new Doors(host.scene);
+    this.net = new WorldNet(host.scene);
     this.solid = new StreetSolid({
       renderer: host.renderer,
       scene: host.scene,
       area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
-      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
+      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
       surface: (x, z) => this.roads.surface(x, z),
     });
     host.scene.add(this.player.group);
@@ -313,6 +316,7 @@ export class GtaMode {
     this.missions.setVisible(true);
     this.doors.set(this.host.doors());
     this.doors.show(true);
+    this.net.join(true);
     this.hud.show(true);
     // the street's solid shape (once, and again when the far city has streamed in)
     if (!this.solid.ready) {
@@ -342,6 +346,7 @@ export class GtaMode {
     this.missions.stop();
     this.missions.setVisible(false);
     this.doors.show(false);
+    this.net.join(false);
     this.heat.clear();
     this.sound.siren(0);
     this.player.group.visible = false;
@@ -578,6 +583,7 @@ export class GtaMode {
     const vel = this.car ? { vx: this.car.vel.x, vz: this.car.vel.y } : { vx: this.player.vel.x, vz: this.player.vel.z };
     const near = this.heat.update(dt, { x: at.x, z: at.z, ...vel, speed: this.car?.speed ?? this.player.speed, inCar: !!this.car }, (self) => this.carWorld(self));
     this.sound.siren(this.heat.chasers.length ? Math.max(0.15, 1 - near / 140) : 0);
+    this.net.update(dt, { x: at.x, y: this.car ? 0 : this.player.pos.y, z: at.z, h: heading, c: this.car?.kind ?? "", v: this.car?.speed ?? this.player.speed, s: this.player.id });
     this.hudFrame(dt, at, heading);
   }
 
@@ -747,6 +753,13 @@ export class GtaMode {
       yield { x: p.x, z: p.z, hx: along ? half : 0.95, hz: along ? 0.95 : half };
     }
     yield* this.host.vehicles();
+    // the other players' cars
+    for (const o of this.net.others())
+      if (o.car) {
+        const cs = Math.abs(Math.cos(o.yaw)),
+          sn = Math.abs(Math.sin(o.yaw));
+        yield { x: o.x, z: o.z, hx: (cs * 4.4 + sn * 2) / 2.2, hz: (sn * 4.4 + cs * 2) / 2.2 };
+      }
     for (const c of [...this.parked, ...this.heat.chasers.map((x) => x.car), ...(this.car ? [this.car] : [])]) {
       if (c === self) continue;
       const p = c.group.position;
@@ -790,6 +803,8 @@ export class GtaMode {
         live: { height: h.height(), since: h.lastBlockAt() ? (Date.now() - h.lastBlockAt()) / 1000 : 0, mempool: h.mempool() },
         heat: { stars: this.heat.stars, chasing: this.heat.chasers.length > 0, losing: this.heat.losing, pin: this.heat.pin },
         cops: this.heat.chasers.map((c) => ({ x: c.car.group.position.x, z: c.car.group.position.z })),
+        players: [...this.net.others()].map((o) => ({ x: o.x, z: o.z })),
+        online: this.net.count,
       },
       this.settings,
     );
