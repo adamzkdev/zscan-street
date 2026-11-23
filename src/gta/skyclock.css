@@ -1,0 +1,21 @@
+/* The game's clock and weather (src/gta/skyclock.ts): top right of the location card, small. */
+.gh-where .gh-clock {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 700 12px var(--g-disp, "Archivo", system-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+  color: var(--g-ink2, rgba(243, 244, 241, 0.74));
+  font-style: normal;
+  letter-spacing: 0.01em;
+}
+.gh-where .gh-clock svg {
+  display: block;
+  color: var(--g-ink, #f3f4f1);
+}
+.gh-where .gh-clock:empty {
+  display: none;
+}

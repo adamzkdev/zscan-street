@@ -96,26 +96,27 @@ export class StreetProps {
     this.placed = true;
     let seed = 99;
     const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-    const kinds: Kind[] = ["cone", "cone", "bin", "bin", "crate", "barrier", "newsbox"];
+    // (only what a pavement has for a reason — a wheelie bin, a newspaper box — and seldom: cones,
+    // barriers and crates every few dozen metres along every kerb, with no works anywhere, were clutter)
+    const kinds: Kind[] = ["bin", "bin", "newsbox"];
     const spots: { x: number; z: number; rot: number; kind: Kind }[] = [];
     for (const r of roads.rects) {
       const len = r.axis === "x" ? r.x1 - r.x0 : r.z1 - r.z0;
-      for (let s = 6 + rnd() * 20; s < len - 6; s += 18 + rnd() * 30) {
+      for (let s = 12 + rnd() * 30; s < len - 12; s += 60 + rnd() * 40) {
         const side = rnd() < 0.5 ? -1 : 1;
         const kind = kinds[Math.floor(rnd() * kinds.length)];
-        // on the pavement, just past the kerb (never in the road, never in a junction)
+        // on the pavement, just past the kerb (never in the road, never at a corner)
         const off = 0.9;
         const x = r.axis === "x" ? r.x0 + s : (side < 0 ? r.x0 : r.x1) + side * off;
         const z = r.axis === "x" ? (side < 0 ? r.z0 : r.z1) + side * off : r.z0 + s;
-        if (world.blocked(x, z) || roads.road(x, z) || spots.some((o) => Math.hypot(o.x - x, o.z - z) < 4)) continue;
-        spots.push({ x, z, rot: (r.axis === "x" ? 0 : Math.PI / 2) + (rnd() - 0.5) * 0.4, kind });
-        // a few cones come in threes
-        if (kind === "cone" && rnd() < 0.5)
-          for (const d of [1.1, 2.2]) {
-            const cx = r.axis === "x" ? x + d : x,
-              cz = r.axis === "x" ? z : z + d;
-            if (!world.blocked(cx, cz) && !roads.road(cx, cz)) spots.push({ x: cx, z: cz, rot: 0, kind });
-          }
+        if (world.blocked(x, z) || roads.road(x, z) || spots.some((o) => Math.hypot(o.x - x, o.z - z) < 12)) continue;
+        // a corner: asphalt a few metres along the pavement either way
+        const ax = r.axis === "x" ? 5 : 0,
+          az = r.axis === "x" ? 0 : 5;
+        if (roads.road(x + ax, z + az) || roads.road(x - ax, z - az)) continue;
+        // clear round it (a lamp, a tree, a bench there already)
+        if (world.blocked(x + 0.9, z) || world.blocked(x - 0.9, z) || world.blocked(x, z + 0.9) || world.blocked(x, z - 0.9)) continue;
+        spots.push({ x, z, rot: (r.axis === "x" ? 0 : Math.PI / 2) + (rnd() - 0.5) * 0.2, kind });
       }
     }
     const count = new Map<Kind, number>();

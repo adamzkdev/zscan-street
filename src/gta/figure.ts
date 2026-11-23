@@ -20,13 +20,14 @@ export const J = { hips: 0, chest: 1, neck: 2, shR: 3, elR: 4, wrR: 5, shL: 6, e
 const PARENT = [-1, 0, 1, 1, 3, 4, 1, 6, 7, 0, 9, 10, 0, 12, 13];
 export const JOINTS = 15;
 
-const THIGH = 0.21,
-  SHIN = 0.2,
-  ANKLE = 0.05;
+const THIGH = 0.2,
+  SHIN = 0.19,
+  ANKLE = 0.07;
 const HIP_Y = THIGH + SHIN + ANKLE;
-const UPPER = 0.18,
+const UPPER = 0.17,
   FORE = 0.15;
-const ARM_W = 0.115;
+/** (sturdier limbs than the first sticks: a zkSNARK is a chibi with a big head, not a stick figure) */
+const ARM_W = 0.135;
 
 /** Limbs: joint, size (w, h, d), centre in the joint's frame, colour slot. */
 type Slot = "cloth" | "trousers" | "skin" | "shoes" | "sole";
@@ -37,21 +38,22 @@ interface Part {
   col: Slot;
 }
 export const PARTS: Part[] = [
-  { j: J.hips, s: [0.3, 0.12, 0.22], c: [0, 0.03, 0], col: "trousers" },
-  { j: J.shR, s: [ARM_W, 0.2, ARM_W], c: [0, -0.08, 0], col: "cloth" },
-  { j: J.shL, s: [ARM_W, 0.2, ARM_W], c: [0, -0.08, 0], col: "cloth" },
-  { j: J.elR, s: [0.1, 0.16, 0.1], c: [0, -0.07, 0], col: "cloth" },
-  { j: J.elL, s: [0.1, 0.16, 0.1], c: [0, -0.07, 0], col: "cloth" },
-  { j: J.wrR, s: [0.095, 0.085, 0.08], c: [0, -0.03, 0.005], col: "skin" },
-  { j: J.wrL, s: [0.095, 0.085, 0.08], c: [0, -0.03, 0.005], col: "skin" },
-  { j: J.hipR, s: [0.125, 0.23, 0.135], c: [0, -0.095, 0], col: "trousers" },
-  { j: J.hipL, s: [0.125, 0.23, 0.135], c: [0, -0.095, 0], col: "trousers" },
-  { j: J.knR, s: [0.115, 0.215, 0.125], c: [0, -0.095, 0], col: "trousers" },
-  { j: J.knL, s: [0.115, 0.215, 0.125], c: [0, -0.095, 0], col: "trousers" },
-  { j: J.anR, s: [0.13, 0.06, 0.22], c: [0, -0.02, 0.035], col: "shoes" },
-  { j: J.anL, s: [0.13, 0.06, 0.22], c: [0, -0.02, 0.035], col: "shoes" },
-  { j: J.anR, s: [0.135, 0.02, 0.225], c: [0, -0.058, 0.035], col: "sole" },
-  { j: J.anL, s: [0.135, 0.02, 0.225], c: [0, -0.058, 0.035], col: "sole" },
+  { j: J.hips, s: [0.32, 0.15, 0.24], c: [0, 0.035, 0], col: "trousers" },
+  { j: J.shR, s: [ARM_W, 0.21, ARM_W + 0.01], c: [0, -0.075, 0], col: "cloth" },
+  { j: J.shL, s: [ARM_W, 0.21, ARM_W + 0.01], c: [0, -0.075, 0], col: "cloth" },
+  { j: J.elR, s: [0.12, 0.165, 0.125], c: [0, -0.07, 0], col: "cloth" },
+  { j: J.elL, s: [0.12, 0.165, 0.125], c: [0, -0.07, 0], col: "cloth" },
+  { j: J.wrR, s: [0.115, 0.105, 0.105], c: [0, -0.04, 0.008], col: "skin" },
+  { j: J.wrL, s: [0.115, 0.105, 0.105], c: [0, -0.04, 0.008], col: "skin" },
+  { j: J.hipR, s: [0.155, 0.23, 0.165], c: [0, -0.09, 0], col: "trousers" },
+  { j: J.hipL, s: [0.155, 0.23, 0.165], c: [0, -0.09, 0], col: "trousers" },
+  { j: J.knR, s: [0.145, 0.21, 0.155], c: [0, -0.09, 0], col: "trousers" },
+  { j: J.knL, s: [0.145, 0.21, 0.155], c: [0, -0.09, 0], col: "trousers" },
+  // chunky trainers: the upper, and a sole a shade lighter that shows all round
+  { j: J.anR, s: [0.165, 0.085, 0.27], c: [0, -0.018, 0.045], col: "shoes" },
+  { j: J.anL, s: [0.165, 0.085, 0.27], c: [0, -0.018, 0.045], col: "shoes" },
+  { j: J.anR, s: [0.175, 0.035, 0.285], c: [0, -0.07, 0.045], col: "sole" },
+  { j: J.anL, s: [0.175, 0.035, 0.285], c: [0, -0.07, 0.045], col: "sole" },
 ];
 export const NPARTS = PARTS.length;
 
@@ -82,10 +84,14 @@ export interface Act {
   gesture: "talk" | "wave" | "cheer" | "phone" | "film" | "point" | "hands" | null;
   /** The head turned (rad), toward something it looks at. */
   lookYaw: number;
+  /** In deep water: 0 on land … 1 swimming (a crawl when it moves, treading water when it stays). */
+  swim: number;
+  /** Lying down to rest (the beach): 0 no, 1 on its back, 2 on its front. */
+  lie: number;
 }
 
 export function newAct(): Act {
-  return { t: Math.random() * 10, phase: Math.random(), speed: 0, air: 0, guard: 0, punch: -1, punchSide: -1, hit: 9, hitFrom: 1, down: 0, downSide: 0, seat: 0, ride: false, gesture: null, lookYaw: 0 };
+  return { t: Math.random() * 10, phase: Math.random(), speed: 0, air: 0, guard: 0, punch: -1, punchSide: -1, hit: 9, hitFrom: 1, down: 0, downSide: 0, seat: 0, ride: false, gesture: null, lookYaw: 0, swim: 0, lie: 0 };
 }
 
 /** One frame of the stride: the phase moves with the ground covered (short legs: quick steps). */
@@ -118,12 +124,13 @@ const set3 = (o: [number, number, number], x: number, y: number, z: number) => (
 export function pose(a: Act, look: Look, out: THREE.Matrix4[]) {
   for (let i = 0; i < JOINTS; i++) rot[i][0] = rot[i][1] = rot[i][2] = 0;
   // where the joints sit: the shoulders' piece on the hips, the head on top of it, the arms out of its sides
-  const sx = Math.max(0.16, look.halfW * 0.9) + ARM_W * 0.5;
-  const lx = Math.max(0.075, Math.min(look.halfW * 0.42, 0.13));
+  // (the arms come out of the hoodie's sides, a little into them: never hanging off in the air)
+  const sx = Math.max(0.15, look.halfW * 0.8) + ARM_W * 0.35;
+  const lx = Math.max(0.085, Math.min(look.halfW * 0.42, 0.13));
   set3(off[J.chest], 0, 0.04, 0);
   set3(off[J.neck], 0, look.bodyH - 0.01, 0);
-  set3(off[J.shR], -sx, Math.max(0.12, look.bodyH * 0.6), 0);
-  set3(off[J.shL], sx, Math.max(0.12, look.bodyH * 0.6), 0);
+  set3(off[J.shR], -sx, Math.max(0.15, look.bodyH * 0.72), 0);
+  set3(off[J.shL], sx, Math.max(0.15, look.bodyH * 0.72), 0);
   set3(off[J.elR], 0, -UPPER, 0);
   set3(off[J.elL], 0, -UPPER, 0);
   set3(off[J.wrR], 0, -FORE, 0);
@@ -212,6 +219,18 @@ export function pose(a: Act, look: Look, out: THREE.Matrix4[]) {
       rot[J.shL][0] = rot[J.shR][0] = -0.35;
       rot[J.elL][0] = rot[J.elR][0] = -0.6;
       hipY = a.seat + 0.06;
+      // on the ground (the sand, a towel): legs out in front, leaning back on its hands
+      if (a.seat < 0.15) {
+        rot[J.knL][0] = 0.18;
+        rot[J.knR][0] = 0.5;
+        rot[J.hipR][0] = -1.25;
+        rot[J.anL][0] = rot[J.anR][0] = 0.25;
+        rot[J.chest][0] = -0.18;
+        rot[J.shL][0] = rot[J.shR][0] = 0.45;
+        rot[J.shL][2] = 0.35;
+        rot[J.shR][2] = -0.35;
+        rot[J.elL][0] = rot[J.elR][0] = 0;
+      }
     }
   }
   // ---- the guard: fists up in front of the face, side on, knees soft, a little bounce
@@ -301,6 +320,66 @@ export function pose(a: Act, look: Look, out: THREE.Matrix4[]) {
     rot[J.shR][2] -= 0.5 * amp;
     rot[J.shL][2] += 0.5 * amp;
   }
+  // ---- swimming: flat in a crawl when it goes (the arms windmilling, the legs fluttering), upright
+  // treading water when it stays (the arms sculling, the legs cycling) — the head always out
+  if (a.swim > 0.01) {
+    const s = smooth(clamp01(a.swim));
+    const go = smooth(clamp01((sp - 0.25) / 1.1));
+    const st = t * lerp(2.1, 3.3, go);
+    const L = (j: number, ax: number, val: number) => (rot[j][ax] = lerp(rot[j][ax], val, s));
+    L(J.hips, 0, lerp(0.12, 1.32, go));
+    L(J.hips, 1, 0);
+    L(J.hips, 2, 0.07 * Math.sin(st) * go);
+    L(J.chest, 0, lerp(0.05, 0, go));
+    L(J.chest, 1, 0.2 * Math.sin(st) * go);
+    for (const [sh, el, side, ph] of [
+      [J.shR, J.elR, -1, 0],
+      [J.shL, J.elL, 1, Math.PI],
+    ] as const) {
+      L(sh, 0, lerp(-0.45 + 0.4 * Math.sin(st + ph), -1.55 - 1.45 * Math.cos(st + ph), go));
+      L(sh, 2, side * lerp(0.8 + 0.25 * Math.sin(st * 2 + ph), 0.18, go));
+      L(el, 0, lerp(-0.55, -0.2 - 0.5 * Math.max(0, Math.sin(st + ph)), go));
+    }
+    const kick = Math.sin(t * lerp(3.6, 9.5, go));
+    L(J.hipL, 0, lerp(-0.35 + 0.35 * kick, 0.22 * kick, go));
+    L(J.hipR, 0, lerp(-0.35 - 0.35 * kick, -0.22 * kick, go));
+    L(J.knL, 0, lerp(0.7 + 0.35 * Math.max(0, -kick), 0.12, go));
+    L(J.knR, 0, lerp(0.7 + 0.35 * Math.max(0, kick), 0.12, go));
+    L(J.anL, 0, 0.55);
+    L(J.anR, 0, 0.55);
+    for (const j of [J.hipL, J.hipR]) rot[j][2] = lerp(rot[j][2], 0, s);
+    hipY = lerp(hipY, HIP_Y, s);
+  }
+  // ---- lying down to rest: on its back (hands behind the head, a knee up) or its front (arms folded
+  // under the head), whole and still but for breathing
+  const lie = a.lie > 0 && a.down < 0.05 ? a.lie : 0;
+  if (lie) {
+    const set = (j: number, x: number, y = 0, z = 0) => ((rot[j][0] = x), (rot[j][1] = y), (rot[j][2] = z));
+    set(J.hips, 0);
+    set(J.chest, 0.015 * Math.sin(t * 1.2));
+    if (lie === 1) {
+      set(J.shR, -2.75, 0, -0.35);
+      set(J.shL, -2.75, 0, 0.35);
+      set(J.elR, -2.0);
+      set(J.elL, -2.0);
+      set(J.hipL, -0.55);
+      set(J.knL, 1.1);
+      set(J.hipR, 0);
+      set(J.knR, 0.05);
+    } else {
+      set(J.shR, -2.6, 0, -0.55);
+      set(J.shL, -2.6, 0, 0.55);
+      set(J.elR, -1.9);
+      set(J.elL, -1.9);
+      set(J.hipL, 0.05);
+      set(J.knL, 0.35 + 0.25 * Math.max(0, Math.sin(t * 0.9)));
+      set(J.hipR, 0);
+      set(J.knR, 0.1);
+    }
+    set(J.anL, 0.4);
+    set(J.anR, 0.4);
+    hipY = HIP_Y;
+  }
   // the head: looking at something, steadied against the lean
   rot[J.neck][0] += -(rot[J.hips][0] + rot[J.chest][0]) * 0.6;
   rot[J.neck][1] = a.lookYaw - rot[J.hips][1] - rot[J.chest][1];
@@ -330,7 +409,13 @@ export function pose(a: Act, look: Look, out: THREE.Matrix4[]) {
     local.compose(v.set(x, y, z), q, one);
     const p = PARENT[i];
     if (p < 0) {
-      if (d > 0) {
+      if (lie) {
+        // flat on the towel: on its back (head toward −z) or its front (head toward +z), half its
+        // thickness off the ground
+        e.set(lie === 1 ? -Math.PI / 2 : Math.PI / 2, 0, 0, "XYZ");
+        q.setFromEuler(e);
+        out[i].compose(v.set(0, lie === 1 ? 0.2 : 0.17, lie === 1 ? 0.15 : -0.15), q, one).multiply(local);
+      } else if (d > 0) {
         // over about the feet: on its back (side 0), or onto a side; lifted by half its thickness
         const side = a.downSide;
         e.set(side === 0 ? -d * (Math.PI / 2) : 0, 0, side === 0 ? 0 : side * d * (Math.PI / 2), "XYZ");
@@ -429,8 +514,8 @@ export function partBox() {
 let partMat: THREE.MeshStandardMaterial | null = null;
 let bustMat: THREE.MeshStandardMaterial | null = null;
 export function figureMaterials() {
-  partMat ??= new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0 });
-  bustMat ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0 });
+  partMat ??= new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 });
+  bustMat ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0 });
   partMat.userData.shared = bustMat.userData.shared = true;
   return { part: partMat, bust: bustMat };
 }

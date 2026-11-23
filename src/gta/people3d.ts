@@ -106,7 +106,8 @@ export class People3D {
     this.hideR = coarse ? 90 : 220;
     this.limit = this.max;
     const mats = figureMaterials();
-    this.busts = new THREE.BatchedMesh(this.max * 2, 400_000, 0, mats.bust);
+    // (indexed busts: the smooth ones share their corners)
+    this.busts = new THREE.BatchedMesh(this.max * 2, 400_000, 900_000, mats.bust);
     this.busts.castShadow = true;
     this.busts.frustumCulled = false;
     this.busts.perObjectFrustumCulled = true;
@@ -287,8 +288,9 @@ export class People3D {
       return this.busts.addGeometry(geo);
     } catch {
       // more room (half as much again)
-      const b = this.busts as unknown as { _maxVertexCount: number };
-      this.busts.setGeometrySize(Math.ceil(b._maxVertexCount * 1.5) + n, 0);
+      const b = this.busts as unknown as { _maxVertexCount: number; _maxIndexCount: number };
+      const ni = geo.index?.count ?? 0;
+      this.busts.setGeometrySize(Math.ceil(b._maxVertexCount * 1.5) + n, Math.ceil(b._maxIndexCount * 1.5) + ni);
       return this.busts.addGeometry(geo);
     }
   }

@@ -8,6 +8,7 @@ import { grassTexture, neonTexture, pavingTexture, releaseAfterUpload, roadTextu
 import { MATERIALS } from "../voxel/mesher";
 import type { Kind } from "../voxel/model";
 import { beachY, corridor, inKeys, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, shoreDist } from "./plan";
+import { KeysSea } from "./sea";
 import type { KGeo, KOut } from "./worker";
 
 /**
@@ -42,6 +43,7 @@ export class Keys {
   readonly group = new THREE.Group();
   done = false;
   readonly ready: Promise<void>;
+  readonly sea: KeysSea;
   facades: KeysFacade[] = [];
   palms: { x: number; z: number }[] = [];
   private land: Land | null;
@@ -62,6 +64,9 @@ export class Keys {
     this.hgt = new Float32Array(this.nx * this.nz);
     for (let j = 0; j < this.nz; j++) for (let i = 0; i < this.nx; i++) this.hgt[i + j * this.nx] = this.height(KEYS.x0 + i, KEYS.z0 + j);
     this.group.add(this.terrain());
+    // the sea round the town: clear over the sand, deeper blue further out, waves and foam
+    this.sea = new KeysSea((x, z) => this.ground(x, z), day);
+    this.group.add(this.sea.mesh);
     this.streets();
     for (const l of kLots()) {
       const along = l.face === "n" || l.face === "s";
@@ -136,16 +141,19 @@ export class Keys {
       dark = new THREE.Color("#4a7c3a"),
       gold = new THREE.Color("#a8a060"),
       rock = new THREE.Color("#8a8478"),
-      foam = new THREE.Color("#f4f2ea");
+      foam = new THREE.Color("#f4f2ea"),
+      sea = new THREE.Color("#6f8f7c");
     const tint = (x: number, z: number, y: number) => {
       const s = shoreDist(x, z);
       const slope = Math.max(Math.abs(this.ground(x + 1, z) - this.ground(x - 1, z)), Math.abs(this.ground(x, z + 1) - this.ground(x, z - 1))) / 2;
       const n = Math.sin(x * 0.7) * Math.cos(z * 0.55) * 0.04 + Math.sin((x + z) * 1.3) * 0.02;
-      if (Math.abs(y - (BAY.water - 0.06)) < 0.12) c.copy(foam);
+      // (the foam is the water's own now: here the sand darkens where the waves wet it, and under the water)
+      if (y < BAY.water + 0.22 && y > BAY.water - 0.08) c.copy(wet).lerp(foam, 0.08);
       else if (y > CURB + 0.6 || (z < TOWN.z0 + 2 && s > 10)) {
         const patch = Math.sin(x * 0.19 + z * 0.07) * Math.cos(z * 0.23 - x * 0.05);
         c.copy(slope > 1.1 ? rock : grass).lerp(dark, Math.max(0, patch) * 0.6).lerp(gold, Math.max(0, -patch) * 0.35);
-      } else c.copy(sand).lerp(wet, Math.min(1, Math.max(0, -y / 1.4)));
+      } else if (y <= BAY.water - 0.08) c.copy(wet).lerp(sea, Math.min(0.55, (BAY.water - y) / 5));
+      else c.copy(sand).lerp(wet, Math.min(0.5, Math.max(0, (BAY.water + 0.9 - y) / 2.2)));
       return c.multiplyScalar(1 + n);
     };
     const S = 1;
@@ -159,7 +167,9 @@ export class Keys {
         // the road out of the tunnel to the first street: the town's asphalt
         if (Math.abs(cx - KX) < KTUNNEL.half + 1.2 && cz > KTUNNEL.z1 - 0.6 && cz < TOWN.z0 + 1) continue;
         const ys = [this.ground(x, z), this.ground(x, z + S), this.ground(x + S, z), this.ground(x + S, z + S)];
-        if (Math.max(...ys) < BAY.bed + 0.3) continue;
+        // (the floor under the clear water — the sand and the shelf show through it — but not where
+        // it is deep enough for the water to hide it)
+        if (Math.max(...ys) < BAY.water - 2.7) continue;
         const q = [
           [x, z, ys[0]],
           [x, z + S, ys[1]],
@@ -402,8 +412,21 @@ export class Keys {
     return z >= F.z1 || x < F.x0 || x > F.x1;
   }
 
+  /**
+   * On the pier's deck (between its rails, from the promenade's edge out to its end): the deck's
+   * height there — a short ramp up from the promenade, then level — or null.
+   */
+  pierAt(x: number, z: number): number | null {
+    const P = KPIER;
+    if (Math.abs(x - P.x) > P.half - 0.35 || z < P.z0 - 2.5 || z > P.z1 - 0.6) return null;
+    const k = Math.min(1, Math.max(0, (z - (P.z0 - 2.5)) / 5));
+    return CURB + (P.y - CURB) * k;
+  }
+
   /** The floor on foot off the town's pavements: the tunnel's, the beach, the hill (null: the kerb's). */
   groundAt(x: number, z: number): number | null {
+    const pier = this.pierAt(x, z);
+    if (pier !== null) return pier;
     if (corridor(x, z) && z > KTUNNEL.z0 - 0.4) return Math.abs(x - KX) < KTUNNEL.half - 0.85 ? 0.03 : 0.36;
     if (!this.owns(x, z) || inTown(x, z)) return null;
     return Math.max(BAY.water - 0.3, this.ground(x, z));
@@ -424,6 +447,15 @@ export class Keys {
    * lets thin things through): (p) pushed out of any within r. True if it was.
    */
   pushCar(p: THREE.Vector3, r: number) {
+    // the tunnel's walls, for a car (under the hill the picture from above has nothing to stop it:
+    // a car that strayed past the kerb found the hill's height and rode up the wall onto it)
+    if (p.z > KTUNNEL.z0 - 1 && p.z < KTUNNEL.z1 + 0.5) {
+      const lim = KTUNNEL.half - r - 0.1;
+      if (Math.abs(p.x - KX) > lim) {
+        p.x = KX + Math.sign(p.x - KX) * lim;
+        return true;
+      }
+    }
     if (!inKeys(p.x, p.z)) return false;
     const c = this.circleAt(p.x, p.z, r);
     if (!c) return false;
@@ -438,6 +470,7 @@ export class Keys {
 
   /** On foot (without the game's solid shape): the sea, the hill's steep side, the tunnel's walls, a house. */
   blocked(x: number, z: number) {
+    if (this.pierAt(x, z) !== null) return false;
     if (this.circleAt(x, z, 0.25)) return true;
     if (corridor(x, z) && z > KTUNNEL.z0 - 0.4) return Math.abs(x - KX) > KTUNNEL.half - 0.3;
     if (inTown(x, z)) {

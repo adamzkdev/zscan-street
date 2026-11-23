@@ -4,7 +4,7 @@ import { CITY, CURB, GRID, RIVER, ST, streetSegments } from "./city/plan";
 import type { Traffic } from "./traffic";
 import { freeObject, sharedObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
-import { policeModel, sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
+import { convertibleModel, pickupModel, policeModel, sedanModel, sportsModel, suvModel, taxiModel, truckModel, vanModel } from "./voxel/vehicles";
 import { busSign, canvasTexture } from "./textures";
 
 /**
@@ -54,7 +54,12 @@ const PAINTS: [string, string][] = [
   ["#3a6a4a", "#38ff9c"],
 ];
 
-type MoverKind = "sedan" | "taxi" | "police" | "truck";
+type MoverKind = "sedan" | "taxi" | "police" | "truck" | "sports" | "suv" | "pickup" | "van" | "convertible";
+/** Bumper to bumper (m), by kind. */
+const LEN: Record<MoverKind, number> = { sedan: 4.3, taxi: 4.6, police: 4.4, truck: 7, sports: 4.4, suv: 4.6, pickup: 5.1, van: 5.3, convertible: 4.3 };
+/** The street's paints (bright, sunny: the bay's side of things) and the neon under the sports cars. */
+const VICE = ["#f2f2ee", "#16161c", "#d62f2f", "#ff7eb6", "#2ec4b6", "#4aa8ff", "#f4c430", "#8a5cff", "#ff8a3d", "#9aa0a8", "#1f3f7a", "#2f6b3e"];
+const GLOW = ["#3ef0ff", "#ff3e8a", "#b07bff", "#f4b728"];
 const LIVERIES = ["#e8e4dc", "#2e5ab8", "#c0302e", "#3a7a5a", "#f4b728", "#5a3a8a"];
 
 class Mover {
@@ -75,7 +80,7 @@ class Mover {
     kind: MoverKind,
   ) {
     this.kind = kind;
-    this.len = kind === "truck" ? 7 : 4.3;
+    this.len = LEN[kind];
     // (each body meshed once, shared by every car of its kind and paint: a car every few seconds was
     // meshed again, and left on the GPU once it had driven off)
     let body: THREE.Group;
@@ -86,7 +91,23 @@ class Mover {
     } else if (kind === "sedan") {
       const p = Math.floor(Math.random() * PAINTS.length);
       body = sharedObject(`traffic:sedan:${p}`, () => sedanModel(...PAINTS[p]));
-    } else body = sharedObject(`traffic:${kind}`, () => (kind === "taxi" ? taxiModel() : policeModel()));
+    } else if (kind === "taxi" || kind === "police") body = sharedObject(`traffic:${kind}`, () => (kind === "taxi" ? taxiModel() : policeModel()));
+    else {
+      // (a dozen paints per model, each meshed once)
+      const p = Math.floor(Math.random() * VICE.length),
+        g = Math.floor(Math.random() * GLOW.length);
+      const paint = VICE[p];
+      body =
+        kind === "sports"
+          ? sharedObject(`traffic:sports:${p}:${g}`, () => sportsModel(paint, GLOW[g]))
+          : kind === "suv"
+            ? sharedObject(`traffic:suv:${p}`, () => suvModel(paint))
+            : kind === "pickup"
+              ? sharedObject(`traffic:pickup:${p}:${g & 1}`, () => pickupModel(paint, (g & 1) === 1))
+              : kind === "van"
+                ? sharedObject(`traffic:van:${p}:${g}`, () => vanModel(paint, GLOW[g]))
+                : sharedObject(`traffic:convertible:${p}`, () => convertibleModel(paint, p % 2 ? "#e8dcc8" : "#5a2a22"));
+    }
     this.group.add(body);
     if (kind === "police") {
       // the light bar: red on the left, blue on the right, flashing in turn
@@ -108,7 +129,7 @@ class Mover {
         this.group.add(plate);
       }
     }
-    this.vmax = kind === "police" ? 11 : kind === "truck" ? 7 + Math.random() * 1.5 : 8 + Math.random() * 3;
+    this.vmax = kind === "police" ? 11 : kind === "truck" || kind === "van" ? 7 + Math.random() * 1.5 : kind === "sports" ? 10 + Math.random() * 3 : 8 + Math.random() * 3;
     this.s = dir > 0 ? line.from : line.to;
     this.setLine(line, dir, this.s);
   }
@@ -163,8 +184,8 @@ export class CityTraffic {
     scene.add(this.group);
     const width = xWidth;
     // the streets that run unbroken: the rings, the boulevards, the streets round the heart
-    // (the north street is the B tram's, the south one the A tram's)
-    const ewLines = [ST.ringN, ST.blvdN, ST.north, ST.ringS];
+    // (Park Row and Coinbase Street were the trams' until the trams went)
+    const ewLines = [ST.ringN, ST.blvdN, ST.parkN, ST.north, ST.south, ST.ringS];
     const nsLines = [ST.ringW, ST.blvdW, ST.heartW, ST.heartE, ST.blvdE, ST.ringE];
     const crossZ = [ST.ringN, ST.blvdN, ST.parkN, ST.north, AVENUE_Z, ST.south, ST.ringS];
     // every street ends on the ring road, where its cars turn onto the ring (and the ring's own
@@ -275,7 +296,9 @@ export class CityTraffic {
     if (this.cars.size >= this.max) return;
     const line = this.lines[Math.floor(Math.random() * this.lines.length)];
     const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
-    const kind = !this.police ? "police" : Math.random() < 0.18 ? "taxi" : Math.random() < 0.22 ? "truck" : "sedan";
+    // (the mix: sedans and SUVs most, taxis, a sports car or a convertible now and then, vans, pickups, trucks)
+    const r = Math.random();
+    const kind: MoverKind = !this.police ? "police" : r < 0.13 ? "taxi" : r < 0.2 ? "truck" : r < 0.3 ? "sports" : r < 0.36 ? "convertible" : r < 0.5 ? "suv" : r < 0.58 ? "pickup" : r < 0.65 ? "van" : "sedan";
     const car = new Mover(line, dir, kind);
     // in the middle of a street, where there's room (not at the ends, in plain view)
     car.s = line.from + (anywhere ? 0.05 + Math.random() * 0.9 : 0.15 + Math.random() * 0.7) * (line.to - line.from);

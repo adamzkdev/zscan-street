@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { CITY, CURB, GRID, ST, viaductBents } from "./city/plan";
+import { CITY, CURB, GRID, viaductBents } from "./city/plan";
 import { busSign, canvasTexture } from "./textures";
 import { toObject } from "./voxel/mesher";
 import { C, E, G, VOX, VoxelModel } from "./voxel/model";
@@ -31,10 +31,13 @@ const offCrossing = (x: number) => {
   const i = GRID.xs.findIndex((c, k) => Math.abs(x - c) < GRID.xw[k] / 2 + 3.2);
   return i >= 0 ? GRID.xs[i] + GRID.xw[i] / 2 + 4.5 : x;
 };
-export const TRAM_LINES: TramLine[] = [
-  { name: "TRAM A · 路面電車", z: ST.south + 1.9, stops: [ST.blvdW, ST.shotengai, 0, ST.east1, ST.blvdE].map(offCrossing), body: "#2e8a5a", band: "#ece4cc" },
-  { name: "TRAM B · 北線", z: ST.parkN + 1.9, stops: [-190, ST.shotengai, ST.heartW, 0, ST.heartE, ST.east1, 190].map(offCrossing), body: "#d8602a", band: "#f4e8c8" },
-];
+/**
+ * The lines (none since 2026-11-23: the game wanted its streets to drive in — trams on the road were
+ * in the way — Coinbase Street and Park Row carry ordinary traffic now). The two that ran:
+ *   TRAM A · 路面電車 on Coinbase Street (ST.south + 1.9), TRAM B · 北線 on Park Row (ST.parkN + 1.9).
+ */
+export const TRAM_LINES: TramLine[] = [];
+void offCrossing;
 const CARW = 42;
 const SPEED = 9;
 

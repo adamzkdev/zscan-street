@@ -1,12 +1,12 @@
 /// <reference lib="webworker" />
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { BAY, CURB } from "../city/plan";
+import { CURB } from "../city/plan";
 import { meshModel } from "../voxel/mesher";
 import { VOX, type Kind, type VoxelModel } from "../voxel/model";
 import { tree } from "../voxel/props";
-import { beachBar, beachSet, buildLot, bush, hillLetter, keysLamp, lifeguard, parkedCar, pier, rock, saplingPark, streetPalm, tunnel, volleyNet } from "./models";
-import { faceOut, faceYaw, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, sandAt } from "./plan";
+import { beachBar, beachSet, buildLot, bush, hillLetter, keysLamp, lifeguard, parkedCar, pier, rock, sandcastle, saplingPark, streetPalm, towel, tunnel, volleyNet } from "./models";
+import { beachSpots, faceOut, faceYaw, KBED, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, sandAt } from "./plan";
 
 /**
  * Orchard Keys built off the main thread (src/scene/keys): every lot's model, the street palms and
@@ -237,29 +237,38 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
     put(saplingPark(P.x1 - P.x0 - 5, P.z1 - P.z0 - 5), (P.x0 + P.x1) / 2, CURB, (P.z0 + P.z1) / 2, 0);
   }
 
-  // ---- the beach ----------------------------------------------------------------------------------
-  for (const x of [112, 160, 252, 302]) put(() => lifeguard(Math.round(x)), x, sandAt(x, 428), 428, 0, `guard${x}`);
-  for (let k = 0; k < 26; k++) {
-    const x = 104 + R() * 216,
-      z = 419 + R() * 14;
-    if (Math.abs(x - KPIER.x) < 7 || [112, 160, 252, 302].some((g) => Math.abs(g - x) < 7) || (x > 270 && x < 290 && z > 424)) continue;
-    put(() => beachSet(k), x, sandAt(x, z), z, (R() - 0.5) * 0.6, `set${k % 9}`);
-  }
-  {
-    const y = sandAt(132, 424);
-    put(beachBar, 132, y, 424, Math.PI, "bar");
-    const p = world(60, 40, 132, y, 424, Math.PI)(30, 21.5, 26.2);
-    signs.push({ text: "SHELL BAR", color: "#4dffb8", x: p.x, y: p.y, z: p.z, yaw: Math.PI, w: 30 * VOX, h: 3 * VOX, vertical: false, both: false });
-    put(volleyNet, 280, sandAt(280, 430), 430, 0, "net");
+  // ---- the beach (the same spots the game's beach-goers use: plan.ts beachSpots) ---------------------
+  for (const b of beachSpots()) {
+    const y = sandAt(b.x, b.z);
+    if (b.kind === "set") {
+      put(() => beachSet(b.seed % 12), b.x, y, b.z, b.yaw, `set${b.seed % 12}`);
+      circles.push([b.x, b.z, 0.25]);
+    } else if (b.kind === "towel") put(() => towel(b.seed % 16), b.x, y + 0.01, b.z, b.yaw, `towel${b.seed % 16}`);
+    else if (b.kind === "castle") put(() => sandcastle(b.seed % 5), b.x, y - 0.02, b.z, b.yaw, `castle${b.seed % 5}`);
+    else if (b.kind === "guard") {
+      put(() => lifeguard(b.seed), b.x, y, b.z, b.yaw, `guard${b.seed}`);
+      circles.push([b.x, b.z, 2.4]);
+    } else if (b.kind === "court") {
+      put(volleyNet, b.x, y, b.z, b.yaw, "net");
+      for (const dx of [-4.9, 4.9]) circles.push([b.x + dx, b.z, 0.2]);
+    } else if (b.kind === "palm") {
+      put(() => streetPalm(820 + b.seed, 50 + b.seed * 4), b.x, y - 0.1, b.z, b.yaw, `spalm${b.seed}`);
+      palms.push([b.x, b.z]);
+      circles.push([b.x, b.z, 0.4]);
+    } else if (b.kind === "bar") {
+      put(beachBar, b.x, y, b.z, b.yaw, "bar");
+      const p = world(60, 40, b.x, y, b.z, b.yaw)(30, 21.5, 26.2);
+      signs.push({ text: b.seed === 1 ? "SHELL BAR" : "TIDE BAR", color: b.seed === 1 ? "#4dffb8" : "#ff4fa3", x: p.x, y: p.y, z: p.z, yaw: b.yaw, w: 30 * VOX, h: 3 * VOX, vertical: false, both: false });
+    }
   }
   // the west and east beaches' huts, facing their seas
-  put(() => lifeguard(77), KGRID.west - 7, sandAt(KGRID.west - 7, 330), 330, -Math.PI / 2, "guardW");
-  put(() => lifeguard(91), KGRID.east + 7, sandAt(KGRID.east + 7, 330), 330, Math.PI / 2, "guardE");
+  put(() => lifeguard(77), KGRID.west - 14, sandAt(KGRID.west - 14, 330), 330, -Math.PI / 2, "guardW");
+  put(() => lifeguard(91), KGRID.east + 14, sandAt(KGRID.east + 14, 330), 330, Math.PI / 2, "guardE");
   // the pier
   {
     const P = KPIER;
     const len = P.z1 - P.z0;
-    put(pier(len, P.half, P.y, BAY.bed), P.x, BAY.bed, (P.z0 + P.z1) / 2, 0);
+    put(pier(len, P.half, P.y, KBED), P.x, KBED, (P.z0 + P.z1) / 2, 0);
     signs.push({ text: "ORCHARD PIER", color: "#34e7ff", x: P.x, y: P.y + 17 * VOX, z: P.z1 - 40.2 * VOX, yaw: Math.PI, w: 26 * VOX, h: 4 * VOX, vertical: false, both: false });
   }
 

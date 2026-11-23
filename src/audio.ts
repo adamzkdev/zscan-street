@@ -115,6 +115,16 @@ export class Soundscape {
     }, 900);
   }
 
+  private under: BiquadFilterNode | null = null;
+  /** The ear under the water (src/gta, swimming): everything muffled, far away. */
+  underwater(on: boolean) {
+    if (!this.ctx || !this.under) return;
+    const t = this.ctx.currentTime;
+    this.under.frequency.cancelScheduledValues(t);
+    this.under.frequency.setTargetAtTime(on ? 480 : 22000, t, on ? 0.05 : 0.12);
+    this.under.Q.value = on ? 1.1 : 0.5;
+  }
+
   /** The game's own sounds (src/gta) go through the master: the sound button and fades rule them. */
   output(): { ctx: AudioContext; out: AudioNode } | null {
     return this.ctx && this.on ? { ctx: this.ctx, out: this.master } : null;
@@ -553,7 +563,11 @@ export class Soundscape {
     verb.buffer = this.impulse(2.8);
     const wet = ctx.createGain();
     wet.gain.value = 0.35;
-    this.master.connect(ctx.destination);
+    // (a low-pass on the way out, open: shut down when the ear is under the water — the game's swims)
+    this.under = ctx.createBiquadFilter();
+    this.under.type = "lowpass";
+    this.under.frequency.value = 22000;
+    this.master.connect(this.under).connect(ctx.destination);
     verb.connect(wet).connect(this.master);
     this.rainGain = ctx.createGain();
     this.rainGain.gain.value = this.rainOn ? 0.55 : 0;

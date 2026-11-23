@@ -53,6 +53,10 @@ export class FootPlayer {
   private hitFrom = 1;
   down = 0;
   riding = false;
+  /** The water at the feet (m deep; 0 on land), set by the game each frame, and how far into a swim (0…1). */
+  water = 0;
+  swim = 0;
+  private swimT = 0;
 
   /** Throw a punch (true if it started: not one already). */
   punch() {
@@ -116,11 +120,16 @@ export class FootPlayer {
       dz = fz * my + rz * mx;
     const l = Math.hypot(dx, dz);
     if (l > 1e-3) (dx /= l), (dz /= l);
-    const want = l > 1e-3 ? (mag < 0.45 ? WALK : sprint ? SPRINT : JOG) * Math.min(1, mag * 1.6) : 0;
+    // in the sea: wading slows you (the deeper, the slower), deep water is a swim (a crawl, faster on Shift)
+    const deep = this.water > 1.1;
+    const wade = this.water > 0.2 ? Math.max(0.42, 1 - (this.water - 0.2) * 0.62) : 1;
+    const pace = deep ? (sprint ? 3.3 : 2.1) : (mag < 0.45 ? WALK : sprint ? SPRINT : JOG) * wade;
+    const want = l > 1e-3 ? pace * Math.min(1, mag * 1.6) : 0;
+    if (deep) jump = false;
     const tx = dx * want,
       tz = dz * want;
     // quick to start and stop on the ground, little say in the air
-    const k = this.grounded ? (want > 0 ? 12 : 16) : 2.5;
+    const k = deep ? (want > 0 ? 2.4 : 1.6) : this.grounded ? (want > 0 ? 12 : 16) : 2.5;
     this.vel.x += (tx - this.vel.x) * Math.min(1, dt * k);
     this.vel.z += (tz - this.vel.z) * Math.min(1, dt * k);
     // turn to face the way you go (unless backing up, the follow camera's way)
@@ -128,7 +137,7 @@ export class FootPlayer {
       const target = Math.atan2(-dx, -dz);
       let d = target - this.facing;
       d = Math.atan2(Math.sin(d), Math.cos(d));
-      this.facing += d * Math.min(1, dt * (this.grounded ? 14 : 5));
+      this.facing += d * Math.min(1, dt * (deep ? 3.5 : this.grounded ? 14 : 5));
     }
     // move, one axis at a time (sliding along walls)
     const p = this.pos;
@@ -173,8 +182,11 @@ export class FootPlayer {
       this.hop = this.floorY - floor;
       this.vy = 0;
       this.floorY = floor;
-    } else this.floorY += (floor - this.floorY) * Math.min(1, dt * (floor > this.floorY ? 20 : 14));
-    p.y = this.floorY + this.hop;
+    } else this.floorY += (floor - this.floorY) * Math.min(1, dt * (this.swim > 0.3 ? 5 : floor > this.floorY ? 20 : 14));
+    // afloat: a gentle bob on the swell
+    this.swimT += dt;
+    this.swim += ((this.water > 1.05 ? Math.min(1, (this.water - 1.05) / 0.3) : 0) - this.swim) * Math.min(1, dt * 4);
+    p.y = this.floorY + this.hop + this.swim * 0.035 * Math.sin(this.swimT * 2.1);
     this.speed = Math.hypot(this.vel.x, this.vel.z);
     this.pose(dt);
   }
@@ -214,7 +226,8 @@ export class FootPlayer {
     a.down = this.down;
     a.downSide = 0;
     a.ride = this.riding;
-    b.update(dt, { speed: this.riding ? 0 : this.speed, grounded: this.grounded || this.riding });
+    a.swim = this.swim;
+    b.update(dt, { speed: this.riding ? 0 : this.speed, grounded: this.grounded || this.riding || this.swim > 0.3 });
   }
 
   dispose() {

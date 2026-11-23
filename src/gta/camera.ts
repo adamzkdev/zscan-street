@@ -136,6 +136,9 @@ export class GtaCamera {
   }
 
   /** The camera on its arm from the pivot, shortened to the first wall. */
+  /** The lowest the camera goes (over the ground: the street's, or the sea floor off the beach, so it can follow a dive). */
+  minY = 0.35;
+
   private place(dt: number, arm: number, shoulder: number, world: CamWorld, fov: number, flip = false) {
     const yaw = this.yaw + (flip ? Math.PI : 0);
     const cp = Math.cos(this.pitch),
@@ -160,7 +163,7 @@ export class GtaCamera {
     // shorten at once, lengthen slowly (no pumping along a wall)
     this.arm = len < this.arm ? len : this.arm + (len - this.arm) * Math.min(1, dt * 2.5);
     const y = Math.max(this.pivot.y - 1.0, this.pivot.y + by * this.arm + 0.15);
-    this.camera.position.set(ox + bx * this.arm, Math.max(0.35, y), oz + bz * this.arm);
+    this.camera.position.set(ox + bx * this.arm, Math.max(this.minY, y), oz + bz * this.arm);
     look.set(ox, this.pivot.y + 0.1, oz);
     this.camera.lookAt(look);
     this.fov(dt, fov);

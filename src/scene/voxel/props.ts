@@ -11,10 +11,71 @@ export interface Prop {
   canopy?: [number, number, number, number];
 }
 
-export type TreeKind = "round" | "blossom" | "pine" | "tall" | "bush" | "persimmon";
+export type TreeKind = "round" | "blossom" | "pine" | "tall" | "bush" | "persimmon" | "palm";
 
 /** A tree with a branching trunk and a canopy of overlapping blobs, shaded top to bottom. */
+/**
+ * A street palm (the boulevards by the bay, the south of the city): a tall ringed trunk leaning a
+ * little, a crown of drooping fronds with their leaflets, coconuts under it.
+ */
+function palmTree(seed: number): Prop {
+  const r = rand(seed * 7 + 3);
+  const m = new VoxelModel(44, 64, 44);
+  const cx = 22,
+    cz = 22;
+  const trunkA = C("#8a6a48"),
+    trunkB = C("#76593c"),
+    fronds = [C("#3f9a3c"), C("#4cab45"), C("#348534"), C("#5bb850")],
+    nut = C("#6a4a2a");
+  const h = 40 + Math.floor(r() * 10);
+  const a = r() * Math.PI * 2;
+  const lean = 0.1 + r() * 0.16;
+  let tx = cx,
+    tz = cz;
+  m.box(cx - 2, 0, cz - 2, cx + 2, 1, cz + 2, trunkB);
+  for (let y = 0; y < h; y++) {
+    const t = y / h;
+    tx = cx + Math.cos(a) * lean * t * t * h * 0.45;
+    tz = cz + Math.sin(a) * lean * t * t * h * 0.45;
+    m.box(Math.round(tx) - 1, y, Math.round(tz) - 1, Math.round(tx) + 1, y + 1, Math.round(tz) + 1, Math.floor(y / 3) % 2 ? trunkA : trunkB);
+  }
+  const top = h;
+  const n = 9 + Math.floor(r() * 3);
+  for (let i = 0; i < n; i++) {
+    const fa = (i / n) * Math.PI * 2 + r() * 0.35;
+    const L = 14 + Math.floor(r() * 5);
+    const c = fronds[Math.floor(r() * fronds.length)];
+    const ca = Math.cos(fa),
+      sa = Math.sin(fa);
+    for (let s2 = 0; s2 <= L; s2++) {
+      const u = s2 / L;
+      const dy = 2.5 * Math.sin(u * Math.PI * 0.6) - u * u * 9;
+      const px = tx + ca * s2,
+        pz = tz + sa * s2,
+        py = top + dy;
+      m.set(px, py, pz, c);
+      if (s2 > 2 && s2 < L) {
+        const w = s2 < L * 0.7 ? 2 : 1;
+        for (let k = 1; k <= w; k++) {
+          m.set(px - sa * k, py - (k > 1 ? 1 : 0), pz + ca * k, c);
+          m.set(px + sa * k, py - (k > 1 ? 1 : 0), pz - ca * k, c);
+        }
+      }
+    }
+  }
+  m.box(Math.round(tx) - 2, top - 1, Math.round(tz) - 2, Math.round(tx) + 2, top + 2, Math.round(tz) + 2, fronds[2]);
+  for (const [dx, dz] of [
+    [2, 0],
+    [-1, 2],
+    [0, -2],
+  ])
+    m.set(Math.round(tx) + dx, top - 2, Math.round(tz) + dz, nut);
+  // (its trunk at the model's middle: the prop is placed by it; the crown overhangs high above the kerb)
+  return { model: m, radius: 0.3, canopy: [Math.round(tx), top, Math.round(tz), 14] };
+}
+
 export function tree(kind: TreeKind, seed: number): Prop {
+  if (kind === "palm") return palmTree(seed);
   const r = rand(seed);
   const m = new VoxelModel(28, 44, 28);
   const cx = 14,

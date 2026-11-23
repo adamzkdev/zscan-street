@@ -44,6 +44,8 @@ export interface Look {
 
 /** One voxel of the bust (m): a zkSNARK is about 1.5 m on its legs. */
 export const SNARK_VOX = 0.052;
+/** The shoulders drawn a little narrower than the art's (its bust is cut by the picture's edges). */
+const BODY_SX = 0.84;
 
 const cells = new Map<number, Cells | null>();
 /** Read from the collection's atlas (quick, all at once, a little soft): the street's own crowd. */
@@ -175,6 +177,10 @@ export const faces = {
     trimLooks();
     return l;
   },
+  /** A look can be built for it now (its picture, or the atlas's quick read of it). */
+  known(id: number) {
+    return cells.has(id) || quickCells.has(id);
+  },
   /** Read these from the atlas (the street's crowd: many, quickly). */
   quick(ids: number[]) {
     for (const id of ids) {
@@ -264,6 +270,8 @@ const mode = (xs: number[], fallback: number) => {
   }
   return best;
 };
+/** Two colours close enough to be one (a shade's step in the pixel art). */
+const near = (a: number, b: number) => Math.abs(((a >> 16) & 255) - ((b >> 16) & 255)) + Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)) + Math.abs((a & 255) - (b & 255)) < 60;
 const lum = (c: number) => 0.2126 * ((c >> 16) & 255) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255);
 function shade(c: number, k: number) {
   const r = Math.min(255, Math.round(((c >> 16) & 255) * k)),
@@ -384,19 +392,64 @@ function build(id: number, src: Cells, real: boolean): Look {
   const clothXs: number[] = [];
   for (let y = Math.max(neck + 1, bottom - 2); y <= bottom; y++) for (let x = bs.x0 + 2; x <= bs.x1 - 1; x++) if (inBody(x, y)) clothXs.push(at(x, y));
   const cloth = mode(clothXs, shell[neck]);
+  // round the sides and the back one colour, not a stripe per row (each row's back edge took its own
+  // colour: the trail's leftovers, an outline, a highlight striped the back of every head): the hood's
+  // commonest edge colour, and a hat's on top when the first rows are another colour all along
+  let hatEnd = top - 1;
+  {
+    const rows: number[] = [];
+    for (let y = top; y <= neck; y++) rows.push(shell[y]);
+    // (the hood's colour from the lower rows: the top ones may be a hat's)
+    const hood = mode(rows.slice(Math.floor(rows.length * 0.55)), shell[neck]);
+    const hatCol = shell[top];
+    if (hatCol !== hood) {
+      let y = top;
+      while (y <= neck && (shell[y] === hatCol || near(shell[y], hatCol))) y++;
+      // (a band of at least two rows, not the whole head)
+      if (y - top >= 2 && y <= top + (neck - top) * 0.6) hatEnd = y - 1;
+    }
+    for (let y = top; y <= neck; y++) shell[y] = y <= hatEnd ? hatCol : hood;
+    for (let y = neck + 1; y <= bottom; y++) shell[y] = cloth;
+  }
   const shells = new Set<number>();
   for (let y = top; y <= neck; y++) shells.add(shell[y]);
   const faceXs: number[] = [];
   const hcx = (hs.x0 + hs.x1 + 1) / 2;
-  for (let y = top + 2; y <= neck - 1; y++) for (let x = Math.floor(hcx) - 1; x <= hs.x1; x++) if (inHead(x, y) && !shells.has(at(x, y)) && lum(at(x, y)) > 50) faceXs.push(at(x, y));
+  // (not the hood's nor the hat's colour, nor a shade of them: the hands took a beanie's orange)
+  const shellish = (c0: number) => [...shells].some((s0) => s0 === c0 || near(s0, c0));
+  for (let y = Math.max(top + 2, hatEnd + 2); y <= neck - 1; y++) for (let x = Math.floor(hcx) - 1; x <= hs.x1; x++) if (inHead(x, y) && !shellish(at(x, y)) && lum(at(x, y)) > 50) faceXs.push(at(x, y));
   const skin = faceXs.length > 6 ? mode(faceXs, 0xd8b48c) : 0xd8b48c;
   // both pieces round the shoulders' middle column (the head sits where the art has it)
   const cx = (bs.x0 + bs.x1 + 1) / 2;
   const v = SNARK_VOX;
   const hw = hs.x1 - hs.x0 + 1,
     bw = bs.x1 - bs.x0 + 1;
-  const head = inflate(inHead, at, shell, top, neck, cx, v, Math.max(7, Math.round(hw * 0.88)), Math.max(2.2, hw * 0.36));
-  const body = inflate(inBody, at, shell, neck + 1, bottom, cx, v, Math.max(6, Math.round(Math.min(hw * 0.8, bw * 0.62))), Math.max(1.8, bw * 0.24));
+  // the face: what is inside the hood and not the hood's colour, set a voxel back (the hood's rim
+  // stands proud of it, as a hood does)
+  const hoodCol = shell[neck];
+  const faceIn = (x: number, y: number) => {
+    if (!inHead(x, y)) return false;
+    const c0 = at(x, y);
+    if (c0 === hoodCol || near(c0, hoodCol) || c0 === shell[y]) return false;
+    // (inside: hood all round it within a few cells)
+    let n = 0;
+    for (const [dx, dy] of [
+      [-3, 0],
+      [3, 0],
+      [0, -3],
+    ])
+      if (inHead(x + dx, y + dy)) n++;
+    return n === 3;
+  };
+  const head = pillow(inHead, at, shell, top, neck, cx, v, Math.max(9, hw * 1.02), Math.max(2.6, hw * 0.42), faceIn);
+  // the body: the art's shoulders, then two rows more of the top (its hem a shade darker), a hoodie's depth
+  const ext = 3;
+  const bodyAt = (x: number, y: number) => (y <= bottom ? at(x, y) : inBody(x, bottom) ? (y === bottom + ext ? shade(cloth, 0.82) : cloth) : -1);
+  const bodyIn = (x: number, y: number) => (y <= bottom ? inBody(x, y) : inBody(x, bottom) && x > bs.x0 && x < bs.x1);
+  const shellExt = new Int32Array(GRID + ext).fill(cloth);
+  for (let y = 0; y < GRID; y++) shellExt[y] = shell[y];
+  shellExt[bottom + ext] = shade(cloth, 0.82);
+  const body = pillow(bodyIn, bodyAt, shellExt, neck + 1, bottom + ext, cx, v, Math.max(8, Math.min(hw * 0.85, bw * 0.62)), Math.max(1.6, bw * 0.16), undefined, [0.18, 0.02], BODY_SX);
   let h = Math.imul(id ^ 0x5bd1e995, 0x27d4eb2d) >>> 0;
   const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0) / 4294967296);
   return {
@@ -405,16 +458,31 @@ function build(id: number, src: Cells, real: boolean): Look {
     head,
     body,
     headH: (neck - top + 1) * v,
-    bodyH: (bottom - neck) * v,
-    halfW: (bw / 2) * v,
+    bodyH: (bottom + ext - neck) * v,
+    halfW: (bw / 2) * v * BODY_SX,
     cloth,
-    // (the street's look: trousers the clothes a shade darker, dark shoes)
-    trousers: shade(cloth, 0.62),
+    // (the street's look: trousers and sneakers of their own, by the number — denim, black, khaki,
+    // grey or the top's own colour darker; white, black or bright trainers on a light sole)
+    ...dress(rnd, cloth),
     skin,
-    shoes: 0x2a2630,
-    sole: 0x4a4650,
     bh: 0.96 + rnd() * 0.08,
   };
+}
+
+function dress(rnd: () => number, cloth: number) {
+  const TROUSERS = [0x2e3a55, 0x3f5d8c, 0x1d1d23, 0x6c6356, 0x8b7b58, 0x4b505b, shade(cloth, 0.58)];
+  const SHOES: [number, number][] = [
+    [0xeeeeea, 0xb9b9b4],
+    [0x1c1c22, 0xe8e8e2],
+    [0xeeeeea, 0xd8d2c4],
+    [0x2a2a30, 0x2a2a30],
+    [0xeeeeea, 0x9a9a96],
+    [0x1c1c22, 0xe8e8e2],
+    [0xb83434, 0xf0f0ea],
+    [0x3a3a40, 0x9a9a96],
+  ];
+  const [shoes, sole] = SHOES[Math.floor(rnd() * SHOES.length)];
+  return { trousers: TROUSERS[Math.floor(rnd() * TROUSERS.length)], shoes, sole };
 }
 
 /**
@@ -423,7 +491,7 @@ function build(id: number, src: Cells, real: boolean): Look {
  * head, a pair of shoulders is round). The front of each column is the art; behind it, the row's
  * hood colour. Its origin at the bottom middle, facing +z.
  */
-function inflate(inside: (x: number, y: number) => boolean, at: (x: number, y: number) => number, shell: Int32Array, y0: number, y1: number, cx: number, v: number, D: number, R: number) {
+function inflate(inside: (x: number, y: number) => boolean, at: (x: number, y: number) => number, shell: Int32Array, y0: number, y1: number, cx: number, v: number, D: number, R: number, recess: (x: number, y: number) => boolean = () => false) {
   const W = GRID,
     H = y1 - y0 + 1;
   // each cell's distance to the outside (a chamfer, two passes each way)
@@ -445,24 +513,271 @@ function inflate(inside: (x: number, y: number) => boolean, at: (x: number, y: n
       }
   }
   // (a head is round at the top and the bottom too: rows off the ends count as outside for it)
+  // and round all over, not a slab with soft edges: the depth falls off from the middle like a ball's
+  let mx = 0,
+    my = 0,
+    cnt = 0,
+    xa = W,
+    xb = 0;
+  for (let i = 0; i < W * H; i++)
+    if (dist[i]) {
+      const x = i % W,
+        y = Math.floor(i / W);
+      mx += x;
+      my += y;
+      cnt++;
+      xa = Math.min(xa, x);
+      xb = Math.max(xb, x);
+    }
+  mx /= Math.max(1, cnt);
+  my /= Math.max(1, cnt);
+  const hx = Math.max(2, (xb - xa + 1) / 2),
+    hy = Math.max(2, H / 2);
   const zLo = new Int16Array(W * H),
     zHi = new Int16Array(W * H).fill(-1);
   for (let i = 0; i < W * H; i++) {
     if (!dist[i]) continue;
     const e = Math.min(1, (Math.min(dist[i], 99) - 0.4) / R);
     const k = Math.sqrt(Math.max(0.1, 1 - (1 - e) * (1 - e)));
-    const n = Math.max(2, Math.round(D * k));
+    const u = ((i % W) + 0.5 - mx) / hx,
+      w = (Math.floor(i / W) + 0.5 - my) / hy;
+    const ball = Math.sqrt(Math.max(0.3, 1 - 0.32 * u * u - 0.14 * w * w));
+    const n = Math.max(2, Math.round(D * k * ball));
     zLo[i] = Math.floor((D - n) / 2);
     zHi[i] = zLo[i] + n - 1;
+    if (recess(i % W, y0 + Math.floor(i / W)) && zHi[i] - zLo[i] > 3) zHi[i]--;
   }
+  // the sides and the back: lit from above (a shade lighter at the top, darker toward the bottom)
+  const sh = new Int32Array(H);
+  for (let y = 0; y < H; y++) sh[y] = shade(shell[y0 + y], 1.06 - 0.2 * (y / Math.max(1, H - 1)));
   const color = (x: number, y: number, z: number): number => {
     if (x < 0 || y < 0 || x >= W || y >= H || z < 0 || z >= D) return -1;
     const i = y * W + x;
     if (zHi[i] < 0 || z < zLo[i] || z > zHi[i]) return -1;
-    return z === zHi[i] ? at(x, y0 + y) : shell[y0 + y];
+    return z === zHi[i] ? at(x, y0 + y) : sh[y];
   };
   return greedy(color, [W, H, D], (gx, gy, gz) => [(gx - cx) * v, (H - gy) * v, (gz - D / 2) * v]);
 }
+
+/**
+ * The same volume as a smooth surface (an art toy's, not a pile of voxels): the silhouette's cells
+ * rows y0..y1, a depth at every cell corner rounded like a ball from the middle and like a pillow
+ * toward the edge, the front and the back as smooth sheets — a quad per pixel of the art with its
+ * own colour, so the art stays crisp while the light rolls round the volume — joined round the
+ * outline by a rim. The face (`recess`) sits a little back in the hood. Origin at the bottom middle,
+ * facing +z; vertex colours, smooth normals.
+ */
+function pillow(inside: (x: number, y: number) => boolean, at: (x: number, y: number) => number, shell: Int32Array, y0: number, y1: number, cx: number, v: number, D: number, R: number, recess: (x: number, y: number) => boolean = () => false, round: [number, number] = [0.3, 0.16], sx = 1) {
+  const W = GRID,
+    H = y1 - y0 + 1;
+  const inC = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && inside(x, y0 + y);
+  // each cell's distance to the outside
+  const dist = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) dist[y * W + x] = inC(x, y) ? 99 : 0;
+  const get = (x: number, y: number) => (x < 0 || x >= W || y < 0 || y >= H ? 0 : dist[y * W + x]);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (dist[i]) dist[i] = Math.min(dist[i], get(x - 1, y) + 1, get(x, y - 1) + 1, get(x - 1, y - 1) + 1.41, get(x + 1, y - 1) + 1.41);
+      }
+    for (let y = H - 1; y >= 0; y--)
+      for (let x = W - 1; x >= 0; x--) {
+        const i = y * W + x;
+        if (dist[i]) dist[i] = Math.min(dist[i], get(x + 1, y) + 1, get(x, y + 1) + 1, get(x + 1, y + 1) + 1.41, get(x - 1, y + 1) + 1.41);
+      }
+  }
+  let mx = 0,
+    my = 0,
+    cnt = 0,
+    xa = W,
+    xb = 0;
+  for (let i = 0; i < W * H; i++)
+    if (dist[i]) {
+      mx += i % W;
+      my += Math.floor(i / W);
+      cnt++;
+      xa = Math.min(xa, i % W);
+      xb = Math.max(xb, i % W);
+    }
+  mx = mx / Math.max(1, cnt) + 0.5;
+  my = my / Math.max(1, cnt) + 0.5;
+  const hx = Math.max(2, (xb - xa + 1) / 2),
+    hy = Math.max(2, H / 2);
+  // the half depth at every cell corner (x, y in 0..W, 0..H): from the cells round it
+  const CW = W + 1;
+  const half = new Float32Array(CW * (H + 1));
+  for (let y = 0; y <= H; y++)
+    for (let x = 0; x <= W; x++) {
+      let d = 0,
+        n = 0;
+      for (const [dx, dy] of [
+        [-1, -1],
+        [0, -1],
+        [-1, 0],
+        [0, 0],
+      ]) {
+        const g = get(x + dx, y + dy);
+        if (g) ((d += Math.min(g, 99)), n++);
+      }
+      if (!n) continue;
+      // (a corner on the outline: the edge's own thickness)
+      const dd = n < 4 ? 0.15 : d / n - 0.5;
+      const e = Math.min(1, Math.max(0, dd) / R);
+      const k = Math.sqrt(Math.max(0.12, 1 - (1 - e) * (1 - e)));
+      const u = (x - mx) / hx,
+        w = (y - my) / hy;
+      const ball = Math.sqrt(Math.max(0.3, 1 - round[0] * u * u - round[1] * w * w));
+      half[y * CW + x] = (D / 2) * k * ball;
+    }
+  // the face set back in the hood: by corner (the share of face cells round it), so the sheet stays whole
+  const sinkC = new Float32Array(CW * (H + 1));
+  for (let y = 0; y <= H; y++)
+    for (let x = 0; x <= W; x++) {
+      let n = 0;
+      for (const [dx, dy] of [
+        [-1, -1],
+        [0, -1],
+        [-1, 0],
+        [0, 0],
+      ])
+        if (inC(x + dx, y + dy) && recess(x + dx, y0 + y + dy)) n++;
+      sinkC[y * CW + x] = 0.6 * (n / 4);
+    }
+  const hAt = (x: number, y: number) => half[Math.max(0, Math.min(H, y)) * CW + Math.max(0, Math.min(W, x))];
+  // the corner's normal on the front sheet (from the depth's slope), mirrored on the back
+  const nrm = (x: number, y: number, out: THREE.Vector3) => {
+    const dzdx = (hAt(x + 1, y) - hAt(x - 1, y)) / 2,
+      dzdy = (hAt(x, y + 1) - hAt(x, y - 1)) / 2;
+    // world: x right, y up (grid y runs down), z out of the front
+    return out.set(-dzdx, dzdy, 1).normalize();
+  };
+  const pos: number[] = [],
+    nor: number[] = [],
+    col: number[] = [];
+  const tmp = new THREE.Color();
+  const n0 = new THREE.Vector3();
+  const P = (x: number, y: number, z: number) => [(x - cx) * v * sx, (H - y) * v, z * v];
+  const push = (p: number[], n: THREE.Vector3, c: number, k = 1) => {
+    pos.push(p[0], p[1], p[2]);
+    nor.push(n.x, n.y, n.z);
+    tmp.setHex(c, THREE.SRGBColorSpace).multiplyScalar(k);
+    col.push(tmp.r, tmp.g, tmp.b);
+  };
+  // the sides and the back: lit from above a little (lighter at the top)
+  const shadeAt = (y: number) => 1.05 - 0.16 * (y / Math.max(1, H));
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (!inC(x, y)) continue;
+      const art = at(x, y0 + y);
+      const back = shell[y0 + y];
+      const corners: [number, number][] = [
+        [x, y],
+        [x + 1, y],
+        [x + 1, y + 1],
+        [x, y + 1],
+      ];
+      // front (+z): the art; back (−z): the hood, a shade by height
+      for (const side of [1, -1]) {
+        const vs = corners.map(([qx, qy]) => P(qx, qy, side * Math.max(0.15, hAt(qx, qy) - (side > 0 ? sinkC[qy * CW + qx] : 0))));
+        const ns = corners.map(([qx, qy]) => {
+          const nn = nrm(qx, qy, new THREE.Vector3());
+          if (side < 0) nn.z = -nn.z;
+          return nn;
+        });
+        const order = side > 0 ? [0, 3, 2, 0, 2, 1] : [0, 1, 2, 0, 2, 3];
+        for (const t of order) push(vs[t], ns[t], side > 0 ? art : back, side > 0 ? 1 : shadeAt(corners[t][1]));
+      }
+      // the rim, where the cell's edge is the outline: from the front sheet to the back one
+      const edges: [number, number, number, number, number, number][] = [
+        [x, y, x + 1, y, 0, 1],
+        [x + 1, y, x + 1, y + 1, 1, 0],
+        [x + 1, y + 1, x, y + 1, 0, -1],
+        [x, y + 1, x, y, -1, 0],
+      ];
+      const nb = [
+        [x, y - 1],
+        [x + 1, y],
+        [x, y + 1],
+        [x - 1, y],
+      ];
+      edges.forEach(([ax, ay, bx, by, ex, ey], k) => {
+        if (inC(nb[k][0], nb[k][1])) return;
+        n0.set(ex, ey, 0);
+        const za = Math.max(0.15, hAt(ax, ay)),
+          zb = Math.max(0.15, hAt(bx, by));
+        const a1 = P(ax, ay, za),
+          b1 = P(bx, by, zb),
+          b2 = P(bx, by, -zb),
+          a2 = P(ax, ay, -za);
+        // (the rim takes the art's colour on its front half, the hood's behind)
+        const mid1 = P(ax, ay, 0),
+          mid2 = P(bx, by, 0);
+        for (const [q1, q2, q3, q4, c] of [
+          [a1, b1, mid2, mid1, art],
+          [mid1, mid2, b2, a2, back],
+        ] as [number[], number[], number[], number[], number][]) {
+          for (const p0 of [q1, q2, q3, q1, q3, q4]) push(p0, n0, c, c === back ? shadeAt(ay) : 0.92);
+        }
+      });
+    }
+  // wind every triangle to face its normal
+  const pa = new THREE.Vector3(),
+    pb = new THREE.Vector3(),
+    pc = new THREE.Vector3(),
+    pn = new THREE.Vector3();
+  for (let i = 0; i < pos.length; i += 9) {
+    pa.fromArray(pos, i);
+    pb.fromArray(pos, i + 3);
+    pc.fromArray(pos, i + 6);
+    pn.fromArray(nor, i).add(pn.clone().fromArray(nor, i + 3)).add(pn.clone().fromArray(nor, i + 6));
+    if (pb.sub(pa).cross(pc.sub(pa)).dot(pn) < 0)
+      for (const arr of [pos, nor, col])
+        for (let k = 0; k < 3; k++) {
+          const t = arr[i + 3 + k];
+          arr[i + 3 + k] = arr[i + 6 + k];
+          arr[i + 6 + k] = t;
+        }
+  }
+  return indexed(pos, nor, col);
+}
+
+/**
+ * Triangles to an indexed geometry: corners that are the same point with the same normal and colour
+ * shared (the back's sheet and a run of one colour on the front are most of a bust: about half the
+ * vertices of the triangle soup, for the 400 drawn round you).
+ */
+function indexed(pos: number[], nor: number[], col: number[]) {
+  const map = new Map<string, number>();
+  const P: number[] = [],
+    N: number[] = [],
+    C: number[] = [],
+    I: number[] = [];
+  const r = (x: number, k: number) => Math.round(x * k);
+  for (let i = 0; i < pos.length; i += 3) {
+    const key = `${r(pos[i], 1e4)},${r(pos[i + 1], 1e4)},${r(pos[i + 2], 1e4)},${r(nor[i], 100)},${r(nor[i + 1], 100)},${r(nor[i + 2], 100)},${r(col[i], 255)},${r(col[i + 1], 255)},${r(col[i + 2], 255)}`;
+    let k = map.get(key);
+    if (k === undefined) {
+      k = P.length / 3;
+      map.set(key, k);
+      P.push(pos[i], pos[i + 1], pos[i + 2]);
+      N.push(nor[i], nor[i + 1], nor[i + 2]);
+      C.push(col[i], col[i + 1], col[i + 2]);
+    }
+    I.push(k);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(N, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(C, 3));
+  g.setIndex(I);
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
+
+// (the voxel builder, kept: the look before the smooth one)
+void inflate;
 
 /** A voxel grid's faces, greedy-merged by colour, as a flat-shaded geometry (vertex colours). */
 function greedy(color: (x: number, y: number, z: number) => number, dims: number[], place: (x: number, y: number, z: number) => [number, number, number]) {

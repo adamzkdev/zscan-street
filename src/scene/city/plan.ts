@@ -835,6 +835,18 @@ export function planCity() {
     const list = PALETTES[zoneAt(cx, cz)];
     return list[Math.floor(rnd(k) * list.length)];
   };
+  /** Bay Road's front, facing the bay: low pastel art-deco blocks with roof terraces and neon cafés (an Ocean Drive). */
+  const BAYFRONT: V[] = [
+    ["apartment", { floors: 5, wall: "pink", garden: true, vsign: "x" }, 44],
+    ["shophouse", { floors: 3, shop: "cafe", wall: "mint", vsign: "海" }, 36],
+    ["apartment", { floors: 6, wall: "sky", garden: true }, 40],
+    ["shophouse", { floors: 4, shop: "karaoke", wall: "peach", vsign: "夜" }, 34],
+    ["apartment", { floors: 4, wall: "lemon", garden: true }, 44],
+    ["apartment", { floors: 7, wall: "lilac", garden: true, vsign: "x" }, 46],
+    ["shophouse", { floors: 3, shop: "cafe", wall: "pink" }, 32],
+    ["apartment", { floors: 5, wall: "mint", garden: true }, 42],
+  ];
+  const bayZ = ST.ringS - (GRID.zw[GRID.zs.indexOf(ST.ringS)] ?? 16) / 2;
   const lampColor = (x: number) => (x < ST.heartW ? "#ffd9a0" : x > ST.heartE ? "#c9a0ff" : "#ffb46b");
   const lampAbs = (x: number, z: number, rot: number) => props.push({ type: "lamp", args: [lampColor(x)], x, z, rot, district: "downtown" });
   /**
@@ -890,7 +902,8 @@ export function planCity() {
           // every other one round the park is a supertall, the rest the usual towers
           const supertall = ((parkEast && face === "w") || (parkNorth && face === "s")) && slot++ % 2 === 0;
           const shop = shotengaiFace === face && store < STORES.length;
-          const [type, opts, width] = shop ? STORES[store] : supertall ? SUPERTALL[tall++ % SUPERTALL.length] : pick(cx, cz, seq * 3.17 + 1);
+          const bay = face === "s" && Math.abs(z1 - bayZ) < 0.6;
+          const [type, opts, width] = shop ? STORES[store] : supertall ? SUPERTALL[tall++ % SUPERTALL.length] : bay ? BAYFRONT[Math.floor(rnd(seq * 3.17 + 1) * BAYFRONT.length)] : pick(cx, cz, seq * 3.17 + 1);
           if (shop) {
             // a shop: placed on its own (clickable, walls-down), never instanced
             const w = width * VOX;
@@ -920,14 +933,15 @@ export function planCity() {
         if (east) fill("e", e0, e1, x1 - PAVE, false);
         if (west && x1 - x0 > DEEP * 2 + 2) fill("w", e0, e1, x0 + PAVE, false);
       }
-      // street lamps along the kerbs that face a street
-      for (let x = x0 + 5; x < x1 - 3; x += 14) {
+      // street lamps along the kerbs that face a street: one every 24 m, none at the corners
+      // (a lamp every 14 m on every kerb, right to the crossings, crowded the pavements)
+      for (let x = x0 + 9; x < x1 - 8; x += 24) {
         if (south) lampAbs(x, z1 - 0.35, 0);
-        if (north) lampAbs(x, z0 + 0.35, Math.PI);
+        if (north) lampAbs(x + 12, z0 + 0.35, Math.PI);
       }
-      for (let z = z0 + 9; z < z1 - 5; z += 14) {
+      for (let z = z0 + 10; z < z1 - 8; z += 24) {
         if (east) lampAbs(x1 - 0.35, z, Math.PI / 2);
-        if (west) lampAbs(x0 + 0.35, z, -Math.PI / 2);
+        if (west) lampAbs(x0 + 0.35, z + 12, -Math.PI / 2);
       }
   }
   // the park's own lamps along the kerb round it
@@ -949,13 +963,17 @@ export function planCity() {
     let t = 0;
     for (const st of streetSegments()) {
       if (st.width < 10) continue;
-      for (let a = st.from + 6; a < st.to - 4; a += 9) {
+      for (let a = st.from + 7; a < st.to - 5; a += 13) {
         if (st.axis === "x" ? nearCross(a, crossX) : nearCross(a, crossZ) || avenue(a) || (a > RIVER.z0 - 2 && a < RIVER.z1 + 2)) continue;
         for (const side of [-1, 1]) {
           const off = st.at + side * (st.width / 2 + 1.1);
           const [x, z] = st.axis === "x" ? [a, off] : [off, a];
           if (LOTS.some((l) => x > l.x0 && x < l.x1 && z > l.z0 && z < l.z1)) continue;
-          const [kind, seed] = kinds[t++ % kinds.length];
+          // palms by the water and down the boulevards (the bay's side of the city, the ring road,
+          // the big avenues); the blossoms and maples keep the north and the Japanese streets
+          const palmy = z > ST.south + 8 || st.at === ST.blvdW || st.at === ST.blvdE || st.at === ST.ringW || st.at === ST.ringE || (st.axis === "x" && st.at === ST.ringS);
+          let [kind, seed] = kinds[t++ % kinds.length];
+          if (palmy) [kind, seed] = ["palm", t % 6];
           props.push({ type: "tree", args: [kind, seed], x, z, rot: t, y: CURB, district: "downtown" });
           circles.push([x, z, 0.45]);
         }
@@ -1154,6 +1172,40 @@ export function planCity() {
       if (Math.abs(m.x - o.x) >= Math.abs(m.z - o.z)) m.x = o.x + (m.x >= o.x ? 0.75 : -0.75);
       else m.z = o.z + (m.z >= o.z ? 0.75 : -0.75);
     }
+
+  // a calmer pavement: no two lamps within 9 m (two blocks' rows meeting, facing pairs across a
+  // narrow street: one goes), no lamp in a tree's pit (it steps along the kerb, or goes), lamps off
+  // the asphalt's corners; then the viaducts below
+  {
+    const lampsKept: PropJob[] = [];
+    const trees = props.filter((q) => q.type === "tree");
+    const corner = (x: number, z: number) => {
+      // within 5 m of a crossing (two streets' asphalt meeting there)
+      const inX = GRID.xs.some((c, i) => Math.abs(x - c) < GRID.xw[i] / 2 + 5);
+      const inZ = GRID.zs.some((c, i) => Math.abs(z - c) < GRID.zw[i] / 2 + 5) || (z > CITY.road.z0 - 5 && z < CITY.road.z1 + 5);
+      return inX && inZ;
+    };
+    const heart = (x: number, z: number) => x > CORE.minX && x < CORE.maxX && z > CORE.minZ - 0.5 && z < CORE.maxZ;
+    for (let i = 0; i < props.length; i++) {
+      const q = props[i];
+      if (q.type !== "lamp" || heart(q.x, q.z)) continue;
+      const alongX = Math.abs(Math.sin(q.rot)) < 0.5;
+      let ok = false;
+      for (const d of [0, 2.5, -2.5, 4.5, -4.5]) {
+        const x = alongX ? q.x + d : q.x,
+          z = alongX ? q.z : q.z + d;
+        if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < 2.2)) continue;
+        if (lampsKept.some((l) => Math.hypot(l.x - x, l.z - z) < 9)) continue;
+        if (corner(x, z)) continue;
+        q.x = x;
+        q.z = z;
+        ok = true;
+        break;
+      }
+      if (ok) lampsKept.push(q);
+      else props.splice(i--, 1);
+    }
+  }
 
   // the viaducts' legs stand on the pavements: nothing of the street's furniture in them (a lamp
   // steps along the kerb, the rest goes)

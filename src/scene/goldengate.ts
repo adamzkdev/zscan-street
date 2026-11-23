@@ -206,12 +206,30 @@ export class GoldenGate {
   }
 
   /** The traffic as boxes (centre, half sizes along x and z), for the cars and the walkers to hit. */
-  *boxes(): Iterable<{ x: number; z: number; hx: number; hz: number }> {
+  *boxes(): Iterable<{ x: number; z: number; hx: number; hz: number; ref?: unknown; vx?: number; vz?: number; mass?: number }> {
     for (const c of this.cars) {
       const cs = Math.abs(Math.cos(c.yaw)),
         sn = Math.abs(Math.sin(c.yaw));
-      yield { x: c.x, z: c.z, hx: (cs * c.len + sn * 1.9) / 2, hz: (sn * c.len + cs * 1.9) / 2 };
+      // (with what the game needs to shove it: itself, its velocity, its weight)
+      yield { x: c.x, z: c.z, hx: (cs * c.len + sn * 1.9) / 2, hz: (sn * c.len + cs * 1.9) / 2, ref: c, vx: Math.cos(c.yaw) * c.v, vz: -Math.sin(c.yaw) * c.v, mass: c.len > 6 ? 4.5 : 1.35 };
     }
+  }
+
+  /** A car knocked out of the bridge's traffic by the game: its body (out of the traffic's group) and kind, or null. */
+  take(ref: unknown): { group: THREE.Group; kind: "sedan" | "taxi" | "truck" } | null {
+    const i = this.cars.indexOf(ref as Car);
+    if (i < 0) return null;
+    const c = this.cars[i];
+    this.cars.splice(i, 1);
+    this.group.remove(c.obj);
+    const g = new THREE.Group();
+    g.position.copy(c.obj.position);
+    g.rotation.set(0, c.yaw, 0);
+    c.obj.position.set(0, 0, 0);
+    c.obj.rotation.set(0, 0, 0);
+    g.add(c.obj);
+    const key = (c.obj.userData.kind as string) ?? "";
+    return { group: g, kind: c.len > 6 ? "truck" : key === "taxi" ? "taxi" : "sedan" };
   }
 
   private spawn(anywhere = false) {
@@ -221,7 +239,7 @@ export class GoldenGate {
     // and left on the GPU once it had crossed)
     let obj: THREE.Group;
     let len = 4;
-    if (r < 0.15) obj = sharedObject("gg:taxi", taxiModel);
+    if (r < 0.15) (obj = sharedObject("gg:taxi", taxiModel)), (obj.userData.kind = "taxi");
     else if (r < 0.27) {
       const livery = ["#e8e4dc", "#2e5ab8", "#c0302e"][Math.floor(Math.random() * 3)];
       const label = Math.random() < 0.5 ? "proof" : "depot";

@@ -3,6 +3,7 @@ import { faces } from "./faces";
 import type { Act } from "./figure";
 import type { Person3 } from "./people3d";
 import type { Roads } from "./roads";
+import { areaAt, residents, type Area } from "./census";
 
 /**
  * The game's passers-by (src/gta): a population kept round you the way the open-world games do it —
@@ -240,8 +241,11 @@ export class Peds {
   crowd: Crowd = "normal";
   /** At most this many (what the 3D bodies can take now). */
   room = 999;
-  /** The faces of the town: 140 zkSNARKs (their pictures read once, one after the other, and kept). */
-  private pool = Array.from({ length: 140 }, () => 1 + Math.floor(Math.random() * 10000));
+  /** Where you are (the census's area): who lives here, how crowded it is. */
+  private here: Area | null = null;
+  private warmT = 0;
+  /** Each area's next resident to send out (they come in turn, the same faces about a neighbourhood). */
+  private turn = new Map<string, number>();
   private scale: number;
   events: PedEvents = { hitMe: () => {}, report: () => {} };
   /** The doors people queue at (the big sights'): where, the way out of them. */
@@ -267,8 +271,12 @@ export class Peds {
     this.lines = [];
   }
 
+  /** More walks of their own (the beach's: along the water's edge, between the umbrellas), from (ax, az) to (bx, bz). */
+  extra: [number, number, number, number][] = [];
+
   build(roads: Roads, world: PedWorld) {
     if (this.lines.length) return;
+    for (const [ax, az, bx, bz] of this.extra) this.lines.push({ ax, az, bx, bz, len: Math.hypot(bx - ax, bz - az) });
     for (const r of roads.rects) {
       const w = r.axis === "x" ? r.z1 - r.z0 : r.x1 - r.x0;
       for (const side of [-1, 1]) {
@@ -308,14 +316,48 @@ export class Peds {
     return out.set(l.ax + (l.bx - l.ax) * k, 0, l.az + (l.bz - l.az) * k);
   }
 
-  /** A face for a newcomer: one of the town's whose picture is in (none yet: nobody comes). */
-  private face() {
-    const ready = this.pool.filter((id) => faces.ready(id));
-    return ready.length ? ready[Math.floor(Math.random() * ready.length)] : 0;
+  /**
+   * A face for a newcomer born at (x, z): one who lives there (the census), whose look is in (the
+   * atlas's quick read or its picture), not about already; none: nobody comes yet.
+   */
+  private face(x: number, z: number) {
+    const a = areaAt(x, z);
+    const list = residents(a.key);
+    if (!list.length) return 0;
+    let i = this.turn.get(a.key) ?? 0;
+    for (let k = 0; k < 60; k++, i++) {
+      const id = list[i % Math.min(list.length, 220)];
+      if (!faces.known(id) || this.peds.some((p) => p.id === id)) continue;
+      this.turn.set(a.key, i + 1);
+      return id;
+    }
+    return 0;
+  }
+
+  /** The looks of who lives round (x, z), read ahead: the atlas's quick reads for many, the pictures for a few. */
+  private warm(x: number, z: number) {
+    const keys = new Set<string>();
+    for (const [dx, dz] of [
+      [0, 0],
+      [70, 0],
+      [-70, 0],
+      [0, 70],
+      [0, -70],
+    ])
+      keys.add(areaAt(x + dx, z + dz).key);
+    for (const k of keys) {
+      const list = residents(k);
+      faces.quick(list.slice(0, 220));
+      faces.want(list.slice(0, 10));
+    }
+  }
+
+  /** (For the tests and the HUD: the area you are in.) */
+  areaHere() {
+    return this.here?.name ?? null;
   }
 
   private spawn(x: number, z: number, world: PedWorld, fx: number, fz: number) {
-    if (!this.face()) return;
     // a pavement point in the ring round you, out of sight behind you for the first tries
     for (let tries = 0; tries < 16; tries++) {
       const l = this.lines[Math.floor(Math.random() * this.lines.length)];
@@ -331,13 +373,16 @@ export class Peds {
       const ahead = ((p.x - x) * fx + (p.z - z) * fz) / d;
       if (tries < 10 && (this.n % 2 ? ahead > 0.2 : ahead < 0.5 || d < 28)) continue;
       if (world.seen?.(p.x, p.z) && d < FAR - 4) continue;
+      // who lives here
+      const who = this.face(p.x, p.z);
+      if (!who) continue;
       p.y = world.floor(p.x, p.z);
       const r = Math.random();
-      const make = (mode: Mode, ps: THREE.Vector3, ss: number): Ped => {
+      const make = (mode: Mode, ps: THREE.Vector3, ss: number, id = who): Ped => {
         const t = Math.random();
         return {
           key: `g${++this.n}`,
-          id: this.face(),
+          id,
           pos: ps,
           heading: 0,
           line: l,
@@ -375,11 +420,13 @@ export class Peds {
           queue: null,
         };
       };
-      if (r < 0.18) {
+      // (a pair needs a second face from here: none, and the first goes on alone)
+      const mate = r < 0.18 ? this.face(p.x, p.z) : 0;
+      if (mate && mate !== who) {
         // two talking, facing each other
         const a = make("chat", p.clone(), s);
         const s2 = Math.min(l.len, s + 1.1);
-        const b = make("chat", this.at(l, s2, new THREE.Vector3()).setY(p.y), s2);
+        const b = make("chat", this.at(l, s2, new THREE.Vector3()).setY(p.y), s2, mate);
         a.mate = b;
         b.mate = a;
         a.modeT = b.modeT;
@@ -394,7 +441,14 @@ export class Peds {
   /** Each frame: births and departures round you, everyone's step, the fights, the bubbles. */
   update(dt: number, me: Me, world: PedWorld, live: { height: number; at: number; mempool: number }) {
     if (!this.lines.length) return;
-    const target = Math.min(Math.round(TARGET[this.crowd] * this.scale), this.room);
+    // (how crowded: the area's own density — the heart busy, the ring road quiet)
+    this.here = areaAt(me.x, me.z);
+    this.warmT -= dt;
+    if (this.warmT <= 0) {
+      this.warmT = 2.5;
+      this.warm(me.x, me.z);
+    }
+    const target = Math.min(Math.round(TARGET[this.crowd] * this.scale * this.here.density), this.room);
     for (let i = this.peds.length - 1; i >= 0; i--) {
       const p = this.peds[i];
       // gone once far, and only where you don't see it go (unless it is very far)
@@ -448,7 +502,7 @@ export class Peds {
     for (const q of this.queues) {
       const d = Math.hypot(q.x - me.x, q.z - me.z);
       if (d > 42 || this.peds.some((p) => p.queue?.key === q.key)) continue;
-      if (!this.face()) return;
+      if (!this.face(q.x, q.z)) return;
       // beside the door's lane (it stays clear), stretching out from the door, on whichever side has room
       const n = 4 + Math.floor(Math.random() * 4);
       const spots = (sgn: number, side: number) => {
@@ -473,9 +527,11 @@ export class Peds {
           z = sp.z + (Math.random() - 0.5) * 0.25;
         const l = this.lines[0];
         if (!l) return;
+        const qid = this.face(x, z);
+        if (!qid) continue;
         const p: Ped = {
           key: `g${++this.n}`,
-          id: this.face(),
+          id: qid,
           pos: new THREE.Vector3(x, world.floor(x, z), z),
           heading: Math.atan2(-q.fx, -q.fz),
           line: l,
@@ -1212,7 +1268,7 @@ export class Peds {
   show(on: boolean) {
     this.group.visible = on;
     if (!on) this.clear();
-    // the town's faces read ahead, one after the other
-    else faces.want(this.pool);
+    // the looks of who lives round here, read ahead (the rest as you go)
+    else this.warmT = 0;
   }
 }

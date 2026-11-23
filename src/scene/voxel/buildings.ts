@@ -58,6 +58,13 @@ export const WALLS = {
   blue: ["#4f5a6e", "#4a5468", "#556074"],
   cream: ["#9a9284", "#948c7e", "#a0988a"],
   violet: ["#4a3f5c", "#453a56", "#504462"],
+  // the bay's art-deco pastels (Bay Road's front: pink, mint, peach, sky, lilac, lemon stucco)
+  pink: ["#c08c9c", "#b98594", "#c793a3"],
+  mint: ["#86b4a4", "#7fad9d", "#8dbbab"],
+  peach: ["#c89c80", "#c19579", "#cfa387"],
+  sky: ["#8eaac6", "#87a3bf", "#95b1cd"],
+  lilac: ["#a89ac0", "#a193b9", "#afa1c7"],
+  lemon: ["#c6bc8a", "#bfb583", "#cdc391"],
 };
 export type Wall = keyof typeof WALLS;
 

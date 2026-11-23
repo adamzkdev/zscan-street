@@ -27,7 +27,11 @@ import { Heat } from "./police";
 import { Roads } from "./roads";
 import { GtaSound, type AudioOut } from "./sound";
 import { CarRadio } from "./radio";
-import { DriveCar, SPECS, type VehicleKind } from "./vehicle";
+import { SkyClock, weatherIcon } from "./skyclock";
+import type { Daylight } from "../scene/daylight";
+import { SwimFx } from "./swim";
+import { Beach } from "./beach";
+import { DriveCar, SPECS, type CarBox, type VehicleKind } from "./vehicle";
 import { MOTO_SEAT } from "./models";
 
 /**
@@ -118,6 +122,12 @@ export interface GtaHost {
   blur(amount: number): void;
   /** The game's colour grade on the street's picture (on while playing). */
   grade?(on: boolean): void;
+  /** The game's time of day and weather painted on the street every frame (null: back to the street's own theme). */
+  tod?(d: Daylight | null): void;
+  /** A thunderclap (after the lightning). */
+  thunder?(): void;
+  /** A car of some other traffic (the bridge's) knocked out of it: its body and kind, or null. */
+  takeCar?(ref: unknown): { group: THREE.Group; kind: VehicleKind } | null;
   /** People in a car's way react (a shout, a jump): from (x, z) along (fx, fz). */
   react(x: number, z: number, fx: number, fz: number): void;
   /** The street's arrest: a patrol, a night on the rock. */
@@ -135,12 +145,14 @@ export interface GtaHost {
   carHold(p: THREE.Vector3, r: number): boolean;
   /** The Golden Gate's deck, Orchard Keys and its tunnel: outside what the street's own plan (its nav) knows. */
   beyond(x: number, z: number): boolean;
+  /** The sea you can wade and swim in there (Orchard Keys' beaches): its floor and its surface, or null. */
+  sea?(x: number, z: number): { floor: number; surface: number } | null;
+  /** The ear under the water (muffled) or not. */
+  underwater?(on: boolean): void;
 }
 
 const SETTINGS_KEY = "zstreet.gta.settings";
 /** The game's day and night (s). */
-const DAY_S = 9 * 60;
-const NIGHT_S = 5 * 60;
 const ACTIVE_KEY = "zstreet.gta.alive";
 
 export class GtaMode {
@@ -161,6 +173,8 @@ export class GtaMode {
   readonly missions: Missions;
   readonly sound: GtaSound;
   readonly radio: CarRadio;
+  readonly swim: SwimFx;
+  readonly beach: Beach;
   readonly heat: Heat;
   readonly solid: StreetSolid;
   readonly doors: Doors;
@@ -217,6 +231,7 @@ export class GtaMode {
     this.input.stick = host.walker.stick;
     this.settings = { ...DEFAULTS, ...this.loadSettings() };
     this.sound = new GtaSound(() => host.audio());
+    this.swim = new SwimFx(host.scene, host.ui, () => host.audio(), (on) => host.underwater?.(on));
     this.radio = new CarRadio(() => host.audio(), host.ui, { height: () => host.height(), mempool: () => host.mempool() });
     this.front = new FrontEnd({
       scene: host.scene,
@@ -290,11 +305,14 @@ export class GtaMode {
     this.doors = new Doors(host.scene);
     this.net = new WorldNet(host.scene);
     this.peds = new Peds(host.scene);
+    // Orchard Beach's own people, and the passers-by's walks along its sand
+    this.beach = new Beach(host.scene);
+    this.peds.extra = Beach.walks();
     this.peds.events = {
       hitMe: (dmg, x, z) => this.hurtMe(dmg, x, z),
       report: (why) => this.heat.raise(1, why),
     };
-    this.people = new People3D(host.scene, (x, z, r) => [...this.peds.near(x, z, r), ...host.people3d(x, z, r)]);
+    this.people = new People3D(host.scene, (x, z, r) => [...this.peds.near(x, z, r), ...this.beach.near(x, z, r), ...host.people3d(x, z, r)]);
     this.breakables = new Breakables(this.debris);
     this.props = new StreetProps(host.scene, this.debris);
     host.interiorWalker.mover = () => this.active;
@@ -453,6 +471,7 @@ export class GtaMode {
       window.addEventListener("pointerdown", wake, true);
     }
     this.skyWas = h.skyPref();
+    this.clock.reset();
     this.skyT = -1;
     h.ui.classList.add("gta-on");
     this.input.active = true;
@@ -531,11 +550,15 @@ export class GtaMode {
     PROP_HOLE_N.value = 0;
     this.breakables.restore();
     this.host.pickCamera(null);
+    this.host.tod?.(null);
+    this.hud.clock(null);
     this.host.setSky(this.skyWas);
     if (this.player.group.parent !== this.host.scene) this.host.scene.add(this.player.group);
     this.heat.clear();
     this.sound.siren(0);
     this.radio.car(false);
+    this.swim.reset();
+    this.beach.hide();
     h.grade?.(false);
     this.player.group.visible = false;
     this.sound.drive(null);
@@ -632,7 +655,7 @@ export class GtaMode {
       const g = m.group.position;
       const d = Math.hypot(g.x - p.x, g.z - p.z) - 1;
       if (d < 3 && (!best || d < best.d)) {
-        const kind: VehicleKind = m.kind === "taxi" ? "taxi" : m.kind === "police" ? "police" : m.kind === "truck" ? "truck" : "sedan";
+        const kind = m.kind as VehicleKind;
         best = { mover: m, kind, name: SPECS[kind].name, d };
       }
     }
@@ -654,6 +677,7 @@ export class GtaMode {
     if (!car) return;
     this.car = car;
     this.radio.car(true);
+    this.swim.reset();
     this.player.group.visible = false;
     // on a bike you ride it: your body on its seat, leaning with it
     if (car.spec.bike) this.mount(car);
@@ -831,6 +855,7 @@ export class GtaMode {
     else if (this.hud.mapOpen && inp.hit("Tab", "KeyM", "pad:back", "pad:b")) this.hud.toggleMap(false);
     if (this.car) this.drive(dt);
     else this.walk(dt);
+    this.loose(dt);
     // the walker stands where you are: doors, talk, traffic, sound all follow
     const at = this.car ? this.car.group.position : this.player.pos;
     h.walker.camera.position.set(at.x, (this.car ? Math.max(0, this.car.group.position.y) : this.player.pos.y) + 1.6, at.z);
@@ -843,6 +868,7 @@ export class GtaMode {
     this.missions.update(dt, { x: at.x, z: at.z, inCar: !!this.car, speed: this.car?.speed ?? this.player.speed, hits: this.hits });
     const vel = this.car ? { vx: this.car.vel.x, vz: this.car.vel.y } : { vx: this.player.vel.x, vz: this.player.vel.z };
     const near = this.heat.update(dt, { x: at.x, z: at.z, ...vel, speed: this.car?.speed ?? this.player.speed, inCar: !!this.car }, (self) => this.carWorld(self));
+    for (const ch of this.heat.chasers) this.shove(ch.car);
     this.sound.siren(this.heat.chasers.length ? Math.max(0.15, 1 - near / 140) : 0);
     if (!this.front.open) this.people.update(dt, at.x, at.z, this.car ? null : this.player.pos, this.cam.camera.position, this.cam.camera.getWorldDirection(this.viewDir));
     this.streetThings(dt);
@@ -859,7 +885,7 @@ export class GtaMode {
       const order: ("cycle" | "day" | "night" | "clock")[] = ["cycle", "day", "night", "clock"];
       this.settings.sky = order[(order.indexOf(this.settings.sky) + 1) % order.length];
       this.apply(this.settings);
-      this.hud.toast(this.settings.sky === "cycle" ? "Day and night cycle" : this.settings.sky === "clock" ? "Sky follows your clock" : this.settings.sky === "day" ? "Day" : "Night", "sky · T");
+      this.hud.toast(this.settings.sky === "cycle" ? "Day and night cycle" : this.settings.sky === "clock" ? "Sky follows your clock" : this.settings.sky === "day" ? "Afternoon" : "Night", "sky · T");
     }
     // (Enter is the coach card's: it must not also put you in a car)
     if (i.hit("KeyF", "pad:y", "touch:car")) {
@@ -934,9 +960,31 @@ export class GtaMode {
       mx = 0;
       my = m.y < 0 ? m.y * 0.4 : m.y;
     }
+    // the sea at your feet (Orchard Keys' beaches): how deep it is there; the camera may follow you under
+    const seaHere = h.sea?.(pl.pos.x, pl.pos.z) ?? null;
+    {
+      const c = this.camera.position;
+      const under = h.sea?.(c.x, c.z);
+      this.cam.minY = under ? under.floor + 0.3 : seaHere ? seaHere.floor + 0.3 : 0.35;
+    }
+    pl.water = seaHere ? Math.max(0, seaHere.surface - seaHere.floor) : 0;
     this.player.update(dt, mx, my, follow ? Math.abs(my) + (m.x !== 0 && my === 0 ? 0 : 0) : m.mag, !this.paused && i.sprint && my > 0, !this.paused && i.jump, ref, {
       blocked: (x, z, feet) => {
         if (this.parkedAt(x, z) && feet < 1.2) return true;
+        // the low sand and the sea: walked, waded, swum; what stands up out of them stops you (a
+        // pier's pile, a tower's legs, a sandcastle), and the sea's far edge
+        const sea = h.sea?.(x, z);
+        if (sea) {
+          if (h.footSmall(x, z)) return true;
+          if (!solid.ready) return false;
+          const t = solid.topAt(x, z);
+          const top = t !== undefined && t === t ? t : -99;
+          // up on something over the water (the sand, a pier's deck): a step up is climbed, more stops
+          // you; off its edge you drop in (a jump off the pier)
+          if (pl.floor > sea.surface + 0.3) return top > Math.max(pl.floor, feet) + 0.62;
+          // in the water: what stands up out of it stops you (a pile, a tower's legs, a sandcastle)
+          return top > Math.max(sea.floor, Math.min(feet, sea.surface - 0.4)) + 0.62;
+        }
         // a door is shut: its leaves stop you (E opens it)
         if (this.doorShut(x, z)) return true;
         // in front of a door: always a way in (whatever stands there, short of water)
@@ -952,6 +1000,23 @@ export class GtaMode {
         return !solid.foot(x, z, up).ok || (feet < pl.floor + 0.5 && (h.footSmall(x, z) || h.dynamicHit(x, z)));
       },
       floor: (x, z, feet) => {
+        const sea = h.sea?.(x, z);
+        if (sea && solid.ready && pl.floor > sea.surface + 0.3) {
+          // on the sand or a deck over the water: its own floor while there is one within a step
+          const t = solid.topAt(x, z);
+          if (t !== undefined && t === t && Math.abs(t - pl.floor) < 0.66) return t;
+        }
+        if (sea) {
+          // waist deep and more you float: low and flat in a crawl, upright treading water; the
+          // floor again as it shallows (one continuous height, no step)
+          const depth = sea.surface - sea.floor;
+          const go = Math.min(1, Math.max(0, (pl.speed - 0.25) / 1.1));
+          // (Space held: a dive, down under the surface)
+          const dive = this.input.down("Space") || this.input.pad.a ? 1.5 : 0;
+          const afloat = Math.max(sea.floor + 0.15, sea.surface - (0.9 - 0.52 * go) - dive);
+          const w = Math.min(1, Math.max(0, (depth - 0.95) / 0.4));
+          return sea.floor + (afloat - sea.floor) * w * w * (3 - 2 * w);
+        }
         if (solid.ready && this.doorway(x, z)) {
           // the steps up to a door: climbed; anything higher walked past
           const t = solid.topAt(x, z) ?? pl.floor;
@@ -970,6 +1035,13 @@ export class GtaMode {
     // a bus shelter's roof or a stall, which it passes, the way the games' cameras do)
     this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z) && (solid.topAt(x, z) ?? 0) > 3.6 && !solid.thinAt(x, z)) || (!h.beyond(x, z) && h.nav.wall(x, z)) || this.crown(x, z) });
     pl.group.visible = this.cam.armLength > 0.8;
+    // in the sea: rings, splashes, the view under the surface
+    {
+      const here = h.sea?.(pl.pos.x, pl.pos.z) ?? null;
+      const c = this.camera.position;
+      const camSea = h.sea?.(c.x, c.z) ?? null;
+      this.swim.update(dt, pl.pos, here ? Math.max(0, here.surface - here.floor) : 0, pl.speed, pl.facing, here?.surface ?? 0, this.camera, camSea ? camSea.surface - camSea.floor : null);
+    }
     // sprinting into people: they go down
     if (pl.speed > 6 && !this.paused) {
       this.reactT -= dt;
@@ -1034,27 +1106,30 @@ export class GtaMode {
       this.peds.room = Math.round(this.people.limit * 0.6);
       const at = this.car ? this.car.group.position : this.player.pos;
       const fy = this.cam.yaw;
+      this.beach.update(dt, at);
       this.peds.update(dt, { x: at.x, z: at.z, onFoot: !this.car, speed: this.car?.speed ?? this.player.speed, id: this.player.id, fx: -Math.sin(fy), fz: -Math.cos(fy), guard: !this.car && this.player.guard, down: this.wastedT >= 0 }, this.pedWorld(), { height: this.host.height(), at: this.host.lastBlockAt(), mempool: this.host.mempool() });
     }
     if (this.player.landed) this.punchLanded(null);
   }
 
   /** The sky: the setting's, or the game's own cycle (9 min of day, 5 of night). */
+  /**
+   * The game's day and weather (skyclock.ts): the hour moves on (not while the menu or the map is
+   * open), the weather turns now and then, and the street paints itself with it every frame
+   * (scene/daylight.ts through the host); the clock on the location card.
+   */
+  readonly clock = new SkyClock();
+  private clockT = 0;
   private sky(dt: number) {
-    const s = this.settings.sky;
-    if (this.skyT < 0) {
-      this.skyT = 0;
-      if (s !== "cycle") return this.host.setSky(s === "clock" ? "auto" : s);
-      // the cycle starts where the street is
-      this.skyT = this.host.night() ? DAY_S : 0.1;
-    }
-    if (s !== "cycle") return;
-    const was = this.skyT < DAY_S;
-    this.skyT = (this.skyT + dt) % (DAY_S + NIGHT_S);
-    const day = this.skyT < DAY_S;
-    if (day !== was || this.host.night() === day) {
-      this.host.setSky(day ? "day" : "night");
-      this.hud.toast(day ? "Morning" : "Night falls", day ? "the city wakes up" : "the neon comes on");
+    if (this.skyT < 0) this.skyT = 0;
+    const d = this.clock.update(this.paused ? 0 : dt, this.settings.sky, this.settings.weather ?? "dynamic");
+    this.host.tod?.(d);
+    if (this.clock.struck) this.host.thunder?.();
+    this.clockT -= dt;
+    if (this.clockT <= 0) {
+      this.clockT = 1;
+      const g = this.clock.glyph;
+      this.hud.clock(this.clock.time, weatherIcon(g.kind, g.night));
     }
   }
 
@@ -1178,20 +1253,40 @@ export class GtaMode {
     if (!this.active || this.wasIndoors) return [];
     const out = [...this.peds.inRoad(this.pedWorld())];
     if (!this.car && this.roads.road(this.player.pos.x, this.player.pos.z)) out.push({ x: this.player.pos.x, z: this.player.pos.z });
+    // a wreck in the road: the traffic stops behind it (it drove through them) until it is towed
+    for (const c of this.wrecks.keys()) {
+      const p = c.group.position;
+      if (c !== this.car && this.roads.road(p.x, p.z)) out.push({ x: p.x, z: p.z });
+    }
     return out;
   }
 
   private pedWorldCache: { free(x: number, z: number): boolean; wall(x: number, z: number): boolean; floor(x: number, z: number): number; road(x: number, z: number): boolean; stand(x: number, z: number): boolean; seen(x: number, z: number): boolean } | null = null;
   private pedWorld() {
+    // (the beach's low sand, down to the water's edge, is ground to walk on: the solid shape calls
+    // anything that low a hole)
+    const sand = (x: number, z: number) => {
+      const s = this.host.sea?.(x, z);
+      return s && s.floor > s.surface + 0.04 ? s.floor : null;
+    };
+    const propOnSand = (x: number, z: number, f: number) => {
+      const t = this.solid.topAt(x, z);
+      return (t !== undefined && t === t && t > f + 0.5) || this.host.footSmall(x, z);
+    };
     return (this.pedWorldCache ??= {
       free: (x: number, z: number) => {
+        const sf = sand(x, z);
+        if (sf !== null) return !propOnSand(x, z, sf);
         if (!this.solid.ready) return !this.host.nav.wall(x, z);
         const t = this.solid.topAt(x, z);
         return t !== undefined && t === t && t > -0.3 && t < 0.7 && !this.host.footSmall(x, z);
       },
       floor: (x: number, z: number) => {
+        const sf = sand(x, z);
+        if (sf !== null) return sf;
         const t = this.solid.topAt(x, z);
-        return t !== undefined && t === t && t > -0.3 && t < 2.2 ? t : 0.2;
+        if (t !== undefined && t === t && t > -0.3 && t < 2.2) return t;
+        return this.host.ground(x, z) ?? 0.2;
       },
       stand: (x: number, z: number) => {
         if (!this.solid.ready) return false;
@@ -1205,6 +1300,8 @@ export class GtaMode {
         return true;
       },
       wall: (x: number, z: number) => {
+        const sf = sand(x, z);
+        if (sf !== null) return propOnSand(x, z, sf);
         if (!this.solid.ready) return this.host.nav.wall(x, z);
         const t = this.solid.topAt(x, z);
         return !(t !== undefined && t === t && t > -0.3 && t < 0.7);
@@ -1858,6 +1955,7 @@ export class GtaMode {
     car.lamps = h.night();
     this.doors.night(h.night());
     car.update(dt, d, this.carWorld(car));
+    this.shove(car);
     if (car.hit && car.hit.what === "car" && car.hit.speed > 7) {
       if (this.heat.near(car.hit.x, car.hit.z, 4.5)) this.heat.raise(0.9, "you rammed a police cruiser");
       else this.heat.raise(0.45, `you hit a car at ${Math.round(car.hit.speed * 3.6)} km/h`);
@@ -1923,13 +2021,149 @@ export class GtaMode {
 
   private legs: [number, number][] | null = null;
 
+  /**
+   * The crashes, the games' way: what `car` ran into trades momentum with it (by their masses, a
+   * little extra for the show) — the one hit is shoved off, sliding and spinning, metres away, and
+   * may hit the next. A car of the traffic hit hard leaves its lane and is a car on its own (in
+   * `parked`, simulated while it moves; you can take it); a parked car, a cruiser, is shoved.
+   */
+  private shove(car: DriveCar) {
+    // (one trade per car met: the steps of a frame note the same touch several times)
+    const met = new Set<unknown>();
+    for (const c of car.contacts) {
+      const b = c.box;
+      const key = this.refKey(c.ref);
+      if (met.has(key)) continue;
+      met.add(key);
+      const mA = car.spec.mass,
+        mB = b.mass ?? 1.4;
+      // its velocity now (a car already shoved this frame has moved on from the box's note)
+      const was = this.refCar(c.ref);
+      const vbx = was ? was.vel.x : (b.vx ?? 0),
+        vbz = was ? was.vel.y : (b.vz ?? 0);
+      // closing speed along the normal (from it to the car): negative when they meet
+      const vrel = (car.vel.x - vbx) * c.nx + (car.vel.y - vbz) * c.nz;
+      if (vrel > -0.8) continue;
+      const J = (-(1 + 0.3) * vrel) / (1 / mA + 1 / mB);
+      // the car: its share back
+      const dA = J / mA;
+      car.push(c.nx * dA, c.nz * dA, 0, dA > 7 ? 0.5 : 0);
+      // the other: shoved along the normal (a little more than physics: you see it go), spun by
+      // where it was hit
+      const dB = (J / mB) * 1.3;
+      const dvx = -c.nx * dB,
+        dvz = -c.nz * dB;
+      const rx = c.x - b.x,
+        rz = c.z - b.z;
+      const spin = Math.max(-5, Math.min(5, (rz * dvx - rx * dvz) * 0.55));
+      const stun = Math.min(3.2, 1.2 + dB * 0.12);
+      const other = this.loosen(c.ref, b, dB);
+      if (other) other.push(dvx, dvz, spin, stun);
+      // the bang
+      const hs = -vrel;
+      if (hs > 1.5 && (!car.hit || hs > car.hit.speed)) car.hit = { speed: hs, x: c.x, z: c.z, what: "car" };
+      if (car !== this.car && hs > 3) this.sound.crash(Math.min(0.4, hs / 50));
+    }
+  }
+
+  /** The thing behind a box's ref (the traffic's mover, the bridge's car, a car of ours). */
+  private refKey(ref: unknown) {
+    const r = ref as { t?: string; m?: unknown; car?: unknown };
+    return r.t === "mover" ? r.m : r.t === "car" ? r.car : ref;
+  }
+  /** Out of the traffic already (or ours): the car it is now. */
+  private knocked = new WeakMap<object, DriveCar>();
+  private refCar(ref: unknown): DriveCar | null {
+    const r = ref as { t?: string; car?: DriveCar };
+    if (r.t === "car") return r.car!;
+    return this.knocked.get(this.refKey(ref) as object) ?? null;
+  }
+
+  /** The car behind a box, as a car of its own (out of its traffic if it was in one), or null. */
+  private loosen(ref: unknown, b: CarBox, dv: number): DriveCar | null {
+    const r = ref as { t: string; m?: unknown; car?: DriveCar };
+    const already = this.refCar(ref);
+    // a car of ours (parked: it wakes; a cruiser drives itself), or one knocked out of the traffic before
+    if (already) return already;
+    // (a touch moves no one out of the traffic: a real knock does)
+    if (dv < 2.5) return null;
+    let group: THREE.Group | null = null,
+      kind: VehicleKind = "sedan";
+    if (r.t === "mover") {
+      const m = r.m as { kind: string };
+      kind = (m.kind in SPECS ? m.kind : "sedan") as VehicleKind;
+      group = this.host.traffic.take(r.m as Parameters<CityTraffic["take"]>[0]);
+      if (kind === "police") this.heat.raise(1.2, "you rammed a police cruiser");
+    } else {
+      const t = this.host.takeCar?.(ref);
+      if (t) ((group = t.group), (kind = t.kind));
+    }
+    if (!group) return null;
+    const car = new DriveCar(kind, group);
+    this.knocked.set(this.refKey(ref) as object, car);
+    this.wrecks.set(car, 0);
+    if (!car.group.parent) this.host.scene.add(car.group);
+    car.vel.set(b.vx ?? 0, b.vz ?? 0);
+    car.damage = 0.3;
+    this.parked.push(car);
+    // (a street full of wrecks: the oldest out of sight go, never your GT nor the bikes)
+    const wrecks = this.parked.filter((c) => c.kind !== "gt" && c.kind !== "moto");
+    if (wrecks.length > 10) {
+      const me = this.car?.group.position ?? this.player.pos;
+      const far = wrecks.filter((c) => c !== car && !this.seen(c.group.position.x, c.group.position.z)).sort((a, z2) => z2.group.position.distanceTo(me) - a.group.position.distanceTo(me))[0];
+      if (far) {
+        this.parked.splice(this.parked.indexOf(far), 1);
+        far.dispose();
+      }
+    }
+    return car;
+  }
+
+  /** Cars knocked out of the traffic, and how long each has been at rest (towed away once out of sight). */
+  private wrecks = new Map<DriveCar, number>();
+
+  /** The cars knocked about (in `parked`, not yours): on their own until they come to rest, hitting what is in their way. */
+  private loose(dt: number) {
+    // the tow truck: a wreck at rest a while, out of sight and not near you, goes (the traffic behind it moves on)
+    const me = this.car?.group.position ?? this.player.pos;
+    for (const [c, t] of this.wrecks) {
+      if (c === this.car || !this.parked.includes(c)) {
+        this.wrecks.delete(c);
+        continue;
+      }
+      const rest = c.speed < 0.1 && c.stun <= 0 ? t + dt : 0;
+      this.wrecks.set(c, rest);
+      const p = c.group.position;
+      if (rest > 15 && Math.hypot(p.x - me.x, p.z - me.z) > 25 && !this.seen(p.x, p.z)) {
+        this.parked.splice(this.parked.indexOf(c), 1);
+        this.wrecks.delete(c);
+        c.dispose();
+      }
+    }
+    const still = { throttle: 0, brake: 0.25, steer: 0, handbrake: false, nitro: false };
+    for (const c of [...this.parked]) {
+      if (c === this.car) continue;
+      if (c.stun <= 0 && Math.hypot(c.vel.x, c.vel.y) < 0.08) continue;
+      c.update(dt, still, this.carWorld(c));
+      this.shove(c);
+      if (c.speed > 0.05 && c.speed < 0.25 && c.stun <= 0) c.vel.set(0, 0);
+      // people in its way go down
+      if (c.speed > 3) {
+        const p = c.group.position;
+        const n = this.knockAll(p.x, p.z, c.vel.x, c.vel.y, c.spec.wid * 0.7);
+        if (n) this.peds.panic(p.x, p.z, 12);
+      }
+    }
+  }
+
   /** Everything a car can hit that moves: the traffic, the avenue's cars and buses, the trams, your parked cars, the cruisers (and the viaducts' legs). */
-  private *boxes(self: DriveCar) {
+  private *boxes(self: DriveCar): Generator<CarBox> {
     for (const m of this.host.traffic.movers) {
       const p = m.group.position;
       const along = m.line.axis === "x";
       const half = m.len / 2;
-      yield { x: p.x, z: p.z, hx: along ? half : 0.95, hz: along ? 0.95 : half };
+      const yaw = m.group.rotation.y;
+      yield { x: p.x, z: p.z, hx: along ? half : 0.95, hz: along ? 0.95 : half, ref: { t: "mover", m }, vx: Math.cos(yaw) * m.v, vz: -Math.sin(yaw) * m.v, mass: SPECS[m.kind as VehicleKind]?.mass ?? 1.35 };
     }
     yield* this.host.vehicles();
     // the other players' cars
@@ -1948,7 +2182,7 @@ export class GtaMode {
       const p = c.group.position;
       const cs = Math.abs(Math.cos(c.yaw)),
         sn = Math.abs(Math.sin(c.yaw));
-      yield { x: p.x, z: p.z, hx: (cs * c.spec.len + sn * c.spec.wid) / 2.2, hz: (sn * c.spec.len + cs * c.spec.wid) / 2.2 };
+      yield { x: p.x, z: p.z, hx: (cs * c.spec.len + sn * c.spec.wid) / 2.2, hz: (sn * c.spec.len + cs * c.spec.wid) / 2.2, ref: { t: "car", car: c }, vx: c.vel.x, vz: c.vel.y, mass: c.spec.mass };
     }
   }
 

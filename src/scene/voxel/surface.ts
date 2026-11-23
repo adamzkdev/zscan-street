@@ -1,5 +1,8 @@
 import type * as THREE from "three";
 
+/** 0 by day, 1 by night: the rooms behind the windows' glass light up (a share of them). */
+export const GLASS_NIGHT = { value: 0 };
+
 /**
  * The surface of a voxel: what it is made of (the material class the mesher hides in the normal,
  * see MAT_NORMAL) becomes grain, gloss and relief — brick courses and mortar, roof tiles, stone
@@ -191,6 +194,40 @@ const GLASS = /* glsl */ `
   vec3 t = vec3(vxHash(cell), vxHash(cell + 7.13), vxHash(cell + 3.71)) - 0.5;
   normal = normalize(normal + t * 0.07);
   roughnessFactor = 0.24 + vxHash(cell + 1.9) * 0.14;
+  // the room behind (upper floors, upright glass: not a car's window, not a shopfront with its own
+  // interior, not a skylight): a back wall lit from the ceiling, furniture low down, blinds half
+  // drawn here, curtains there; by day dim inside under the reflection, by night a share of the
+  // rooms lit warm or cool and the rest dark
+  if (an.y < 0.5 && vVoxP.y > 2.6) {
+    vec2 cs = vec2(1.35, 1.25);
+    vec2 cid = floor(q / cs);
+    vec2 f = fract(q / cs);
+    float h1 = vxHash(cid + 0.37), h2 = vxHash(cid + 5.13), h3 = vxHash(cid + 9.71);
+    vec3 wallC = mix(vec3(0.62, 0.55, 0.46), vec3(0.46, 0.52, 0.6), h2);
+    float ceilL = smoothstep(0.55, 0.97, f.y);
+    vec3 room = wallC * (0.28 + 0.62 * ceilL);
+    // furniture: a dark band low in the room, a lamp's pool beside it
+    float sofa = step(f.y, 0.3) * step(0.12 + 0.3 * h3, f.x) * step(f.x, 0.55 + 0.35 * h3);
+    room *= 1.0 - 0.55 * sofa;
+    // blinds over the top part (slats), or curtains at the sides, or nothing
+    float blind = step(0.62, h1) * step(1.0 - (0.25 + 0.55 * h3), f.y);
+    float slat = 0.72 + 0.28 * step(0.45, fract(f.y * 22.0));
+    room = mix(room, vec3(0.86, 0.84, 0.78) * slat * 0.75, blind);
+    float curt = step(h1, 0.22) * (step(f.x, 0.2 + 0.08 * h3) + step(0.8 - 0.08 * h3, f.x));
+    vec3 cc = mix(vec3(0.72, 0.28, 0.24), vec3(0.88, 0.8, 0.6), h2);
+    room = mix(room, cc * 0.7, clamp(curt, 0.0, 1.0));
+    // the mullion between bays
+    float frame = 1.0 - step(0.035, f.x) * step(f.x, 0.965) * step(0.03, f.y) * step(f.y, 0.97);
+    float lit = step(0.58, fract(h2 * 7.31 + h3 * 3.17));
+    vec3 warm = mix(vec3(1.0, 0.78, 0.5), vec3(0.78, 0.86, 1.0), step(0.75, h3));
+    float px = length(fwidth(vVoxP));
+    float near = 1.0 - smoothstep(0.08, 0.35, px);
+    // by day: the glass a little darker, the room seen through it, dim
+    vec3 dayIn = room * 0.16;
+    vec3 nightIn = room * warm * (0.55 + 0.45 * ceilL) * 1.35 * lit + room * 0.012;
+    totalEmissiveRadiance += mix(dayIn, nightIn, uGlassNight) * (1.0 - frame) * mix(0.6, 1.0, near);
+    diffuseColor.rgb *= mix(0.55, 1.0, frame);
+  }
 }
 `;
 
@@ -215,7 +252,8 @@ export function voxelSolid(sh: THREE.WebGLProgramParametersWithUniforms) {
 /** Shader hook for window glass (MeshStandardMaterial). */
 export function voxelGlass(sh: THREE.WebGLProgramParametersWithUniforms) {
   vertex(sh);
+  sh.uniforms.uGlassNight = GLASS_NIGHT;
   sh.fragmentShader = sh.fragmentShader
-    .replace("#include <common>", "#include <common>\n" + FRAG_HEAD)
+    .replace("#include <common>", "#include <common>\nuniform float uGlassNight;\n" + FRAG_HEAD)
     .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + GLASS);
 }

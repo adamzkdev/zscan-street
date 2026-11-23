@@ -8,6 +8,8 @@ import * as THREE from "three";
  */
 
 export const SKY_HORIZON = { day: "#e3e9f3", night: "#1c0e28" };
+/** The game's day (src/gta): clearer air, a deeper blue overhead, a blue haze at the horizon instead of a white one. */
+export const GAME_HORIZON = "#b8cfea";
 
 const cache = new Map<string, THREE.Texture>();
 const W = 2048,
@@ -34,14 +36,22 @@ function toCanvas(dir: THREE.Vector3) {
 /** Canvas row of an elevation (radians above the horizon). */
 const rowAt = (elev: number) => (0.5 - elev / Math.PI) * H;
 
-function paint(day: boolean, sunDir: THREE.Vector3) {
+function paint(day: boolean, sunDir: THREE.Vector3, game = false) {
   const c = document.createElement("canvas");
   c.width = W;
   c.height = H;
   const ctx = c.getContext("2d")!;
   const r = rng(day ? 41 : 97);
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  if (day) {
+  if (day && game) {
+    g.addColorStop(0, "#164fbe");
+    g.addColorStop(0.2, "#3b7bd6");
+    g.addColorStop(0.36, "#73a7e6");
+    g.addColorStop(0.46, "#a3c4ec");
+    g.addColorStop(0.5, GAME_HORIZON);
+    g.addColorStop(0.53, "#c2cfe0");
+    g.addColorStop(1, "#b9c3d2");
+  } else if (day) {
     g.addColorStop(0, "#2a62bf");
     g.addColorStop(0.2, "#4a86d8");
     g.addColorStop(0.36, "#86b2ea");
@@ -140,9 +150,9 @@ function paint(day: boolean, sunDir: THREE.Vector3) {
 }
 
 /** The sky for a theme; `sunDir` points toward the sun (or the moon). */
-export function skyTexture(day: boolean, sunDir: THREE.Vector3) {
-  const key = day ? "day" : "night";
+export function skyTexture(day: boolean, sunDir: THREE.Vector3, game = false) {
+  const key = day ? (game ? "game" : "day") : "night";
   let t = cache.get(key);
-  if (!t) cache.set(key, (t = paint(day, sunDir.clone().normalize())));
+  if (!t) cache.set(key, (t = paint(day, sunDir.clone().normalize(), game && day)));
   return t;
 }

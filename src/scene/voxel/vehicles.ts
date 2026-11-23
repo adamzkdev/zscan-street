@@ -347,3 +347,146 @@ export function policeModel() {
   }
   return m;
 }
+
+// ---- the street's other cars (the game's traffic: sports cars, SUVs, pickups, vans, convertibles) ----
+// Same build as the sedan: front +x, passenger side +z, wheel wells left open at x ≈ 5 and w − 6
+// (the game's own wheels go there when you take one, see src/gta/vehicle.ts SPECS).
+
+const lamps = (m: VoxelModel, w: number, d: number, y: number, inset = 1) => {
+  m.box(w - 1, y, inset, w, y + 1, inset + 2, E("#fff6e0", 3));
+  m.box(w - 1, y, d - inset - 2, w, y + 1, d - inset, E("#fff6e0", 3));
+  m.box(0, y, inset, 1, y + 1, inset + 2, E("#ff2a1a", 2.4));
+  m.box(0, y, d - inset - 2, 1, y + 1, d - inset, E("#ff2a1a", 2.4));
+};
+const wells = (m: VoxelModel, d: number, xs: number[]) => {
+  for (const x of xs) {
+    m.clear(x - 2, 0, 0, x + 3, 2, 1);
+    m.clear(x - 2, 0, d - 1, x + 3, 2, d);
+  }
+};
+
+/** A low two-door sports car: a long bonnet, the cabin set back, a wing on the tail, a neon line under it. */
+export function sportsModel(paint: string, glow: string) {
+  const w = 26,
+    d = 11;
+  const m = new VoxelModel(w, 9, d);
+  const body = C(paint),
+    dark = C("#141418");
+  m.box(1, 1, 0, w - 1, 4, d, body);
+  m.box(0, 1, 1, w, 3, d - 1, body);
+  // the nose lower than the tail
+  m.clear(w - 3, 3, 0, w, 4, d);
+  m.box(w - 3, 3, 1, w, 4, d - 1, body);
+  // the cabin, low, glass all round
+  m.box(8, 4, 1, w - 10, 7, d - 1, body);
+  m.box(9, 4, 0, w - 11, 6, d, G("#141c2c"));
+  m.box(w - 11, 4, 1, w - 10, 6, d - 1, G("#1e2638"));
+  m.box(8, 4, 1, 9, 6, d - 1, G("#1e2638"));
+  // side intakes, the wing on its posts
+  m.box(7, 1, 0, 10, 3, 1, dark);
+  m.box(7, 1, d - 1, 10, 3, d, dark);
+  m.box(1, 6, 1, 4, 7, d - 1, body);
+  m.box(2, 4, 2, 3, 6, 3, dark);
+  m.box(2, 4, d - 3, 3, 6, d - 2, dark);
+  lamps(m, w, d, 2);
+  m.box(3, 0, 1, w - 3, 1, 2, E(glow, 1.8));
+  m.box(3, 0, d - 2, w - 3, 1, d - 1, E(glow, 1.8));
+  wells(m, d, [5, w - 6]);
+  return m;
+}
+
+/** A tall SUV: a boxy body, roof rails, a spare wheel on the back. */
+export function suvModel(paint: string) {
+  const w = 27,
+    d = 12;
+  const m = new VoxelModel(w, 14, d);
+  const body = C(paint),
+    dark = C("#1a1a20");
+  m.box(1, 1, 0, w - 1, 7, d, body);
+  m.box(0, 2, 1, w, 6, d - 1, body);
+  m.box(3, 7, 1, w - 5, 12, d - 1, body);
+  // the glass band and its pillars
+  m.box(4, 8, 0, w - 6, 11, d, G("#18202e"));
+  for (const x of [10, 16]) m.box(x, 8, 0, x + 1, 11, d, body);
+  m.box(w - 6, 7, 1, w - 4, 11, d - 1, G("#1e2638"));
+  // roof rails, bumpers, the spare
+  m.box(4, 12, 1, w - 6, 13, 2, dark);
+  m.box(4, 12, d - 2, w - 6, 13, d - 1, dark);
+  m.box(0, 1, 1, 1, 3, d - 1, dark);
+  m.box(w - 1, 1, 1, w, 3, d - 1, dark);
+  m.box(0, 4, 4, 1, 8, 8, dark);
+  lamps(m, w, d, 5);
+  wells(m, d, [5, w - 6]);
+  return m;
+}
+
+/** A pickup: a cab and an open bed, a load in it now and then. */
+export function pickupModel(paint: string, load: boolean) {
+  const w = 30,
+    d = 12;
+  const m = new VoxelModel(w, 13, d);
+  const body = C(paint),
+    dark = C("#1a1a20");
+  m.box(1, 1, 0, w - 1, 6, d, body);
+  m.box(0, 2, 1, w, 5, d - 1, body);
+  // the cab
+  m.box(w - 15, 6, 1, w - 6, 11, d - 1, body);
+  m.box(w - 14, 7, 0, w - 7, 10, d, G("#18202e"));
+  m.box(w - 7, 6, 1, w - 6, 10, d - 1, G("#1e2638"));
+  // the bed: its walls, its floor a shade darker, the tailgate
+  m.clear(2, 4, 1, w - 16, 6, d - 1);
+  m.box(2, 3, 1, w - 16, 4, d - 1, dark);
+  if (load) {
+    m.box(4, 4, 2, 9, 8, 6, C("#a8743f"));
+    m.box(10, 4, 3, 14, 7, 9, C("#8a6236"));
+  }
+  m.box(0, 1, 1, 1, 3, d - 1, dark);
+  lamps(m, w, d, 4);
+  wells(m, d, [5, w - 6]);
+  return m;
+}
+
+/** A delivery van: tall and square, a stripe down its side. */
+export function vanModel(paint: string, stripe: string) {
+  const w = 31,
+    d = 12;
+  const m = new VoxelModel(w, 17, d);
+  const body = C(paint);
+  m.box(1, 1, 0, w - 1, 15, d, body);
+  m.box(0, 2, 1, w, 6, d - 1, body);
+  // the sloped front and its windscreen
+  m.clear(w - 3, 10, 0, w - 1, 15, d);
+  m.box(w - 3, 10, 1, w - 1, 14, d - 1, G("#18202e"));
+  m.box(w - 7, 9, 0, w - 3, 13, d, G("#18202e"));
+  m.box(2, 7, 0, w - 8, 9, d, C(stripe));
+  m.box(0, 1, 1, 1, 3, d - 1, C("#1a1a20"));
+  lamps(m, w, d, 4);
+  wells(m, d, [5, w - 6]);
+  return m;
+}
+
+/** A convertible, top down: the seats and their headrests in the open, a chrome line. */
+export function convertibleModel(paint: string, seats: string) {
+  const w = 25,
+    d = 11;
+  const m = new VoxelModel(w, 10, d);
+  const body = C(paint);
+  m.box(1, 1, 0, w - 1, 5, d, body);
+  m.box(0, 2, 1, w, 4, d - 1, body);
+  // the cockpit: open, the seats in it
+  m.clear(6, 4, 1, w - 9, 5, d - 1);
+  m.box(6, 3, 1, w - 9, 4, d - 1, C(seats));
+  for (const x of [8, 13])
+    for (const z of [2, d - 5]) {
+      m.box(x, 4, z, x + 3, 6, z + 3, C(seats));
+      m.box(x, 6, z + 1, x + 1, 8, z + 2, C(seats));
+    }
+  // the windscreen's frame and glass
+  m.box(w - 9, 5, 1, w - 8, 8, d - 1, G("#2a3448"));
+  m.box(w - 9, 8, 1, w - 8, 9, d - 1, C("#c8ccd4"));
+  m.box(2, 4, 0, w - 2, 5, 1, C("#c8ccd4"));
+  m.box(2, 4, d - 1, w - 2, 5, d, C("#c8ccd4"));
+  lamps(m, w, d, 3);
+  wells(m, d, [5, w - 6]);
+  return m;
+}

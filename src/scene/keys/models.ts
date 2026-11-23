@@ -1213,3 +1213,47 @@ export function rock(seed: number) {
   }
   return m;
 }
+
+/** A beach towel on the sand (2 m × 1 m), in stripes, a bag or a pair of flip-flops beside it now and then. */
+export function towel(seed: number) {
+  const r = rand(seed);
+  const cols = ["#ff7fb0", "#46c8e0", "#f4b728", "#ff8a3a", "#4dffb8", "#b56bff", "#ffffff", "#e8333f", "#3a6aff"];
+  const a = C(cols[Math.floor(r() * cols.length)]),
+    b = C(cols[Math.floor(r() * cols.length)]);
+  const m = new VoxelModel(10, 3, 16);
+  for (let z = 2; z < 14; z++) for (let x = 2; x < 8; x++) m.set(x, 0, z, Math.floor(z / 2) % 2 ? a : b);
+  if (r() < 0.5) m.box(8, 0, 3, 10, 2, 6, C(["#2a2a30", "#c8664a", "#f6efe2"][Math.floor(r() * 3)]));
+  if (r() < 0.4) for (const x of [0, 1]) m.box(x * 1 + 0, 0, 12, x + 1, 1, 14, C("#ff4fa3"));
+  return m;
+}
+
+/** A sandcastle at the water's edge: a keep, four towers with their crenels, a moat, a bucket and a spade. */
+export function sandcastle(seed: number) {
+  const r = rand(seed);
+  const m = new VoxelModel(16, 12, 16);
+  const sand = shades(["#e2c98f", "#d9bf84", "#e8d29c"], 1, 30 + seed);
+  const wet = C("#b89e6e");
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) {
+    const d = Math.max(Math.abs(x - 7.5), Math.abs(z - 7.5));
+    if (d > 6.5 && d < 7.6) m.set(x, 0, z, wet);
+  }
+  m.box(4, 0, 4, 12, 4, 12, sand);
+  for (const [x, z] of [
+    [3, 3],
+    [11, 3],
+    [3, 11],
+    [11, 11],
+  ]) {
+    m.box(x, 0, z, x + 2, 6 + Math.floor(r() * 2), z + 2, sand);
+    m.set(x, 7, z, sand);
+    m.set(x + 1, 7, z + 1, sand);
+  }
+  m.box(6, 4, 6, 10, 8, 10, sand);
+  for (let x = 6; x < 10; x += 2) for (const z of [6, 9]) m.set(x, 8, z, sand);
+  m.set(7, 9, 7, C("#d8333f"));
+  m.set(7, 10, 7, C("#d8333f"));
+  const pail = C(["#ff4fa3", "#46c8e0", "#f4b728", "#4dffb8"][Math.floor(r() * 4)]);
+  m.box(13, 0, 13, 16, 3, 16, pail);
+  m.box(0, 0, 14, 3, 1, 15, C("#3a6aff"));
+  return m;
+}

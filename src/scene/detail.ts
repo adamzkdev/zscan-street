@@ -13,6 +13,8 @@ const DETAIL_ENABLED = typeof location === "undefined" || new URLSearchParams(lo
 
 /** Seconds, for the water's ripples (advanced by the app). */
 export const DETAIL_TIME = { value: 0 };
+/** How wet the tarmac is (0 dry by day … 1 a damp night with puddles), set with the theme. */
+export const DETAIL_WET = { value: 0 };
 
 const IDS: Record<Detail, number> = { asphalt: 0, paving: 1, grass: 2, concrete: 3, water: 4, plaster: 5, polished: 6, fabric: 7, wood: 8, metal: 9 };
 
@@ -42,6 +44,7 @@ const FRAG_HEAD = /* glsl */ `
 varying vec3 vDetW;
 varying vec3 vDetN;
 uniform float uDetTime;
+uniform float uDetWet;
 float dtHash(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -68,13 +71,29 @@ float dtH = 0.0, dtFade = 0.0, dtRough = -1.0, dtBump = 0.004;
   float tint = 0.0;
   int k = DETAIL_KIND;
   if (k == 0) {
-    // asphalt: aggregate, and where the camber holds water a darker, glossier film
+    // asphalt: aggregate; over metres, slow blotches of older and newer tarmac and the grime of
+    // the wheel tracks (in the world's own metres: the street's 16 m tile no longer repeats to the eye)
     float agg = dtNoise(q * 38.0);
-    float film = 0.0; // dry tarmac: no wet film
-    tint = (agg - 0.5) * 0.12 * dtFade - film * 0.12 * far * step(roughness, 0.6);
+    float wide = 1.0 - smoothstep(1.2, 4.0, px);
+    float mid = 0.5;
+    if (wide > 0.0) {
+      float big = dtFbm(q * 0.045 + 3.1);
+      mid = dtFbm(q * 0.23 + 9.7);
+      tint = ((big - 0.5) * 0.2 + (mid - 0.5) * 0.1) * wide;
+    }
+    tint += (agg - 0.5) * 0.12 * dtFade + (dtNoise(q * 3.3) - 0.5) * 0.05 * far;
     dtH = agg;
-    // (only on wet nights: dry tarmac by day stays matte)
-    dtRough = mix(roughness, roughness * 0.35, film * far * step(roughness, 0.6));
+    dtRough = roughness;
+    // by night the tarmac is damp — darker, with a sheen — and holds puddles in its hollows that
+    // mirror the neon and the lamps (the screen-space reflections read the gloss)
+    if (uDetWet > 0.0) {
+      float puddle = smoothstep(0.6, 0.67, dtFbm(q * 0.15 + 21.0) * 0.8 + mid * 0.2);
+      float film = uDetWet * (0.4 + 0.6 * puddle);
+      // (damp tarmac darker; a puddle less so: it mirrors, it is not a hole)
+      tint -= (0.2 - 0.1 * puddle) * uDetWet * wide;
+      dtH *= 1.0 - puddle * uDetWet;
+      dtRough = mix(roughness, mix(0.42, 0.05, puddle), film);
+    }
   } else if (k == 1) {
     // paving: a little wear and dirt, a sandy grain
     float g = dtNoise(q * 26.0);
@@ -162,6 +181,7 @@ const FRAG_BUMP = /* glsl */ `
 function hook(kind: Detail, spec: number) {
   return (sh: THREE.WebGLProgramParametersWithUniforms) => {
     sh.uniforms.uDetTime = DETAIL_TIME;
+    sh.uniforms.uDetWet = DETAIL_WET;
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + VERT_HEAD).replace("#include <project_vertex>", "#include <project_vertex>\n" + VERT_BODY);
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", `#include <common>\n#define DETAIL_KIND ${IDS[kind]}\n` + FRAG_HEAD)

@@ -79,9 +79,11 @@ export function roadTexture(len: number, width: number, crossAt: number[], lanes
   ctx.fillStyle = day ? "#8e8da6" : "#2a2833";
   ctx.fillRect(0, 0, c.width, c.height);
   noise(ctx, c.width, c.height, day ? 0.04 : 0.12, r, 4);
-  // patches and cracks
-  for (let i = 0; i < 40; i++) {
-    ctx.fillStyle = day ? `rgba(${r() > 0.5 ? "150,148,168" : "190,188,204"},${0.15 + r() * 0.15})` : `rgba(${r() > 0.5 ? "20,18,26" : "60,56,70"},${0.25 + r() * 0.3})`;
+  // patches and cracks (a few, soft: on a short tile repeated down a street, hard dark rectangles
+  // came back every 16 m; the detail shader adds the variation over metres)
+  const nPatch = Math.round(Math.min(40, (len * width) / 60));
+  for (let i = 0; i < nPatch; i++) {
+    ctx.fillStyle = day ? `rgba(${r() > 0.5 ? "150,148,168" : "190,188,204"},${0.15 + r() * 0.15})` : `rgba(${r() > 0.5 ? "20,18,26" : "60,56,70"},${0.1 + r() * 0.14})`;
     ctx.fillRect(r() * c.width, r() * c.height, 20 + r() * 90, 10 + r() * 40);
   }
   ctx.strokeStyle = day ? "rgba(120,118,140,0.25)" : "rgba(10,10,14,0.7)";
@@ -140,7 +142,8 @@ function dayRoadTexture(len: number, width: number, crossAt: number[], lanes: nu
     if (x - w < 0) fn(W);
     if (x + w > W) fn(-W);
   };
-  ctx.fillStyle = "#5c5b63";
+  // (a shade darker than it was: the paint reads against it, the street less washed out in the sun)
+  ctx.fillStyle = "#535259";
   ctx.fillRect(0, 0, W, H);
   // big soft blotches: the surface's age, lighter and darker
   for (let i = 0; i < 26; i++) {
@@ -171,27 +174,39 @@ function dayRoadTexture(len: number, width: number, crossAt: number[], lanes: nu
       ctx.fillStyle = g;
       ctx.fillRect(0, mid + off - 0.35 * P, W, 0.7 * P);
     }
-    for (let i = 0; i < 14; i++) {
+    // the oil drips down the middle of the lane: soft-edged, faint, a few (on a 16 m tile they repeat)
+    const drips = Math.max(3, Math.round(len / 4));
+    for (let i = 0; i < drips; i++) {
       const x = r() * W,
         y = mid + (r() - 0.5) * 0.5 * P;
-      const rx = 6 + r() * 26,
-        ry = 3 + r() * 9;
+      const rx = 6 + r() * 22,
+        ry = 3 + r() * 7;
+      const a = 0.05 + r() * 0.08;
       wrap(x, rx, (dx) => {
-        ctx.fillStyle = `rgba(18,18,22,${0.12 + r() * 0.16})`;
+        ctx.save();
+        ctx.translate(x + dx, y);
+        ctx.scale(1, ry / rx);
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+        g.addColorStop(0, `rgba(16,16,20,${a})`);
+        g.addColorStop(0.6, `rgba(16,16,20,${a * 0.6})`);
+        g.addColorStop(1, "rgba(16,16,20,0)");
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.ellipse(x + dx, y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.arc(0, 0, rx, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
       });
     }
   }
-  // patched trenches: darker, sharp-edged, a sealed seam round them
-  for (let i = 0; i < 4; i++) {
+  // patched trenches: darker, sharp-edged, a sealed seam round them (only on long tiles: on a 16 m
+  // one the same patch came back at every tile)
+  for (let i = 0; i < (len >= 40 ? 3 : 0); i++) {
     const w = (1.2 + r() * 4) * P,
       h = (0.8 + r() * 2.5) * P;
     const x = r() * W,
       y = r() * (H - h);
     wrap(x + w / 2, w, (dx) => {
-      ctx.fillStyle = r() < 0.5 ? "rgba(56,55,62,0.55)" : "rgba(84,83,90,0.45)";
+      ctx.fillStyle = r() < 0.5 ? "rgba(56,55,62,0.3)" : "rgba(84,83,90,0.26)";
       ctx.fillRect(x + dx, y, w, h);
       ctx.strokeStyle = "rgba(22,22,26,0.45)";
       ctx.lineWidth = 1.5;
@@ -273,7 +288,8 @@ function dayPavingTexture(seed: number, tiles: number) {
   const s = 256 / tiles;
   for (let y = 0; y < tiles; y++)
     for (let x = 0; x < tiles; x++) {
-      const g = 178 + Math.floor(r() * 20);
+      // (concrete grey, not white: in full sun the pavements glared)
+      const g = 140 + Math.floor(r() * 18);
       ctx.fillStyle = `rgb(${g},${g - 2},${g - 6})`;
       ctx.fillRect(x * s, y * s, s, s);
       // the bevel: a light edge up and left, a dark one down and right
@@ -303,7 +319,7 @@ function dayPavingTexture(seed: number, tiles: number) {
     ctx.arc(r() * 256, r() * 256, 1 + r() * 1.6, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.strokeStyle = "rgba(96,92,88,0.75)";
+  ctx.strokeStyle = "rgba(78,74,70,0.8)";
   ctx.lineWidth = 2;
   for (let i = 0; i <= tiles; i++) {
     ctx.beginPath();

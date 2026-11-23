@@ -11,7 +11,7 @@ import { GT_SPEC, MOTO_SPEC, gtModel, motoModel } from "./models";
  * (scene/nav.ts) with three circles along its length, and bounce it off.
  */
 
-export type VehicleKind = "gt" | "moto" | "sedan" | "taxi" | "police" | "truck";
+export type VehicleKind = "gt" | "moto" | "sedan" | "taxi" | "police" | "truck" | "sports" | "suv" | "pickup" | "van" | "convertible";
 
 interface Spec {
   name: string;
@@ -32,15 +32,23 @@ interface Spec {
   gears: number;
   /** Two wheels: one per axle, and it leans into the turns. */
   bike?: boolean;
+  /** For the crashes: how hard it is to shove (tonnes, more or less). */
+  mass: number;
 }
 
 export const SPECS: Record<VehicleKind, Spec> = {
-  gt: { name: "ZK-GT", accel: 11, vmax: 50, grip: 8.5, turn: 1, len: GT_SPEC.w * VOX, wid: GT_SPEC.d * VOX, wheelR: 0.32, wheels: [6, 21], vox: 27, track: 5.1, gears: 7 },
-  moto: { name: "ZK-R motorbike", accel: 12.5, vmax: 54, grip: 9.5, turn: 1, len: MOTO_SPEC.w * VOX, wid: 0.85, wheelR: 0.33, wheels: [2.5, 11.5], vox: MOTO_SPEC.w, track: 0, gears: 6, bike: true },
-  sedan: { name: "Sedan", accel: 7, vmax: 40, grip: 7.5, turn: 0.9, len: 4, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 18], vox: 24, track: 4.6, gears: 5 },
-  taxi: { name: "Taxi", accel: 6.5, vmax: 38, grip: 7.5, turn: 0.9, len: 4.5, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 21], vox: 27, track: 4.6, gears: 5 },
-  police: { name: "Police cruiser", accel: 8.5, vmax: 47, grip: 8, turn: 0.95, len: 26 * VOX, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 20], vox: 26, track: 4.6, gears: 6 },
-  truck: { name: "Box truck", accel: 4.2, vmax: 27, grip: 6, turn: 0.7, len: 7, wid: 2.1, wheelR: 0.34, wheels: [8, 34], vox: 42, track: 5, gears: 5 },
+  gt: { name: "ZK-GT", accel: 11, vmax: 50, grip: 8.5, turn: 1, len: GT_SPEC.w * VOX, wid: GT_SPEC.d * VOX, wheelR: 0.32, wheels: [6, 21], vox: 27, track: 5.1, gears: 7, mass: 1.5 },
+  moto: { name: "ZK-R motorbike", accel: 12.5, vmax: 54, grip: 9.5, turn: 1, len: MOTO_SPEC.w * VOX, wid: 0.85, wheelR: 0.33, wheels: [2.5, 11.5], vox: MOTO_SPEC.w, track: 0, gears: 6, bike: true, mass: 0.35 },
+  sedan: { name: "Sedan", accel: 7, vmax: 40, grip: 7.5, turn: 0.9, len: 4, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 18], vox: 24, track: 4.6, gears: 5, mass: 1.3 },
+  taxi: { name: "Taxi", accel: 6.5, vmax: 38, grip: 7.5, turn: 0.9, len: 4.5, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 21], vox: 27, track: 4.6, gears: 5, mass: 1.4 },
+  police: { name: "Police cruiser", accel: 8.5, vmax: 47, grip: 8, turn: 0.95, len: 26 * VOX, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 20], vox: 26, track: 4.6, gears: 6, mass: 1.7 },
+  truck: { name: "Box truck", accel: 4.2, vmax: 27, grip: 6, turn: 0.7, len: 7, wid: 2.1, wheelR: 0.34, wheels: [8, 34], vox: 42, track: 5, gears: 5, mass: 4.5 },
+  // the street's other cars (scene/voxel/vehicles.ts): yours when you take one
+  sports: { name: "Sports car", accel: 10, vmax: 52, grip: 9, turn: 1, len: 26 * VOX, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 20], vox: 26, track: 4.6, gears: 6, mass: 1.3 },
+  suv: { name: "SUV", accel: 7, vmax: 40, grip: 7, turn: 0.85, len: 27 * VOX, wid: 12 * VOX, wheelR: 0.36, wheels: [5, 21], vox: 27, track: 5.1, gears: 5, mass: 2 },
+  pickup: { name: "Pickup", accel: 6.5, vmax: 38, grip: 6.8, turn: 0.8, len: 30 * VOX, wid: 12 * VOX, wheelR: 0.36, wheels: [5, 24], vox: 30, track: 5.1, gears: 5, mass: 2.2 },
+  van: { name: "Van", accel: 5, vmax: 32, grip: 6.3, turn: 0.75, len: 31 * VOX, wid: 12 * VOX, wheelR: 0.34, wheels: [5, 25], vox: 31, track: 5.1, gears: 5, mass: 2.6 },
+  convertible: { name: "Convertible", accel: 8, vmax: 44, grip: 8, turn: 0.95, len: 25 * VOX, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 19], vox: 25, track: 4.6, gears: 6, mass: 1.3 },
 };
 
 const TYRE = new THREE.MeshStandardMaterial({ color: "#121216", roughness: 0.85 });
@@ -92,8 +100,33 @@ export interface CarWorld {
   outside(x: number, z: number): boolean;
   /** The surface height under a wheel. */
   surface(x: number, z: number): number;
-  /** Other vehicles as boxes (centre, half sizes along x and z): the traffic, the trams. */
-  boxes(): Iterable<{ x: number; z: number; hx: number; hz: number }>;
+  /**
+   * Other vehicles as boxes (centre, half sizes along x and z). Those that can be shoved carry a
+   * `ref` (and their velocity and mass): a touch is noted in `contacts` and the game trades the
+   * momentum (no wall's bounce off them).
+   */
+  boxes(): Iterable<CarBox>;
+}
+
+export interface CarBox {
+  x: number;
+  z: number;
+  hx: number;
+  hz: number;
+  ref?: unknown;
+  vx?: number;
+  vz?: number;
+  mass?: number;
+}
+
+/** A touch with something that can be shoved: who, the normal from it to the car, where. */
+export interface Contact {
+  ref: unknown;
+  box: CarBox;
+  nx: number;
+  nz: number;
+  x: number;
+  z: number;
 }
 
 const tmp = new THREE.Vector3();
@@ -134,6 +167,10 @@ export class DriveCar {
   private own: boolean;
   /** The last hit this frame, read by the game. */
   hit: Hit | null = null;
+  /** What it touched this frame that can be shoved (the game trades the momentum). */
+  contacts: Contact[] = [];
+  /** Knocked about: seconds of sliding and spinning on its own (the tyres let go). */
+  stun = 0;
   /** Lit lamps at night. */
   lamps = false;
 
@@ -204,8 +241,20 @@ export class DriveCar {
     this.group.rotation.set(0, yaw, 0);
   }
 
+  /** Shoved: a change of velocity (m/s, world), a spin (rad/s), and a moment of sliding. */
+  push(dvx: number, dvz: number, spin: number, stun: number) {
+    this.vel.x += dvx;
+    this.vel.y += dvz;
+    this.yawRate += spin;
+    this.stun = Math.max(this.stun, stun);
+    const fx = Math.cos(this.yaw),
+      fz = -Math.sin(this.yaw);
+    this.vF = this.vel.x * fx + this.vel.y * fz;
+  }
+
   update(dt: number, inp: DriveIn, world: CarWorld) {
     this.hit = null;
+    this.contacts.length = 0;
     // small steps: a fast car must not cross a lamp post in one frame
     const n = Math.max(1, Math.ceil(dt / (1 / 90)));
     for (let i = 0; i < n; i++) this.step(dt / n, inp, world);
@@ -259,9 +308,12 @@ export class DriveCar {
     let target = -this.steerNow * peak * build * ease * (vF >= 0 ? 1 : -1);
     // the handbrake: the tail swings out, the steering holds the slide
     if (drift) target = target * 1.55 + -Math.sign(vL) * 0.15 * (this.steerNow === 0 ? 1 : 0);
-    // no input: the car straightens itself (no wobble after a turn)
-    const k = drift ? 4 : this.steerNow === 0 ? 14 : 9;
-    this.yawRate += (target - this.yawRate) * Math.min(1, dt * k);
+    // no input: the car straightens itself (no wobble after a turn); knocked about, it spins on
+    // and only slowly comes to rest
+    const stunned = this.stun > 0;
+    if (stunned) this.stun = Math.max(0, this.stun - dt);
+    const k = stunned ? 1.1 : drift ? 4 : this.steerNow === 0 ? 14 : 9;
+    this.yawRate += ((stunned ? 0 : target) - this.yawRate) * Math.min(1, dt * k);
     // the speed in the world (the engine's change along the car as it was)
     const wx = fx * vF + lx * vL,
       wz = fz * vF + lz * vL;
@@ -273,10 +325,11 @@ export class DriveCar {
     // seen from the turned car: what was ahead is now partly sideways, and the tyres take that out
     let nF = wx * fx + wz * fz;
     let nL = wx * lx + wz * lz;
-    const grip = drift ? 1.5 : s.grip * 1.6;
+    const grip = stunned ? 0.9 : drift ? 1.5 : s.grip * 1.6;
     nL *= Math.exp(-grip * dt);
-    // the tyres scrub speed while the car slides
-    nF -= Math.sign(nF) * Math.min(Math.abs(nF), Math.abs(nL) * 0.6 * dt);
+    // the tyres scrub speed while the car slides (sideways, a knocked car's skid: hard)
+    nF -= Math.sign(nF) * Math.min(Math.abs(nF), Math.abs(nL) * (stunned ? 1.4 : 0.6) * dt);
+    if (stunned) nL -= Math.sign(nL) * Math.min(Math.abs(nL), 4.5 * dt);
     this.vel.set(fx * nF + lx * nL, fz * nF + lz * nL);
     this.vF = nF;
     this.vR = nL;
@@ -317,8 +370,14 @@ export class DriveCar {
       }
     }
     let what: Hit["what"] = "wall";
+    // (the push from what can be shoved, kept apart: no bounce off it — the game trades the momentum)
+    let rx = 0,
+      rz = 0;
     // the other vehicles: boxes, the car a circle at each end
     for (const b of world.boxes()) {
+      let touched = false;
+      const bx0 = px,
+        bz0 = pz;
       for (const k of [-1, 0, 1]) {
         const cx = p.x + fx * half * k + px,
           cz = p.z + fz * half * k + pz;
@@ -338,10 +397,25 @@ export class DriveCar {
           px += (dx / d) * (r - d);
           pz += (dz / d) * (r - d);
         }
-        n++;
+        touched = true;
+        if (!b.ref) n++;
         what = "car";
       }
+      if (touched && b.ref) {
+        const ex = px - bx0,
+          ez = pz - bz0;
+        // (that push is the box's: off the bounce, onto its own account)
+        px = bx0;
+        pz = bz0;
+        rx += ex;
+        rz += ez;
+        const l = Math.hypot(ex, ez) || 1;
+        this.contacts.push({ ref: b.ref, box: b, nx: ex / l, nz: ez / l, x: p.x - (ex / l) * r, z: p.z - (ez / l) * r });
+      }
     }
+    // out of what can be shoved, without a bounce
+    p.x += rx;
+    p.z += rz;
     if (!n) return;
     const len = Math.hypot(px, pz);
     if (len < 1e-5) return;

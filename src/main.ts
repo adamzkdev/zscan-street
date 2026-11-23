@@ -23,7 +23,8 @@ import { goldenHour } from "./gta/frontend";
 import type { Person3 } from "./gta/people3d";
 import { FinishPass, GradePass, ScenePass } from "./scene/finish";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { applyTheme, setRainWanted, type Theme } from "./scene/theme";
+import { applyTheme, ATMOS, setRainWanted, type Theme } from "./scene/theme";
+import { applyDaylight, GameSky, type Daylight } from "./scene/daylight";
 import type { Snark } from "./scene/snark";
 import { Overlays } from "./ui/overlays";
 import { openPartyHall, openTableGame, wireParty } from "./party/city";
@@ -36,6 +37,8 @@ import { GoldenGate } from "./scene/goldengate";
 import { WalletCrowns } from "./scene/walletcrowns";
 import { Forest } from "./scene/forest";
 import { Keys } from "./scene/keys";
+import { KeysSea } from "./scene/keys/sea";
+import { SEA_Y } from "./scene/keys/plan";
 import { Cemetery } from "./scene/cemetery";
 import { Chatter } from "./scene/chatter";
 import { bubbles, drawBubbles } from "./scene/speech";
@@ -224,6 +227,10 @@ if (!SAFE && !new URLSearchParams(location.search).has("nothrift"))
   }
 const lampLights = new LampLights(scene, city.lamps, 12);
 const decor = buildDecor(scene, city);
+/** The game's sky (a shader dome with its clouds, sun and stars) and its rain round the camera: on while the game paints its own day. */
+const gameSky = new GameSky(scene);
+/** The game's fog for the frame (its day's), or null: the theme's. */
+let todFog: { near: number; far: number } | null = null;
 // the NU7 upgrade: countdown on the screens, fireworks when it activates
 const nu7 = new Nu7(scene, city, decor);
 const anniversary = new Anniversary(scene, nu7, city);
@@ -296,6 +303,41 @@ function setTheme(t: Theme) {
   shibuyaNight?.(t === "night");
 }
 let shibuyaNight: ((night: boolean) => void) | null = null;
+
+/**
+ * The game's day (src/gta skyclock → scene/daylight): the street's theme follows it at the blue hour
+ * (its night-only meshes, its night textures), and every frame the light, the sky, the fog, the
+ * lamps and the grade are painted over it. Null: the street's own theme back as it was.
+ */
+const skyEye = new THREE.Vector3();
+let rainHeard = false;
+function paintDay(d: Daylight | null) {
+  if (!d) {
+    if (!gameSky.on) return;
+    gameSky.on = false;
+    todFog = null;
+    if (rainHeard) sound.setRain((rainHeard = false));
+    MOON_OFFSET.set(-18, 34, 22);
+    setTheme(theme);
+    return;
+  }
+  gameSky.on = true;
+  // (the street's night — its night-only signs and textures — comes in at the blue hour, the sky already deep)
+  const dark = theme === "night" ? d.night > 0.7 : d.night > 0.82;
+  if (dark !== (theme === "night")) {
+    themePref = dark ? "night" : "day";
+    setTheme(dark ? "night" : "day");
+  }
+  // the sky is the game's dome (the theme painted its panorama as the background)
+  scene.background = null;
+  gameSky.set(d);
+  moonShadow = applyDaylight({ renderer, scene, hemi, sun: moon, bloom, lamps: lampLights, grade, offset: MOON_OFFSET }, d);
+  bloomThreshold = bloom.threshold;
+  const f = scene.fog as THREE.Fog;
+  todFog = { near: f.near, far: f.far };
+  const wet = d.rain > 0.2;
+  if (wet !== rainHeard) sound.setRain((rainHeard = wet));
+}
 /** The street's bloom threshold for the theme (raised indoors, see frame). */
 let bloomThreshold = 0.95;
 /** Set once the walk-in places exist (they are built further down). */
@@ -3035,6 +3077,13 @@ gta = new GtaMode({
   carSurface: (x, z) => (goldenGate.onDeck(x, z) ? goldenGate.deckAt(z) : keys.carSurface(x, z)),
   carHold: (p, r) => goldenGate.holdCar(p, r) || (keys.pushCar(p, r), false),
   beyond: (x, z) => keys.owns(x, z) || goldenGate.onDeck(x, z),
+  underwater: (on) => sound.underwater(on),
+  // (Orchard Keys' low sand and its sea: waded into, swum in)
+  sea: (x, z) => {
+    if (!KeysSea.inside(x, z) || !keys.owns(x, z) || keys.pierAt(x, z) !== null) return null;
+    const floor = keys.ground(x, z);
+    return floor < SEA_Y + 1.35 ? { floor, surface: SEA_Y } : null;
+  },
   enterBuilding: (v) => {
     if (jumping || closeChoice || interiors.active) return;
     buildingDoor.at.set(v.x, CURB, v.z);
@@ -3188,7 +3237,21 @@ gta = new GtaMode({
   quality: () => ({ level: quality.level, pinned: quality.pinned, tiers: quality.tiers }),
   pinQuality: (l) => quality.pin(l),
   blur: (a) => speedFx.set(a),
-  grade: (on) => grade.game(on),
+  grade: (on) => {
+    grade.game(on);
+    // the game's day: a clearer sky, a blue haze farther out (scene/theme.ts ATMOS)
+    if (ATMOS.game !== on) {
+      ATMOS.game = on;
+      setTheme(theme);
+    }
+  },
+  takeCar: (ref) => goldenGate.take(ref),
+  tod: (d) => paintDay(d),
+  thunder: () => {
+    // the bolt's sound, a moment after its flash (farther, later)
+    const later = 300 + Math.random() * 2200;
+    setTimeout(() => sound.thunder(), later);
+  },
   react: (x, z, fx, fz) => {
     const now = performance.now();
     for (const s of director.snarks) {
@@ -3497,11 +3560,13 @@ function frameBody(stepDt?: number) {
     const up = iso ? 0 : Math.max(0, cam.position.y - 15) * 3.5;
     // (the iso camera usually stands 320 m back; a Titan pushes it farther: the fog goes with it)
     const back = iso ? cam.position.distanceTo(rig.controls.target) - 320 : 0;
-    scene.fog.near = (theme === "day" ? 170 : 150) + (iso ? 260 + back : 0) + up;
-    scene.fog.far = (theme === "day" ? 360 : 330) + (iso ? 420 + back : 0) + up * 1.6;
+    const clear = ATMOS.game && !iso;
+    scene.fog.near = (todFog && !iso ? todFog.near : theme === "day" ? (clear ? 200 : 170) : 150) + (iso ? 260 + back : 0) + up;
+    scene.fog.far = (todFog && !iso ? todFog.far : theme === "day" ? (clear ? 430 : 360) : 330) + (iso ? 420 + back : 0) + up * 1.6;
     load.fog(scene.fog.near, scene.fog.far);
   } else load.fog(1e9, 1e9);
   renderPass.camera = finish.camera = cam;
+  gameSky.frame(cam.getWorldPosition(skyEye), t, dt);
   load.view(cam);
   updateMemes(dt, cam, scene);
   cam.getWorldQuaternion(camQuat);

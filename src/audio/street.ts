@@ -332,9 +332,37 @@ const DISTRICTS: Record<string, District> = {
       s.every("ship-horn", 70, 140, (t) => shot(s, "ship-horn", t, 0.25, { pan: side(), lp: 1600 }), 20);
     },
   },
+  /**
+   * Orchard Beach itself: the surf breaking close, louder at the water's edge; the people on the sand
+   * (a far-off murmur, children splashing, a whistle from the lifeguards, the volleyball's thump), the
+   * beach bars' music drifting over.
+   */
+  beach: {
+    weight: (e) => fall(dRect(BEACH_R, e.x, e.z), 40),
+    build(s, e) {
+      preload(s.ctx, "applause");
+      const surf = loop(s, "waves", 1.0, { hp: 120 });
+      s.knobs.surf = surf.gain;
+      if (!e.night) {
+        loop(s, "pool", 0.22, { lp: 2600 });
+        loop(s, "gulls", 0.25);
+        // the lifeguard's whistle, now and then
+        s.every("whistle", 25, 60, (t) => [0, 0.32].forEach((d) => tone(s, t + d, 2900 + Math.random() * 200, "sine", 0.02, 0.22, 0.35, { pan: side() })), 8);
+        // a volleyball being hit
+        s.every("volley", 1.3, 2.6, (t) => drum(s, t, 140 + Math.random() * 40, 0.05, 0.4, side() * 0.6), 2);
+      }
+      music(s, ["jazz-combo", "sax-solo", "jazz-dixie"], e.night ? 0.32 : 0.2, 2200, 0.3);
+    },
+    update(s, e) {
+      // the surf louder the nearer the water's edge
+      s.knobs.surf?.setTargetAtTime(0.55 + 0.6 * Math.max(0, 1 - Math.abs(e.z - 492) / 40), s.now, 0.6);
+    },
+  },
 };
 /** Orchard Keys (src/scene/keys): the town, its beaches and the bluff behind it. */
-const KEYS_R = { x0: 82, x1: 338, z0: 238, z1: 446 };
+const KEYS_R = { x0: 70, x1: 352, z0: 238, z1: 492 };
+/** Orchard Beach: the big sand south of the promenade, to the water's edge and the swimmers off it. */
+const BEACH_R = { x0: 96, x1: 324, z0: 418, z1: 520 };
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 
 /** The fountain's distance in Central Park, for its own level. */

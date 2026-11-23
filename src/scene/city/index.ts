@@ -8,6 +8,7 @@ import { C, E, G, VOX, VoxelModel, type Kind } from "../voxel/model";
 import type { SignSpot } from "../voxel/parts";
 import { mat } from "./kit";
 import { AREAS, BAY, CITY, CORE, CURB, DISTRICTS, GRID, gridCells, nz, PARK, planCity, polePositions, RIVER, SHOTENGAI, ST, streetSegments, type BuildingJob, type DistrictKey } from "./plan";
+import { SEA_RECT } from "../keys/sea";
 import type { Geos } from "./worker";
 import { CUT_VOX } from "./plan";
 import { tunnels } from "./tunnel";
@@ -1363,8 +1364,13 @@ function coast(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   const CT = CITY;
   const wt = waterTexture();
   wt.wrapS = wt.wrapT = THREE.RepeatWrapping;
-  wt.repeat.set(5000 / 8, 5000 / 8);
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), addDetail(new THREE.MeshStandardMaterial({ map: wt, color: "#2f7392", roughness: 0.16, metalness: 0.25, emissive: "#05263a", emissiveIntensity: 0.7 }), "water"));
+  // (a hole where Orchard Keys' own clear water lies: scene/keys/sea.ts; the UVs in metres)
+  wt.repeat.set(1 / 8, 1 / 8);
+  const shape = new THREE.Shape([new THREE.Vector2(-2500, -2500), new THREE.Vector2(2500, -2500), new THREE.Vector2(2500, 2500), new THREE.Vector2(-2500, 2500)]);
+  const H = SEA_RECT;
+  // (the plane is turned flat with its y as −z)
+  shape.holes.push(new THREE.Path([new THREE.Vector2(H.x0, -H.z0), new THREE.Vector2(H.x0, -H.z1), new THREE.Vector2(H.x1, -H.z1), new THREE.Vector2(H.x1, -H.z0)]));
+  const sea = new THREE.Mesh(new THREE.ShapeGeometry(shape), addDetail(new THREE.MeshStandardMaterial({ map: wt, color: "#2f7392", roughness: 0.16, metalness: 0.25, emissive: "#05263a", emissiveIntensity: 0.7 }), "water"));
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(0, BAY.water - 0.06, 0);
   sea.receiveShadow = true;

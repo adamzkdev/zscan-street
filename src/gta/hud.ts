@@ -100,6 +100,8 @@ export interface Settings {
   crowd: "few" | "normal" | "busy";
   /** The sky in the game: a day-night cycle of its own, the visitor's clock, or fixed. */
   sky: "cycle" | "clock" | "day" | "night";
+  /** The weather: changing (clouds, showers, storms), or always fair. */
+  weather: "dynamic" | "clear";
   /** On foot: the camera follows behind by itself (W ahead, A/D turn), or the mouse turns it. */
   follow: boolean;
   carView: 0 | 1 | 2;
@@ -112,7 +114,7 @@ export interface Settings {
   units: "kmh" | "mph";
   volume: number;
 }
-export const DEFAULTS: Settings = { crowd: "normal", sky: "cycle", follow: true, carView: 0, footFar: false, fovAdd: 0, sens: 1, vibe: true, blur: "subtle", hud: "full", units: "kmh", volume: 1 };
+export const DEFAULTS: Settings = { crowd: "normal", sky: "cycle", weather: "clear", follow: true, carView: 0, footFar: false, fovAdd: 0, sens: 1, vibe: true, blur: "subtle", hud: "full", units: "kmh", volume: 1 };
 
 const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 const COACH = TOUCH
@@ -130,6 +132,13 @@ const COACH = TOUCH
     ];
 
 export class GtaHud {
+  /** The clock and the weather on the location card ("17:42" and a glyph's markup), or none. */
+  clock(time: string | null, icon = "") {
+    const el = this.root.querySelector<HTMLElement>(".gh-where .gh-clock");
+    if (!el) return;
+    const html = time ? `${icon}<span>${time}</span>` : "";
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
   readonly root: HTMLElement;
   private $ = <T extends HTMLElement = HTMLElement>(s: string) => this.root.querySelector<T>(s)!;
   private radar: HTMLCanvasElement;
@@ -177,7 +186,7 @@ export class GtaHud {
       <div class="gh-hp" style="--hp:1" title="Health"><i></i></div>
       <div class="gh-hurtfx"></div>
       <div class="gh-wasted"><b>Wasted</b><span>Knocked out cold. Back on your feet in a moment.</span></div>
-      <div class="gh-where"><b class="gh-dist"></b><span class="gh-st"></span><span class="gh-nx"></span></div>
+      <div class="gh-where"><b class="gh-dist"></b><span class="gh-st"></span><span class="gh-nx"></span><i class="gh-clock"></i></div>
       <div class="gh-speed">
         <svg viewBox="0 0 240 240" aria-hidden="true">
           <circle class="face" cx="120" cy="120" r="104"/>
@@ -965,7 +974,8 @@ export class GtaHud {
         <h3>HUD</h3>${seg("hud", [["full", "Full", "radar, speed, what's next"], ["min", "Minimal", "radar and speed"]], S.hud)}
         <h3>Speed</h3>${seg("units", [["kmh", "km/h"], ["mph", "mph"]], S.units)}
         <h3>Streets</h3>${seg("crowd", [["few", "Quiet"], ["normal", "Lively"], ["busy", "Busy", "the most people about"]], S.crowd)}
-        <h3>Day and night <span>T</span></h3>${seg("sky", [["cycle", "Cycle", "a day every 14 min"], ["clock", "My clock", "night 19:00–7:00"], ["day", "Day"], ["night", "Night"]], S.sky)}`;
+        <h3>Day and night <span>T</span></h3>${seg("sky", [["cycle", "Cycle", "a day in about 19 min"], ["clock", "My clock", "the hour where you are"], ["day", "Afternoon"], ["night", "Night"]], S.sky)}
+        <h3>Weather</h3>${seg("weather", [["dynamic", "Changing", "clouds, showers, storms"], ["clear", "Always fair"]], S.weather)}`;
     else if (this.tab === "graphics") {
       const q = this.menu.quality();
       const names = ["Ultra", "High", "Balanced", "Light", "Battery saver"];
