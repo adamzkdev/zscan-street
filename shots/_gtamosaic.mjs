@@ -9,7 +9,10 @@ await p.goto(URL);
 await p.waitForFunction(() => window.__streetUp && window.street?.gta?.garage?.open, { timeout: 240000, polling: 300 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 await sleep(1500);
-await p.click(".gg-all");
+// (the front end's line-up: its "All 10,000")
+await p.evaluate(() => street.gta.front.select());
+await sleep(1500);
+await p.click(".gf-tools [data-do=all]");
 await p.waitForFunction(() => document.querySelector(".gm-wait")?.style.display === "none", { timeout: 60000, polling: 300 });
 await sleep(800);
 await p.screenshot({ path: `${OUT}-1-all.png` });
@@ -26,6 +29,6 @@ console.log(await p.evaluate(() => document.querySelector(".gm-count").textConte
 await p.mouse.click(700, 300);
 await sleep(1500);
 await p.screenshot({ path: `${OUT}-4-picked.png` });
-console.log(await p.evaluate(() => JSON.stringify({ id: street.gta.garage.id, mosaic: document.querySelector(".gg-mosaic").classList.contains("on") })));
+console.log(await p.evaluate(() => JSON.stringify({ id: document.querySelector(".gf-cname em")?.textContent, mosaic: document.querySelector(".gg-mosaic").classList.contains("on") })));
 console.log("errors", errs.length, errs.slice(0, 5).join("\n"));
 await b.close();

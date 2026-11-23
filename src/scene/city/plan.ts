@@ -151,7 +151,8 @@ export const WORKS_VOX = 64;
 export const NU7Q = {
   tower: { x: 205.5, z: -84, half: 8 },
   board: { x: 205.5, z: -54.5 },
-  kart: { x0: 131, x1: 187, z0: -113, z1: -50.5 },
+  // (its west and north fences stood on the boulevard and Park Row once they grew wider)
+  kart: { x0: 133.2, x1: 187, z0: -111.8, z1: -50.5 },
   /** The NU7 TOWER's doors on its south face (a walk-in place once NU7 is live), and the circuit's pit gate on the east fence, facing the tower. */
   door: { x: 205.5, z: -75.6 },
   pit: { x: 187, z: -84 },
@@ -1033,7 +1034,8 @@ export function planCity() {
       circles.push([B.x - 3.6, B.z, 0.4], [B.x + 3.6, B.z, 0.4]);
       for (let z = T.z + T.half + 6; z < -52; z += 7) {
         const [kind, seed] = greenKinds[gk++ % greenKinds.length];
-        for (const x of [193.5, 217.5]) {
+        // (the east row a little in from the ring road's kerb: the trunks stood on its edge)
+        for (const x of [193.5, 215.6]) {
           props.push({ type: "tree", args: [kind, seed], x, z, rot: gk, y: CURB, district: "downtown" });
           circles.push([x, z, 0.5]);
         }
@@ -1153,6 +1155,32 @@ export function planCity() {
       else m.z = o.z + (m.z >= o.z ? 0.75 : -0.75);
     }
 
+  // the viaducts' legs stand on the pavements: nothing of the street's furniture in them (a lamp
+  // steps along the kerb, the rest goes)
+  {
+    const legs = viaductBents().flatMap((b) => b.legs);
+    const hit = (x: number, z: number, r: number) => legs.some(([lx, lz]) => Math.abs(x - lx) < r && Math.abs(z - lz) < r);
+    for (let i = props.length - 1; i >= 0; i--) {
+      const q = props[i];
+      if (!hit(q.x, q.z, q.type === "tree" ? 2.2 : 1.3)) continue;
+      if (q.type === "lamp") {
+        const leg = legs.find(([lx, lz]) => Math.abs(q.x - lx) < 1.3 && Math.abs(q.z - lz) < 1.3)!;
+        // along the kerb: the lamp faces the street, so it moves along its own row
+        const alongX = Math.abs(Math.sin(q.rot)) < 0.5;
+        if (alongX) q.x = leg[0] + (q.x >= leg[0] ? 1.6 : -1.6);
+        else q.z = leg[1] + (q.z >= leg[1] ? 1.6 : -1.6);
+        if (!hit(q.x, q.z, 1.3)) continue;
+      }
+      props.splice(i, 1);
+    }
+    // (and their collision circles with them: a tree gone, its trunk's circle stayed, an invisible post)
+    // (the heart's own come first and are moved north at the end by their index: left alone)
+    for (let i = circles.length - 1; i >= heartCircles; i--) {
+      const [x, z, r] = circles[i];
+      if (r < 1.6 && hit(x, z, 2.2)) circles.splice(i, 1);
+    }
+  }
+
   return {
     jobs,
     props,
@@ -1267,5 +1295,70 @@ export function polePositions() {
     run.push({ x, z: CITY.north.z1 - 0.9 });
   }
   if (run.length > 1) out.push(run);
+  return out;
+}
+
+/**
+ * The elevated lines' viaducts: where the ZEC line (round the ring and along the crosstown) and the
+ * NU7 line (up the east boulevard) run, their decks' heights and their stations. They stand on bents
+ * — a leg on each pavement, a crossbeam over the street — so nothing of them is in the road.
+ */
+export const VIADUCT = {
+  zec: { deck: CURB + 9, stops: [[0, ST.south], [-172, ST.south], [ST.ringW, -82], [-160, ST.ringN], [-80, ST.ringN], [40, ST.ringN], [ST.ringE, -110], [168, ST.ringS], [40, ST.ringS], [-175, ST.ringS]] as [number, number][] },
+  nu7: { deck: CURB + 14, stops: [[ST.blvdE, -90], [ST.blvdE, 104]] as [number, number][] },
+};
+
+export interface Bent {
+  /** The centre (over the street's centre line), which way the line runs, the leg's offset either side. */
+  x: number;
+  z: number;
+  along: "x" | "z";
+  reach: number;
+  deck: number;
+  legs: [number, number][];
+}
+
+/** Every bent of both lines (pure: the props are kept clear of their legs, metro.ts draws them). */
+export function viaductBents(): Bent[] {
+  const r = 9;
+  const Z = VIADUCT.zec,
+    N = VIADUCT.nu7;
+  const runs: { along: "x" | "z"; at: number; from: number; to: number; line: typeof Z }[] = [
+    { along: "x", at: ST.south, from: ST.ringW + r, to: CITY.maxX - 3, line: Z },
+    { along: "z", at: ST.ringW, from: ST.ringN + r, to: ST.ringS - r, line: Z },
+    { along: "x", at: ST.ringN, from: ST.ringW + r, to: ST.ringE - r, line: Z },
+    { along: "z", at: ST.ringE, from: ST.ringN + r, to: ST.ringS - r, line: Z },
+    { along: "x", at: ST.ringS, from: ST.ringW + r, to: ST.ringE - r, line: Z },
+    { along: "z", at: ST.blvdE, from: ST.ringN + 10, to: ST.ringS - 10, line: N },
+  ];
+  const halfOf = (along: "x" | "z", at: number) => {
+    const list = along === "x" ? GRID.zs : GRID.xs,
+      w = along === "x" ? GRID.zw : GRID.xw;
+    const i = list.findIndex((c) => Math.abs(c - at) < 1.5);
+    return i >= 0 ? w[i] / 2 : 5;
+  };
+  /** In a street (any of the grid's, the avenue), with a margin. */
+  const inStreet = (x: number, z: number, m: number) =>
+    GRID.xs.some((c, i) => Math.abs(x - c) < GRID.xw[i] / 2 + m && z > CITY.minZ && z < ST.ringS + 10) ||
+    GRID.zs.some((c, i) => c !== ST.river && Math.abs(z - c) < GRID.zw[i] / 2 + m) ||
+    (z > CITY.road.z0 - m && z < CITY.road.z1 + m);
+  const out: Bent[] = [];
+  for (const run of runs) {
+    const half = halfOf(run.along, run.at);
+    const reach = half + 0.55;
+    for (let s = run.from + 6; s < run.to - 2; s += 16) {
+      const x = run.along === "x" ? s : run.at,
+        z = run.along === "x" ? run.at : s;
+      // not over a crossing, the river, nor where a station's platforms and stairs are
+      const cross = run.along === "x" ? GRID.xs.some((c, i) => Math.abs(x - c) < GRID.xw[i] / 2 + 1.6) : GRID.zs.some((c, i) => Math.abs(z - c) < GRID.zw[i] / 2 + 1.6) || (z > CITY.road.z0 - 1.6 && z < CITY.road.z1 + 1.6);
+      if (cross) continue;
+      if (run.along === "z" && z > RIVER.z0 - 2 && z < RIVER.z1 + 2) continue;
+      if (run.line.stops.some(([sx, sz]) => (run.along === "x" ? Math.abs(sz - z) < 2 && Math.abs(sx - x) < 29 : Math.abs(sx - x) < 2 && Math.abs(sz - z) < 29))) continue;
+      const legs: [number, number][] = run.along === "x" ? [[x, z - reach], [x, z + reach]] : [[x - reach, z], [x + reach, z]];
+      // each leg on a pavement: not in another street, not off the board
+      if (legs.some(([lx, lz]) => lx < CITY.minX + 0.6 || lx > CITY.maxX - 0.6 || lz < CITY.minZ + 0.6 || inStreet(lx, lz, 0.2) && !(run.along === "x" ? Math.abs(lz - run.at) < half + 0.1 : Math.abs(lx - run.at) < half + 0.1))) continue;
+      out.push({ x, z, along: run.along, reach, deck: run.line.deck, legs });
+    }
+  }
   return out;
 }

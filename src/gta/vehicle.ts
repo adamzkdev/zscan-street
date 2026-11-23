@@ -116,6 +116,8 @@ export class DriveCar {
   private beam: THREE.Mesh;
   private y = 0;
   private vy = 0;
+  private lastGround = 0;
+  private lastStep = 0;
   private pitch = 0;
   private roll = 0;
   /** Nitrous left (0…1), refilling slowly. */
@@ -376,7 +378,13 @@ export class DriveCar {
     const yF = world.surface(p.x + fx * s.len * 0.35, p.z + fz * s.len * 0.35);
     const yB = world.surface(p.x - fx * s.len * 0.35, p.z - fz * s.len * 0.35);
     const ground = (yF + yB) / 2;
-    this.vy += ((ground - this.y) * 260 - this.vy * 22) * dt;
+    // (a long ramp — the Golden Gate's deck — is followed at its own rate, not lagging half a metre
+    // under it; a kerb's step is left to the springs)
+    const step = ground - this.lastGround;
+    const gv = dt > 0 && Math.abs(step) < 0.5 && Math.abs(step - this.lastStep) < 0.06 ? THREE.MathUtils.clamp(step / dt, -10, 10) : 0;
+    this.lastGround = ground;
+    this.lastStep = step;
+    this.vy += ((ground - this.y) * 260 + (gv - this.vy) * 22) * dt;
     this.y += this.vy * dt;
     p.y = this.y;
     this.group.rotation.set(0, this.yaw, 0);

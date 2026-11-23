@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { CITY, PARK, GRID } from "../scene/city/plan";
+import { KEYS, KGRID } from "../scene/keys/plan";
 
 /** The base map's frame (the game's own maps, src/gta, draw from the same picture). */
 export const MAP_FRAME = {
@@ -27,10 +28,14 @@ export interface Blip {
   icon?: string;
 }
 
-/** The square of the city the base map covers (metres), centred on the board. */
-const SPAN = Math.max(CITY.maxX - CITY.minX, CITY.maxZ - CITY.minZ) + 16;
-const CX = (CITY.minX + CITY.maxX) / 2;
-const CZ = (CITY.minZ + CITY.maxZ) / 2;
+/** The square the base map covers (metres): the city and Orchard Keys across the bridge. */
+const MX0 = Math.min(CITY.minX, KEYS.x0),
+  MX1 = Math.max(CITY.maxX, KEYS.x1),
+  MZ0 = Math.min(CITY.minZ, KEYS.z0),
+  MZ1 = Math.max(CITY.maxZ, KEYS.z1);
+const SPAN = Math.max(MX1 - MX0, MZ1 - MZ0) + 16;
+const CX = (MX0 + MX1) / 2;
+const CZ = (MZ0 + MZ1) / 2;
 const RES = 2048;
 /** Metres from you to the radar's top and bottom edge. */
 const RANGE = 40;
@@ -76,6 +81,8 @@ const FRAG = /* glsl */ `
 uniform vec4 uPark;
 uniform vec4 uLake;
 uniform vec3 uLand;
+uniform vec4 uKeys;
+uniform vec4 uTown;
 varying float vY;
 varying vec2 vXZ;
 void main() {
@@ -91,10 +98,15 @@ void main() {
   if (park && dot(lk, lk) < 1.0) { gl_FragColor = vec4(1.0 / 255.0, 0.0, 0.0, 1.0); return; }
   green = green || park;
   float cls;
+  // Orchard Keys across the bridge: its town (streets, blocks, lots), the bluff behind it, its beaches
+  bool keys = vXZ.x > uKeys.x && vXZ.x < uKeys.y && vXZ.y > uKeys.z && vXZ.y < uKeys.w;
+  bool town = vXZ.x > uTown.x && vXZ.x < uTown.y && vXZ.y > uTown.z && vXZ.y < uTown.w;
   // the beach round the island (outside the land's rectangle, above the water)
-  bool shore = vXZ.x < uLand.x || vXZ.x > uLand.y || vXZ.y < uLand.z;
+  bool shore = !keys && (vXZ.x < uLand.x || vXZ.x > uLand.y || vXZ.y < uLand.z);
   if (vY < -0.45) cls = 1.0;
   else if (shore) cls = 6.0;
+  else if (keys && !town && vXZ.y < uTown.z) cls = vY < 0.1 ? 2.0 : 4.0;
+  else if (keys && !town) cls = vY < 0.25 ? 6.0 : vY < 1.4 ? 3.0 : 5.0;
   else if (green) cls = 4.0;
   else if (vY < 0.1) cls = 2.0;
   else if (vY < 0.9) cls = 3.0;
@@ -118,6 +130,8 @@ function bake(renderer: THREE.WebGLRenderer, scene: THREE.Scene): HTMLCanvasElem
       uPark: { value: new THREE.Vector4(GRID.park.x0, GRID.park.x1, GRID.park.z0, GRID.park.z1) },
       uLake: { value: new THREE.Vector4(PARK.lake.x, PARK.lake.z, PARK.lake.rx, PARK.lake.rz) },
       uLand: { value: new THREE.Vector3(CITY.minX, CITY.maxX, CITY.minZ) },
+      uKeys: { value: new THREE.Vector4(KEYS.x0, KEYS.x1, KEYS.z0 + 8, KEYS.z1) },
+      uTown: { value: new THREE.Vector4(KGRID.west, KGRID.east, KGRID.north, KGRID.south) },
     },
   });
   const cam = new THREE.OrthographicCamera(-SPAN / 2, SPAN / 2, SPAN / 2, -SPAN / 2, 1, 310);

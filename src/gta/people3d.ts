@@ -52,6 +52,8 @@ interface Slot {
   aside: THREE.Vector3;
   /** Far off: posed every few frames. */
   skip: number;
+  /** Not posed yet (posed the first frame whatever its distance). */
+  fresh: boolean;
   look: Look;
 }
 
@@ -85,6 +87,8 @@ export class People3D {
   /** How many are drawn in 3D now: the most, or fewer while the frame rate suffers (it climbs back). */
   limit: number;
   private frameAvg = 1 / 60;
+  private slow = 0;
+  private fast = 0;
   private judgeT = 0;
   /** Seconds since it was shown (or moved somewhere new). */
   private warm = 0;
@@ -149,10 +153,15 @@ export class People3D {
     this.frameAvg += (Math.min(dt, 0.1) - this.frameAvg) * 0.05;
     this.judgeT += dt;
     this.warm += dt;
-    if (this.judgeT > 2.5) {
+    // (slowly, and only on a clear verdict: a limit going up and down every few seconds took dozens
+    // of bodies out of the picture and back — the crowd blinking)
+    if (this.judgeT > 4) {
       this.judgeT = 0;
-      if (this.frameAvg > 1 / 42 && this.warm > 8) this.limit = Math.max(Math.round(this.max * 0.35), this.limit - 30);
-      else if (this.frameAvg < 1 / 55) this.limit = Math.min(this.max, this.limit + 30);
+      if (this.frameAvg > 1 / 40 && this.warm > 8) (this.slow++, (this.fast = 0));
+      else if (this.frameAvg < 1 / 56) (this.fast++, (this.slow = 0));
+      else this.slow = this.fast = 0;
+      if (this.slow >= 2) (this.limit = Math.max(Math.round(this.max * 0.35), this.limit - 20)), (this.slow = 0);
+      if (this.fast >= 3) (this.limit = Math.min(this.max, this.limit + 20)), (this.fast = 0);
     }
     this.scanT -= dt;
     if (this.scanT <= 0) {
@@ -183,7 +192,10 @@ export class People3D {
         const ox = this.tmp.x - ex,
           oz = this.tmp.z - ez;
         const sight = dd < 64 || (ox * this.view.x + oz * this.view.z) / Math.max(0.01, Math.hypot(ox, oz)) > 0.34;
-        return { p, d: dd, sight, score: p.own ? -1e9 + dd : dd * (sight ? 1 : 7) };
+        // (one already in 3D keeps its place against newcomers: at the cut, two swapping in and
+        // out every scan as the camera turns was the flicker — a body gone, then back)
+        const held = this.slots.has(p.key) ? 0.45 : 1;
+        return { p, d: dd, sight, score: p.own ? -1e9 + dd : dd * (sight ? 1 : 7) * held };
       })
       .sort((a, b) => a.score - b.score);
     const keep = new Set<string>();
@@ -224,26 +236,32 @@ export class People3D {
       if (inst === undefined) break;
       const body = this.busts.addInstance(g.body);
       const head = this.busts.addInstance(g.head);
+      // (unseen until it is first posed: a new instance stands at the world's origin, a flash there)
+      this.busts.setMatrixAt(body, this.zero);
+      this.busts.setMatrixAt(head, this.zero);
       g.users++;
       g.used = performance.now();
       p.hide(true);
       const at = p.pos(new THREE.Vector3());
       const look = faces.lookNow(p.id);
-      const sl: Slot = { p, inst, body, head, id: p.id, heading: p.heading?.() ?? Math.random() * Math.PI * 2, last: at, act: newAct(), aside: new THREE.Vector3(), skip: 0, look };
+      const was = this.gone.get(p.key);
+      if (was !== undefined && performance.now() - was < 2500) this.churn++;
+      const sl: Slot = { p, inst, body, head, id: p.id, heading: p.heading?.() ?? Math.random() * Math.PI * 2, last: at, act: newAct(), aside: new THREE.Vector3(), skip: 0, fresh: true, look };
       this.slots.set(p.key, sl);
       for (let k = 0; k < NPARTS; k++) this.parts.setColorAt(inst * NPARTS + k, this.c.setHex(partColor(look, k), THREE.SRGBColorSpace));
       if (this.parts.instanceColor) this.parts.instanceColor.needsUpdate = true;
     }
     if (asked.length) faces.want(asked);
     if (quick.length) faces.quick(quick);
-    // the flat figures in the ring: hidden — those in 3D, and those it will not draw (too many);
-    // one waiting for its bust keeps its flat figure a moment rather than vanish. Out of the ring: shown again.
+    // the flat figures in the ring: hidden for those in 3D; those it will not draw (too many, far
+    // off) keep their flat figure — never gone from the picture, then back (the flicker); one
+    // waiting for its bust keeps it a moment too. Out of the ring: shown again.
     if (!this.source) {
       const seen = new Set<string>();
       for (const { p } of ranked) {
         if (p.own) continue;
         seen.add(p.key);
-        const hidden = this.slots.has(p.key) || !keep.has(p.key);
+        const hidden = this.slots.has(p.key);
         if (hidden && !this.flat.has(p.key)) {
           p.hide(true);
           this.flat.set(p.key, p);
@@ -287,7 +305,24 @@ export class People3D {
     }
   }
 
+  /** When each one last went back to flat (a body back in 3D soon after is a flicker: counted). */
+  private gone = new Map<string, number>();
+  private churn = 0;
+
+  private seenDrop = 0;
+
   private drop(s: Slot) {
+    // (gone while in the picture: the flicker one sees)
+    if (this.eye) {
+      const at = s.p.pos(this.tmp2);
+      const ox = at.x - this.eye.x,
+        oz = at.z - this.eye.z;
+      const l = Math.hypot(ox, oz);
+      if (l > 1 && (ox * this.view.x + oz * this.view.z) / l > 0.72 && s.p.alive() && !this.flat.has(s.p.key)) this.seenDrop++;
+      else if (l > 1 && (ox * this.view.x + oz * this.view.z) / l > 0.72 && s.p.alive()) this.seenDrop++;
+    }
+    this.gone.set(s.p.key, performance.now());
+    if (this.gone.size > 4000) this.gone.clear();
     this.slots.delete(s.p.key);
     this.busts.deleteInstance(s.body);
     this.busts.deleteInstance(s.head);
@@ -332,7 +367,8 @@ export class People3D {
       top = Math.max(top, sl.inst + 1);
       // far off: posed one frame in three (the walk carries on between)
       const camD = this.eye ? Math.hypot(at.x - this.eye.x, at.z - this.eye.z) : 9;
-      if (camD > 55 && (this.frame + sl.inst) % 3 !== 0) continue;
+      if (camD > 55 && (this.frame + sl.inst) % 3 !== 0 && !sl.fresh) continue;
+      sl.fresh = false;
       // you are in the way: it steps round you (drawn aside; the crowd's own loop carries on)
       const want = this.tmp2.set(0, 0, 0);
       let look = 0;
@@ -386,6 +422,6 @@ export class People3D {
 
   /** How many are drawn in 3D now, and how many flat figures are hidden round about. */
   get counts() {
-    return { in3d: this.slots.size, hidden: this.flat.size, builds: this.builds, msPerBuild: +(this.buildMs / Math.max(1, this.builds)).toFixed(2) };
+    return { in3d: this.slots.size, hidden: this.flat.size, builds: this.builds, msPerBuild: +(this.buildMs / Math.max(1, this.builds)).toFixed(2), churn: this.churn, seenDrop: this.seenDrop, limit: this.limit };
   }
 }

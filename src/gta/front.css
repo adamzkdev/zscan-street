@@ -1,0 +1,623 @@
+/* The game's front end (src/gta/frontend.ts): the title over the street, the main menu, the line-up.
+ * The HUD's own language: Archivo wide for names, the menu's dark surface, Zcash gold for what matters. */
+
+/* while it is up, nothing else of the street's or the game's HUD shows (the settings panel aside) */
+#ui.gta-front-on > :not(.gta-front):not(.gta-hud) {
+  display: none !important;
+}
+#ui.gta-front-on .gta-hud:not(.front) {
+  display: none !important;
+}
+.gta-hud.front {
+  display: block;
+  z-index: 50;
+}
+.gta-hud.front > :not(.gh-pause),
+.gta-hud.front::before,
+.gta-hud.front::after,
+.gta-hud.front .gh-quit {
+  display: none !important;
+}
+.gta-hud.front .gh-pause {
+  background: rgba(4, 5, 8, 0.4);
+}
+
+.gta-front {
+  position: absolute;
+  inset: 0;
+  display: none;
+  z-index: 40;
+  overflow: hidden;
+  color: var(--g-ink);
+  font-family: var(--g-disp);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+  touch-action: none;
+}
+.gta-front.on {
+  display: block;
+}
+.gta-front button {
+  font-family: var(--g-disp);
+  cursor: pointer;
+}
+.gta-front[data-mode="select"] {
+  cursor: grab;
+}
+
+/* ---- the frame: letterbox bars on the title, a shade under the menus ---- */
+.gf-bars i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 10.5vh;
+  background: #000;
+  transition: transform 0.9s cubic-bezier(0.6, 0, 0.2, 1);
+}
+.gf-bars i:first-child {
+  top: 0;
+}
+.gf-bars i:last-child {
+  bottom: 0;
+}
+.gta-front:not([data-mode="title"]) .gf-bars i:first-child {
+  transform: translateY(-100%);
+}
+.gta-front:not([data-mode="title"]) .gf-bars i:last-child {
+  transform: translateY(100%);
+}
+.gf-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(0deg, rgba(5, 6, 9, 0.5) 0%, rgba(5, 6, 9, 0) 34%);
+  transition: background 0.6s;
+}
+.gta-front[data-mode="menu"] .gf-shade {
+  background:
+    linear-gradient(90deg, rgba(5, 6, 9, 0.78) 0%, rgba(5, 6, 9, 0.5) 26%, rgba(5, 6, 9, 0) 52%),
+    linear-gradient(0deg, rgba(5, 6, 9, 0.45) 0%, rgba(5, 6, 9, 0) 30%);
+}
+.gta-front[data-mode="select"] .gf-shade {
+  background:
+    linear-gradient(0deg, rgba(5, 6, 9, 0.82) 0%, rgba(5, 6, 9, 0.4) 26%, rgba(5, 6, 9, 0) 46%),
+    linear-gradient(180deg, rgba(5, 6, 9, 0.55) 0%, rgba(5, 6, 9, 0) 18%);
+}
+
+/* the modes: one shows at a time, cross-faded */
+.gf-title,
+.gf-menu,
+.gf-select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.4s,
+    visibility 0s 0.4s;
+}
+.gta-front[data-mode="title"] .gf-title,
+.gta-front[data-mode="menu"] .gf-menu,
+.gta-front[data-mode="select"] .gf-select {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.5s 0.15s;
+}
+.gf-menu button,
+.gf-select button,
+.gf-select input,
+.gf-select form,
+.gf-card {
+  pointer-events: auto;
+}
+
+/* ---- the wordmark ---- */
+.gf-mark {
+  margin: 0;
+  font: 900 clamp(64px, 10.5vw, 176px) / 0.84 var(--g-disp);
+  font-stretch: 125%;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.18);
+}
+.gf-mark span {
+  color: var(--g-gold);
+}
+.gf-mark.small {
+  font-size: clamp(40px, 3.4vw, 64px);
+  letter-spacing: -0.03em;
+}
+
+/* ---- the title ---- */
+.gf-title .gf-mark {
+  position: absolute;
+  left: 6vw;
+  bottom: calc(10.5vh + 6vh);
+  font-size: clamp(52px, 7.4vw, 124px);
+}
+.gf-press {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10.5vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+}
+.gf-press b {
+  font: 600 15px var(--g-disp);
+  letter-spacing: 0.02em;
+  color: var(--g-ink);
+  animation: gf-pulse 2.4s ease-in-out infinite;
+}
+@keyframes gf-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---- the main menu ---- */
+.gf-menu .gf-mark {
+  position: absolute;
+  left: 6vw;
+  top: 9vh;
+}
+.gf-items {
+  position: absolute;
+  left: calc(6vw - 18px);
+  top: 50%;
+  transform: translateY(-46%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: clamp(340px, 26vw, 480px);
+}
+.gf-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 13px 18px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--g-ink2);
+  text-align: left;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.gf-item b {
+  font: 700 clamp(24px, 1.9vw, 34px) var(--g-disp);
+  font-stretch: 112%;
+  letter-spacing: -0.01em;
+}
+.gf-item small {
+  margin-top: 3px;
+  font: 500 clamp(13px, 0.9vw, 16px) var(--g-disp);
+  color: var(--g-ink3);
+}
+.gf-item.on {
+  background: var(--g-ink);
+  color: #0b0c10;
+}
+.gf-item.on small {
+  color: rgba(11, 12, 16, 0.62);
+}
+.gf-me {
+  position: absolute;
+  left: 6vw;
+  bottom: 7vh;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px 8px 8px;
+  border-radius: 12px;
+  background: var(--g-panel);
+  border: 1px solid var(--g-line);
+  box-shadow: var(--g-shadow);
+}
+.gf-me > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.gf-me small {
+  font: 500 12px var(--g-disp);
+  color: var(--g-ink3);
+}
+.gf-me b {
+  font-size: 18px;
+}
+.gf-me i {
+  position: absolute;
+  right: -8px;
+  top: -8px;
+  font-style: normal;
+}
+.gf-pic {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+.gf-pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+}
+
+/* ---- the line-up ---- */
+.gf-shead {
+  position: absolute;
+  left: 5vw;
+  right: 5vw;
+  top: 4.5vh;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.gf-shead h2 {
+  margin: 0;
+  font: 800 30px var(--g-disp);
+  font-stretch: 112%;
+  letter-spacing: -0.01em;
+}
+.gf-count {
+  margin-left: auto;
+  font: 600 14px var(--g-disp);
+  color: var(--g-ink2);
+}
+.gf-back {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--g-line2);
+  background: var(--g-panel);
+  color: var(--g-ink);
+  font: 400 26px/1 var(--g-disp);
+  padding-bottom: 3px;
+}
+.gf-back:hover {
+  background: var(--g-panel-hi);
+}
+.gf-card {
+  position: absolute;
+  left: 5vw;
+  bottom: 7vh;
+  width: min(420px, 40vw);
+}
+.gf-cname {
+  font-size: clamp(30px, 3.6vw, 52px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+.gf-cname em {
+  font-style: normal;
+  color: var(--g-gold);
+}
+.gf-ctags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  min-height: 22px;
+}
+.gf-band {
+  display: contents;
+}
+.gf-band .gta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.gf-band .gta-tag i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.gf-band span {
+  font: 600 13px var(--g-disp);
+  color: var(--g-ink2);
+}
+.gf-traits {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin: 16px 0 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--g-line);
+  border: 1px solid var(--g-line);
+}
+.gf-traits:empty {
+  display: none;
+}
+.gf-traits div {
+  padding: 9px 14px 10px;
+  background: var(--g-panel);
+}
+.gf-traits dt {
+  font: 500 11px var(--g-disp);
+  color: var(--g-ink3);
+}
+.gf-traits dd {
+  margin: 2px 0 0;
+  font: 600 14px var(--g-disp);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gf-nav {
+  position: absolute;
+  left: 50%;
+  bottom: 7vh;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--g-panel);
+  border: 1px solid var(--g-line);
+  box-shadow: var(--g-shadow);
+}
+.gf-arrow {
+  width: 40px;
+  height: 52px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--g-ink);
+  font: 400 30px/1 var(--g-disp);
+}
+.gf-arrow:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.gf-dots {
+  display: flex;
+  gap: 6px;
+}
+.gf-dot {
+  width: 46px;
+  height: 52px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 9px;
+  background: #000;
+  overflow: hidden;
+  opacity: 0.55;
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+}
+.gf-dot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+}
+.gf-dot:hover {
+  opacity: 0.85;
+}
+.gf-dot.gold {
+  border-color: rgba(244, 183, 40, 0.5);
+}
+.gf-dot.on {
+  opacity: 1;
+  border-color: var(--g-ink);
+  transform: translateY(-3px);
+}
+.gf-tools {
+  position: absolute;
+  right: 5vw;
+  bottom: calc(7vh + 72px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gf-num {
+  display: flex;
+  gap: 6px;
+}
+.gf-num input {
+  width: 108px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--g-line2);
+  background: var(--g-panel);
+  color: var(--g-ink);
+  font: 600 13px var(--g-disp);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.gf-num input::placeholder {
+  color: var(--g-ink3);
+}
+.gf-tools .gta-btn.ghost {
+  background: var(--g-panel);
+  border-color: var(--g-line);
+}
+.gf-tools .gta-btn.ghost:hover {
+  background: var(--g-panel-hi);
+}
+.gf-play {
+  position: absolute;
+  right: 5vw;
+  bottom: 7vh;
+  height: 58px;
+  min-width: 220px;
+  padding: 0 28px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  font: 800 18px var(--g-disp);
+  font-stretch: 112%;
+}
+.gf-play small {
+  font: 600 11px var(--g-disp);
+  opacity: 0.6;
+}
+
+/* ---- key hints, the fade ---- */
+.gf-hints {
+  position: absolute;
+  left: 50%;
+  bottom: 2.2vh;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 18px;
+  font: 500 12px var(--g-disp);
+  color: var(--g-ink2);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.gf-hints kbd {
+  display: inline-block;
+  min-width: 1.7em;
+  padding: 0 5px;
+  margin: 0 3px 0 0;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--g-ink);
+  font: 700 11px/1.7 var(--g-disp);
+  text-align: center;
+}
+.gta-front[data-mode="select"] .gf-hints {
+  bottom: 1.6vh;
+}
+.gf-fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+.gta-front.on .gf-fade {
+  animation: gf-in 1.4s ease-out;
+}
+.gta-front.fade .gf-fade {
+  opacity: 1;
+}
+@keyframes gf-in {
+  0%,
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---- narrow screens, phones ---- */
+@media (max-width: 900px) {
+  .gf-card {
+    width: min(360px, 44vw);
+  }
+  .gf-tools {
+    display: none;
+  }
+}
+@media (max-width: 760px), (max-height: 520px) {
+  /* the menu over the whole picture: a shade behind it all the way across */
+  .gta-front[data-mode="menu"] .gf-shade {
+    background: linear-gradient(180deg, rgba(5, 6, 9, 0.35) 0%, rgba(5, 6, 9, 0.72) 28%, rgba(5, 6, 9, 0.72) 62%, rgba(5, 6, 9, 0.35) 100%);
+  }
+  .gf-items {
+    width: 88vw;
+  }
+  .gf-mark.small {
+    font-size: 30px;
+  }
+  .gf-menu .gf-mark {
+    top: 5vh;
+  }
+  .gf-item b {
+    font-size: 21px;
+  }
+  .gf-item {
+    padding: 11px 16px 12px;
+  }
+  .gf-me {
+    bottom: 4vh;
+  }
+  .gf-shead {
+    top: 3vh;
+  }
+  .gf-shead h2 {
+    font-size: 21px;
+  }
+  .gf-card {
+    left: 4vw;
+    right: 4vw;
+    width: auto;
+    bottom: calc(5vh + 140px);
+  }
+  .gf-traits {
+    display: none;
+  }
+  .gf-nav {
+    left: 4vw;
+    right: 4vw;
+    transform: none;
+    bottom: calc(4vh + 70px);
+    justify-content: space-between;
+  }
+  .gf-dots {
+    overflow-x: auto;
+    flex: 1;
+    gap: 4px;
+  }
+  .gf-dot {
+    flex: none;
+    width: 38px;
+    height: 44px;
+  }
+  .gf-play {
+    left: 4vw;
+    right: 4vw;
+    bottom: 4vh;
+    min-width: 0;
+    height: 54px;
+  }
+  .gf-hints {
+    display: none;
+  }
+}
+@media (max-height: 520px) and (min-width: 600px) {
+  /* a phone on its side: the card on the left, the strip and play on the right */
+  .gf-card {
+    right: auto;
+    width: 40vw;
+    bottom: 5vh;
+  }
+  .gf-nav {
+    left: auto;
+    right: 4vw;
+    width: 52vw;
+    bottom: calc(4vh + 64px);
+  }
+  .gf-play {
+    left: auto;
+    right: 4vw;
+    width: 52vw;
+  }
+}

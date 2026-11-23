@@ -1220,18 +1220,32 @@ function river(g: THREE.Group, nav: Nav, animated: ((t: number, dt: number) => v
   const rail = mat("#2a2832");
   // (posts and planks merged: hundreds of them, a couple of draw calls)
   const bits = new Batch();
+  const bw = (x: number) => GRID.xw[GRID.xs.indexOf(x)] ?? GRID.street;
+  const spans: [number, number][] = [...R.bridges.map((x) => [x - bw(x) / 2, x + bw(x) / 2] as [number, number]), ...R.foot.map((x) => [x - 1.2, x + 1.2] as [number, number])].sort((a, b) => a[0] - b[0]);
+  // the quay's railing and coping stop where a bridge or a footbridge lands (they used to run on
+  // across the bridges' roads: a railing across four lanes at both ends of every bridge)
+  const runs: [number, number][] = [];
+  {
+    let from = CT.minX;
+    for (const [a, b] of [...spans.map(([a, b]) => [a - 0.6, b + 0.6] as [number, number]), [CT.maxX, CT.maxX] as [number, number]]) {
+      if (a > from + 0.2) runs.push([from, a]);
+      from = Math.max(from, b);
+    }
+  }
   for (const [z, dir] of [
     [R.z0, 1],
     [R.z1, -1],
   ] as const) {
-    box(g, W, CURB - R.bed, 0.6, stone, 0, R.bed, z + dir * 0.3);
-    box(g, W, 0.12, 0.7, mat("#9a94a0"), 0, CURB, z + dir * 0.35);
-    for (let x = CT.minX + 1; x < CT.maxX; x += 2.4) bits.box(rail, 0.06, 0.9, 0.06, x, CURB + 0.12, z + dir * 0.15);
-    box(g, W, 0.06, 0.08, rail, 0, CURB + 1.0, z + dir * 0.15);
+    // (under a bridge the wall stops below the road: its top used to stand proud of the asphalt)
+    box(g, W, -0.05 - R.bed, 0.6, stone, 0, R.bed, z + dir * 0.3);
+    for (const [a, b] of runs) {
+      bits.box(stone, b - a, CURB + 0.05, 0.6, (a + b) / 2, -0.05, z + dir * 0.3);
+      bits.box(mat("#9a94a0"), b - a, 0.12, 0.7, (a + b) / 2, CURB, z + dir * 0.35);
+      for (let x = a + 0.4; x < b - 0.2; x += 2.4) bits.box(rail, 0.06, 0.9, 0.06, x, CURB + 0.12, z + dir * 0.15);
+      bits.box(rail, b - a, 0.06, 0.08, (a + b) / 2, CURB + 1.0, z + dir * 0.15);
+    }
   }
   // the water and its railings block the way, except where a bridge crosses
-  const bw = (x: number) => GRID.xw[GRID.xs.indexOf(x)] ?? GRID.street;
-  const spans: [number, number][] = [...R.bridges.map((x) => [x - bw(x) / 2, x + bw(x) / 2] as [number, number]), ...R.foot.map((x) => [x - 1.2, x + 1.2] as [number, number])].sort((a, b) => a[0] - b[0]);
   let from = CT.minX;
   for (const [a, b] of [...spans, [CT.maxX, CT.maxX] as [number, number]]) {
     if (a > from) nav.addRect(from, R.z0 - 0.4, a, R.z1 + 0.4);
@@ -1532,7 +1546,6 @@ function bay(g: THREE.Group, nav: Nav, animated: ((t: number, dt: number) => voi
 function arcade(g: THREE.Group, flicker: Flicker[], nav: Nav) {
   const A = SHOTENGAI;
   const len = A.z1 - A.z0;
-  const cz = (A.z0 + A.z1) / 2;
   // pedestrian paving over the tarmac
   const t = pavingTexture(61, 3);
   t.repeat.set(A.half, len / 2);
@@ -1541,7 +1554,12 @@ function arcade(g: THREE.Group, flicker: Flicker[], nav: Nav) {
     d.repeat.copy(t.repeat);
     return d;
   });
-  box(g, 8, CURB, len, pave, A.x, 0, cz);
+  // (the avenue crosses it at grade: no paving and no rib in its lanes — a kerb and two posts stood
+  // across Mempool Avenue)
+  const R0 = CITY.road.z0 - 0.4,
+    R1 = CITY.road.z1 + 0.4;
+  box(g, 8, CURB, R0 - A.z0, pave, A.x, 0, (A.z0 + R0) / 2);
+  box(g, 8, CURB, A.z1 - R1, pave, A.x, 0, (R1 + A.z1) / 2);
   // ribs every 4 m and the roof: a shallow vault, glass between the ribs
   const H = 7.2,
     rise = 1.6,
@@ -1551,6 +1569,7 @@ function arcade(g: THREE.Group, flicker: Flicker[], nav: Nav) {
   const arch = new THREE.EllipseCurve(0, 0, w / 2, rise, 0, Math.PI, false, 0);
   const archPts = arch.getPoints(16).map((p) => new THREE.Vector3(p.x, p.y + H, 0));
   for (let z = A.z0; z <= A.z1; z += 4) {
+    if (z > R0 - 0.3 && z < R1 + 0.3) continue;
     for (let i = 1; i < archPts.length; i++) {
       const a = archPts[i - 1],
         b = archPts[i];

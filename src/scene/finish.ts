@@ -180,9 +180,39 @@ export class GradePass extends ShaderPass {
   constructor() {
     super(GRADE);
   }
+  private day = true;
+  private gameOn = false;
   setTheme(day: boolean) {
+    this.day = day;
+    this.apply();
+  }
+  /**
+   * The game's look (src/gta): a warmer, punchier grade — teal in the shadows, sun-warm highlights,
+   * richer colour and a touch more contrast, a deeper vignette — the open-world games' sunlit look.
+   */
+  game(on: boolean) {
+    this.gameOn = on;
+    this.apply();
+  }
+  private apply() {
     const u = this.uniforms;
-    if (day) {
+    if (this.gameOn) {
+      if (this.day) {
+        u.lift.value.set(0.0, 0.005, 0.012);
+        u.gain.value.set(1.07, 1.0, 0.92);
+        u.saturation.value = 1.2;
+        u.contrast.value = 1.08;
+        u.vignette.value = 0.24;
+      } else {
+        u.lift.value.set(0.004, 0.0, 0.016);
+        u.gain.value.set(1.04, 0.98, 1.05);
+        u.saturation.value = 1.2;
+        u.contrast.value = 1.06;
+        u.vignette.value = 0.3;
+      }
+      return;
+    }
+    if (this.day) {
       u.lift.value.set(0.004, 0.003, 0.0);
       u.gain.value.set(1.02, 1.0, 0.97);
       u.saturation.value = 1.07;

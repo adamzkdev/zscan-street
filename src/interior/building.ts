@@ -29,6 +29,8 @@ export function dressBuilding(v: BuildingVisit) {
 
 /** Which kind of ground floor a building of the city has, by its archetype. */
 export function kindOf(type: string, seed: number): BuildingKind {
+  // (Orchard Keys' diner and bar say what they are)
+  if (type === "cafe" || type === "bar") return type;
   if (type === "streetshop" || type === "kiosk" || type === "bookshop") return "shop";
   if (type === "izakaya" || type === "machiya") return seed % 2 ? "bar" : "cafe";
   if (type === "apartment" || type === "house") return "home";

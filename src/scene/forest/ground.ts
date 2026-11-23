@@ -1,6 +1,10 @@
 import * as THREE from "three";
 import { BAY } from "../city/plan";
 import { BX, CREEK, creekAt, F, fbm, goldAt, Land, shoreZ, SITES, trailDist, vnoise, WATER } from "./land";
+import { KTUNNEL } from "../keys/plan";
+
+/** Over the tunnel's shell (its inside and the concrete either side). */
+const overTunnel = (x: number, z: number) => Math.abs(x - KTUNNEL.x) < KTUNNEL.half + 4.2 && z > KTUNNEL.z0 - 0.2;
 
 /**
  * The forest floor as voxel columns a metre square, a quarter metre per step: redwood duff and
@@ -74,7 +78,10 @@ export function groundMesh(land: Land) {
         const edge = (i + di >= nx && x1 >= F.x1 - 0.01) || (j + dj >= nz && z1 >= F.z1 - 0.01);
         const lo = Number.isNaN(nh) ? base : nh;
         if (lo >= h) continue;
-        const bottom = edge ? base - 0.4 : lo;
+        // (over the Orchard Tunnel: the columns stop at the tunnel's concrete, their sides never hang
+        // down across its road)
+        const bottom = Math.max(edge ? base - 0.4 : lo, overTunnel(cx, cz) ? KTUNNEL.top + 4.1 : -Infinity);
+        if (bottom >= h) continue;
         const p =
           di === -1
             ? [

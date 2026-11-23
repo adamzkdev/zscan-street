@@ -30,7 +30,7 @@ export class GtaInput {
   touch = new Set<string>();
   active = false;
   private drag: { id: number; x: number; y: number; x0: number; y0: number; t0: number; button: number; mouse: boolean } | null = null;
-  pad = { lx: 0, ly: 0, rx: 0, ry: 0, rt: 0, lt: 0, a: false, b: false, x: false, y: false, lb: false, rb: false, start: false, back: false, down: false, connected: false };
+  pad = { lx: 0, ly: 0, rx: 0, ry: 0, rt: 0, lt: 0, a: false, b: false, x: false, y: false, lb: false, rb: false, start: false, back: false, down: false, left: false, right: false, connected: false };
   private padWas: Record<string, boolean> = {};
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -155,6 +155,8 @@ export class GtaInput {
       ["back", 8],
       ["start", 9],
       ["down", 13],
+      ["left", 14],
+      ["right", 15],
     ];
     for (const [k, i] of map) {
       const on = b(i);

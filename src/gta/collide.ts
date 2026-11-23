@@ -40,6 +40,8 @@ export interface SolidHost {
   surface(x: number, z: number): number;
   /** On the asphalt. */
   road(x: number, z: number): boolean;
+  /** More of the world beyond `area` (Orchard Keys, across the bridge): each its own picture, as fine. */
+  extra?: { x0: number; x1: number; z0: number; z1: number }[];
 }
 
 export class StreetSolid {
@@ -56,12 +58,36 @@ export class StreetSolid {
   /** What a car hits but goes through (thin things): 1 per cell. */
   private thin: Uint8Array | null = null;
   private building = false;
+  /** The pictures of the world beyond the board (each answers for its own area). */
+  private more: StreetSolid[] = [];
+  private area: { x0: number; x1: number; z0: number; z1: number };
 
-  constructor(private host: SolidHost) {
+  constructor(
+    private host: SolidHost,
+    size?: number,
+  ) {
     // a phone: a coarser picture (half the memory, a quarter of the work)
     const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-    this.size = coarse ? 1024 : 2048;
+    this.size = size ?? (coarse ? 1024 : 2048);
+    this.area = host.area;
     this.builder = new FieldBuilder(host.renderer, host.scene, host.area, () => host.movers(), { size: this.size, band: [LOW, HIGH], empty: NaN, shear: 0.16 });
+    for (const a of host.extra ?? []) {
+      const w = Math.max(a.x1 - a.x0, a.z1 - a.z0);
+      this.more.push(new StreetSolid({ ...host, area: a, extra: undefined }, Math.min(this.size, 2 ** Math.round(Math.log2(w / 0.24)))));
+    }
+  }
+
+  /** Which picture answers for (x, z): the board's, or the one beyond it that holds it. */
+  private pick(x: number, z: number): StreetSolid {
+    const a = this.area;
+    if (x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1) return this;
+    for (const m of this.more) if (x >= m.area.x0 && x <= m.area.x1 && z >= m.area.z0 && z <= m.area.z1) return m;
+    return this;
+  }
+
+  /** The pictures beyond the board made again (what is there was built after the first time). */
+  async buildMore() {
+    for (const m of this.more) await m.build();
   }
 
   /** Make it (or make it again): what moves is noted now and left out a second later. */
@@ -81,6 +107,7 @@ export class StreetSolid {
       const sdf = await this.distance(top);
       this.top = top;
       this.sdf = sdf;
+      for (const m of this.more) await m.build();
       this.ready = true;
     } catch (e) {
       console.warn("gta: the street's solid shape could not be built", e);
@@ -167,7 +194,9 @@ export class StreetSolid {
   }
 
   /** Something thin a car goes through at (x, z) (a post, a rail): the game knocks it about. */
-  thinAt(x: number, z: number) {
+  thinAt(x: number, z: number): boolean {
+    const o = this.pick(x, z);
+    if (o !== this) return o.thinAt(x, z);
     if (!this.thin) return false;
     const k = this.index(x, z);
     return k >= 0 && this.thin[k] === 1;
@@ -187,6 +216,8 @@ export class StreetSolid {
 
   /** The highest surface in the slab at (x, z) (NaN: nothing, a hole; undefined: not built). */
   topAt(x: number, z: number): number | undefined {
+    const o = this.pick(x, z);
+    if (o !== this) return o.top ? o.topAt(x, z) : this.top ? NaN : undefined;
     if (!this.top) return undefined;
     const k = this.index(x, z);
     return k < 0 ? NaN : this.top[k];
@@ -209,7 +240,9 @@ export class StreetSolid {
   }
 
   /** The signed distance at (x, z), bilinear (m). */
-  dist(x: number, z: number) {
+  dist(x: number, z: number): number {
+    const o = this.pick(x, z);
+    if (o !== this) return o.sdf ? o.dist(x, z) : -1;
     const s = this.sdf;
     if (!s) return Infinity;
     const fx = (x - this.x0) / this.cell - 0.5,
@@ -228,7 +261,9 @@ export class StreetSolid {
   }
 
   /** Push a car's circle (centre p, radius r) out of what it overlaps, along the distance's slope. */
-  resolve(p: THREE.Vector3, r: number) {
+  resolve(p: THREE.Vector3, r: number): boolean {
+    const o = this.pick(p.x, p.z);
+    if (o !== this) return o.sdf ? o.resolve(p, r) : false;
     if (!this.sdf) return false;
     const d = this.dist(p.x, p.z);
     if (d >= r) return false;

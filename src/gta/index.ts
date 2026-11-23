@@ -3,11 +3,13 @@ import { profile } from "../game/profile";
 import type { WalkControls } from "../interior/walk";
 import type { CityTraffic } from "../scene/citytraffic";
 import type { Nav } from "../scene/nav";
+import { viaductBents } from "../scene/city/plan";
 import { CAR_VIEWS, GtaCamera } from "./camera";
 import { StreetSolid } from "./collide";
-import { DOOR_HALF, Doors, type DoorSpot } from "./doors";
+import { KEYS } from "../scene/keys/plan";
+import { DOOR_HALF, Doors, ropes, type DoorSpot } from "./doors";
 import { FootPlayer } from "./foot";
-import { Garage } from "./garage";
+import { FrontEnd, type StartAt } from "./frontend";
 import { DEFAULTS, GtaHud, type MapData, type Settings } from "./hud";
 import { PLACE_CAT, WAYPOINT, type Cat } from "./mapkit";
 import { NU7_LINE, ZEC_LINE } from "../scene/metro";
@@ -24,6 +26,7 @@ import { StreetProps } from "./streetprops";
 import { Heat } from "./police";
 import { Roads } from "./roads";
 import { GtaSound, type AudioOut } from "./sound";
+import { CarRadio } from "./radio";
 import { DriveCar, SPECS, type VehicleKind } from "./vehicle";
 import { MOTO_SEAT } from "./models";
 
@@ -36,7 +39,8 @@ import { MOTO_SEAT } from "./models";
  * and your car, and films it all with its own camera.
  *
  *   main.ts: `gta.update(dt)` after the walker's, `gta.camera` while `gta.active`,
- *   `gta.garage.open` → draw `gta.garage.scene`. Esc → `gta.escape()`.
+ *   `gta.front.open` → draw the street with `gta.front.camera` (the title, the menu, the line-up).
+ *   Esc → `gta.escape()`.
  */
 
 export interface GtaHost {
@@ -96,6 +100,10 @@ export interface GtaHost {
   audio(): AudioOut | null;
   soundOn(): boolean;
   toggleSound(): void;
+  /** The sound on at a first gesture (unless the visitor switched it off). */
+  startSound(): void;
+  /** The front end's golden-hour look over the street (false: the street's own sky again). */
+  menuLook(on: boolean): void;
   night(): boolean;
   cycleTheme(): void;
   /** The street's sky: day, night, or the visitor's clock. */
@@ -108,6 +116,8 @@ export interface GtaHost {
   pinQuality(level: number | null): void;
   /** The camera's motion blur amount (0 off). */
   blur(amount: number): void;
+  /** The game's colour grade on the street's picture (on while playing). */
+  grade?(on: boolean): void;
   /** People in a car's way react (a shout, a jump): from (x, z) along (fx, fz). */
   react(x: number, z: number, fx: number, fz: number): void;
   /** The street's arrest: a patrol, a night on the rock. */
@@ -119,6 +129,12 @@ export interface GtaHost {
   /** Inside a place: use what is at (x, y) on the screen (talk, a panel, a game); false if nothing. */
   useAt(x: number, y: number): boolean;
   useLabel(x: number, y: number): string | null;
+  /** Across the Golden Gate: the height under a wheel where it is not the street's (the deck, the tunnel, the sand), or null. */
+  carSurface(x: number, z: number): number | null;
+  /** On the bridge's deck a car is held between its railings (true: the deck's to rule, not the solid shape's). */
+  carHold(p: THREE.Vector3, r: number): boolean;
+  /** The Golden Gate's deck, Orchard Keys and its tunnel: outside what the street's own plan (its nav) knows. */
+  beyond(x: number, z: number): boolean;
 }
 
 const SETTINGS_KEY = "zstreet.gta.settings";
@@ -134,11 +150,17 @@ export class GtaMode {
   readonly cam = new GtaCamera();
   readonly input: GtaInput;
   readonly hud: GtaHud;
-  readonly garage: Garage;
+  /** The title, the main menu, the line-up to choose your zkSNARK (src/gta/frontend.ts). */
+  readonly front: FrontEnd;
+  /** (the front end's old name, for the tests) */
+  get garage() {
+    return this.front;
+  }
   readonly roads = new Roads();
   readonly player = new FootPlayer();
   readonly missions: Missions;
   readonly sound: GtaSound;
+  readonly radio: CarRadio;
   readonly heat: Heat;
   readonly solid: StreetSolid;
   readonly doors: Doors;
@@ -195,11 +217,26 @@ export class GtaMode {
     this.input.stick = host.walker.stick;
     this.settings = { ...DEFAULTS, ...this.loadSettings() };
     this.sound = new GtaSound(() => host.audio());
-    this.garage = new Garage(host.ui);
+    this.radio = new CarRadio(() => host.audio(), host.ui, { height: () => host.height(), mempool: () => host.mempool() });
+    this.front = new FrontEnd({
+      scene: host.scene,
+      ui: host.ui,
+      surface: (x, z) => this.roads.surface(x, z),
+      road: (x, z) => this.roads.road(x, z),
+      blocked: (x, z) => host.footBlocked(x, z),
+      startSound: () => host.startSound(),
+      look: (on) => host.menuLook(on),
+      settings: () => this.hud.front(true),
+    });
     this.hud = new GtaHud(host.ui, {
-      resume: () => this.resume(),
+      // (over the front end, the menu panel is its settings: closing it goes back to the front end)
+      resume: () => (this.front.open ? this.hud.front(false) : this.resume()),
       leave: () => this.stop(),
-      garage: () => this.openGarage(),
+      garage: () => {
+        if (!this.front.open) return this.openGarage();
+        this.hud.front(false);
+        this.front.select();
+      },
       teleport: (x, z) => this.teleport(x, z),
       waypoint: (p) => this.setWaypoint(p),
       where: (x, z) => this.roads.where(x, z),
@@ -265,7 +302,9 @@ export class GtaMode {
       renderer: host.renderer,
       scene: host.scene,
       area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
-      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
+      // (and Orchard Keys, across the bridge, in a picture of its own)
+      extra: [{ x0: KEYS.x0, x1: KEYS.x1, z0: KEYS.z0, z1: KEYS.z1 }],
+      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, this.front.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
       surface: (x, z) => this.roads.surface(x, z),
       road: (x, z) => this.roads.road(x, z),
     });
@@ -287,7 +326,7 @@ export class GtaMode {
       "keydown",
       (e) => {
         if (!this.active || this.garage.open || /input|textarea|select/i.test((e.target as HTMLElement)?.tagName ?? "")) return;
-        const own = ["Tab", "KeyF", "KeyC", "KeyT", "KeyB", "KeyP", "KeyM", "KeyR", "KeyX"].includes(e.code) || (this.car && ["KeyE", "Space", "KeyQ"].includes(e.code)) || (!this.car && (e.code === "KeyE" || e.code === "KeyQ"));
+        const own = ["Tab", "KeyF", "KeyC", "KeyT", "KeyB", "KeyP", "KeyM", "KeyR", "KeyX"].includes(e.code) || (this.car && ["KeyE", "Space", "KeyQ", "KeyH", "Period", "Comma"].includes(e.code)) || (!this.car && (e.code === "KeyE" || e.code === "KeyQ"));
         if (own) {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -357,41 +396,62 @@ export class GtaMode {
 
   // ---- in and out ---------------------------------------------------------------------------------
 
-  /** Open the garage, then play as the zkSNARK picked there. */
-  start() {
-    this.openGarage();
-  }
-
-  private openGarage() {
-    if (this.active) {
-      this.hud.pause(false);
-      this.paused = true;
-    }
+  /** The title screen (in the street), its menu, then play as the zkSNARK picked there. */
+  start(): void {
+    if (this.active) return this.openGarage();
+    if (this.front.open) return;
     if (document.pointerLockElement) document.exitPointerLock();
-    this.host.ui.classList.add("gta-garage-on");
-    this.garage.show(
-      (id) => {
-        this.host.ui.classList.remove("gta-garage-on");
-        if (this.active) {
-          this.player.wear(id);
-          this.paused = false;
-          this.hud.toast(`zkSNARK #${id}`, "that's you now", "gold");
-        } else this.play(id);
+    // the street's people in 3D round the shot, as in the game
+    useAtlasCells(true);
+    this.people.show(true);
+    this.front.show({
+      play: (id, at) => this.play(id, at),
+      close: () => {
+        if (!this.active) this.people.show(false);
       },
-      () => {
-        this.host.ui.classList.remove("gta-garage-on");
-        if (this.active) this.paused = this.hud.paused;
-      },
-    );
+    });
   }
 
-  /** Into the street as zkSNARK #id. */
-  play(id = Garage.chosen()) {
+  /** In the game: the line-up, to be someone else. */
+  private openGarage(): void {
+    if (!this.active) return this.start();
+    this.hud.pause(false);
+    this.paused = true;
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.front.show({
+      select: true,
+      inGame: true,
+      play: (id) => {
+        this.player.wear(id);
+        this.paused = false;
+        this.hud.toast(`zkSNARK #${id}`, "that's you now", "gold");
+      },
+      close: () => {
+        this.paused = this.hud.paused;
+      },
+    });
+  }
+
+  /** Into the street as zkSNARK #id (from the title: by your car, where it was shot). */
+  play(id = FrontEnd.chosen(), at: StartAt | null = null) {
     const h = this.host;
     if (!h.walking()) h.setWalking(true);
     if (!h.walking()) return;
+    if (at) h.walker.place(new THREE.Vector3(at.x, h.curb, at.z), at.heading, h.curb);
     this.active = true;
     this.paused = false;
+    h.grade?.(true);
+    // the city's sound with the game (its ambiences, the monuments' music, the car radio): on the
+    // first key or click, unless it was switched off (browsers only let it start on a gesture)
+    if (!h.soundOn()) {
+      const wake = () => {
+        window.removeEventListener("keydown", wake, true);
+        window.removeEventListener("pointerdown", wake, true);
+        if (this.active) h.startSound();
+      };
+      window.addEventListener("keydown", wake, true);
+      window.addEventListener("pointerdown", wake, true);
+    }
     this.skyWas = h.skyPref();
     this.skyT = -1;
     h.ui.classList.add("gta-on");
@@ -428,7 +488,13 @@ export class GtaMode {
       });
       setTimeout(() => this.active && void this.solid.build(), 40_000);
     }
-    // your own car, parked on the nearest street
+    // your own car: where the title showed it, else parked on the nearest street
+    if (at && !this.parked.some((c) => c.kind === "gt")) {
+      const car = new DriveCar("gt");
+      car.place(at.car.x, at.car.z, at.car.yaw);
+      this.host.scene.add(car.group);
+      this.parked.push(car);
+    }
     if (!this.parked.some((c) => c.kind === "gt")) this.spawnGt();
     this.scatterBikes();
     if (!GtaHud.coached()) this.hud.coach(0);
@@ -469,6 +535,8 @@ export class GtaMode {
     if (this.player.group.parent !== this.host.scene) this.host.scene.add(this.player.group);
     this.heat.clear();
     this.sound.siren(0);
+    this.radio.car(false);
+    h.grade?.(false);
     this.player.group.visible = false;
     this.sound.drive(null);
     this.sound.hornOn(false);
@@ -585,6 +653,7 @@ export class GtaMode {
     } else if (car) this.parked.splice(this.parked.indexOf(car), 1);
     if (!car) return;
     this.car = car;
+    this.radio.car(true);
     this.player.group.visible = false;
     // on a bike you ride it: your body on its seat, leaning with it
     if (car.spec.bike) this.mount(car);
@@ -605,6 +674,7 @@ export class GtaMode {
     let spot = { x: p.x - rx * (car.spec.wid / 2 + 0.9), z: p.z - rz * (car.spec.wid / 2 + 0.9) };
     if (this.host.footBlocked(spot.x, spot.z)) spot = { x: p.x + rx * (car.spec.wid / 2 + 0.9), z: p.z + rz * (car.spec.wid / 2 + 0.9) };
     this.car = null;
+    this.radio.car(false);
     if (car.spec.bike) this.dismount();
     car.vel.set(0, 0);
     car.vF = car.vR = 0;
@@ -709,8 +779,14 @@ export class GtaMode {
   // ---- every frame ------------------------------------------------------------------------------------
 
   update(dt: number) {
-    if (this.garage.open) this.garage.update(dt);
+    if (this.front.open) {
+      this.front.update(dt);
+      // the street's people round the shot, in 3D
+      const c = this.front.camera;
+      this.people.update(dt, this.front.focus.x, this.front.focus.z, null, c.position, c.getWorldDirection(this.viewDir));
+    }
     if (!this.active) return;
+    this.radio.update(dt);
     const h = this.host;
     // the street left on-foot mode on its own (an event, a cut to the map): the game ends quietly
     if (!h.walking() && !h.indoors()) return this.stop();
@@ -757,7 +833,7 @@ export class GtaMode {
     else this.walk(dt);
     // the walker stands where you are: doors, talk, traffic, sound all follow
     const at = this.car ? this.car.group.position : this.player.pos;
-    h.walker.camera.position.set(at.x, (this.car ? 0 : this.player.pos.y) + 1.6, at.z);
+    h.walker.camera.position.set(at.x, (this.car ? Math.max(0, this.car.group.position.y) : this.player.pos.y) + 1.6, at.z);
     h.walker.setFloor(this.car ? h.curb : this.player.floor);
     const heading = this.car ? this.car.yaw - Math.PI / 2 : this.player.facing;
     h.walker.aim(heading, -0.08);
@@ -768,7 +844,7 @@ export class GtaMode {
     const vel = this.car ? { vx: this.car.vel.x, vz: this.car.vel.y } : { vx: this.player.vel.x, vz: this.player.vel.z };
     const near = this.heat.update(dt, { x: at.x, z: at.z, ...vel, speed: this.car?.speed ?? this.player.speed, inCar: !!this.car }, (self) => this.carWorld(self));
     this.sound.siren(this.heat.chasers.length ? Math.max(0.15, 1 - near / 140) : 0);
-    this.people.update(dt, at.x, at.z, this.car ? null : this.player.pos, this.cam.camera.position, this.cam.camera.getWorldDirection(this.viewDir));
+    if (!this.front.open) this.people.update(dt, at.x, at.z, this.car ? null : this.player.pos, this.cam.camera.position, this.cam.camera.getWorldDirection(this.viewDir));
     this.streetThings(dt);
     this.net.update(dt, { x: at.x, y: this.car ? 0 : this.player.pos.y, z: at.z, h: heading, c: this.car?.kind ?? "", v: this.car?.speed ?? this.player.speed, s: this.player.id });
     this.hudFrame(dt, at, heading);
@@ -801,6 +877,9 @@ export class GtaMode {
       }
     }
     if (i.hit("KeyR", "pad:down") && this.car) this.reset();
+    // the car radio: Q (or . and ,, or the pad's left and right) to the next station
+    if (this.car && i.hit("KeyQ", "Period", "pad:right")) this.radio.turn(1);
+    if (this.car && i.hit("Comma", "pad:left")) this.radio.turn(-1);
     if (!this.car && this.wastedT < 0 && i.hit("KeyX", "Mouse0", "pad:x", "touch:hit")) this.player.punch();
     // someone to talk to (no door in reach): E, and the street's talk opens with them
     if (!this.car && !this.doors.at && this.talkable && !this.talkWith && i.hit("KeyE", "touch:door")) this.startTalk(this.talkable);
@@ -867,7 +946,7 @@ export class GtaMode {
         }
         // (the rock, the bridge, the woods, the platforms: their own rules)
         if (!solid.ready || h.footSpecial(x, z)) return h.footBlocked(x, z);
-        if (x < h.bounds.x0 || x > h.bounds.x1 || z < h.bounds.z0 || z > h.bounds.z1) return true;
+        if (!h.beyond(x, z) && (x < h.bounds.x0 || x > h.bounds.x1 || z < h.bounds.z0 || z > h.bounds.z1)) return true;
         // in the air: what is under the feet is cleared (a hedge, a bench, a low wall)
         const up = Math.max(pl.floor, feet);
         return !solid.foot(x, z, up).ok || (feet < pl.floor + 0.5 && (h.footSmall(x, z) || h.dynamicHit(x, z)));
@@ -889,7 +968,7 @@ export class GtaMode {
     if (follow && i.idleLook > 0.6) this.cam.follow(dt, pl.facing, pl.speed);
     // (the camera stops at what would hide you: a building, a tree's crown; not a lamp post, a sign,
     // a bus shelter's roof or a stall, which it passes, the way the games' cameras do)
-    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z) && (solid.topAt(x, z) ?? 0) > 3.6 && !solid.thinAt(x, z)) || h.nav.wall(x, z) || this.crown(x, z) });
+    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z) && (solid.topAt(x, z) ?? 0) > 3.6 && !solid.thinAt(x, z)) || (!h.beyond(x, z) && h.nav.wall(x, z)) || this.crown(x, z) });
     pl.group.visible = this.cam.armLength > 0.8;
     // sprinting into people: they go down
     if (pl.speed > 6 && !this.paused) {
@@ -1084,6 +1163,17 @@ export class GtaMode {
   }
 
   /** The people in the road the traffic must wait for (you on foot, passers-by crossing). */
+  /** Orchard Keys has been built (across the bridge): its solid shape drawn, its doors and pavements found. */
+  keysReady() {
+    // (the game not started yet: its first build will see the town; started and still building: once it is done)
+    if (!this.active && !this.solid.ready) return;
+    if (!this.solid.ready) return void setTimeout(() => this.keysReady(), 1500);
+    void this.solid.buildMore().then(() => {
+      this.buildingSpots = null;
+      this.peds.relines();
+    });
+  }
+
   trafficBlockers(): { x: number; z: number }[] {
     if (!this.active || this.wasIndoors) return [];
     const out = [...this.peds.inRoad(this.pedWorld())];
@@ -1091,7 +1181,7 @@ export class GtaMode {
     return out;
   }
 
-  private pedWorldCache: { free(x: number, z: number): boolean; wall(x: number, z: number): boolean; floor(x: number, z: number): number; road(x: number, z: number): boolean; stand(x: number, z: number): boolean } | null = null;
+  private pedWorldCache: { free(x: number, z: number): boolean; wall(x: number, z: number): boolean; floor(x: number, z: number): number; road(x: number, z: number): boolean; stand(x: number, z: number): boolean; seen(x: number, z: number): boolean } | null = null;
   private pedWorld() {
     return (this.pedWorldCache ??= {
       free: (x: number, z: number) => {
@@ -1120,7 +1210,27 @@ export class GtaMode {
         return !(t !== undefined && t === t && t > -0.3 && t < 0.7);
       },
       road: (x: number, z: number) => this.roads.road(x, z),
+      seen: (x: number, z: number) => this.seen(x, z),
     });
+  }
+
+  /** Is (x, z) in the camera's view, with no building in between? (where nobody should pop in or out) */
+  private seenDir = new THREE.Vector3();
+  seen(x: number, z: number) {
+    const cam = this.camera;
+    const e = cam.position;
+    const d = cam.getWorldDirection(this.seenDir);
+    const ox = x - e.x,
+      oz = z - e.z;
+    const l = Math.hypot(ox, oz);
+    if (l < 1) return true;
+    const fl = Math.hypot(d.x, d.z) || 1;
+    // (a wide cone: the sides of the picture, and a turn of the head)
+    if ((ox * d.x + oz * d.z) / (l * fl) < 0.25) return false;
+    if (!this.solid.ready) return true;
+    // a building in between hides it
+    for (let t = 1.5; t < l - 1; t += 1) if (this.solid.wall(e.x + (ox / l) * t, e.z + (oz / l) * t)) return false;
+    return true;
   }
 
   /** Inside: what E would use (checked a few times a second), and where on the screen it is. */
@@ -1602,6 +1712,9 @@ export class GtaMode {
       const along = dx * d.fx + dz * d.fz,
         across = Math.abs(-dx * d.fz + dz * d.fx);
       if (along < 0.34 && along > -2.5 && across < DOOR_HALF + (d.wall === false ? 0.35 : 0.1)) return true;
+      // a grand entrance's brass posts and velvet ropes: you walk up the carpet, not through them
+      const r = ropes(d);
+      if (r && along > r.from - 0.2 && along < r.to + 0.2 && Math.abs(across - r.half) < 0.3) return true;
     }
     return false;
   }
@@ -1637,7 +1750,12 @@ export class GtaMode {
           fz = Math.round(f.out.z);
         // the wall's run along the front: s/n facades carry it; e/w ones are found along the wall
         let cx: number, cz: number;
-        if (fx === 0) {
+        const own = (f as { door?: { x: number; z: number } }).door;
+        if (own) {
+          // (a door of its own: Orchard Keys' shops and houses say where theirs is)
+          cx = own.x;
+          cz = own.z;
+        } else if (fx === 0) {
           cx = (f.x0 + f.x1) / 2;
           cz = f.z;
         } else {
@@ -1648,26 +1766,29 @@ export class GtaMode {
           cx = f.x0;
           cz = f.z + (a + b) / 2;
         }
-        // the wall right behind, the pavement free in front
+        // the wall right behind, the pavement free in front (a door of its own is where it says)
         let k = 0;
-        for (k = -1; k < 4; k += 0.1) if (wallAt(cx - fx * k, cz - fz * k)) break;
-        if (k >= 4) return;
+        if (!own) {
+          for (k = -1; k < 4; k += 0.1) if (wallAt(cx - fx * k, cz - fz * k)) break;
+          if (k >= 4) return;
+        }
         const dx = cx - fx * (k - 0.06),
           dz = cz - fz * (k - 0.06);
-        for (const d of [1, 2.5]) {
-          const t = s.topAt(dx + fx * d, dz + fz * d);
-          if (t === undefined || t !== t || t > 0.7 || t < -0.3) return;
-        }
+        if (!own)
+          for (const d of [1, 2.5]) {
+            const t = s.topAt(dx + fx * d, dz + fz * d);
+            if (t === undefined || t !== t || t > 0.7 || t < -0.3) return;
+          }
         // on a street (not a back yard): a road within a few metres in front
         let road = false;
-        for (let d = 2; d < 14 && !road; d += 1) road = this.roads.road(dx + fx * d, dz + fz * d);
+        for (let d = 2; d < (own ? 28 : 14) && !road; d += 1) road = this.roads.road(dx + fx * d, dz + fz * d);
         if (!road) return;
         if (this.placeSpots.some((p) => Math.hypot(p.x - dx, p.z - dz) < 8)) return;
         if (out.some((p) => Math.hypot(p.x - dx, p.z - dz) < 6)) return;
         const seed = (Math.abs(Math.round(dx * 13 + dz * 7)) % 997) + i;
-        const kind = kindOf(f.type, seed);
+        const kind = f.type === "cafe" || f.type === "bar" ? f.type : kindOf(f.type, seed);
         const names = NAMES[kind];
-        out.push({ key: `building:${i}`, x: dx, z: dz, fx, fz, y: s.topAt(dx + fx, dz + fz) ?? 0.2, label: names[seed % names.length], type: f.type, seed, wall: true, kind });
+        out.push({ key: `building:${i}`, x: dx, z: dz, fx, fz, y: s.topAt(dx + fx, dz + fz) ?? 0.2, label: (f as { name?: string }).name ?? names[seed % names.length], type: f.type, seed, wall: true, kind });
       });
       this.buildingSpots = out;
     }
@@ -1695,12 +1816,23 @@ export class GtaMode {
       const t = s.topAt(d.x - d.fx * k, d.z - d.fz * k);
       return t !== undefined && t === t && t > d.y + 2;
     };
+    // (how much clear pavement lies in front of it: a grand entrance's carpet and ropes fit in that)
+    const room = (o: DoorSpot): DoorSpot => {
+      let k = 0.3;
+      for (; k < 6; k += 0.2) {
+        const x = o.x + o.fx * k,
+          z = o.z + o.fz * k;
+        const t = s.topAt(x, z);
+        if (this.roads.road(x, z) || t === undefined || t !== t || t > o.y + 0.6 || t < o.y - 0.6) break;
+      }
+      return { ...o, room: k };
+    };
     if (wall(0)) {
-      for (let k = -0.1; k > -3; k -= 0.1) if (!wall(k)) return { ...d, x: d.x - d.fx * (k - 0.05), z: d.z - d.fz * (k - 0.05), wall: true };
-      return { ...d, wall: false };
+      for (let k = -0.1; k > -3; k -= 0.1) if (!wall(k)) return room({ ...d, x: d.x - d.fx * (k - 0.05), z: d.z - d.fz * (k - 0.05), wall: true });
+      return room({ ...d, wall: false });
     }
-    for (let k = 0.1; k < 7; k += 0.1) if (wall(k)) return { ...d, x: d.x - d.fx * (k - 0.06), z: d.z - d.fz * (k - 0.06), wall: true };
-    return { ...d, wall: false };
+    for (let k = 0.1; k < 7; k += 0.1) if (wall(k)) return room({ ...d, x: d.x - d.fx * (k - 0.06), z: d.z - d.fz * (k - 0.06), wall: true });
+    return room({ ...d, wall: false });
   }
 
   /** Inside one of the parked cars' boxes (you walk round them). */
@@ -1762,10 +1894,10 @@ export class GtaMode {
       if (car.hit.speed > 14) this.hud.toast("Crash", `${Math.round(car.hit.speed * 3.6)} km/h into ${car.hit.what === "car" ? "a car" : "a wall"}`, "bad");
     }
     // the horn on E (held), the look back on B
-    const horn = !this.paused && i.down("KeyE", "KeyQ");
+    const horn = !this.paused && i.down("KeyE", "KeyH");
     if (horn !== this.horn) this.sound.hornOn((this.horn = horn));
     this.cam.back = !this.paused && i.down("KeyB");
-    this.cam.car(dt, car.group.position, car.yaw, car.speed, car.vF < 0, this.settings.follow ? Math.max(i.idleLook, i.idleLook > 0.5 ? 2 : 0) : i.idleLook, { wall: (x, z) => (this.solid.ready && this.solid.wall(x, z)) || h.nav.wall(x, z) }, car.spec.len);
+    this.cam.car(dt, car.group.position, car.yaw, car.speed, car.vF < 0, this.settings.follow ? Math.max(i.idleLook, i.idleLook > 0.5 ? 2 : 0) : i.idleLook, { wall: (x, z) => (this.solid.ready && this.solid.wall(x, z)) || (!h.beyond(x, z) && h.nav.wall(x, z)) }, car.spec.len);
     this.sound.drive({ rpm: car.rpm, throttle: d.throttle, drift: car.drifting, nitro: car.nosOn, speed: car.speed });
     const strong = this.settings.blur === "strong";
     const blur = this.settings.blur === "off" ? 0 : Math.max(0, car.speed - (strong ? 12 : 28)) / (strong ? 30 : 70);
@@ -1778,16 +1910,20 @@ export class GtaMode {
     const h = this.host;
     return {
       resolve: (p: THREE.Vector3, r: number) => {
+        // (the Golden Gate's deck: over the bay, between its railings)
+        if (h.carHold(p, r)) return;
         if (!this.solid.ready) return h.nav.resolve(p, r);
         this.solid.resolve(p, r);
       },
-      outside: (x: number, z: number) => x < h.bounds.x0 || x > h.bounds.x1 || z < h.bounds.z0 || z > h.bounds.z1,
-      surface: (x: number, z: number) => this.roads.surface(x, z),
+      outside: (x: number, z: number) => !h.beyond(x, z) && (x < h.bounds.x0 || x > h.bounds.x1 || z < h.bounds.z0 || z > h.bounds.z1),
+      surface: (x: number, z: number) => h.carSurface(x, z) ?? this.roads.surface(x, z),
       boxes: () => this.boxes(self),
     };
   }
 
-  /** Everything a car can hit that moves: the traffic, the avenue's cars and buses, the trams, your parked cars, the cruisers. */
+  private legs: [number, number][] | null = null;
+
+  /** Everything a car can hit that moves: the traffic, the avenue's cars and buses, the trams, your parked cars, the cruisers (and the viaducts' legs). */
   private *boxes(self: DriveCar) {
     for (const m of this.host.traffic.movers) {
       const p = m.group.position;
@@ -1803,6 +1939,10 @@ export class GtaMode {
           sn = Math.abs(Math.sin(o.yaw));
         yield { x: o.x, z: o.z, hx: (cs * 4.4 + sn * 2) / 2.2, hz: (sn * 4.4 + cs * 2) / 2.2 };
       }
+    // the viaducts' legs: concrete, thin enough for the solid shape to call them a post a car goes
+    // through — they stop it
+    const sp = self.group.position;
+    for (const [lx, lz] of (this.legs ??= viaductBents().flatMap((b) => b.legs))) if (Math.abs(lx - sp.x) < 24 && Math.abs(lz - sp.z) < 24) yield { x: lx, z: lz, hx: 0.5, hz: 0.5 };
     for (const c of [...this.parked, ...this.heat.chasers.map((x) => x.car), ...(this.car ? [this.car] : [])]) {
       if (c === self) continue;
       const p = c.group.position;

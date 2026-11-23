@@ -19,6 +19,7 @@ import { memeStats, posterHit, updateMemes } from "./scene/memes";
 import { cityMemes } from "./scene/memewalls";
 import { LampLights, speedBlur, tiltShift } from "./scene/post";
 import { GtaMode } from "./gta";
+import { goldenHour } from "./gta/frontend";
 import type { Person3 } from "./gta/people3d";
 import { FinishPass, GradePass, ScenePass } from "./scene/finish";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -34,6 +35,7 @@ import { Shibuya } from "./scene/shibuya";
 import { GoldenGate } from "./scene/goldengate";
 import { WalletCrowns } from "./scene/walletcrowns";
 import { Forest } from "./scene/forest";
+import { Keys } from "./scene/keys";
 import { Cemetery } from "./scene/cemetery";
 import { Chatter } from "./scene/chatter";
 import { bubbles, drawBubbles } from "./scene/speech";
@@ -300,6 +302,8 @@ let bloomThreshold = 0.95;
 let themeHook: ((t: Theme) => void) | null = null;
 /** The moon's shadow strength for the theme (shadows are faded out, never switched off: see frame). */
 let moonShadow = 1;
+/** The game's front end has the street in its golden hour (the clock's dusk and dawn wait). */
+let menuLookOn = false;
 function setThemePref(p: ThemePref) {
   themePref = p;
   try {
@@ -309,7 +313,7 @@ function setThemePref(p: ThemePref) {
 }
 // on "auto", dusk and dawn come with the visitor's clock
 setInterval(() => {
-  if (themePref !== "auto" || clockTheme() === theme) return;
+  if (themePref !== "auto" || clockTheme() === theme || menuLookOn) return;
   hud?.cut();
   setTheme(clockTheme());
 }, 60_000);
@@ -660,6 +664,8 @@ const goldenGate = new GoldenGate(scene, city);
 const walletCrowns = new WalletCrowns(scene, city);
 // Shielded Woods: the redwood forest on the headland across the bridge, walkable off its deck
 const forest = new Forest(scene, city, director, (z) => goldenGate.deckAt(z));
+// Orchard Keys: the beach town across the bridge, through the tunnel under the woods (built off the main thread)
+const keys = new Keys(city, forest.land, () => theme === "day");
 // the ZK Cemetery: zombie zkSNARKs rising from their graves (more of them at night)
 const cemetery = new Cemetery(scene, city, director, { day: [4, 4, 3, 2, 1][worldLevel()], night: [10, 9, 7, 5, 3][worldLevel()] });
 // people talk to each other wherever the camera looks
@@ -1185,6 +1191,8 @@ function groundAt(x: number, z: number): number | null {
   if (pg !== null) return pg;
   const gg = goldenGate.groundAt(x, z);
   if (gg !== null) return gg;
+  const kg = keys.groundAt(x, z);
+  if (kg !== null) return kg;
   const cg = cemetery.groundAt(x, z);
   if (cg !== null) return cg;
   const fg = forest.groundAt(x, z);
@@ -1217,6 +1225,7 @@ function dynamicHit(x: number, z: number) {
     if (Math.abs((along ? x : z) - (along ? p.x : p.z)) < 2.4 && Math.abs((along ? z : x) - (along ? p.z : p.x)) < 1.3) return true;
   }
   if (cemetery.hit(x, z)) return true;
+  for (const b of goldenGate.boxes()) if (Math.abs(x - b.x) < b.hx + 0.3 && Math.abs(z - b.z) < b.hz + 0.3) return true;
   for (const t of tram.sets) {
     const p = t.group.position;
     if (Math.abs(x - p.x) < 7.4 && Math.abs(z - p.z) < 1.5) return true;
@@ -1230,7 +1239,7 @@ function dynamicHit(x: number, z: number) {
 }
 onFoot.collide = (x, z) => {
   const inPrison = x > PRISON.x0 + 0.6 && x < PRISON.x1 && z > PRISON.z0 + 0.6 && z < PRISON.z1 - 0.6;
-  if (!inPrison && (x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1)) return true;
+  if (!inPrison && !keys.owns(x, z) && (x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1)) return true;
   const here = onFoot.floor;
   const there = groundAt(x, z) ?? CURB;
   // no walking off a platform, no walking into the side of a staircase
@@ -1239,6 +1248,8 @@ onFoot.collide = (x, z) => {
   if (inPrison) return !prison.free(x, z, 0.28);
   // on the Golden Gate: between its railings
   if (goldenGate.onDeck(x, z)) return false;
+  // across it, the beach town (and the tunnel there)
+  if (keys.owns(x, z)) return keys.blocked(x, z) || dynamicHit(x, z);
   // in the woods across it: trunks, rocks, the creek, the cliffs
   if (forest.owns(x, z)) return forest.blocked(x, z);
   // up there, the street's obstacles are below you
@@ -2668,6 +2679,8 @@ if (new URLSearchParams(location.search).has("debug")) {
       sky,
       goldenGate,
       forest,
+      keys,
+      groundAt,
       cemetery,
       chatter,
       rideFlyer: () => boardSky("flyer"),
@@ -2995,9 +3008,15 @@ gta = new GtaMode({
     ...tram.sets.map((t) => t.group),
     ...[...metro.trains, ...metro2.trains].map((t) => t.group),
     sky.blimp.group,
+    goldenGate.group,
   ],
   // (raised floors a body walks on: the deck, the woods, platforms and stairs up; a footbridge's gentle hump is the solid shape's)
   footSpecial: (x, z) => {
+    // (Orchard Keys: its streets and beaches are the solid shape's, its hill its own)
+    if (keys.owns(x, z)) {
+      const g = groundAt(x, z);
+      return g !== null && g > CURB + 0.45;
+    }
     if ((x > PRISON.x0 && x < PRISON.x1 && z > PRISON.z0 && z < PRISON.z1) || goldenGate.onDeck(x, z) || forest.owns(x, z)) return true;
     const g = groundAt(x, z);
     return g !== null && g > CURB + 0.45;
@@ -3011,7 +3030,11 @@ gta = new GtaMode({
   enter: (key) => {
     if (!jumping && !closeChoice) enterPlace(key);
   },
-  facades: () => city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out! })),
+  facades: () => [...city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out! })), ...keys.facades],
+  // across the Golden Gate: the deck under the wheels (and its railings), the tunnel, the town's sand
+  carSurface: (x, z) => (goldenGate.onDeck(x, z) ? goldenGate.deckAt(z) : keys.carSurface(x, z)),
+  carHold: (p, r) => goldenGate.holdCar(p, r) || (keys.pushCar(p, r), false),
+  beyond: (x, z) => keys.owns(x, z) || goldenGate.onDeck(x, z),
   enterBuilding: (v) => {
     if (jumping || closeChoice || interiors.active) return;
     buildingDoor.at.set(v.x, CURB, v.z);
@@ -3107,6 +3130,7 @@ gta = new GtaMode({
       const p = t.group.position;
       yield { x: p.x, z: p.z, hx: 7.4, hz: 1.5 };
     }
+    yield* goldenGate.boxes();
   },
   *people() {
     for (const s of director.snarks) if (s.root.visible && s.root.parent === scene) yield { x: s.root.position.x, z: s.root.position.z };
@@ -3116,6 +3140,28 @@ gta = new GtaMode({
   hq: () => (city.shops[0] ? { x: city.shops[0].door.x, z: city.shops[0].door.z } : null),
   audio: () => sound.output(),
   soundOn: () => sound.on,
+  startSound: () => {
+    if (sound.on) return;
+    try {
+      if (localStorage.getItem("street.sound") === "0") return;
+    } catch {}
+    master.set(true);
+    void sound.start();
+    hud.setSoundButton(true);
+  },
+  menuLook: (on) => {
+    if (on === menuLookOn) return;
+    menuLookOn = on;
+    if (on) {
+      if (theme !== "day") setTheme("day");
+      goldenHour({ scene, renderer, hemi, sun: moon, bloom, offset: MOON_OFFSET });
+      bloomThreshold = bloom.threshold;
+      moonShadow = moon.shadow.intensity;
+    } else {
+      MOON_OFFSET.set(-18, 34, 22);
+      setTheme(themePref === "auto" ? clockTheme() : themePref);
+    }
+  },
   toggleSound: () => {
     const on = !sound.on;
     master.set(on);
@@ -3142,6 +3188,7 @@ gta = new GtaMode({
   quality: () => ({ level: quality.level, pinned: quality.pinned, tiers: quality.tiers }),
   pinQuality: (l) => quality.pin(l),
   blur: (a) => speedFx.set(a),
+  grade: (on) => grade.game(on),
   react: (x, z, fx, fz) => {
     const now = performance.now();
     for (const s of director.snarks) {
@@ -3171,6 +3218,18 @@ gta = new GtaMode({
     return true;
   },
   useLabel: (x, y) => (interiors.active ? (interiors.hoverAt(x, y) ?? null) : null),
+});
+// the bridge's traffic stops for you (on foot in the road, or at the wheel in front of it)
+goldenGate.blockers = () => {
+  if (!gta?.active) return [];
+  const out = gta.trafficBlockers();
+  if (gta.car) out.push({ x: gta.car.group.position.x, z: gta.car.group.position.z });
+  return out;
+};
+// Orchard Keys is up: the maps drawn again with it, the game's solid shape and doors taken again there
+void keys.ready.then(() => {
+  minimap.stale();
+  gta?.keysReady();
 });
 
 // the Needle's base jump (src/game/wingsuit.ts): off the 150 m deck in a wingsuit, through a ring per
@@ -3353,20 +3412,6 @@ function frameBody(stepDt?: number) {
     hud.frame(() => null);
     return again();
   }
-  // the game's garage: its own little scene, the city living on unseen
-  if (gta?.garage.open) {
-    gta.update(dt);
-    runDirector(sim, t, gta.garage.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(gta.garage.camera.quaternion));
-    load.view(gta.garage.camera);
-    renderPass.scene = gta.garage.scene;
-    renderPass.camera = finish.camera = gta.garage.camera;
-    tilt.set(0);
-    speedFx.set(0);
-    bloom.threshold = 0.9;
-    composer.render();
-    hud.frame(() => null);
-    return again();
-  }
   // inside a place: its own scene and the walking camera; the city keeps living (but unseen)
   if (interiors.active) {
     gta?.update(dt);
@@ -3442,7 +3487,9 @@ function frameBody(stepDt?: number) {
     // lights and shadows follow the point the shot looks at
     rig.controls.target.set(capShot!.look[0], 1, capShot!.look[2]);
   }
-  const cam = capturing ? capCam : dive.inCity || dive.inProof ? dive.camera : wing.active ? wing.camera : gta?.active ? gta.camera : walking ? onFoot.camera : rig.camera;
+  // the game's front end (the title, its menu, the line-up): the street through its own camera
+  const menuCam = !capturing && gta?.front.open ? gta.front.camera : null;
+  const cam = capturing ? capCam : menuCam ? menuCam : dive.inCity || dive.inProof ? dive.camera : wing.active ? wing.camera : gta?.active ? gta.camera : walking ? onFoot.camera : rig.camera;
   // the fog is measured from the camera: the iso camera stands far back, so push it out by as much
   if (scene.fog instanceof THREE.Fog) {
     const iso = cam === rig.iso;
@@ -3462,7 +3509,7 @@ function frameBody(stepDt?: number) {
 
   // lights and shadows follow what the camera looks at
   // on foot, lights and shadows follow a point a few steps ahead
-  const focus = dive.active ? dive.focus : wing.active ? wing.focus : gta?.active ? gta.focus : walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
+  const focus = menuCam ? gta!.front.focus : dive.active ? dive.focus : wing.active ? wing.focus : gta?.active ? gta.focus : walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
   lampLights.update(t, focus);
   // the whole-city map: the lamps' pools are a few pixels there, the lights cost a third of the frame
   lampLights.setOn(!(cam === rig.iso && pxPerMetre(renderer, rig.iso) < 6));
@@ -3488,12 +3535,12 @@ function frameBody(stepDt?: number) {
 
   // miniature look: strong tilt-shift on cinematic shots, a hint of it in iso
   if (capturing) tilt.set(capShot!.tilt ?? 0, 0.5, 0.22);
-  else if (walking || wing.active || dive.active) tilt.set(0);
+  else if (walking || wing.active || dive.active || menuCam) tilt.set(0);
   else if (rig.shot === "inside" || rig.shot === "shop") tilt.set(0.3, 0.5, 0.3);
   else if (rig.shot) tilt.set(1, 0.48, 0.14);
   else tilt.set(wide ? 0 : theme === "day" ? 0.32 : 0.55, 0.5, theme === "day" ? 0.3 : 0.26);
 
-  if (!capturing) wallsDown(dt, walking || wing.active || dive.active);
+  if (!capturing) wallsDown(dt, walking || wing.active || dive.active || !!menuCam);
   runDirector(sim, t, camQuat, camRight);
   visitors.update(dt, t, camQuat, camRight);
   critters.update(dt, cam);
@@ -3526,8 +3573,8 @@ function frameBody(stepDt?: number) {
   }
   chatter.setLive(lastSummary?.height ?? null, mempoolCount);
   // conversations only where you can read them: on foot, in a close shot, or zoomed in on the map
-  const closeUp = walking || !!rig.shot || (rig.iso.top - rig.iso.bottom) / rig.iso.zoom < 70;
-  if (!interiors.active && closeUp) chatter.update(sim, walking ? onFoot.camera.position : rig.focus);
+  const closeUp = walking || !!menuCam || !!rig.shot || (rig.iso.top - rig.iso.bottom) / rig.iso.zoom < 70;
+  if (!interiors.active && closeUp) chatter.update(sim, menuCam ? focus : walking ? onFoot.camera.position : rig.focus);
   stadium.update(sim, !interiors.active);
   metro2.update(sim);
   horns.update(sim);
@@ -3571,10 +3618,10 @@ function frameBody(stepDt?: number) {
     }
   }
   anniversary.quiet = drones.active;
-  decor.update(t, dt, focus, capturing ? capCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
+  decor.update(t, dt, focus, capturing ? capCam.position : menuCam ? menuCam.position : walking ? onFoot.camera.position : rig.shot ? rig.persp.position : rig.iso.position);
   // close-ups keep full detail further out; the whole-city view is mostly simplified
   if (wide) city.lod(focus, 0, 50);
-  else city.lod(focus, rig.shot ? 60 : 40, rig.shot ? 140 : 95);
+  else city.lod(focus, rig.shot || menuCam ? 60 : 40, rig.shot || menuCam ? 140 : 95);
   prison.lod(focus, wide ? 50 : rig.shot ? 140 : 95);
   city.update(t, dt);
   gameWorld?.update(dt);

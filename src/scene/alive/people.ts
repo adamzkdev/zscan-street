@@ -290,9 +290,11 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
     // x, z, heading (the hatch faces +z rotated), paint, trim, sign
     [-24, -50.8, 0, "#f4b728", "#16141c", "#ff6a3a"],
     [26, -50.8, 0, "#e8e4dc", "#e03a5a", "#3ef0ff"],
-    [-196, -52, 0, "#3a6aff", "#f2eee6", "#f4b728"],
+    // (these two stood in the middle of Sprout Avenue and Canopy Street once the streets grew
+    // wider: now parked at the kerb, the hatch and the queue on the pavement)
+    [-194 - (GRID.xw[GRID.xs.indexOf(-194)] ?? 14) / 2 + 1.35, -52, -Math.PI / 2, "#3a6aff", "#f2eee6", "#f4b728"],
     [-62, 81.5, Math.PI, "#e03a5a", "#f2eee6", "#ffd28a"],
-    [-100, -193.6, Math.PI, "#38a06a", "#f2eee6", "#f4b728"],
+    [-100, -192 + (GRID.zw[GRID.zs.indexOf(-192)] ?? 14) / 2 - 1.35, 0, "#38a06a", "#f2eee6", "#f4b728"],
   ];
   for (const [x, z, rot, paint, trim, sign] of TRUCKS) {
     const o = toObject(foodTruck(paint, trim, sign));
@@ -304,18 +306,23 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
     const along = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), rot);
     const hx = x + out.x * 2.2 - along.x * 0.8,
       hz = z + out.z * 2.2 - along.z * 0.8;
-    const ids = queue(hx, hz, out.x * 3 - along.x * 4, out.z * 3 - along.z * 4, Math.round(range(5, 8)));
-    ids.push(...cluster(x + out.x * 4.5 + along.x * 3, z + out.z * 4.5 + along.z * 3, 1.6, 4));
+    // the queue along the pavement, not out into the street
+    const ids = queue(hx, hz, -along.x * 5 + out.x * 0.6, -along.z * 5 + out.z * 0.6, Math.round(range(5, 8)));
+    ids.push(...cluster(x + out.x * 3.6 + along.x * 3, z + out.z * 3.6 + along.z * 3, 1.2, 4));
     talkers.push({ ids, lines: LINES.truck });
   }
 
   // ---- 6. buskers and their audience ----
+  // (two of them played in the middle of Canopy Street and Viewing Key Street: on the pavement now,
+  // their audience along it)
   const BUSKERS: [number, number, number][] = [
     [6, -78, -Math.PI / 2],
-    [-100, -190.5, Math.PI / 2],
-    [-180, -45.5, Math.PI / 2],
+    [-112, -183.4, Math.PI],
+    [-180, -49.2, 0],
     [150, -8, Math.PI / 2],
   ];
+  const asphalt = (x: number, z: number) =>
+    GRID.xs.some((c, i) => Math.abs(x - c) < GRID.xw[i] / 2 + 0.3 && z > -240 && z < 146) || GRID.zs.some((c, i) => c !== ST.river && Math.abs(z - c) < GRID.zw[i] / 2 + 0.3);
   const buskers: { x: number; z: number; id: number }[] = [];
   for (const [x, z, h] of BUSKERS) {
     const id = add({ kind: Kind.Dance, a: [x, z, h + Math.PI / 2, 0], y: Y });
@@ -330,9 +337,11 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
         r = range(2.6, 4);
       const px = x + Math.cos(a) * r,
         pz = z + Math.sin(a) * r;
+      if (asphalt(px, pz)) continue;
       ids.push(stand(px, pz, Math.atan2(z - pz, x - px), 0));
     }
-    talkers.push({ ids: ids.slice(1), lines: LINES.music });
+    // (an audience of one or none, on a narrow pavement: nobody to talk)
+    if (ids.length > 2) talkers.push({ ids: ids.slice(1), lines: LINES.music });
     buskers.push({ x, z, id });
   }
 
@@ -440,6 +449,7 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
           talkIn = range(1.6, 3.4);
           const slot = anchorBusy.findIndex((u) => u < f.t);
           const near = talkers.filter((g) => {
+            if (!g.ids.length) return false;
             crowd.positionOf(g.ids[0], tmp);
             return Math.hypot(tmp.x - f.focus.x, tmp.z - f.focus.z) < (f.walking ? 22 : 30);
           });

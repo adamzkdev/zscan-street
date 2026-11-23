@@ -10,10 +10,60 @@
  */
 import { BAY, GRID, LOTS, PARK, RIVER } from "../scene/city/plan";
 import { bell, drum, type Room, Scene, tone, type Bufs } from "./lib";
-import { loop, preload, shot } from "./samples";
+import { load, loop, preload, shot } from "./samples";
+import { pyramidMusic } from "./egypt";
 import { bigBenHours } from "./scenes";
 
 const OPEN: Room = { len: 1.4, decay: 3.5, tone: 0.4, wet: 0.25 };
+
+/**
+ * Music heard from a place as you pass it (the city's recordings, public/audio/music, one after
+ * another from a random point): through its doors and walls — a low-pass — and a little room.
+ */
+function music(s: Scene, tracks: string[], level: number, lp = 2400, wet = 0.2) {
+  const ctx = s.ctx;
+  const bus = ctx.createGain();
+  bus.gain.value = level;
+  const f = ctx.createBiquadFilter();
+  f.type = "lowpass";
+  f.frequency.value = lp;
+  f.Q.value = 0.4;
+  bus.connect(f);
+  s.send(f, wet);
+  let src: AudioBufferSourceNode | null = null;
+  let i = Math.floor(Math.random() * tracks.length);
+  const next = async (first: boolean) => {
+    const buf = await load(ctx, `music/${tracks[i % tracks.length]}`);
+    if (s.dead) return;
+    if (!buf) return;
+    const env = ctx.createGain();
+    env.gain.value = 0;
+    env.connect(bus);
+    src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(env);
+    const t = ctx.currentTime + 0.05;
+    const off = first ? Math.random() * buf.duration * 0.7 : 0;
+    src.start(t, off);
+    env.gain.linearRampToValueAtTime(1, t + 1.2);
+    env.gain.setValueAtTime(1, t + Math.max(1.3, buf.duration - off - 1.5));
+    env.gain.linearRampToValueAtTime(0, t + buf.duration - off);
+    src.onended = () => {
+      env.disconnect();
+      if (s.dead) return;
+      i++;
+      void next(false);
+    };
+  };
+  void next(true);
+  s.onClose(() => {
+    try {
+      src?.stop();
+    } catch {}
+  });
+  s.layers.push(`music:${tracks[0]}`);
+  return bus.gain;
+}
 const side = () => Math.random() * 1.6 - 0.8;
 
 interface Rect {
@@ -50,6 +100,17 @@ const ROME = lot("colosseum");
 const PARIS = lot("eiffel");
 const WESTMINSTER = lot("parliament");
 const CEMETERY = lot("cemetery");
+const MUSEUM = lot("museum");
+const FOODHALL = lot("foodhall");
+const MALL = lot("mall");
+const PYRAMID = lot("pyramid");
+const GAMEHOUSE = lot("gamehouse");
+const CONVENTION = lot("convention");
+const OPERA = BAY.opera;
+/** The bandstand in Central Park, its little stage. */
+const BANDSTAND = { x0: PARK.bandstand.x - 4, x1: PARK.bandstand.x + 4, z0: PARK.bandstand.z - 4, z1: PARK.bandstand.z + 4 };
+/** The covered shopping street (the shōtengai), its length. */
+const SHOTENGAI = { x0: -86 - 6, x1: -86 + 6, z0: -39, z1: 31 };
 const PARKR = { x0: GRID.park.x0, x1: GRID.park.x1, z0: GRID.park.z0, z1: GRID.park.z1 };
 const PALM = { x0: Math.min(BAY.palm.x0, BAY.arab.x0), x1: Math.max(BAY.palm.x1, BAY.arab.x1), z0: Math.min(BAY.palm.z0, BAY.arab.z0), z1: Math.max(BAY.palm.z1, BAY.arab.z1) };
 /** The suspension bridge over the bay's mouth, as a thin strip. */
@@ -181,7 +242,100 @@ const DISTRICTS: Record<string, District> = {
       bigBenHours(s, 0.9, { wet: 0.3 });
     },
   },
+  /** The Opera House on its pier: an aria through the glass, the foyer's murmur. */
+  opera: {
+    weight: (e) => fall(dRect(OPERA, e.x, e.z), 40),
+    build(s) {
+      music(s, ["op-puccini", "op-traviata", "op-figaro", "op-toreador", "op-swanlake"], 0.55, 2600, 0.35);
+      loop(s, "foyer", 0.2, { lp: 2000 });
+    },
+  },
+  /** The museum's steps: a piano from the hall, the visitors. */
+  museum: {
+    weight: (e) => fall(dRect(MUSEUM, e.x, e.z), 30),
+    build(s) {
+      music(s, ["piano-gymnopedie", "piano-nocturne", "violin-bach"], 0.42, 2200, 0.35);
+      loop(s, "museum", 0.25, { lp: 1800 });
+    },
+  },
+  /** The hawker centre: a band in the corner, plates, the crowd at the stalls. */
+  foodhall: {
+    weight: (e) => fall(dRect(FOODHALL, e.x, e.z), 28),
+    build(s) {
+      music(s, ["jazz-dixie", "jazz-combo"], 0.42, 2800, 0.25);
+      loop(s, "restaurant", 0.45, { lp: 3000 });
+    },
+  },
+  /** Central Park's bandstand: a saxophone under its roof. */
+  bandstand: {
+    weight: (e) => fall(dRect(BANDSTAND, e.x, e.z), 26),
+    build(s) {
+      music(s, ["sax-park", "sax-solo"], 0.6, 5000, 0.3);
+    },
+  },
+  /** The ZK Mall's doors, the Game House's arcade, the convention's hall. */
+  mall: {
+    weight: (e) => fall(dRect(MALL, e.x, e.z), 22),
+    build(s) {
+      loop(s, "mall", 0.55, { lp: 2600 });
+      music(s, ["jazz-combo", "piano-waltz"], 0.22, 2000, 0.4);
+    },
+  },
+  gamehouse: {
+    weight: (e) => fall(dRect(GAMEHOUSE, e.x, e.z), 22),
+    build(s) {
+      loop(s, "arcade", 0.5, { lp: 2400 });
+    },
+  },
+  convention: {
+    weight: (e) => fall(dRect(CONVENTION, e.x, e.z), 24),
+    build(s) {
+      preload(s.ctx, "applause");
+      loop(s, "foyer", 0.4, { lp: 2400 });
+      s.every("applause", 20, 45, (t) => shot(s, "applause", t, 0.3, { lp: 1800, pan: side() }), 6);
+    },
+  },
+  /** The covered shopping street: shop jingles, the crowd under the canopy. */
+  shotengai: {
+    weight: (e) => fall(dRect(SHOTENGAI, e.x, e.z), 14),
+    build(s) {
+      loop(s, "mall", 0.35, { lp: 3200 });
+      s.every("shop-jingle", 9, 20, (t) => {
+        const tune = pick([
+          [79, 76, 72, 76, 79, 84],
+          [72, 76, 79, 76],
+          [84, 79, 76, 72, 74, 79],
+        ]);
+        const pan = side();
+        tune.forEach((n, k) => bell(s, t + k * 0.17, 440 * Math.pow(2, (n - 69) / 12), 0.35, 0.012, 0.4, pan));
+      });
+    },
+  },
+  /** Giza: the desert's own music, low, from the pyramid's mouth. */
+  pyramid: {
+    weight: (e) => fall(dRect(PYRAMID, e.x, e.z), 40),
+    build(s) {
+      const k = s.child("pyramid-music");
+      k.out.gain.value = 0.45;
+      pyramidMusic(k, false);
+      loop(s, "wind", 0.25);
+    },
+  },
+  /** Orchard Keys across the bridge: the surf on its beaches, gulls, a breeze in the palms. */
+  keys: {
+    weight: (e) => fall(dRect(KEYS_R, e.x, e.z), 30),
+    build(s, e) {
+      preload(s.ctx, "ship-horn");
+      loop(s, "waves", 0.7);
+      loop(s, "gulls", e.night ? 0.08 : 0.32);
+      loop(s, "wind", 0.15);
+      s.every("ship-horn", 70, 140, (t) => shot(s, "ship-horn", t, 0.25, { pan: side(), lp: 1600 }), 20);
+    },
+  },
 };
+/** Orchard Keys (src/scene/keys): the town, its beaches and the bluff behind it. */
+const KEYS_R = { x0: 82, x1: 338, z0: 238, z1: 446 };
+const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 
 /** The fountain's distance in Central Park, for its own level. */
 export const parkFountainLevel = (e: StreetEar) => fall(Math.hypot(e.x - PARK.fountain.x, e.z - PARK.fountain.z), 30) * 0.45 + 0.02;

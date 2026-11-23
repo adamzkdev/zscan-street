@@ -3,7 +3,7 @@ import { nextMeme } from "./memewalls";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Block, Tx } from "../data/types";
-import { CITY, CURB, GRID, RIVER, ST } from "./city/plan";
+import { CITY, CURB, GRID, ST, viaductBents } from "./city/plan";
 import type { Nav } from "./nav";
 import { KIND_COLOR } from "./snark";
 import { busSign, canvasTexture } from "./textures";
@@ -468,35 +468,35 @@ export class Metro {
       for (const z of [-2.22, 2.22]) put(new THREE.BoxGeometry(len + 0.3, 0.06, 0.04), neon, -0.75, z);
     };
     for (let i = 1; i < pts.length; i++) segment(pts[i - 1], pts[i]);
-    // pillars every ~13 m along the straights, never in the avenue
-    const pillar = new THREE.BoxGeometry(0.9, this.deck - 0.8, 0.9);
-    const cap = new THREE.BoxGeometry(3.6, 0.5, 1.1);
-    for (let s = 4; s < this.route.length; s += 13) {
-      const p = this.route.at(s);
-      if (Math.abs(p.x) > CITY.maxX - 2) continue;
-      if (p.z > CITY.road.z0 - 1.5 && p.z < CITY.road.z1 + 1.5) continue;
-      if (p.z > RIVER.z0 - 1 && p.z < RIVER.z1 + 1) continue;
-      // never in the middle of a crossing
-      const inX = GRID.xs.some((x, i) => Math.abs(p.x - x) < GRID.xw[i] / 2 + 1);
-      const inZ = GRID.zs.some((z, i) => Math.abs(p.z - z) < GRID.zw[i] / 2 + 1);
-      if (inX && inZ) continue;
-      const key = `${Math.round(p.x / 6)},${Math.round(p.z / 6)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      collect(concrete, pillar.clone().translate(p.x, (this.deck - 0.8) / 2, p.z));
-      const along = this.route.at(s + 1).sub(p);
-      // posters pasted on every third pillar, both faces across the street
-      if (seen.size % 3 === 0) {
-        const yaw = Math.atan2(along.x, along.z) + Math.PI / 2;
-        for (const f of [0, Math.PI]) {
+    // the bents that carry it: a leg on each pavement and a crossbeam over the street, nothing in
+    // the road (plan.ts places them; the street's lamps and trees keep clear of the legs)
+    let nb = 0;
+    for (const b of viaductBents()) {
+      if (b.deck !== this.deck) continue;
+      // (a leg that would stand in a building: that bent is left out, the deck spans on)
+      if (b.legs.some(([lx, lz]) => nav.wall(lx, lz))) continue;
+      const beamY = this.deck - 1.1;
+      const legH = beamY;
+      for (const [lx, lz] of b.legs) {
+        collect(concrete, new THREE.BoxGeometry(0.9, legH, 0.9).translate(lx, legH / 2, lz));
+        // a plinth and a cap where it meets the beam
+        collect(under, new THREE.BoxGeometry(1.2, 0.35, 1.2).translate(lx, CURB + 0.17, lz));
+        collect(concrete, new THREE.BoxGeometry(1.3, 0.5, 1.3).translate(lx, beamY - 0.25, lz));
+        nav.addCircle(lx, lz, 0.6);
+      }
+      const span = b.reach * 2 + 1.3;
+      const beam = b.along === "x" ? new THREE.BoxGeometry(1.1, 0.95, span) : new THREE.BoxGeometry(span, 0.95, 1.1);
+      collect(concrete, beam.translate(b.x, beamY + 0.47, b.z));
+      // posters pasted on every third leg, on its face to the street
+      if (++nb % 3 === 0)
+        for (const [lx, lz] of b.legs) {
+          const tx = b.along === "x" ? 0 : Math.sign(b.x - lx),
+            tz = b.along === "x" ? Math.sign(b.z - lz) : 0;
           const ad = memePoster(nextMeme(), 0.86, { kind: "paste" });
-          ad.position.set(p.x + Math.sin(yaw + f) * 0.455, CURB + 1.75, p.z + Math.cos(yaw + f) * 0.455);
-          ad.rotation.y = yaw + f;
+          ad.position.set(lx + tx * 0.455, CURB + 1.75, lz + tz * 0.455);
+          ad.rotation.y = Math.atan2(tx, tz);
           this.group.add(ad);
         }
-      }
-      collect(concrete, cap.clone().rotateY(Math.atan2(-along.z, along.x) + Math.PI / 2).translate(p.x, this.deck - 1.05, p.z));
-      nav.addCircle(p.x, p.z, 0.6);
     }
     for (const [mat, list] of bins) {
       const m = new THREE.Mesh(mergeGeometries(list, false), mat);

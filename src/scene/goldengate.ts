@@ -1,30 +1,108 @@
 import * as THREE from "three";
 import type { City } from "./city";
 import { BAY, CURB, ST } from "./city/plan";
+import { corridor, KGRID, KTUNNEL, KX } from "./keys/plan";
 import { sharedObject } from "./voxel/mesher";
 import { sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
 
 /**
  * The Golden Gate comes alive: cars and trucks cross it both ways (four lanes, up the ramps and over
- * the span, the deck's real height under their wheels), in and out of a tunnel in the headland; on
- * foot you can walk across on its deck.
+ * the span, the deck's real height under their wheels), through the Orchard Tunnel under the
+ * headland, and round the streets of Orchard Keys on the other side before they come back over to
+ * the city. On foot you can walk across on its deck; at the wheel (src/gta) you drive it.
  */
 
-const LANES = [-3.2, -1.1, 1.1, 3.2];
 const PAINTS: [string, string][] = [
   ["#c8ccd4", "#3ef0ff"],
   ["#2a2a34", "#ff3e8a"],
   ["#8a2a3a", "#ff9f2e"],
   ["#2a4a7a", "#3ef0ff"],
   ["#e8e4dc", "#b07bff"],
+  ["#ff7fb0", "#ff4fa3"],
+  ["#46c8e0", "#34e7ff"],
+  ["#f4b728", "#ff8a3a"],
 ];
+
+/** A route's centre line, sampled every metre: where, which way, and how sharp the road is there. */
+class Path {
+  readonly pts: { x: number; z: number; tx: number; tz: number; slow: number }[] = [];
+  readonly length: number;
+  constructor(corners: [number, number][], r = 7) {
+    // straight runs with quarter-circle corners of radius r
+    const raw: [number, number][] = [];
+    for (let i = 0; i < corners.length; i++) {
+      const p = corners[i];
+      if (i === 0 || i === corners.length - 1) {
+        raw.push(p);
+        continue;
+      }
+      const a = corners[i - 1],
+        b = corners[i + 1];
+      const ina = Math.hypot(p[0] - a[0], p[1] - a[1]),
+        inb = Math.hypot(b[0] - p[0], b[1] - p[1]);
+      const ux = (p[0] - a[0]) / ina,
+        uz = (p[1] - a[1]) / ina,
+        vx = (b[0] - p[0]) / inb,
+        vz = (b[1] - p[1]) / inb;
+      const k = Math.min(r, ina / 2, inb / 2);
+      // a U-turn (back the way it came): round the end in a half circle
+      if (ux * vx + uz * vz < -0.9) {
+        const nx = -uz,
+          nz = ux;
+        for (let s = 0; s <= 8; s++) {
+          const t = (s / 8) * Math.PI;
+          raw.push([p[0] + ux * Math.sin(t) * 3 + nx * (1 - Math.cos(t)) * -2.2, p[1] + uz * Math.sin(t) * 3 + nz * (1 - Math.cos(t)) * -2.2]);
+        }
+        continue;
+      }
+      const s0: [number, number] = [p[0] - ux * k, p[1] - uz * k],
+        s1: [number, number] = [p[0] + vx * k, p[1] + vz * k];
+      for (let s = 0; s <= 8; s++) {
+        const t = s / 8;
+        // a quadratic through the corner: close enough to the arc, and smooth
+        raw.push([(1 - t) * (1 - t) * s0[0] + 2 * (1 - t) * t * p[0] + t * t * s1[0], (1 - t) * (1 - t) * s0[1] + 2 * (1 - t) * t * p[1] + t * t * s1[1]]);
+      }
+    }
+    // resample every metre along it (repeated points dropped: no zero-length piece to take a heading from)
+    for (let i = raw.length - 1; i > 0; i--) if (Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]) < 0.01) raw.splice(i, 1);
+    const cum = [0];
+    for (let i = 1; i < raw.length; i++) cum.push(cum[i - 1] + Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]));
+    let seg = 1;
+    for (let d = 0; d <= cum[cum.length - 1]; d += 1) {
+      while (seg < raw.length - 1 && cum[seg] < d) seg++;
+      const [ax, az] = raw[seg - 1],
+        [bx, bz] = raw[seg];
+      const L = Math.max(1e-6, cum[seg] - cum[seg - 1]);
+      const t = Math.max(0, Math.min(1, (d - cum[seg - 1]) / L));
+      this.pts.push({ x: ax + (bx - ax) * t, z: az + (bz - az) * t, tx: (bx - ax) / L, tz: (bz - az) / L, slow: 0 });
+    }
+    this.length = this.pts.length - 1;
+    // how much to slow down: where the heading turns over the next few metres
+    for (let i = 0; i < this.pts.length; i++) {
+      const j = Math.min(this.pts.length - 1, i + 10);
+      const a = this.pts[i],
+        b = this.pts[j];
+      this.pts[i].slow = Math.min(1, (1 - (a.tx * b.tx + a.tz * b.tz)) * 2.5);
+    }
+    for (let i = this.pts.length - 2; i >= 0; i--) this.pts[i].slow = Math.max(this.pts[i].slow, this.pts[i + 1].slow * 0.9);
+  }
+  at(s: number) {
+    const i = Math.max(0, Math.min(this.pts.length - 1, Math.floor(s)));
+    return this.pts[i];
+  }
+}
 
 interface Car {
   obj: THREE.Object3D;
+  path: Path;
+  /** Metres right of the centre line (right-hand traffic: the lane). */
   lane: number;
-  dir: 1 | -1;
-  z: number;
+  s: number;
   v: number;
+  len: number;
+  x: number;
+  z: number;
+  yaw: number;
 }
 
 export class GoldenGate {
@@ -35,13 +113,17 @@ export class GoldenGate {
   private z1 = BAY.headland.z0 + 4;
   private h: Float32Array = new Float32Array(0);
   private cars: Car[] = [];
-  private group = new THREE.Group();
+  readonly group = new THREE.Group();
   private spawnIn = 0;
+  private paths: Path[] = [];
+  /** Who the traffic must not run over (the game's player, on foot or at the wheel). */
+  blockers: () => { x: number; z: number }[] = () => [];
 
   constructor(scene: THREE.Object3D, city: City) {
     const lm = city.landmarks.get("bridge");
     this.ok = !!lm;
     if (!lm) return;
+    this.group.name = "goldengate:traffic";
     scene.add(this.group);
     // the deck's height along its centre line, measured once on the bridge's own model
     const ray = new THREE.Raycaster();
@@ -67,18 +149,20 @@ export class GoldenGate {
       for (let i = 1; i < n; i++) if (Math.abs(this.h[i] - this.h[i - 1]) > 0.5) steep = true;
       if (pass >= 2 && !steep) break;
     }
-    // the headland tunnel the road disappears into
-    const portal = new THREE.Group();
-    const dark = new THREE.Mesh(new THREE.BoxGeometry(12, 6, 0.5), new THREE.MeshBasicMaterial({ color: "#050508" }));
-    dark.position.set(0, 3, 0);
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(14, 7.6, 1.6), new THREE.MeshStandardMaterial({ color: "#6a6470", roughness: 0.9 }));
-    frame.position.set(0, 3.8, 0.6);
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(11, 0.2, 0.2), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.6, 0.6), toneMapped: false }));
-    lamp.position.set(0, 6.1, -0.3);
-    portal.add(frame, dark, lamp);
-    portal.position.set(this.x, this.deckAt(this.z1), this.z1 + 2);
-    this.group.add(portal);
-    for (let i = 0; i < 10; i++) this.spawn(true);
+    // the loops round Orchard Keys: over the bridge, through the tunnel, round a few blocks, back
+    const X = KX,
+      [xW, , xV, xP, xS] = KGRID.xs,
+      [zN, zC, zA, zD] = KGRID.zs;
+    const start = this.z0;
+    for (const loop of [
+      [[X, start], [X, zN], [xS, zN], [xS, zD], [X, zD], [X, start]],
+      [[X, start], [X, zD], [xW, zD], [xW, zN], [X, zN], [X, start]],
+      [[X, start], [X, zC], [xP, zC], [xP, zD], [X, zD], [X, start]],
+      [[X, start], [X, zA], [xW, zA], [xW, zC], [X, zC], [X, start]],
+      [[X, start], [X, zN], [xV, zN], [xV, zA], [X, zA], [X, start]],
+    ] as [number, number][][])
+      this.paths.push(new Path(loop));
+    for (let i = 0; i < 16; i++) this.spawn(true);
   }
 
   /** Deck height at z (null off the deck's length). */
@@ -102,50 +186,114 @@ export class GoldenGate {
     return this.onDeck(x, z) ? this.deckAt(z) : null;
   }
 
+  /** The road's height under a wheel on the way over: the deck, the headland's road, the tunnel, the town. */
+  roadY(x: number, z: number) {
+    if (this.onDeck(x, z)) return this.deckAt(z);
+    if (corridor(x, z)) return z < KTUNNEL.z0 ? CURB + 0.02 : 0.03;
+    return 0.01;
+  }
+
+  /**
+   * At the wheel on the deck: kept between the railings (the deck is above anything the game's solid
+   * shape sees: under it, the bay). True when (p) was the deck's to hold.
+   */
+  holdCar(p: THREE.Vector3, r: number) {
+    if (!this.ok || Math.abs(p.x - this.x) > 7 || p.z < this.z0 - 1 || p.z > this.z1 + 0.5) return false;
+    const lim = 5.35 - r;
+    if (p.x > this.x + lim) p.x = this.x + lim;
+    else if (p.x < this.x - lim) p.x = this.x - lim;
+    return true;
+  }
+
+  /** The traffic as boxes (centre, half sizes along x and z), for the cars and the walkers to hit. */
+  *boxes(): Iterable<{ x: number; z: number; hx: number; hz: number }> {
+    for (const c of this.cars) {
+      const cs = Math.abs(Math.cos(c.yaw)),
+        sn = Math.abs(Math.sin(c.yaw));
+      yield { x: c.x, z: c.z, hx: (cs * c.len + sn * 1.9) / 2, hz: (sn * c.len + cs * 1.9) / 2 };
+    }
+  }
+
   private spawn(anywhere = false) {
-    const li = Math.floor(Math.random() * 4);
-    const dir: 1 | -1 = li < 2 ? -1 : 1;
+    const path = this.paths[Math.floor(Math.random() * this.paths.length)];
     const r = Math.random();
     // (a car every second or two: each body meshed once and shared, not meshed again for every car
     // and left on the GPU once it had crossed)
     let obj: THREE.Group;
+    let len = 4;
     if (r < 0.15) obj = sharedObject("gg:taxi", taxiModel);
-    else if (r < 0.3) {
+    else if (r < 0.27) {
       const livery = ["#e8e4dc", "#2e5ab8", "#c0302e"][Math.floor(Math.random() * 3)];
       const label = Math.random() < 0.5 ? "proof" : "depot";
       obj = sharedObject(`gg:truck:${livery}:${label}`, () => truckModel(livery, label));
+      len = 7;
     } else {
       const p = Math.floor(Math.random() * PAINTS.length);
       obj = sharedObject(`gg:sedan:${p}`, () => sedanModel(...PAINTS[p]));
     }
-    obj.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
-    const z = anywhere ? this.z0 + Math.random() * (this.z1 - this.z0) : dir > 0 ? this.z0 : this.z1;
-    const car: Car = { obj, lane: LANES[li], dir, z, v: 9 + Math.random() * 4 };
-    for (const o of this.cars) if (o.lane === car.lane && Math.abs(o.z - car.z) < 9) return;
+    const s = anywhere ? Math.random() * path.length : 0;
+    const p = path.at(s);
+    // a four-lane road (the bridge, the boulevard, the drive): kerb lane or fast lane; else the one lane
+    const wide = Math.abs(p.x - KX) < 8 || Math.abs(p.z - KGRID.zs[3]) < 8 || p.z < KTUNNEL.z1;
+    const lane = wide ? (Math.random() < 0.5 ? 1.1 : 3.2) : 1.9;
+    const car: Car = { obj, path, lane, s, v: 9 + Math.random() * 4, len, x: p.x, z: p.z, yaw: 0 };
+    this.place(car);
+    for (const o of this.cars) if (Math.hypot(o.x - car.x, o.z - car.z) < 9) return;
     this.cars.push(car);
     this.group.add(obj);
+  }
+
+  private place(c: Car) {
+    const p = c.path.at(c.s);
+    // (the lane follows the road: on the two-lane streets the outer lane eases in)
+    const wide = Math.abs(p.x - KX) < 8 || Math.abs(p.z - KGRID.zs[3]) < 8 || p.z < KTUNNEL.z1;
+    const lane = wide ? c.lane : Math.min(c.lane, 1.9);
+    c.x = p.x - p.tz * lane;
+    c.z = p.z + p.tx * lane;
+    c.yaw = Math.atan2(-p.tz, p.tx);
+    c.obj.position.set(c.x, this.roadY(c.x, c.z), c.z);
+    c.obj.rotation.set(0, c.yaw, 0);
   }
 
   update(dt: number) {
     if (!this.ok) return;
     this.spawnIn -= dt;
-    if (this.spawnIn <= 0 && this.cars.length < 18) {
-      this.spawnIn = 0.8 + Math.random() * 1.6;
+    if (this.spawnIn <= 0 && this.cars.length < 26) {
+      this.spawnIn = 1.1 + Math.random() * 1.8;
       this.spawn();
     }
+    const others = this.blockers();
     for (const c of this.cars) {
-      // keep the gap to the car ahead in the lane
+      const p = c.path.at(c.s);
+      const fx = Math.cos(c.yaw),
+        fz = -Math.sin(c.yaw);
+      // keep the gap to whatever is ahead in the lane (another car, you)
       let ahead = Infinity;
-      for (const o of this.cars) if (o !== c && o.lane === c.lane && (o.z - c.z) * c.dir > 0) ahead = Math.min(ahead, Math.abs(o.z - c.z));
-      const want = ahead < 8 ? 0 : ahead < 16 ? c.v * 0.5 : c.v;
-      c.z += c.dir * want * dt;
-      c.obj.position.set(this.x + c.lane, this.deckAt(c.z), c.z);
+      for (const o of this.cars) {
+        if (o === c) continue;
+        const dx = o.x - c.x,
+          dz = o.z - c.z;
+        const along = dx * fx + dz * fz,
+          across = Math.abs(-dx * fz + dz * fx);
+        if (along > 0 && along < 18 && across < 1.5) ahead = Math.min(ahead, along - (o.len + c.len) / 2);
+      }
+      for (const o of others) {
+        const dx = o.x - c.x,
+          dz = o.z - c.z;
+        const along = dx * fx + dz * fz,
+          across = Math.abs(-dx * fz + dz * fx);
+        if (along > 0 && along < 14 && across < 1.7) ahead = Math.min(ahead, along - c.len / 2 - 0.6);
+      }
+      const cruise = c.v * (1 - p.slow * 0.55);
+      const want = ahead < 2.5 ? 0 : ahead < 9 ? cruise * ((ahead - 2.5) / 6.5) : cruise;
+      c.s += want * dt;
+      this.place(c);
       // the city end: they come in from (and go out to) the ring road, growing in/out of view
-      const fade = Math.min(1, (c.z - this.z0) / 4);
+      const fade = Math.min(1, c.s / 4, (c.path.length - c.s) / 4);
       c.obj.scale.setScalar(Math.max(0.01, fade));
     }
     this.cars = this.cars.filter((c) => {
-      const gone = c.z < this.z0 - 0.5 || c.z > this.z1 + 3;
+      const gone = c.s >= c.path.length - 0.5;
       if (gone) this.group.remove(c.obj);
       return !gone;
     });

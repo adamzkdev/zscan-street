@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { CITY, CURB, ST } from "./city/plan";
+import { CITY, CURB, GRID, ST, viaductBents } from "./city/plan";
 import { busSign, canvasTexture } from "./textures";
 import { toObject } from "./voxel/mesher";
 import { C, E, G, VOX, VoxelModel } from "./voxel/model";
@@ -21,9 +21,19 @@ export interface TramLine {
   body: string;
   band: string;
 }
+/** The street a line runs along: its kerb on the tram's side (the poles and shelters stand past it). */
+const kerbOf = (z: number) => {
+  const i = GRID.zs.findIndex((c) => Math.abs(c - z) < 3);
+  return i >= 0 ? GRID.zs[i] + GRID.zw[i] / 2 : z + 2;
+};
+/** A stop at a crossing moves on past it (its shelter stood in the cross street's lanes). */
+const offCrossing = (x: number) => {
+  const i = GRID.xs.findIndex((c, k) => Math.abs(x - c) < GRID.xw[k] / 2 + 3.2);
+  return i >= 0 ? GRID.xs[i] + GRID.xw[i] / 2 + 4.5 : x;
+};
 export const TRAM_LINES: TramLine[] = [
-  { name: "TRAM A · 路面電車", z: ST.south + 1.9, stops: [ST.blvdW, ST.shotengai, 0, ST.east1, ST.blvdE], body: "#2e8a5a", band: "#ece4cc" },
-  { name: "TRAM B · 北線", z: ST.parkN + 1.9, stops: [-190, ST.shotengai, ST.heartW, 0, ST.heartE, ST.east1, 190], body: "#d8602a", band: "#f4e8c8" },
+  { name: "TRAM A · 路面電車", z: ST.south + 1.9, stops: [ST.blvdW, ST.shotengai, 0, ST.east1, ST.blvdE].map(offCrossing), body: "#2e8a5a", band: "#ece4cc" },
+  { name: "TRAM B · 北線", z: ST.parkN + 1.9, stops: [-190, ST.shotengai, ST.heartW, 0, ST.heartE, ST.east1, 190].map(offCrossing), body: "#d8602a", band: "#f4e8c8" },
 ];
 const CARW = 42;
 const SPEED = 9;
@@ -183,16 +193,30 @@ export class Tram {
     rails.receiveShadow = true;
     this.group.add(rails);
     const poles: THREE.BufferGeometry[] = [];
+    // the poles on the pavement just past the kerb (the streets grew wider: they stood in the lanes),
+    // an arm out over the track; none in a crossing, none in a viaduct's leg
+    const kerb = kerbOf(Z);
+    const PZ = kerb + 0.35;
+    const legs = viaductBents().flatMap((b) => b.legs);
+    const crossing = (x: number, m: number) => GRID.xs.some((c, k) => Math.abs(x - c) < GRID.xw[k] / 2 + m);
     for (let x = -END; x <= END; x += 16) {
-      poles.push(new THREE.BoxGeometry(0.18, 5.8, 0.18).translate(x, 2.9, Z + 2.2));
-      this.nav?.addCircle(x, Z + 2.2, 0.2);
-      poles.push(new THREE.BoxGeometry(0.1, 0.1, 2.4).translate(x, 5.6, Z + 1.1));
+      let px = x;
+      for (const d of [0, 2, -2, 4, -4]) {
+        px = x + d;
+        if (!crossing(px, 0.6) && !legs.some(([lx, lz]) => Math.abs(lx - px) < 1.4 && Math.abs(lz - PZ) < 1.4)) break;
+        px = NaN;
+      }
+      if (px !== px) continue;
+      poles.push(new THREE.BoxGeometry(0.18, 5.8, 0.18).translate(px, 2.9, PZ));
+      this.nav?.addCircle(px, PZ, 0.2);
+      poles.push(new THREE.BoxGeometry(0.1, 0.1, PZ - Z + 0.3).translate(px, 5.6, (PZ + Z) / 2 - 0.15));
     }
+    // the shelters on the pavement, off the crossings
     for (const x of line.stops) {
-      poles.push(new THREE.BoxGeometry(5, 0.12, 1.6).translate(x, CURB + 2.6, Z + 2.4));
+      poles.push(new THREE.BoxGeometry(5, 0.12, 1.6).translate(x, CURB + 2.6, kerb + 1.2));
       for (const dx of [-2.2, 2.2]) {
-        poles.push(new THREE.BoxGeometry(0.12, 2.6, 0.12).translate(x + dx, CURB + 1.3, Z + 3));
-        this.nav?.addCircle(x + dx, Z + 3, 0.15);
+        poles.push(new THREE.BoxGeometry(0.12, 2.6, 0.12).translate(x + dx, CURB + 1.3, kerb + 1.8));
+        this.nav?.addCircle(x + dx, kerb + 1.8, 0.15);
       }
     }
     this.group.add(new THREE.Mesh(mergeGeometries(poles, false), pole));

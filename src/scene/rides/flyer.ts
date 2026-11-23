@@ -26,8 +26,9 @@ const HUB_Y = CURB + FLY.hub;
 export const PLAT_Y = HUB_Y - (FLY.r + FLY.out) + POD.floor;
 const OMEGA = (Math.PI * 2) / 90;
 const BOTTOM = -Math.PI / 2;
-const DECK = { x0: -81.2, x1: -58.8, z0: 87.6, z1: 91.6 };
-const STAIRS = [-78, -62].map((x) => ({ x0: x - 1.5, x1: x + 1.5, z0: DECK.z1, z1: DECK.z1 + 4.8 }));
+// (the riverside park's west edge is the shōtengai's kerb at x −81 since the streets grew wider)
+const DECK = { x0: -80.6, x1: -58.8, z0: 87.6, z1: 91.6 };
+const STAIRS = [-77.3, -62.6].map((x) => ({ x0: x - 1.5, x1: x + 1.5, z0: DECK.z1, z1: DECK.z1 + 4.8 }));
 const RIDERS = 3;
 /** The blimp's mooring mast, on the river promenade. */
 export const MAST = { x: -80.6, z: 78.4, h: 12 };
@@ -148,7 +149,7 @@ export class Flyer {
   private screen: { g: CanvasRenderingContext2D; tex: THREE.CanvasTexture; t: number };
   private glassMat: THREE.MeshStandardMaterial;
   private night: boolean | null = null;
-  private hitBox = new THREE.Box3(v3(-82.5, 0, 86.8), v3(-57.5, 10, 100));
+  private hitBox = new THREE.Box3(v3(-81, 0, 86.8), v3(-57.5, 10, 97));
   private mastBox = new THREE.Box3(v3(MAST.x - 1.4, 0, MAST.z - 1.2), v3(MAST.x + 1.4, CURB + MAST.h + 1.8, MAST.z + 1.2));
   private qT = 0;
   height: number | null = null;
@@ -249,10 +250,12 @@ export class Flyer {
     st.add(white, new THREE.CylinderGeometry(0.95, 0.95, 10.2, 18).rotateX(Math.PI / 2).translate(FLY.x, HUB_Y, FLY.z + 0.9));
     st.add(steel, new THREE.CylinderGeometry(1.5, 1.5, 1.4, 18).rotateX(Math.PI / 2).translate(FLY.x, HUB_Y, FLY.z + 5.6));
     const apex = v3(FLY.x, HUB_Y, FLY.z + 5.6);
-    const feet = [v3(FLY.x - 11, CURB, 98.2), v3(FLY.x + 11, CURB, 98.2)];
+    // (the plaza's south edge is the street's kerb at z 97 since the streets grew wider: the feet, the
+    // booth, the queue and the totem all stood out in Turnstile Street's lanes, 3 m further south)
+    const feet = [v3(FLY.x - 10, CURB, 95.2), v3(FLY.x + 10, CURB, 95.2)];
     for (const f of feet) {
       st.add(white, tube(f, apex.clone().add(v3(Math.sign(f.x - FLY.x) * 1.0, -0.6, 0)), 0.85, 0.5, 12));
-      st.box(stoneDark, f.x - 1.4, CURB - 0.1, f.z - 1.4, f.x + 1.4, CURB + 0.7, f.z + 1.4);
+      st.box(stoneDark, f.x - 1.0, CURB - 0.1, f.z - 1.4, f.x + 1.0, CURB + 0.7, f.z + 1.4);
     }
     for (const t of [0.3, 0.58]) {
       const a = feet[0].clone().lerp(apex, t),
@@ -260,23 +263,23 @@ export class Flyer {
       st.add(white, tube(a, b, 0.32, 0.32, 8));
     }
     for (const dx of [-3.5, 3.5]) {
-      const anchor = v3(FLY.x + dx, CURB + 0.6, 99.3);
+      const anchor = v3(FLY.x + dx, CURB + 0.6, 96.2);
       st.add(steel, tube(anchor, apex.clone().add(v3(dx * 0.15, 0.4, 0.5)), 0.09, 0.09, 5));
       st.box(stoneDark, anchor.x - 0.8, CURB - 0.1, anchor.z - 0.6, anchor.x + 0.8, CURB + 0.8, anchor.z + 0.6);
     }
 
     // ---- the riverside park: paving, lawns, trees, the river railing ----
-    st.box(stone, -82, CURB - 0.04, 77, -58, CURB + 0.03, 100);
-    for (let x = -82; x < -58; x += 2) st.box(stoneDark, x, CURB + 0.03, 77, x + 0.06, CURB + 0.035, 100);
+    st.box(stone, -81, CURB - 0.04, 77, -58, CURB + 0.03, 97);
+    for (let x = -80; x < -58; x += 2) st.box(stoneDark, x, CURB + 0.03, 77, x + 0.06, CURB + 0.035, 97);
     for (const [x0, x1] of [
-      [-81.4, -75.2],
+      [-80.6, -75.2],
       [-64.8, -58.6],
     ]) {
       st.box(stoneDark, x0 - 0.25, CURB, 78.2, x1 + 0.25, CURB + 0.32, 86.4);
       st.box(grass, x0, CURB, 78.45, x1, CURB + 0.36, 86.15);
     }
-    st.box(steel, -82, CURB + 1.0, 77.15, -58, CURB + 1.08, 77.25);
-    for (let x = -82; x <= -58; x += 1.2) st.box(steel, x - 0.04, CURB, 77.16, x + 0.04, CURB + 1.0, 77.24);
+    st.box(steel, -81, CURB + 1.0, 77.15, -58, CURB + 1.08, 77.25);
+    for (let x = -80.8; x <= -58; x += 1.2) st.box(steel, x - 0.04, CURB, 77.16, x + 0.04, CURB + 1.0, 77.24);
     // (only along the river: the capsules sweep low over the lawns)
     const trees = [
       [-76, 79.2],
@@ -292,10 +295,10 @@ export class Flyer {
     for (const [x, z] of [
       [-74, 78.2],
       [-66, 78.2],
-      [-82, 92.5],
+      [-80.6, 92.5],
       [-58, 92.5],
-      [-63.4, 99.2],
-      [-74.5, 99.2],
+      [-63.4, 96.4],
+      [-74.5, 96.4],
     ]) {
       st.add(dark, new THREE.CylinderGeometry(0.07, 0.09, 4, 6).translate(x, CURB + 2, z));
       st.box(dark, x - 0.22, CURB + 4, z - 0.22, x + 0.22, CURB + 4.12, z + 0.22);
@@ -347,7 +350,7 @@ export class Flyer {
     }
 
     // ---- the ticket booth and the queue's stanchions ----
-    const B = { x0: -69, x1: -65, z0: 96.6, z1: 99.1 };
+    const B = { x0: -69, x1: -65, z0: 93.6, z1: 96.1 };
     st.box(white, B.x0, CURB, B.z0, B.x1, CURB + 1.0, B.z1);
     st.box(glassRail, B.x0 + 0.1, CURB + 1.0, B.z1 - 0.12, B.x1 - 0.1, CURB + 2.3, B.z1 - 0.04);
     st.box(white, B.x0, CURB + 1.0, B.z0, B.x1, CURB + 2.3, B.z0 + 0.15);
@@ -355,9 +358,9 @@ export class Flyer {
     st.box(white, B.x1 - 0.15, CURB + 1.0, B.z0, B.x1, CURB + 2.3, B.z1);
     st.box(gold, B.x0 - 0.3, CURB + 2.3, B.z0 - 0.3, B.x1 + 0.3, CURB + 2.6, B.z1 + 0.5);
     st.box(dark, B.x0 + 0.2, CURB + 0.95, B.z1 - 0.05, B.x1 - 0.2, CURB + 1.05, B.z1 + 0.35);
-    const qLanes = [97.3, 98.3];
+    const qLanes = [94.3, 95.3];
     for (const z of qLanes)
-      for (let x = -76.4; x <= -70.4; x += 1.2) {
+      for (let x = -75.2; x <= -70.4; x += 1.2) {
         st.add(steel, new THREE.CylinderGeometry(0.04, 0.05, 0.95, 6).translate(x, CURB + 0.48, z));
         st.add(steel, new THREE.CylinderGeometry(0.15, 0.15, 0.04, 8).translate(x, CURB + 0.02, z));
         if (x + 1.2 <= -70.3) st.box(red, x, CURB + 0.86, z - 0.025, x + 1.2, CURB + 0.92, z + 0.025);
@@ -441,10 +444,10 @@ export class Flyer {
       g.textAlign = "center";
       "FLYER".split("").forEach((ch, i) => g.fillText(ch, w / 2, w * 1.5 + i * w * 0.56));
     });
-    totem.position.set(-74.6, CURB + 2.3, 99.55);
+    totem.position.set(-74.6, CURB + 2.3, 96.75);
     this.group.add(totem);
     const totemBack = new THREE.Mesh(new THREE.BoxGeometry(1.5, 4.6, 0.3), dark);
-    totemBack.position.set(-74.6, CURB + 2.3, 99.35);
+    totemBack.position.set(-74.6, CURB + 2.3, 96.55);
     this.group.add(totemBack);
 
     // ---- the capsules: glass (instanced), frame (instanced, one per material), riders ----
@@ -547,19 +550,19 @@ export class Flyer {
 
     // ---- the queue on the plaza, the stairs and the deck; staff at the gate and the booth ----
     const spots: [number, number, number, boolean?][] = [
-      [-70.9, CURB, 97.8],
-      [-72.2, CURB, 97.8],
-      [-73.6, CURB, 97.8],
-      [-75.0, CURB, 97.8],
-      [-77.9, CURB, 97.4],
-      [-78.1, this.stairY(94.9), 94.9],
-      [-77.9, this.stairY(93.3), 93.3],
+      [-70.9, CURB, 94.8],
+      [-72.2, CURB, 94.8],
+      [-73.6, CURB, 94.8],
+      [-75.0, CURB, 94.8],
+      [-75.3, CURB, 96.2],
+      [-77.4, this.stairY(94.9), 94.9],
+      [-77.2, this.stairY(93.3), 93.3],
       [-77.0, y, 90.7],
       [-75.4, y, 90.3],
       [-73.9, y, 89.9],
       [-71.9, y, 89.1, true],
-      [-67.0, CURB, 97.6, true],
-      [-62.2, this.stairY(93.6), 93.6],
+      [-67.0, CURB, 94.6, true],
+      [-62.8, this.stairY(93.6), 93.6],
       [-66.5, y, 90.2],
     ];
     spots.forEach(([x, yy, z, staff], i) => {

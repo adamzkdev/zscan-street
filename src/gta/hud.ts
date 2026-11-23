@@ -923,6 +923,14 @@ export class GtaHud {
     if (on) this.renderMenu();
   }
 
+  /** The menu panel alone, as the front end's settings (nothing else of the HUD shows). */
+  front(on: boolean) {
+    this.root.classList.toggle("front", on);
+    this.$(".gh-pcard nav h2").innerHTML = on ? "Settings<small>ZStreet</small>" : "Menu<small>Paused</small>";
+    this.$(".gh-pcard nav [data-act=resume]").textContent = on ? "Back" : "Resume";
+    this.pause(on);
+  }
+
   private renderMenu() {
     const tabs: [string, string][] = [
       ["camera", "Camera"],
@@ -979,6 +987,7 @@ export class GtaHud {
         <div><dt>${kbd("Click")} / ${kbd("X")}</dt><dd>punch · smash things, inside and out</dd></div>
         <div><dt>${kbd("Right click")}</dt><dd>guard up · turn to who is in front</dd></div>
         <div><dt>${kbd("E")}</dt><dd>open a door · talk to someone · use · horn</dd></div>
+        <div><dt>${kbd("Q")} / ${kbd("A")}</dt><dd>in a car: the next radio station (${kbd(",")} ${kbd(".")} too)</dd></div>
         <div><dt>${kbd("C")} ${kbd("B")}</dt><dd>camera · look back</dd></div>
         <div><dt>${kbd("R")}</dt><dd>back on the road</dd></div>
         <div><dt>${kbd("M")} ${kbd("Esc")} ${kbd("T")}</dt><dd>map · menu · day / night</dd></div>

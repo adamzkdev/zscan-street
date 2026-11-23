@@ -91,6 +91,8 @@ export interface PedWorld {
   road(x: number, z: number): boolean;
   /** Somewhere to stand still (a step or a plinth up included: a queue on a monument's terrace). */
   stand(x: number, z: number): boolean;
+  /** In the camera's view with nothing tall in between (a body popping in or out there would show). */
+  seen?(x: number, z: number): boolean;
 }
 
 /** What the street tells the game. */
@@ -260,6 +262,11 @@ export class Peds {
   }
 
   /** The pavements: a line along each side of every street, a little off its kerb, where a body can walk. */
+  /** The pavements found again at the next build (more of the world was built: Orchard Keys). */
+  relines() {
+    this.lines = [];
+  }
+
   build(roads: Roads, world: PedWorld) {
     if (this.lines.length) return;
     for (const r of roads.rects) {
@@ -319,9 +326,11 @@ export class Peds {
       if (d < NEAR || d > FAR) continue;
       // not on top of someone else (no single file of strangers)
       if (this.peds.some((q) => Math.abs(q.pos.x - p.x) + Math.abs(q.pos.z - p.z) < 3.5)) continue;
-      // half of them out of sight behind you, half far ahead (in view, past where a pop shows)
+      // never born where you are looking: out of sight (behind you, round a corner, behind a
+      // building), or else far off (so small a step in from nowhere does not show)
       const ahead = ((p.x - x) * fx + (p.z - z) * fz) / d;
       if (tries < 10 && (this.n % 2 ? ahead > 0.2 : ahead < 0.5 || d < 28)) continue;
+      if (world.seen?.(p.x, p.z) && d < FAR - 4) continue;
       p.y = world.floor(p.x, p.z);
       const r = Math.random();
       const make = (mode: Mode, ps: THREE.Vector3, ss: number): Ped => {
@@ -388,7 +397,9 @@ export class Peds {
     const target = Math.min(Math.round(TARGET[this.crowd] * this.scale), this.room);
     for (let i = this.peds.length - 1; i >= 0; i--) {
       const p = this.peds[i];
-      if (Math.hypot(p.pos.x - me.x, p.pos.z - me.z) > GONE && p.knockT < 0) this.remove(i);
+      // gone once far, and only where you don't see it go (unless it is very far)
+      const d = Math.hypot(p.pos.x - me.x, p.pos.z - me.z);
+      if (d > GONE && p.knockT < 0 && (d > GONE + 35 || !world.seen?.(p.pos.x, p.pos.z))) this.remove(i);
     }
     for (let k = 0; k < 3 && this.peds.length < target; k++) this.spawn(me.x, me.z, world, me.fx, me.fz);
     this.queueT -= dt;
