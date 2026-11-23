@@ -9,9 +9,9 @@ await p.evaluateOnNewDocument(() => { window.WebSocket = class { constructor() {
 await p.goto(`http://localhost:3071/tablelab.html?t=legends&seed=${process.env.SEED || 41}&stake=0&map=orchard`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 await sleep(3000);
-await p.evaluate(() => document.querySelector('[data-k="play"], .zkf-item')?.click());
+await p.keyboard.press("Enter");
 await sleep(1200);
-await p.evaluate(() => document.querySelector(".zkf-go")?.click());
+await p.keyboard.press("Enter");
 await sleep(3500);
 await p.evaluate(() => document.querySelector("[data-keep]")?.click());
 await sleep(4000);

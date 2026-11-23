@@ -1,19 +1,18 @@
 import * as A from "./arena";
 /**
- * ZK LEGENDS' front end, in ZStreet's own front-end language (the gta branch's title and line-up):
- * a live 3D picture behind (front/stage.ts: an arena at golden hour, the crew round a duel), Archivo
- * wide and heavy for names, sentence-case menu items with the chosen one in a white pill, dark glass
- * panels, Zcash gold for what matters, key hints along the bottom.
- * - Menu: Play, Collection, Packs, How to play, Settings, Leave the table; "Playing as #id" and
+ * ZK LEGENDS' front end: a live 3D picture behind (front/stage.ts: an arena at golden hour, the crew
+ * round a duel), the wordmark and a plain list of items; everything else is made of the table's own
+ * materials (walnut plates with a brass edge, gold slabs for what you do next, the cards' painted coins
+ * and gems), Archivo condensed for labels and numbers, Geist for prose.
+ * - Menu: Play, Arena, Collection, Packs, How to play, Settings, Leave the table; your deck and
  *   tonight's rival in the corners; your gold, zats and packs top right.
- * - Play: your decks as a line-up (the starters and yours), the chosen one's card (name, pool, hero
- *   power, curve), the rival, a gold Duel.
- * - Collection: all 10,000 zkSNARKs (snarkcards.ts: one card each, rarity and power from the rank)
- *   and the Classics, in a grid that only draws what's in sight; filters (owned, tier, pool, cost,
- *   tribe), search (#number or words), sort; a card's sheet (ZKSNARK #id, its chips, its traits, craft
- *   and disenchant); your decks and the deck editor (30 cards, one pool and the neutrals).
+ * - Play: your decks as boxes (the starters and yours), the chosen one's panel (hero power, curve),
+ *   the rival, a gold Duel.
+ * - Collection: a book (front/book.ts) of the 10,000 zkSNARKs (snarkcards.ts) and the Classics: pool
+ *   tabs, ZEC cost coins, search, filters; a card opens big (traits, craft, disenchant); your decks on
+ *   the right, and the deck being built as card strips.
  * - Packs: buy with gold, open: five cards face down, each turned with its rarity's light.
- * - How to play, Settings: panels with tabs on the left.
+ * - How to play, Settings: full screens with tabs across the top.
  * Your collection lives in progress.ts.
  */
 import * as MAPS_MOD from "./maps";
@@ -22,13 +21,13 @@ import { T } from "../../i18n/lang";
 import { DECK_SIZE, POWERS, card, type CardDef, type Faction, type Rarity } from "./engine";
 import { COLLECTIBLE, FACTIONS, FACTION_INFO } from "./cards";
 import { STARTERS, STARTER_NAMES, saveDecks, maxCopies, type Pool, type SavedDeck } from "./decks";
-import { KW_HELP, TRIBE_ZH, cardEl, cardName, factionName, kwLabel, rarityName, snarkCanvas } from "./art";
-import { backUrl, paintPack } from "./paint";
+import { KW_HELP, TRIBE_ZH, cardEl, cardName, factionName, iconCanvas, kwLabel, rarityName, snarkCanvas } from "./art";
+import { backUrl, coinUrl, gemUrl, paintPack } from "./paint";
 import { SNARKS, ensureCards, isSnarkCard, loadSnarks, snarkCard, snarkCardId, snarkIdOf, snarkInfo, snarksReady, type SnarkInfo } from "./snarkcards";
 import * as P from "./progress";
 import type { LegendsSound } from "./sound";
 import { HubStage } from "./front/stage";
-import { CardGrid } from "./front/grid";
+import { CardBook } from "./front/book";
 
 export interface MenusCtx {
   meId: number;
@@ -48,6 +47,12 @@ const skillName = (s: number) => (s < 0.35 ? T("Easy", "简单") : s < 0.6 ? T("
 const TIER_COLOR: Record<string, string> = { legendary: "#ffb02e", epic: "#b07bff", rare: "#3fa8ff", common: "#d8d2c8", basic: "#9a958e" };
 const TIERS: Rarity[] = ["legendary", "epic", "rare", "common"];
 const TRIBES = ["Miner", "Node", "Whale", "Ghost", "Plant", "Bot"];
+const TIER_RANK: Record<string, number> = { legendary: 0, epic: 1, rare: 2, common: 3, basic: 4 };
+/** Each pool's face: its champion's zkSNARK. */
+const CHAMP: Record<Faction, string> = { transparent: "t_boss", sapling: "s_gardener", sprout: "p_crypt", orchard: "o_sentinel", neutral: "n_explorer" };
+const champArt = (f: Faction) => card(CHAMP[f]).art;
+const MAP_NAMES: Record<string, [string, string]> = { rigs: ["The Rigs", "矿机房"], orchard: ["The Orchard", "果园"], crypt: ["The Crypt", "墓穴"], vault: ["The Vault", "金库"] };
+const MAP_TINT: Record<string, string> = { rigs: "#ff6b35", orchard: "#6dbf8a", crypt: "#b48ad8", vault: "#f4b728" };
 
 /** The sound, whatever it offers today: a call that never throws. */
 function sfx(snd: LegendsSound | null, name: string, ...a: unknown[]) {
@@ -86,7 +91,7 @@ export class Menus {
   private decks: DeckEntry[] = [];
   private deckAt = 0;
   // the collection
-  private grid: CardGrid | null = null;
+  private book: CardBook | null = null;
   private set: "snarks" | "classics" = "snarks";
   private only = false;
   private tier: Rarity | "" = "";
@@ -95,8 +100,8 @@ export class Menus {
   private tribe = "";
   private words = "";
   private sort: "rank" | "cost" | "number" = "rank";
-  private detailId: string | null = null;
   private editing: SavedDeck | null = null;
+  private dirty = false;
   private costsMade = false;
 
   constructor(
@@ -121,7 +126,6 @@ export class Menus {
       <section class="zkf-coll" aria-label="Collection"></section>
       <section class="zkf-packs" aria-label="Packs"></section>
       <section class="zkf-arena" aria-label="Arena"></section>
-      <footer class="zkf-hints"></footer>
       <div class="zkf-toast"></div>
       <div class="zkf-fade"></div>`;
     host.appendChild(this.root);
@@ -133,9 +137,10 @@ export class Menus {
     }
     this.unsub = P.onProgress(() => this.wallet());
     window.addEventListener("keydown", this.onKey, true);
+    const HOV = ".zkf-item, .zkf-btn, .zkf-box, .zkf-tab, .zkf-coin-f, .zkf-hero, .zkf-turn";
     this.root.addEventListener("pointerover", (e) => {
-      const b = (e.target as HTMLElement).closest(".zkf-item, .zkf-btn, .zkf-dot, .zkf-chipbtn");
-      if (b && b !== (e.relatedTarget as HTMLElement | null)?.closest?.(".zkf-item, .zkf-btn, .zkf-dot, .zkf-chipbtn")) sfx(this.snd, "ui", "hover");
+      const b = (e.target as HTMLElement).closest(HOV);
+      if (b && b !== (e.relatedTarget as HTMLElement | null)?.closest?.(HOV)) sfx(this.snd, "ui", "hover");
     });
     sfx(this.snd, "music", "menu");
     // the 10,000: their data, your own zkSNARK's card
@@ -155,7 +160,7 @@ export class Menus {
     this.closed = true;
     this.unsub();
     window.removeEventListener("keydown", this.onKey, true);
-    this.grid?.dispose();
+    this.book?.dispose();
     this.stage?.dispose();
     this.root.remove();
   }
@@ -178,7 +183,6 @@ export class Menus {
     else if (m === "coll") this.collection();
     else if (m === "arena") this.arena();
     else this.packs();
-    this.hints();
     this.wallet();
   }
 
@@ -192,7 +196,7 @@ export class Menus {
 
   private back() {
     if (this.modal) return this.closeModal();
-    if (this.mode === "coll" && this.editing) return this.stopEdit();
+    if (this.mode === "coll" && this.editing) return this.doneEdit();
     if (this.onlyBuilder) {
       this.close();
       return this.builderDone?.(this.lastSaved);
@@ -207,10 +211,18 @@ export class Menus {
       e.preventDefault();
       e.stopPropagation();
       if (inInput) return (e.target as HTMLElement).blur();
+      if (this.closeDrop()) return;
       return this.back();
     }
     if (inInput) return;
-    if (this.modal) return;
+    if (this.modal) {
+      const turn = (this.modal as HTMLElement & { turn?: (d: number) => void }).turn;
+      if (turn && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+        e.preventDefault();
+        turn(e.key === "ArrowRight" ? 1 : -1);
+      }
+      return;
+    }
     if (this.mode === "menu") {
       const n = this.items().length;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -223,9 +235,9 @@ export class Menus {
         this.pick(this.items()[this.menuAt].k);
       }
     } else if (this.mode === "play") {
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        this.stepDeck(e.key === "ArrowRight" ? 1 : -1);
+        this.stepDeck(e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : -1);
       } else if (e.key === "Enter") {
         e.preventDefault();
         this.duel();
@@ -238,58 +250,47 @@ export class Menus {
         e.preventDefault();
         this.arenaDuel();
       }
-    } else if (this.mode === "coll" && e.key === "/") {
-      e.preventDefault();
-      (this.root.querySelector(".zkf-search") as HTMLInputElement | null)?.focus();
+    } else if (this.mode === "coll") {
+      if (e.key === "/") {
+        e.preventDefault();
+        (this.root.querySelector(".zkf-search") as HTMLInputElement | null)?.focus();
+      } else if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "PageDown" || e.key === "PageUp") {
+        e.preventDefault();
+        this.book?.turn(e.key === "ArrowRight" || e.key === "PageDown" ? 1 : -1);
+      }
     } else if (this.mode === "packs" && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
       this.packKey();
     }
   };
 
-  private hints() {
-    const h = this.root.querySelector(".zkf-hints") as HTMLElement;
-    const k = (key: string, label: string) => `<span><kbd>${key}</kbd>${label}</span>`;
-    const list =
-      this.mode === "menu"
-        ? [k("↑", "") + k("↓", T("Choose", "选择")), k("Enter", T("Select", "确定")), k("Esc", T("Back", "返回"))]
-        : this.mode === "play"
-          ? [k("←", "") + k("→", T("Decks", "套牌")), k("Enter", T("Duel", "对决")), k("Esc", T("Back", "返回"))]
-          : this.mode === "arena"
-            ? [k("1", "") + k("2", "") + k("3", T("Pick", "选择")), k("Enter", T("Duel", "对决")), k("Esc", T("Back", "返回"))]
-          : this.mode === "coll"
-            ? [k("/", T("Search", "搜索")), this.editing ? k(T("Click", "点击"), T("Add", "加入")) : k(T("Click", "点击"), T("Card", "卡牌")), this.editing ? k(T("Right click", "右键"), T("Card", "卡牌")) : "", k("Esc", T("Back", "返回"))]
-            : [k("Enter", T("Open · turn", "开包 · 翻牌")), k("Esc", T("Back", "返回"))];
-    h.innerHTML = TOUCH ? "" : list.join("");
-  }
-
   private wallet() {
     const s = P.load();
     const w = this.root.querySelector(".zkf-wallet") as HTMLElement | null;
     if (!w) return;
-    w.innerHTML = `
-      <span class="zkf-coin" title="${T("Gold: earned in duels, buys packs", "金币：对决中赚取，用来买卡包")}"><i class="zkf-ic gold"></i><b>${fmt(s.gold)}</b><small>${T("gold", "金币")}</small></span>
-      <span class="zkf-coin" title="${T("Zats: from extra copies, craft the cards you want", "Zat：来自多余卡牌，用来合成想要的卡")}"><i class="zkf-ic zats"></i><b>${fmt(s.zats)}</b><small>zats</small></span>
-      <span class="zkf-coin" title="${T("Unopened packs", "未开卡包")}"><i class="zkf-ic pack"></i><b>${s.packs}</b><small>${T("packs", "卡包")}</small></span>`;
+    w.innerHTML = `<div class="zkf-purse">
+      <span title="${T("Gold: earned in duels, buys packs", "金币：对决中赚取，用来买卡包")}"><img src="${coinUrl("", 48)}" alt="" /><b>${fmt(s.gold)}</b></span>
+      <span title="${T("Zats: from extra copies, craft the cards you want", "Zat：来自多余卡牌，用来合成想要的卡")}"><img src="${gemUrl("rare", 40)}" alt="" /><b>${fmt(s.zats)}</b></span>
+      <span title="${T("Unopened packs", "未开卡包")}"><i class="zkf-packic" style="background-image:url(${packUrl()})"></i><b>${s.packs}</b></span>
+    </div>`;
   }
 
   // ---- the menu ------------------------------------------------------------------------------------------------
 
-  private items(): { k: string; label: string; sub?: string }[] {
-    const r = this.ctx?.rival;
-    const c = P.completion();
+  private items(): { k: string; label: string; badge?: string; hot?: boolean }[] {
     const s = P.load();
-    const out: { k: string; label: string; sub?: string }[] = [];
-    if (this.ctx) out.push({ k: "play", label: T("Play", "开始对决"), sub: r ? T(`vs ${r.name} · ${skillName(r.skill)}${this.ctx.stake ? ` · ⓩ ${this.ctx.stake}` : ""}`, `对手 ${r.name} · ${skillName(r.skill)}${this.ctx.stake ? ` · ⓩ ${this.ctx.stake}` : ""}`) : undefined });
+    const out: { k: string; label: string; badge?: string; hot?: boolean }[] = [];
+    if (this.ctx) out.push({ k: "play", label: T("Play", "开始对决") });
     if (this.ctx) {
       const a = A.arenaLoad();
-      const sub = a && !a.done ? (A.arenaReady(a) ? T(`Your run: ${a.wins} wins · ${a.losses} losses`, `进行中：${a.wins} 胜 · ${a.losses} 负`) : T(`Drafting: ${a.deck.length}/30`, `选牌中：${a.deck.length}/30`)) : A.arenaFree() ? T("Draft a deck, win up to 12 · first run free", "现场选牌，最多 12 胜 · 首次免费") : T(`Draft a deck, win up to 12 · ${A.ARENA_PRICE} gold`, `现场选牌，最多 12 胜 · ${A.ARENA_PRICE} 金币`);
-      out.push({ k: "arena", label: T("Arena", "竞技场"), sub });
+      const badge = a && !a.done ? (A.arenaReady(a) ? `${a.wins}–${a.losses}` : `${a.deck.length}/30`) : A.arenaFree() ? T("Free", "免费") : undefined;
+      out.push({ k: "arena", label: T("Arena", "竞技场"), badge, hot: !!a && !a.done });
     }
+    const fresh = Object.keys(s.fresh ?? {}).length;
     out.push(
-      { k: "coll", label: T("Collection", "收藏"), sub: snarksReady() ? T(`${fmt(c.snarks)} of 10,000 zkSNARKs · ${c.have}/${c.total} Classics`, `${fmt(c.snarks)} / 10,000 零知卡 · 经典 ${c.have}/${c.total}`) : T(`${c.have}/${c.total} Classics`, `经典 ${c.have}/${c.total}`) },
-      { k: "packs", label: T("Packs", "卡包"), sub: s.packs ? T(`${s.packs} to open`, `${s.packs} 个待开`) : T(`Buy with gold · ${P.PACK_PRICE} a pack`, `用金币购买 · 每包 ${P.PACK_PRICE}`) },
-      { k: "rules", label: T("How to play", "玩法"), sub: T("The duel, the keywords, the four pools", "对决、关键词与四个池") },
+      { k: "coll", label: T("Collection", "收藏"), badge: fresh ? T(`${fresh} new`, `${fresh} 新`) : undefined },
+      { k: "packs", label: T("Packs", "卡包"), badge: s.packs ? String(s.packs) : undefined, hot: s.packs > 0 },
+      { k: "rules", label: T("How to play", "玩法") },
       { k: "settings", label: T("Settings", "设置") },
     );
     if (this.ctx) out.push({ k: "leave", label: T("Leave the table", "离开牌桌") });
@@ -300,7 +301,12 @@ export class Menus {
     const items = this.items();
     this.menuAt = Math.min(this.menuAt, items.length - 1);
     const nav = this.root.querySelector(".zkf-items")!;
-    nav.innerHTML = items.map((it, i) => `<button class="zkf-item ${i === this.menuAt ? "on" : ""}" role="menuitem" data-k="${it.k}" data-i="${i}" type="button"><b>${esc(it.label)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ""}</button>`).join("");
+    nav.innerHTML = items
+      .map(
+        (it, i) =>
+          `<button class="zkf-item ${i === this.menuAt ? "on" : ""} ${it.k === "leave" ? "quiet" : ""}" role="menuitem" data-k="${it.k}" data-i="${i}" type="button"><b>${esc(it.label)}</b>${it.badge ? `<i class="zkf-badge ${it.hot ? "hot" : ""}">${esc(it.badge)}</i>` : ""}</button>`,
+      )
+      .join("");
     for (const b of nav.querySelectorAll<HTMLElement>(".zkf-item")) {
       b.addEventListener("pointerenter", () => {
         if (TOUCH) return;
@@ -309,18 +315,19 @@ export class Menus {
       });
       b.addEventListener("click", () => this.settled() && this.pick(b.dataset.k!));
     }
-    const me = this.ctx?.meId ?? P.mineId();
     const meEl = this.root.querySelector(".zkf-me") as HTMLElement;
-    void me;
     {
       const last = localStorage.getItem("street.legends.last") ?? "";
       const d = this.playable().find((x) => x.key === last) ?? this.playable()[0];
-      meEl.innerHTML = d ? `<span class="zkf-deckmark" style="--fc:${FACTION_INFO[d.pool].color}"></span><span><small>${T("Your deck", "你的套牌")}</small><b>${esc(d.name)}</b></span><i class="zkf-tag">${factionName(d.pool)}</i>` : "";
+      meEl.innerHTML = d ? `<span class="zkf-face" style="--fc:${FACTION_INFO[d.pool].color}" data-pic></span><span class="zkf-who"><small>${T("Deck", "套牌")} · ${factionName(d.pool)}</small><b>${esc(d.name)}</b></span>` : "";
+      meEl.querySelector("[data-pic]")?.appendChild(snarkCanvas(champion(d)));
+      meEl.style.setProperty("--fc", d ? FACTION_INFO[d.pool].color : "#a87a14");
+      meEl.onclick = () => this.settled() && this.ctx && this.go("play");
     }
     const r = this.ctx?.rival;
     const rv = this.root.querySelector(".zkf-rival") as HTMLElement;
     if (r) {
-      rv.innerHTML = `<span><small>${T("Tonight's rival", "今晚的对手")}</small><b>${esc(r.name)}</b><em>${skillName(r.skill)}${this.ctx?.stake ? ` · ⓩ ${this.ctx.stake}` : ""}</em></span><span class="zkf-pic" data-pic></span>`;
+      rv.innerHTML = `<span class="zkf-who"><small>${T("Tonight's rival", "今晚的对手")}</small><b>${esc(r.name)}</b><em>${skillName(r.skill)}${this.ctx?.stake ? ` · ⓩ ${this.ctx.stake}` : ""}</em></span><span class="zkf-face big" data-pic></span>`;
       rv.querySelector("[data-pic]")!.appendChild(snarkCanvas(r.id));
     } else rv.innerHTML = "";
   }
@@ -353,41 +360,62 @@ export class Menus {
     const last = localStorage.getItem("street.legends.last") ?? "";
     const at = this.decks.findIndex((d) => d.key === last && d.ok);
     this.deckAt = at >= 0 ? at : 0;
+    const mine = this.decks.filter((d) => d.custom).length;
     const sec = this.root.querySelector(".zkf-play") as HTMLElement;
     sec.innerHTML = `
-      <header class="zkf-head"><button class="zkf-back" type="button" aria-label="${T("Back", "返回")}">‹</button><h2>${T("Choose your deck", "选择你的套牌")}</h2><span class="zkf-count"></span></header>
-      <div class="zkf-card zkf-deckcard"></div>
-      <div class="zkf-nav"><button class="zkf-arrow" data-step="-1" type="button" aria-label="Previous">‹</button><div class="zkf-dots"></div><button class="zkf-arrow" data-step="1" type="button" aria-label="Next">›</button></div>
-      <div class="zkf-tools">
-        <button class="zkf-btn ghost" data-do="new" type="button">${T("New deck", "新套牌")}</button>
-        <button class="zkf-btn ghost" data-do="edit" type="button">${T("Edit in the collection", "在收藏中编辑")}</button>
+      ${head(T("Choose a deck", "选择套牌"))}
+      <div class="zkf-shelf zkf-plate">
+        <h3 class="zkf-lab">${T("Starter decks", "初始套牌")}</h3>
+        <div class="zkf-boxes" data-g="starter"></div>
+        <h3 class="zkf-lab">${T("My decks", "我的套牌")}<small>${mine}/9</small></h3>
+        <div class="zkf-boxes" data-g="mine"></div>
       </div>
-      <div class="zkf-vs"></div>
-      <button class="zkf-btn gold zkf-go" type="button"><span>${T("Duel", "开始对决")}</span>${TOUCH ? "" : "<small>Enter</small>"}</button>`;
-    sec.querySelector(".zkf-back")!.addEventListener("click", () => this.settled() && this.go("menu"));
+      <div class="zkf-deckcard zkf-plate"></div>
+      <div class="zkf-vs zkf-plate"></div>
+      <button class="zkf-btn gold zkf-go" type="button">${T("Duel", "开始对决")}</button>`;
+    wireBack(sec, () => this.settled() && this.go("menu"));
     sec.querySelector(".zkf-go")!.addEventListener("click", () => this.settled() && this.duel());
-    for (const b of sec.querySelectorAll<HTMLElement>(".zkf-arrow")) b.addEventListener("click", () => this.stepDeck(Number(b.dataset.step)));
-    sec.querySelector("[data-do=new]")!.addEventListener("click", () => {
-      this.go("coll");
-      this.newDeck();
-    });
-    sec.querySelector("[data-do=edit]")!.addEventListener("click", () => {
-      const d = this.decks[this.deckAt];
-      this.go("coll");
-      if (d?.custom) {
-        const sd = P.allDecks().find((x) => `deck:${x.id}` === d.key);
-        if (sd) this.edit(sd);
-      } else if (d) {
-        // a starter: a copy of it to change
-        this.edit({ id: `d${Date.now().toString(36)}`, name: `${d.name} +`, pool: d.pool, cards: d.cards.slice() });
-      }
-    });
+    let lastTap = 0,
+      lastKey = "";
+    const boxOf = (d: DeckEntry, i: number) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `zkf-box ${d.ok ? "" : "off"}`;
+      b.dataset.i = String(i);
+      b.style.setProperty("--fc", FACTION_INFO[d.pool].color);
+      b.innerHTML = `<span class="zkf-boxart"></span><b>${esc(d.name)}</b><small>${d.ok ? factionName(d.pool) : esc(d.why)}</small>`;
+      b.querySelector(".zkf-boxart")!.appendChild(snarkCanvas(champion(d)));
+      b.addEventListener("click", () => {
+        const twice = lastKey === d.key && performance.now() - lastTap < 420;
+        lastTap = performance.now();
+        lastKey = d.key;
+        this.deckAt = i;
+        sfx(this.snd, "ui", "click");
+        this.renderDeck();
+        if (twice) this.duel();
+      });
+      return b;
+    };
+    const st = sec.querySelector('[data-g="starter"]') as HTMLElement,
+      my = sec.querySelector('[data-g="mine"]') as HTMLElement;
+    this.decks.forEach((d, i) => (d.custom ? my : st).appendChild(boxOf(d, i)));
+    if (mine < 9) {
+      const nb = document.createElement("button");
+      nb.type = "button";
+      nb.className = "zkf-box new";
+      nb.innerHTML = `<span class="zkf-boxart"><i></i></span><b>${T("New deck", "新套牌")}</b><small>&nbsp;</small>`;
+      nb.addEventListener("click", () => {
+        this.go("coll");
+        this.newDeck();
+      });
+      my.appendChild(nb);
+    }
     const r = this.ctx?.rival;
     const vs = sec.querySelector(".zkf-vs") as HTMLElement;
     if (r) {
-      vs.innerHTML = `<span class="zkf-pic" data-pic></span><span><small>${T("Against", "对手")}</small><b>${esc(r.name)}</b><em>${skillName(r.skill)}${this.ctx?.stake ? ` · ⓩ ${this.ctx.stake} · ${T(`win ⓩ ${this.ctx.stake * 2}`, `赢 ⓩ ${this.ctx.stake * 2}`)}` : ` · ${T("free duel", "免费对决")}`}</em></span>`;
+      vs.innerHTML = `<span class="zkf-face big" data-pic></span><span class="zkf-who"><small>${T("Against", "对手")}</small><b>${esc(r.name)}</b><em>${skillName(r.skill)}${this.ctx?.stake ? ` · ⓩ ${this.ctx.stake} · ${T(`win ⓩ ${this.ctx.stake * 2}`, `赢 ⓩ ${this.ctx.stake * 2}`)}` : ` · ${T("free duel", "免费对决")}`}</em></span>`;
       vs.querySelector("[data-pic]")!.appendChild(snarkCanvas(r.id));
-    }
+    } else vs.remove();
     this.renderDeck();
   }
 
@@ -402,49 +430,35 @@ export class Menus {
     const sec = this.root.querySelector(".zkf-play") as HTMLElement;
     const d = this.decks[this.deckAt];
     if (!d) return;
-    (sec.querySelector(".zkf-count") as HTMLElement).textContent = `${this.deckAt + 1} / ${this.decks.length}`;
-    const dots = sec.querySelector(".zkf-dots") as HTMLElement;
-    dots.replaceChildren(
-      ...this.decks.map((x, i) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = `zkf-dot ${i === this.deckAt ? "on" : ""} ${x.ok ? "" : "off"}`;
-        b.style.setProperty("--fc", FACTION_INFO[x.pool].color);
-        b.title = x.name;
-        b.innerHTML = `<b>${esc(x.name)}</b><small>${x.custom ? T("Yours", "自建") : T("Starter", "初始")} · ${factionName(x.pool)}</small>`;
-        b.addEventListener("click", () => {
-          this.deckAt = i;
-          this.renderDeck();
-          if (b.classList.contains("on") && performance.now() - lastDot < 400) this.duel();
-          lastDot = performance.now();
-        });
-        return b;
-      }),
-    );
-    let lastDot = 0;
+    for (const b of sec.querySelectorAll<HTMLElement>(".zkf-box[data-i]")) b.classList.toggle("on", Number(b.dataset.i) === this.deckAt);
     const p = POWERS.get(d.pool)!;
     const snarks = d.cards.filter(isSnarkCard).length;
     const legs = d.cards.filter((id) => card(id).rarity === "legendary").length;
     const avg = d.cards.reduce((a, id) => a + card(id).cost, 0) / Math.max(1, d.cards.length);
-    const words = d.name.split(" ");
-    const head = words.length > 1 ? `${esc(words.slice(0, -1).join(" "))} <em style="color:${FACTION_INFO[d.pool].color}">${esc(words[words.length - 1])}</em>` : esc(d.name);
-    (sec.querySelector(".zkf-deckcard") as HTMLElement).innerHTML = `
-      <div class="zkf-cname">${head}</div>
-      <div class="zkf-ctags">
-        <span class="zkf-tag ${d.custom ? "gold" : ""}">${d.custom ? T("Yours", "自建") : T("Starter", "初始")}</span>
-        <span class="zkf-band"><i style="--c:${FACTION_INFO[d.pool].color}"></i>${factionName(d.pool)}</span>
-        <span class="zkf-band">${d.cards.length} ${T("cards", "张")}</span>
-        ${snarks ? `<span class="zkf-band">${snarks} zkSNARKs</span>` : ""}
-        ${d.ok ? "" : `<span class="zkf-tag bad">${esc(d.why)}</span>`}
+    const fc = FACTION_INFO[d.pool].color;
+    const panel = sec.querySelector(".zkf-deckcard") as HTMLElement;
+    panel.style.setProperty("--fc", fc);
+    panel.innerHTML = `
+      <div class="zkf-dhead"><span class="zkf-face big" data-pic></span><span><small class="zkf-pool">${factionName(d.pool)} · ${d.custom ? T("Yours", "自建") : T("Starter", "初始")}</small><b class="zkf-dname-big">${esc(d.name)}</b></span></div>
+      <div class="zkf-power"><img src="${coinUrl(p.cost, 64)}" alt="" /><span><b>${esc(T(p.name, p.zh))}</b><small>${esc(T(p.text, p.textZh))}</small></span></div>
+      <div class="zkf-stats">
+        <span><b>${d.cards.length}</b><small>${T("Cards", "卡牌")}</small></span>
+        <span><b>${legs}</b><small>${T("Legendary", "传说")}</small></span>
+        <span><b>${snarks}</b><small>zkSNARKs</small></span>
+        <span><b>${avg.toFixed(1)}</b><small>${T("Avg cost", "平均费用")}</small></span>
       </div>
-      <dl class="zkf-traits">
-        <div class="wide"><dt>${T("Hero power", "英雄技能")} · ${p.cost} ZEC</dt><dd>${esc(T(p.name, p.zh))} — ${esc(T(p.text, p.textZh))}</dd></div>
-        <div><dt>${T("Legendaries", "传说卡")}</dt><dd>${legs}</dd></div>
-        <div><dt>${T("Average cost", "平均费用")}</dt><dd>${avg.toFixed(1)} ZEC</dd></div>
-        <div class="wide"><dt>${T("Mana curve", "法力曲线")}</dt><dd>${curve(d.cards)}</dd></div>
-      </dl>`;
+      ${curve(d.cards)}
+      ${d.ok ? "" : `<p class="zkf-warn">${esc(d.why)}</p>`}
+      <div class="zkf-row"><button class="zkf-btn" data-do="edit" type="button">${d.custom ? T("Edit deck", "编辑套牌") : T("Make my version", "复制并修改")}</button></div>`;
+    panel.querySelector("[data-pic]")!.appendChild(snarkCanvas(champion(d)));
+    panel.querySelector("[data-do=edit]")!.addEventListener("click", () => {
+      this.go("coll");
+      if (d.custom) {
+        const sd = P.allDecks().find((x) => `deck:${x.id}` === d.key);
+        if (sd) this.edit(sd);
+      } else this.edit({ id: `d${Date.now().toString(36)}`, name: `${d.name} +`, pool: d.pool, cards: d.cards.slice() }, true);
+    });
     (sec.querySelector(".zkf-go") as HTMLButtonElement).disabled = !d.ok;
-    (sec.querySelector("[data-do=edit]") as HTMLElement).textContent = d.custom ? T("Edit in the collection", "在收藏中编辑") : T("Make my version", "复制并修改");
   }
 
   private duel() {
@@ -483,18 +497,20 @@ export class Menus {
     if (!snarksReady()) void loadSnarks().then(() => !this.closed && this.mode === "arena" && this.arena()).catch(() => {});
     const sec = this.root.querySelector(".zkf-arena") as HTMLElement;
     const r = A.arenaLoad();
-    const head = (t: string, right = "") => `<header class="zkf-head"><button class="zkf-back" type="button" aria-label="${T("Back", "返回")}">‹</button><h2>${t}</h2><span class="zkf-count">${right}</span></header>`;
-    const wire = () => sec.querySelector(".zkf-back")?.addEventListener("click", () => this.settled() && this.go("menu"));
+    const wire = () => wireBack(sec, () => this.settled() && this.go("menu"));
     // no run (or the last one is over): the door
     if (!r || r.done) {
       const free = A.arenaFree();
       sec.innerHTML = `${head(T("Arena", "竞技场"))}
-        <div class="zkf-arena-intro">
-          <div class="zkf-cname">${T("The", "")} <em style="color:#f4b728">${T("Arena", "竞技场")}</em></div>
-          <p>${T("Pick a pool, then build a deck one card at a time: three on offer each pick, zkSNARKs and Classics. Play duels with it until 12 wins or 3 losses. The further you go, the bigger the prize.", "先选一个池，再一张一张选牌组成套牌：每次三选一，零知卡与经典卡都有。用它对决，直到 12 胜或 3 负。走得越远，奖励越大。")}</p>
-          ${r?.prize?.length ? `<div class="zkf-arena-prize"><small>${T("Your last run", "上一轮")}: ${r.wins} ${T("wins", "胜")}</small>${r.prize.map((x) => `<b>${esc(x)}</b>`).join("")}</div>` : ""}
-          <dl class="zkf-traits"><div><dt>${T("Entry", "入场")}</dt><dd>${free ? T("Free (first run)", "免费（首次）") : `${A.ARENA_PRICE} ${T("gold", "金币")}`}</dd></div><div><dt>${T("Prize at 12 wins", "12 胜奖励")}</dt><dd>${T("4 packs · 469 gold", "4 包 · 469 金币")}</dd></div></dl>
-          <button class="zkf-btn gold zkf-arena-go" type="button"><span>${T("Start a run", "开始")}</span><small>${free ? T("free", "免费") : `${A.ARENA_PRICE} ${T("gold", "金币")}`}</small></button>
+        <div class="zkf-door zkf-plate">
+          <h3 class="zkf-title">${T("The Arena", "竞技场")}</h3>
+          <p>${T("Draft a deck one card at a time, three on offer each pick. Duel with it until 12 wins or 3 losses: the further you go, the bigger the prize.", "一张一张选牌组成套牌，每次三选一。用它对决，直到 12 胜或 3 负：走得越远，奖励越大。")}</p>
+          <div class="zkf-stats two">
+            <span><b>${free ? T("Free", "免费") : fmt(A.ARENA_PRICE)}</b><small>${free ? T("First run", "首次") : T("Gold to enter", "入场金币")}</small></span>
+            <span><b>12</b><small>${T("Wins for the top prize", "胜场拿头奖")}</small></span>
+          </div>
+          ${r?.prize?.length ? `<div class="zkf-prize"><small class="zkf-lab">${T("Last run", "上一轮")} · ${r.wins} ${T("wins", "胜")}</small>${r.prize.map((x) => `<b>${esc(x)}</b>`).join("")}</div>` : ""}
+          <button class="zkf-btn gold zkf-arena-go" type="button">${T("Start a run", "开始")}${free ? "" : `<small><img src="${coinUrl("", 40)}" alt="" />${A.ARENA_PRICE}</small>`}</button>
         </div>`;
       wire();
       sec.querySelector(".zkf-arena-go")!.addEventListener("click", () => {
@@ -512,30 +528,27 @@ export class Menus {
     }
     // choosing the pool
     if (!r.pool) {
-      sec.innerHTML = `${head(T("Arena · choose your pool", "竞技场 · 选择你的池"))}<div class="zkf-arena-pools">${r.heroes
-        .map((p, i) => {
-          const pw = POWERS.get(p)!;
-          return `<button class="zkf-arena-pool" data-i="${i}" style="--fc:${FACTION_INFO[p].color}" type="button"><kbd>${i + 1}</kbd><span class="face" data-face="${card(STARTERS[p].find((id) => card(id).rarity === "legendary") ?? STARTERS[p][0]).art}"></span><b>${factionName(p)}</b><small>${esc(T(FACTION_INFO[p].tag, FACTION_INFO[p].tagZh))}</small><em>${esc(T(pw.name, pw.zh))} — ${esc(T(pw.text, pw.textZh))}</em></button>`;
-        })
-        .join("")}</div>`;
+      sec.innerHTML = `${head(T("Arena · choose a pool", "竞技场 · 选择池"))}<div class="zkf-heroes three">${r.heroes.map((p, i) => heroCol(p, i + 1)).join("")}</div>`;
       wire();
-      for (const f of sec.querySelectorAll<HTMLElement>("[data-face]")) f.appendChild(snarkCanvas(Number(f.dataset.face)));
-      for (const b of sec.querySelectorAll<HTMLElement>(".zkf-arena-pool")) b.addEventListener("click", () => this.settled() && this.arenaKey(Number(b.dataset.i)));
+      fillFaces(sec);
+      for (const b of sec.querySelectorAll<HTMLElement>(".zkf-hero")) b.addEventListener("click", () => this.settled() && this.arenaKey(Number(b.dataset.i) - 1));
       return;
     }
     // drafting
     if (r.offer && r.deck.length < 30) {
-      sec.innerHTML = `${head(T(`Arena · pick ${r.deck.length + 1} of 30`, `竞技场 · 第 ${r.deck.length + 1} / 30 张`), factionName(r.pool))}
-        <div class="zkf-arena-offer"></div>
-        <aside class="zkf-arena-deck">${this.arenaList(r.deck)}</aside>`;
+      sec.innerHTML = `${head(T("Arena · draft", "竞技场 · 选牌"), `<span class="zkf-count"><b>${r.deck.length + 1}</b> / 30</span>`)}
+        <div class="zkf-offer"></div>
+        <aside class="zkf-side zkf-plate">${this.deckSide(r.deck, r.pool)}</aside>`;
       wire();
-      const box = sec.querySelector(".zkf-arena-offer") as HTMLElement;
+      fillFaces(sec);
+      fillArt(sec);
+      const box = sec.querySelector(".zkf-offer") as HTMLElement;
       r.offer.forEach((id, i) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "zkf-arena-pick";
+        b.className = `zkf-pick r-${card(id).rarity}`;
         b.appendChild(cardEl(id));
-        b.insertAdjacentHTML("beforeend", `<kbd>${i + 1}</kbd>`);
+        if (!TOUCH) b.insertAdjacentHTML("beforeend", `<kbd>${i + 1}</kbd>`);
         b.addEventListener("click", () => this.settled() && this.arenaKey(i));
         box.appendChild(b);
       });
@@ -543,17 +556,20 @@ export class Menus {
     }
     // the run: the record, the deck, duel
     const pips = Array.from({ length: A.ARENA_WINS }, (_, i) => `<i class="${i < r.wins ? "on" : ""}"></i>`).join("");
-    const xs = Array.from({ length: A.ARENA_LOSSES }, (_, i) => `<i class="${i < r.losses ? "on" : ""}">✕</i>`).join("");
-    sec.innerHTML = `${head(T("Arena · your run", "竞技场 · 你的这一轮"), factionName(r.pool))}
-      <div class="zkf-arena-run">
-        <div class="zkf-cname">${r.wins} <em style="color:#f4b728">${T("wins", "胜")}</em></div>
-        <div class="zkf-arena-pips">${pips}</div>
-        <div class="zkf-arena-xs">${xs}</div>
-        <div class="zkf-row"><button class="zkf-btn ghost zkf-arena-retire" type="button">${T("Retire and collect", "退出并领奖")}</button></div>
+    const xs = Array.from({ length: A.ARENA_LOSSES }, (_, i) => `<i class="${i < r.losses ? "on" : ""}"></i>`).join("");
+    sec.innerHTML = `${head(T("Arena · your run", "竞技场 · 你的这一轮"))}
+      <div class="zkf-run zkf-plate">
+        <span class="zkf-face big" data-face="${champArt(r.pool)}" style="--fc:${FACTION_INFO[r.pool].color}"></span>
+        <div class="zkf-wins"><b>${r.wins}</b><small>${T("Wins", "胜")}</small></div>
+        <div class="zkf-pips">${pips}</div>
+        <div class="zkf-xs"><small class="zkf-lab">${T("Losses", "负")}</small>${xs}</div>
+        <button class="zkf-btn zkf-arena-retire" type="button">${T("Retire and collect", "退出并领奖")}</button>
       </div>
-      <aside class="zkf-arena-deck">${this.arenaList(r.deck)}</aside>
-      <button class="zkf-btn gold zkf-go zkf-arena-duel" type="button"><span>${T("Duel", "开始对决")}</span>${TOUCH ? "" : "<small>Enter</small>"}</button>`;
+      <aside class="zkf-side zkf-plate">${this.deckSide(r.deck, r.pool)}</aside>
+      <button class="zkf-btn gold zkf-go zkf-arena-duel" type="button">${T("Duel", "开始对决")}</button>`;
     wire();
+    fillFaces(sec);
+    fillArt(sec);
     sec.querySelector(".zkf-arena-duel")!.addEventListener("click", () => this.settled() && this.arenaDuel());
     sec.querySelector(".zkf-arena-retire")!.addEventListener("click", (e) => {
       const b = e.currentTarget as HTMLButtonElement;
@@ -568,17 +584,9 @@ export class Menus {
     });
   }
 
-  /** The draft's list: cost, name, ×n, the curve. */
-  private arenaList(deck: string[]) {
-    const n = new Map<string, number>();
-    for (const id of deck) n.set(id, (n.get(id) ?? 0) + 1);
-    const rows = [...n.keys()].sort((a, b) => card(a).cost - card(b).cost || card(a).name.localeCompare(card(b).name));
-    return `<div class="zkf-arena-n">${deck.length} / 30</div><div class="zkf-arena-curve">${curve(deck)}</div><ol>${rows
-      .map((id) => {
-        const d = card(id);
-        return `<li class="r-${d.rarity}" style="--fc:${FACTION_INFO[d.faction].color}"><i>${d.cost}</i><span>${esc(T(d.name, d.zh))}</span>${(n.get(id) ?? 0) > 1 ? `<b>×${n.get(id)}</b>` : ""}</li>`;
-      })
-      .join("")}</ol>`;
+  /** A deck as the side panel shows it: its pool, count, curve and strips (read-only). */
+  private deckSide(deck: string[], pool: Pool) {
+    return `<div class="zkf-sidehead" style="--fc:${FACTION_INFO[pool].color}"><span class="zkf-face" data-face="${champArt(pool)}"></span><span><small class="zkf-pool">${factionName(pool)}</small><b>${T("Your draft", "你的套牌")}</b></span><em class="zkf-n ${deck.length === DECK_SIZE ? "full" : ""}"><b>${deck.length}</b>/${DECK_SIZE}</em></div>${curve(deck)}<div class="zkf-strips">${strips(deck)}</div>`;
   }
 
   private arenaKey(i: number) {
@@ -611,29 +619,33 @@ export class Menus {
     ctx.onDuel(r.deck.slice(), r.pool, "Arena");
   }
 
-  // ---- the collection -------------------------------------------------------------------------------------------
+  // ---- the collection: a book -------------------------------------------------------------------------------------
 
   private collection() {
     const sec = this.root.querySelector(".zkf-coll") as HTMLElement;
-    this.grid?.dispose();
-    this.grid = null;
-    if (!this.onlyBuilder && !this.editing) this.detailId = null;
+    this.book?.dispose();
+    this.book = null;
+    const tabs: (Faction | "")[] = ["", ...FACTIONS, "neutral"];
     sec.innerHTML = `
-      <header class="zkf-head"><button class="zkf-back" type="button" aria-label="${T("Back", "返回")}">‹</button><h2>${T("Collection", "收藏")}</h2><span class="zkf-count"></span></header>
-      <aside class="zkf-rail">
-        <div class="zkf-seg" data-f="set"><button data-v="snarks">${T("zkSNARKs", "零知卡")} <small>10,000</small></button><button data-v="classics">${T("Classics", "经典")} <small>${COLLECTIBLE.length}</small></button></div>
-        <input class="zkf-search" placeholder="${T("#4071, a trait, a word…", "#4071、特征、关键词…")}" value="${esc(this.words)}" />
-        <div class="zkf-seg" data-f="only"><button data-v="all">${T("All", "全部")}</button><button data-v="owned">${T("Owned", "已拥有")}</button></div>
-        <div class="zkf-fl"><span>${T("Rarity", "稀有度")}</span><div class="zkf-chips" data-f="tier">${TIERS.map((t) => `<button class="zkf-chipbtn" data-v="${t}"><i style="--c:${TIER_COLOR[t]}"></i>${rarityName(t)}</button>`).join("")}</div></div>
-        <div class="zkf-fl"><span>${T("Pool", "池")}</span><div class="zkf-chips" data-f="pool">${[...FACTIONS, "neutral" as const].map((f) => `<button class="zkf-chipbtn" data-v="${f}"><i style="--c:${FACTION_INFO[f].color}"></i>${factionName(f)}</button>`).join("")}</div></div>
-        <div class="zkf-fl"><span>${T("Cost", "费用")}</span><div class="zkf-costs" data-f="cost">${[0, 1, 2, 3, 4, 5, 6, 7].map((c) => `<button data-v="${c}">${c === 7 ? "7+" : c}</button>`).join("")}</div></div>
-        <div class="zkf-fl"><span>${T("Tribe", "种族")}</span><div class="zkf-chips" data-f="tribe">${TRIBES.map((t) => `<button class="zkf-chipbtn" data-v="${t}">${T(t, TRIBE_ZH[t] ?? t)}</button>`).join("")}</div></div>
-        <div class="zkf-fl"><span>${T("Sort", "排序")}</span><div class="zkf-seg" data-f="sort"><button data-v="rank">${T("Rarest", "最稀有")}</button><button data-v="cost">${T("Cost", "费用")}</button><button data-v="number">#</button></div></div>
-        <div class="zkf-decks"></div>
-      </aside>
-      <div class="zkf-gridbox"><p class="zkf-empty"></p></div>
-      <aside class="zkf-side"></aside>`;
-    sec.querySelector(".zkf-back")!.addEventListener("click", () => this.settled() && this.back());
+      ${head(T("Collection", "收藏"))}
+      <nav class="zkf-tabs">${tabs
+        .map((f) => `<button class="zkf-tab" type="button" data-pool="${f}" style="--fc:${f ? FACTION_INFO[f].color : "#f4b728"}">${f ? `<span class="zkf-tabic" data-face="${champArt(f)}"></span>` : ""}<b>${f ? factionName(f) : T("All", "全部")}</b></button>`)
+        .join("")}</nav>
+      <div class="zkf-ctools">
+        <div class="zkf-seg" data-f="set"><button type="button" data-v="snarks">zkSNARKs</button><button type="button" data-v="classics">${T("Classics", "经典")}</button></div>
+        <button class="zkf-check" type="button" data-f="owned"><i></i>${T("Owned", "已拥有")}</button>
+        <button class="zkf-btn small" type="button" data-do="filters">${T("Filters", "筛选")}<i class="zkf-caret"></i></button>
+        <label class="zkf-searchbox"><i></i><input class="zkf-search" placeholder="${T("Search: #4071, a trait, a word", "搜索：#4071、特征、关键词")}" value="${esc(this.words)}" /></label>
+      </div>
+      <div class="zkf-bookbox"><p class="zkf-empty"></p></div>
+      <footer class="zkf-cfoot">
+        <span class="zkf-pageno"></span>
+        <div class="zkf-mana">${[0, 1, 2, 3, 4, 5, 6, 7].map((c) => `<button class="zkf-coin-f" type="button" data-v="${c}"><img src="${coinUrl(c === 7 ? "7+" : c, 72)}" alt="${c}" /></button>`).join("")}</div>
+        <span class="zkf-count"></span>
+      </footer>
+      <aside class="zkf-side zkf-plate"></aside>`;
+    fillFaces(sec);
+    wireBack(sec, () => this.settled() && this.back());
     const search = sec.querySelector(".zkf-search") as HTMLInputElement;
     let tm: ReturnType<typeof setTimeout> | undefined;
     search.addEventListener("input", () => {
@@ -643,37 +655,124 @@ export class Menus {
         this.fill();
       }, 160);
     });
-    sec.querySelector(".zkf-rail")!.addEventListener("click", (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-v]");
-      const f = b?.parentElement?.dataset.f;
-      if (!b || !f) return;
-      const v = b.dataset.v!;
+    sec.querySelector(".zkf-tabs")!.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-pool]");
+      if (!b || this.editing) return;
       sfx(this.snd, "ui", "click");
-      if (f === "set") this.set = v as typeof this.set;
-      else if (f === "only") this.only = v === "owned";
-      else if (f === "tier") this.tier = this.tier === v ? "" : (v as Rarity);
-      else if (f === "pool") this.pool = this.pool === v ? "" : (v as Faction);
-      else if (f === "cost") this.cost = this.cost === Number(v) ? -1 : Number(v);
-      else if (f === "tribe") this.tribe = this.tribe === v ? "" : v;
-      else if (f === "sort") this.sort = v as typeof this.sort;
+      this.pool = b.dataset.pool as Faction | "";
       this.fill();
     });
-    const box = sec.querySelector(".zkf-gridbox") as HTMLElement;
-    this.grid = new CardGrid({
+    sec.querySelector('[data-f="set"]')!.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-v]");
+      if (!b) return;
+      sfx(this.snd, "ui", "click");
+      this.set = b.dataset.v as typeof this.set;
+      this.fill();
+    });
+    sec.querySelector('[data-f="owned"]')!.addEventListener("click", () => {
+      sfx(this.snd, "ui", "click");
+      this.only = !this.only;
+      this.fill();
+    });
+    sec.querySelector(".zkf-mana")!.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-v]");
+      if (!b) return;
+      sfx(this.snd, "ui", "click");
+      const v = Number(b.dataset.v);
+      this.cost = this.cost === v ? -1 : v;
+      this.fill();
+    });
+    sec.querySelector("[data-do=filters]")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!this.closeDrop()) this.openDrop(e.currentTarget as HTMLElement);
+    });
+    const box = sec.querySelector(".zkf-bookbox") as HTMLElement;
+    this.book = new CardBook({
       decorate: (t, id) => this.decorate(t, id),
       pick: (id, t, e) => {
         if (this.editing && !(e as MouseEvent).shiftKey) return this.addCard(id, t);
         this.showDetail(id);
       },
-      context: (id, t) => {
+      context: (id) => {
         if (this.editing) this.removeCard(id) || this.showDetail(id);
         else this.showDetail(id);
-        void t;
+      },
+      paged: (p, n, turned) => {
+        const el = sec.querySelector(".zkf-pageno") as HTMLElement | null;
+        if (el) el.innerHTML = this.book?.count ? `${T("Page", "第")} <b>${fmt(p + 1)}</b> / ${fmt(n)}` : "";
+        if (turned) sfx(this.snd, "draw");
       },
     });
-    box.appendChild(this.grid.el);
+    box.appendChild(this.book.el);
     this.fill();
     this.side();
+  }
+
+  /** The filters that don't have a place of their own: rarity, tribe, sort. */
+  private openDrop(btn: HTMLElement) {
+    const sec = this.root.querySelector(".zkf-coll") as HTMLElement;
+    const d = document.createElement("div");
+    d.className = "zkf-drop zkf-plate";
+    const r = btn.getBoundingClientRect(),
+      s = sec.getBoundingClientRect();
+    d.style.top = `${r.bottom - s.top + 8}px`;
+    d.style.left = `${Math.max(12, Math.min(r.left - s.left, s.width - 380))}px`;
+    const draw = () => {
+      d.innerHTML = `
+        <h4 class="zkf-lab">${T("Rarity", "稀有度")}</h4>
+        <div class="zkf-opts" data-f="tier">${TIERS.map((t) => `<button type="button" data-v="${t}" class="${this.tier === t ? "on" : ""}" style="--c:${TIER_COLOR[t]}"><img src="${gemUrl(t, 40)}" alt="" />${rarityName(t)}</button>`).join("")}</div>
+        <h4 class="zkf-lab">${T("Tribe", "种族")}</h4>
+        <div class="zkf-opts" data-f="tribe">${TRIBES.map((t) => `<button type="button" data-v="${t}" class="${this.tribe === t ? "on" : ""}">${T(t, TRIBE_ZH[t] ?? t)}</button>`).join("")}</div>
+        <h4 class="zkf-lab">${T("Order", "排序")}</h4>
+        <div class="zkf-opts" data-f="sort">${(
+          [
+            ["rank", T("Rarest first", "最稀有")],
+            ["cost", T("Cost", "费用")],
+            ["number", T("Number", "编号")],
+          ] as const
+        )
+          .map(([v, l]) => `<button type="button" data-v="${v}" class="${this.sort === v ? "on" : ""}">${l}</button>`)
+          .join("")}</div>
+        <div class="zkf-row end"><button class="zkf-btn small" type="button" data-do="clear">${T("Clear all", "清除")}</button></div>`;
+    };
+    draw();
+    d.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const b = (e.target as HTMLElement).closest<HTMLElement>("button");
+      if (!b) return;
+      sfx(this.snd, "ui", "click");
+      if (b.dataset.do === "clear") {
+        this.tier = "";
+        this.tribe = "";
+        this.sort = "rank";
+        this.cost = -1;
+        this.only = false;
+        if (!this.editing) this.pool = "";
+      } else {
+        const f = b.parentElement?.dataset.f;
+        const v = b.dataset.v!;
+        if (f === "tier") this.tier = this.tier === v ? "" : (v as Rarity);
+        else if (f === "tribe") this.tribe = this.tribe === v ? "" : v;
+        else if (f === "sort") this.sort = v as typeof this.sort;
+      }
+      draw();
+      this.fill();
+    });
+    sec.appendChild(d);
+    btn.classList.add("on");
+    const away = (e: Event) => {
+      if (!d.contains(e.target as Node)) this.closeDrop();
+    };
+    setTimeout(() => window.addEventListener("pointerdown", away, true));
+    (d as HTMLElement & { off?: () => void }).off = () => window.removeEventListener("pointerdown", away, true);
+  }
+  private closeDrop(): boolean {
+    const d = this.root.querySelector(".zkf-drop") as (HTMLElement & { off?: () => void }) | null;
+    if (!d) return false;
+    d.off?.();
+    d.remove();
+    this.root.querySelector("[data-do=filters]")?.classList.remove("on");
+    return true;
   }
 
   /** The list the filters leave, sorted. */
@@ -725,7 +824,6 @@ export class Menus {
       }
       return list;
     }
-    const tierRank: Record<string, number> = { legendary: 0, epic: 1, rare: 2, common: 3, basic: 4 };
     return COLLECTIBLE.filter((d) => {
       if (this.only && !owned[d.id]) return false;
       if (this.tier && d.rarity !== this.tier) return false;
@@ -736,31 +834,33 @@ export class Menus {
       if (w && !w.split(/\s+/).every((x) => `${d.name} ${d.zh} ${d.text} ${d.tribe ?? ""} ${d.faction} ${d.type}`.toLowerCase().includes(x))) return false;
       return true;
     })
-      .sort((a, b) => (this.sort === "rank" ? tierRank[a.rarity] - tierRank[b.rarity] || a.cost - b.cost : this.sort === "cost" ? a.cost - b.cost || a.name.localeCompare(b.name) : a.name.localeCompare(b.name)))
+      .sort((a, b) => (this.sort === "rank" ? TIER_RANK[a.rarity] - TIER_RANK[b.rarity] || a.cost - b.cost : this.sort === "cost" ? a.cost - b.cost || a.name.localeCompare(b.name) : a.name.localeCompare(b.name)))
       .map((d) => d.id);
   }
 
-  private fill() {
+  private fill(keepPage = false) {
     const sec = this.root.querySelector(".zkf-coll") as HTMLElement;
-    if (!sec || !this.grid) return;
-    // the rail's state
-    const on = (f: string, v: string | number | boolean) => sec.querySelectorAll<HTMLElement>(`[data-f="${f}"] button`).forEach((b) => b.classList.toggle("on", b.dataset.v === String(v)));
-    on("set", this.set);
-    on("only", this.only ? "owned" : "all");
-    on("tier", this.tier);
-    on("pool", this.editing ? this.editing.pool : this.pool);
-    on("cost", this.cost);
-    on("tribe", this.tribe);
-    on("sort", this.sort);
+    if (!sec || !this.book) return;
+    const cur = this.editing ? this.editing.pool : this.pool;
+    sec.querySelectorAll<HTMLElement>(".zkf-tab").forEach((b) => {
+      const f = b.dataset.pool as Faction | "";
+      b.classList.toggle("on", f === cur);
+      b.classList.toggle("off", !!this.editing && f !== this.editing.pool && f !== "neutral");
+    });
+    sec.querySelectorAll<HTMLElement>('[data-f="set"] button').forEach((b) => b.classList.toggle("on", b.dataset.v === this.set));
+    sec.querySelector('[data-f="owned"]')!.classList.toggle("on", this.only);
+    sec.querySelectorAll<HTMLElement>(".zkf-coin-f").forEach((b) => b.classList.toggle("on", Number(b.dataset.v) === this.cost));
+    const nf = (this.tier ? 1 : 0) + (this.tribe ? 1 : 0) + (this.sort !== "rank" ? 1 : 0);
+    const fb = sec.querySelector("[data-do=filters]") as HTMLElement;
+    fb.innerHTML = `${T("Filters", "筛选")}${nf ? `<em>${nf}</em>` : ""}<i class="zkf-caret"></i>`;
     const loading = this.set === "snarks" && !snarksReady();
     const ids = loading ? [] : this.shownIds();
-    this.grid.set(ids);
+    this.book.set(ids, keepPage);
     const empty = sec.querySelector(".zkf-empty") as HTMLElement;
-    empty.textContent = loading ? T("Loading the 10,000 zkSNARKs…", "正在载入一万张零知卡……") : ids.length ? "" : T("Nothing matches these filters.", "没有符合条件的卡。");
+    empty.textContent = loading ? T("Loading the 10,000 zkSNARKs…", "正在载入一万张零知卡……") : ids.length ? "" : T("No card matches.", "没有符合条件的卡。");
     const c = P.completion();
-    (sec.querySelector(".zkf-count") as HTMLElement).textContent =
-      this.set === "snarks" ? T(`${fmt(ids.length)} shown · ${fmt(c.snarks)} of 10,000 yours`, `显示 ${fmt(ids.length)} · 已拥有 ${fmt(c.snarks)} / 10,000`) : T(`${fmt(ids.length)} shown · ${c.have}/${c.total} copies yours`, `显示 ${fmt(ids.length)} · 已拥有 ${c.have}/${c.total}`);
-    this.renderDecks();
+    (sec.querySelector(".zkf-count") as HTMLElement).innerHTML =
+      this.set === "snarks" ? T(`<b>${fmt(ids.length)}</b> cards · <b>${fmt(c.snarks)}</b> owned`, `<b>${fmt(ids.length)}</b> 张 · 已拥有 <b>${fmt(c.snarks)}</b>`) : T(`<b>${fmt(ids.length)}</b> cards · <b>${c.have}/${c.total}</b> owned`, `<b>${fmt(ids.length)}</b> 张 · 已拥有 <b>${c.have}/${c.total}</b>`);
   }
 
   private decorate(t: HTMLElement, id: string) {
@@ -768,22 +868,24 @@ export class Menus {
     const foot = t.querySelector(".zkf-foot") as HTMLElement;
     const inDeck = this.editing ? this.editing.cards.filter((x) => x === id).length : 0;
     t.classList.toggle("missing", !n);
-    t.classList.toggle("indeck", inDeck > 0);
+    t.classList.toggle("indeck", inDeck > 0 && inDeck >= Math.min(maxCopies(id), n));
     const mine = isSnarkCard(id) && snarkIdOf(id) === P.mineId();
     const fresh = P.load().fresh[id];
-    foot.innerHTML = `${mine ? `<i class="zkf-tag gold">${T("Yours", "你的")}</i>` : ""}${fresh ? `<i class="zkf-tag new">${T("New", "新")}</i>` : ""}${inDeck ? `<i class="zkf-tag white">${T("In deck", "已入组")}${inDeck > 1 ? ` ×${inDeck}` : ""}</i>` : n ? `<span>${isSnarkCard(id) ? T("Owned", "已拥有") : `×${n}`}</span>` : `<span class="off">${T("Not owned", "未拥有")}</span>`}`;
+    const tags = `${mine ? `<i class="zkf-tag gold">${T("Yours", "你的")}</i>` : ""}${fresh ? `<i class="zkf-tag new">${T("New", "新")}</i>` : ""}`;
+    const count = inDeck ? `<i class="zkf-tag ink">${T("In deck", "已入组")}${inDeck > 1 ? ` ×${inDeck}` : ""}</i>` : n > 1 ? `<i class="zkf-tag ink">×${n}</i>` : "";
+    foot.innerHTML = tags + count;
   }
 
-  // ---- a card's sheet ----
+  // ---- a card, big ----
 
   private showDetail(id: string) {
-    this.detailId = id;
-    this.grid?.select(id);
+    this.book?.select(id);
     sfx(this.snd, "ui", "click");
-    if (P.load().fresh[id]) P.seen(id);
-    if (this.editing && matchMedia("(max-width: 1100px)").matches) return this.detailModal(id);
-    if (this.editing) return this.detailModal(id);
-    this.side();
+    if (P.load().fresh[id]) {
+      P.seen(id);
+      this.book?.refresh();
+    }
+    this.detailModal(id);
   }
 
   private sheetHtml(id: string): string {
@@ -792,32 +894,35 @@ export class Menus {
     const z = isSnarkCard(id);
     const s = z ? snarkInfo(snarkIdOf(id)) : null;
     const mine = z && snarkIdOf(id) === P.mineId();
-    const chips = [
-      mine ? `<span class="zkf-tag gold">${T("Yours", "你的")}</span>` : "",
-      `<span class="zkf-band"><i style="--c:${TIER_COLOR[d.rarity]}"></i>${rarityName(d.rarity)}</span>`,
-      s && s.rank ? `<span class="zkf-band">${T("Rank", "排名")} ${fmt(s.rank)}</span>` : "",
-      s?.purged ? `<span class="zkf-tag violet">${T("Purged", "已净化")}</span>` : "",
-      s?.apparition ? `<span class="zkf-tag white">${T("Apparition", "显灵者")}</span>` : "",
-      `<span class="zkf-band"><i style="--c:${FACTION_INFO[d.faction].color}"></i>${factionName(d.faction)}</span>`,
-    ].join("");
-    const title = z ? `ZKSNARK <em>#${snarkIdOf(id)}</em>` : esc(cardName(d));
-    const traits = s
-      ? (["Lineage", "Head", "Eyes", "Skin", "Accessory"] as const).map((k) => `<div><dt>${k}</dt><dd>${esc(s.traits[k])}</dd></div>`).join("") + `<div><dt>${T("Card", "卡名")}</dt><dd>${esc(cardName(d))}</dd></div>`
-      : `<div><dt>${T("Type", "类型")}</dt><dd>${d.type}</dd></div><div><dt>${T("Tribe", "种族")}</dt><dd>${d.tribe ?? "—"}</dd></div>`;
+    const kind = [s?.apparition ? T("Apparition", "显灵者") : "", s?.purged ? T("Purged", "已净化") : "", mine ? T("Yours", "你的") : ""].filter(Boolean);
+    const rows: [string, string][] = s
+      ? [
+          [T("Rank", "排名"), s.rank ? `#${fmt(s.rank)}` : "—"],
+          ...(["Lineage", "Head", "Eyes", "Skin", "Accessory"] as const).map((k): [string, string] => [k, s.traits[k]]),
+          [T("Tribe", "种族"), s.tribe ?? "—"],
+        ]
+      : [
+          [T("Type", "类型"), d.type[0].toUpperCase() + d.type.slice(1)],
+          [T("Tribe", "种族"), d.tribe ?? "—"],
+          [T("Cost", "费用"), `${d.cost} ZEC`],
+        ];
     const craft = P.CRAFT[d.rarity],
       dis = P.DISENCHANT[d.rarity];
     const canC = P.canCraft(id),
       canD = P.canDisenchant(id);
+    const tradeable = d.rarity !== "basic" && !d.token;
     return `
       <div class="zkf-big"></div>
-      <div class="zkf-cname small">${title}</div>
-      <div class="zkf-ctags">${chips}</div>
-      <dl class="zkf-traits">${traits}</dl>
-      <p class="zkf-own">${n ? (z ? T("In your collection", "在你的收藏中") : T(`You have ${n} of ${maxCopies(id)}`, `已拥有 ${n} / ${maxCopies(id)}`)) : T("Not in your collection", "尚未拥有")}</p>
-      <div class="zkf-acts">
-        ${d.rarity !== "basic" && !d.token ? `<button class="zkf-btn ${canC ? "gold" : ""}" data-act="craft" ${canC ? "" : "disabled"}><span>${T("Craft", "合成")}</span><small>${fmt(craft)} zats</small></button>` : ""}
-        ${d.rarity !== "basic" && !d.token ? `<button class="zkf-btn ghost" data-act="dis" ${canD ? "" : "disabled"}><span>${T("Disenchant", "分解")}</span><small>+${fmt(dis)} zats</small></button>` : ""}
-        ${this.editing ? `<button class="zkf-btn white" data-act="add"><span>${T("Add to deck", "加入套牌")}</span></button>` : ""}
+      <div class="zkf-info">
+        <small class="zkf-lab" style="color:${TIER_COLOR[d.rarity]}">${rarityName(d.rarity)} · <span style="color:${FACTION_INFO[d.faction].color}">${factionName(d.faction)}</span>${kind.length ? ` · ${kind.join(" · ")}` : ""}</small>
+        <h3 class="zkf-title">${z ? `${esc(cardName(d))}<em>#${snarkIdOf(id)}</em>` : esc(cardName(d))}</h3>
+        <dl class="zkf-facts">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
+        <p class="zkf-owned ${n ? "yes" : ""}">${n ? (z ? T("In your collection", "在你的收藏中") : T(`You own ${n} of ${maxCopies(id)}`, `已拥有 ${n} / ${maxCopies(id)}`)) : T("Not in your collection", "尚未拥有")}</p>
+        <div class="zkf-row">
+          ${tradeable ? `<button class="zkf-btn ${canC ? "gold" : ""}" type="button" data-act="craft" ${canC ? "" : "disabled"}>${T("Craft", "合成")}<small><img src="${gemUrl("rare", 32)}" alt="" />${fmt(craft)}</small></button>` : ""}
+          ${tradeable ? `<button class="zkf-btn" type="button" data-act="dis" ${canD ? "" : "disabled"}>${T("Disenchant", "分解")}<small><img src="${gemUrl("rare", 32)}" alt="" />+${fmt(dis)}</small></button>` : ""}
+          ${this.editing ? `<button class="zkf-btn gold" type="button" data-act="add">${T("Add to deck", "加入套牌")}</button>` : ""}
+        </div>
       </div>`;
   }
 
@@ -843,112 +948,104 @@ export class Menus {
     });
   }
   private refreshSheet(id: string) {
-    this.grid?.refresh();
-    if (this.modal) this.detailModal(id);
-    else this.side();
+    this.book?.refresh();
+    this.fill(true);
+    this.detailModal(id);
   }
 
   private detailModal(id: string) {
-    const m = this.modalOpen(`<button class="zkf-x" aria-label="${T("Close", "关闭")}">×</button><div class="zkf-sheet">${this.sheetHtml(id)}</div>`, "sheet");
+    const m = this.modalOpen(`<button class="zkf-x" type="button" aria-label="${T("Close", "关闭")}"></button><div class="zkf-sheet">${this.sheetHtml(id)}</div>`, "sheet");
     this.wireSheet(m, id);
   }
 
-  /** The right column: a card's sheet, or the deck being built. */
+  /** The right page: your decks, or the deck being built. */
   private side() {
     const side = this.root.querySelector(".zkf-coll .zkf-side") as HTMLElement | null;
     if (!side) return;
     if (this.editing) return this.deckPanel(side);
-    const id = this.detailId;
-    if (!id) {
-      const c = P.completion();
-      side.innerHTML = `<div class="zkf-intro">
-        <div class="zkf-cname small">${T("The <em>10,000</em>", "<em>一万</em>张")}</div>
-        <p>${T("Every zkSNARK is a card. The rarer it is, the stronger: its rank sets its power, its skin its pool, its eyes what it does.", "每个零知证明者都是一张卡。越稀有越强：排名决定强度，皮肤决定池，眼睛决定能力。")}</p>
-        <dl class="zkf-traits">
-          <div><dt>${T("Legendary", "传说")}</dt><dd>${T("Ranks 1–100 · the 26 Apparitions", "排名 1–100 · 26 个显灵者")}</dd></div>
-          <div><dt>${T("Epic", "史诗")}</dt><dd>${T("Ranks 101–1,000", "排名 101–1,000")}</dd></div>
-          <div><dt>${T("Rare", "稀有")}</dt><dd>${T("Ranks 1,001–3,500 · the Purged", "排名 1,001–3,500 · 已净化")}</dd></div>
-          <div><dt>${T("Common", "普通")}</dt><dd>${T("Ranks 3,501 and on", "排名 3,501 以后")}</dd></div>
-          <div class="wide"><dt>${T("Yours", "你的")}</dt><dd>${fmt(c.snarks)} zkSNARKs · ${c.have}/${c.total} ${T("Classic copies", "经典卡")}</dd></div>
-        </dl>
-        <p class="zkf-own">${T("Pick a card to see it.", "点击卡牌查看。")}</p></div>`;
-      return;
+    const decks = P.allDecks();
+    side.innerHTML = `<h3 class="zkf-lab">${T("My decks", "我的套牌")}<small>${decks.length}/9</small></h3><div class="zkf-decklist"></div>`;
+    const list = side.querySelector(".zkf-decklist") as HTMLElement;
+    for (const d of decks) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "zkf-deckrow";
+      b.style.setProperty("--fc", FACTION_INFO[d.pool].color);
+      const why = deckWhy(d);
+      b.innerHTML = `<span class="zkf-face" data-pic></span><span><b>${esc(d.name)}</b><small>${factionName(d.pool)}${why ? ` · <em>${esc(why)}</em>` : ""}</small></span>`;
+      b.querySelector("[data-pic]")!.appendChild(snarkCanvas(champion({ key: `deck:${d.id}`, name: d.name, pool: d.pool, cards: d.cards, custom: true, ok: true, why: "" })));
+      b.addEventListener("click", () => this.edit(d));
+      list.appendChild(b);
     }
-    side.innerHTML = `<div class="zkf-sheet">${this.sheetHtml(id)}</div>`;
-    this.wireSheet(side, id);
+    if (decks.length < 9) {
+      const nb = document.createElement("button");
+      nb.type = "button";
+      nb.className = "zkf-deckrow new";
+      nb.innerHTML = `<span class="zkf-face"><i></i></span><span><b>${T("New deck", "新套牌")}</b></span>`;
+      nb.addEventListener("click", () => this.newDeck());
+      list.appendChild(nb);
+    }
   }
 
   // ---- decks ----
 
-  private renderDecks() {
-    const box = this.root.querySelector(".zkf-coll .zkf-decks") as HTMLElement | null;
-    if (!box) return;
-    if (this.editing) {
-      box.innerHTML = "";
-      return;
-    }
-    const decks = P.allDecks();
-    box.innerHTML = `<span class="zkf-flh">${T("My decks", "我的套牌")} <small>${decks.length}/9</small></span>`;
-    for (const d of decks) {
-      const b = document.createElement("button");
-      b.className = "zkf-deckrow";
-      b.style.setProperty("--fc", FACTION_INFO[d.pool].color);
-      const why = deckWhy(d);
-      b.innerHTML = `<span class="zkf-pic" data-pic></span><span><b>${esc(d.name)}</b><small>${factionName(d.pool)} · ${d.cards.length}/${DECK_SIZE}${why ? ` · ${esc(why)}` : ""}</small></span>`;
-      b.querySelector("[data-pic]")!.appendChild(snarkCanvas(champion({ key: `deck:${d.id}`, name: d.name, pool: d.pool, cards: d.cards, custom: true, ok: true, why: "" })));
-      b.addEventListener("click", () => this.edit(d));
-      box.appendChild(b);
-    }
-    if (decks.length < 9) {
-      const nb = document.createElement("button");
-      nb.className = "zkf-btn ghost zkf-newdeck";
-      nb.textContent = T("＋ New deck", "＋ 新套牌");
-      nb.addEventListener("click", () => this.newDeck());
-      box.appendChild(nb);
-    }
-  }
-
   private newDeck() {
+    if (P.allDecks().length >= 9) return this.toast(T("Nine decks at most: delete one first.", "最多九副套牌：请先删除一副。"));
     const m = this.modalOpen(
-      `<button class="zkf-x" aria-label="${T("Close", "关闭")}">×</button>
-       <h3 class="zkf-mh">${T("A deck of which pool?", "选择套牌的池")}</h3>
-       <p class="zkf-msub">${T("A deck is thirty cards of one pool and the neutrals.", "一副套牌由一个池的卡与中立卡组成，共三十张。")}</p>
-       <div class="zkf-pools">${FACTIONS.map((p) => `<button class="zkf-pool" data-pool="${p}" style="--fc:${FACTION_INFO[p].color}"><span class="zkf-pic" data-pic="${p}"></span><b>${factionName(p)}</b><small>${esc(T(FACTION_INFO[p].tag, FACTION_INFO[p].tagZh))}</small></button>`).join("")}</div>`,
+      `<button class="zkf-x" type="button" aria-label="${T("Close", "关闭")}"></button>
+       <h3 class="zkf-lab big">${T("Choose a pool", "选择池")}</h3>
+       <div class="zkf-heroes">${FACTIONS.map((p) => heroCol(p)).join("")}</div>`,
       "pools",
     );
-    const champ: Record<Pool, string> = { transparent: "t_boss", sapling: "s_gardener", sprout: "p_crypt", orchard: "o_sentinel" };
-    m.querySelectorAll<HTMLElement>("[data-pic]").forEach((e) => e.appendChild(snarkCanvas(card(champ[e.dataset.pic as Pool]).art)));
+    fillFaces(m);
     m.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-pool]");
       if (!b) return;
       const pool = b.dataset.pool as Pool;
+      sfx(this.snd, "ui", "click");
       this.closeModal();
       const n = P.allDecks().filter((d) => d.pool === pool).length + 1;
-      this.edit({ id: `d${Date.now().toString(36)}`, name: `${T(FACTION_INFO[pool].name, FACTION_INFO[pool].zh)} ${n}`, pool, cards: [] });
+      this.edit({ id: `d${Date.now().toString(36)}`, name: `${T(FACTION_INFO[pool].name, FACTION_INFO[pool].zh)} ${n}`, pool, cards: [] }, true);
     });
   }
 
-  private edit(d: SavedDeck) {
+  private edit(d: SavedDeck, fresh = false) {
     this.editing = { ...d, cards: d.cards.slice() };
+    this.dirty = fresh && d.cards.length > 0;
     if (this.mode !== "coll") this.go("coll");
     this.pool = "";
-    this.detailId = null;
     this.root.classList.add("editing");
     this.fill();
     this.side();
-    this.hints();
+  }
+
+  /** Done (or Esc): keep what changed, then back to the book. */
+  private doneEdit() {
+    const d = this.editing;
+    if (d && this.dirty && d.cards.length) {
+      const list = P.allDecks();
+      const had = list.some((x) => x.id === d.id);
+      if (!had && list.length >= 9) this.toast(T("Nine decks at most: not saved.", "最多九副套牌：未保存。"));
+      else {
+        saveDecks([...list.filter((x) => x.id !== d.id), { ...d, cards: d.cards.slice() }]);
+        this.lastSaved = { ...d };
+        sfx(this.snd, "coin");
+        this.toast(d.cards.length === DECK_SIZE ? T(`${d.name}: saved`, `${d.name}：已保存`) : T(`${d.name}: saved, ${d.cards.length}/${DECK_SIZE}`, `${d.name}：已保存，${d.cards.length}/${DECK_SIZE}`));
+      }
+    }
+    this.stopEdit();
   }
 
   private stopEdit() {
     this.editing = null;
+    this.dirty = false;
     this.root.classList.remove("editing");
     if (this.onlyBuilder) {
       this.close();
       return this.builderDone?.(this.lastSaved);
     }
-    this.fill();
+    this.fill(true);
     this.side();
-    this.hints();
   }
 
   private addCard(id: string, tile?: HTMLElement) {
@@ -960,17 +1057,19 @@ export class Menus {
     if (d.cards.length >= DECK_SIZE) why = T("The deck is full (30).", "套牌已满（30 张）。");
     else if (c.faction !== "neutral" && c.faction !== d.pool) why = T(`Not a ${factionName(d.pool)} card.`, `不是${factionName(d.pool)}的卡。`);
     else if (n >= maxCopies(id)) why = isSnarkCard(id) ? T("Every zkSNARK is one of a kind.", "每个零知证明者独一无二。") : T("No more copies of it.", "已达上限。");
-    else if (n >= P.owned(id)) why = T("You don't own it (craft it from its sheet).", "你还没有这张卡（可在详情中合成）。");
+    else if (n >= P.owned(id)) why = T("You don't own it: right click to craft it.", "你还没有这张卡：右键合成。");
     if (why) {
       sfx(this.snd, "error");
       this.toast(why);
       return;
     }
     d.cards.push(id);
+    this.dirty = true;
     sfx(this.snd, "pick");
-    tile?.animate([{ transform: tile.style.transform + " scale(1)" }, { transform: tile.style.transform + " scale(0.94)" }, { transform: tile.style.transform + " scale(1)" }], { duration: 180 });
-    this.grid?.refresh();
+    tile?.querySelector(".zkl-card")?.animate([{ transform: "scale(1)" }, { transform: "scale(0.93)" }, { transform: "scale(1)" }], { duration: 180 });
+    this.book?.refresh();
     this.side();
+    this.root.querySelector(`.zkf-coll .zkf-strip[data-rm="${id}"]`)?.animate([{ background: "#5a4310" }, { background: "" }], { duration: 500 });
   }
 
   private removeCard(id: string): boolean {
@@ -979,44 +1078,41 @@ export class Menus {
     const i = d.cards.indexOf(id);
     if (i < 0) return false;
     d.cards.splice(i, 1);
+    this.dirty = true;
     sfx(this.snd, "draw");
-    this.grid?.refresh();
+    this.book?.refresh();
     this.side();
     return true;
   }
 
   private deckPanel(side: HTMLElement) {
     const d = this.editing!;
-    const rows = [...new Set(d.cards)].sort((a, b) => card(a).cost - card(b).cost || cardName(card(a)).localeCompare(cardName(card(b))));
     const full = d.cards.length === DECK_SIZE;
     side.innerHTML = `
-      <div class="zkf-deckedit" style="--fc:${FACTION_INFO[d.pool].color}">
-        <input class="zkf-dname" maxlength="28" value="${esc(d.name)}" />
-        <div class="zkf-ctags"><span class="zkf-band"><i style="--c:${FACTION_INFO[d.pool].color}"></i>${factionName(d.pool)}</span><span class="zkf-band ${full ? "ok" : ""}"><b>${d.cards.length}</b>/${DECK_SIZE}</span></div>
-        ${curve(d.cards)}
-        <div class="zkf-list">${
-          rows.length
-            ? rows
-                .map((id) => {
-                  const c = card(id);
-                  const k = d.cards.filter((x) => x === id).length;
-                  return `<button class="zkf-row r-${c.rarity}" data-rm="${id}" style="--fc:${FACTION_INFO[c.faction].color}"><i>${c.cost}</i><span>${esc(cardName(c))}${c.serial ? ` <small>#${c.serial}</small>` : ""}</span><b>${k > 1 ? `×${k}` : c.rarity === "legendary" ? "★" : ""}</b></button>`;
-                })
-                .join("")
-            : `<p class="zkf-own">${T("Click cards in the grid to add them.", "点击左侧卡牌加入套牌。")}</p>`
-        }</div>
-        <div class="zkf-acts">
-          <button class="zkf-btn ghost" data-do="fill">${T("Fill", "补全")}</button>
-          <button class="zkf-btn ghost" data-do="del">${T("Delete", "删除")}</button>
-          <button class="zkf-btn ghost" data-do="done">${T("Back", "返回")}</button>
-          <button class="zkf-btn gold" data-do="save" ${full ? "" : "disabled"}>${T("Save", "保存")}</button>
-        </div>
+      <div class="zkf-sidehead" style="--fc:${FACTION_INFO[d.pool].color}"><span class="zkf-face" data-face="${champArt(d.pool)}"></span><span><small class="zkf-pool">${factionName(d.pool)}</small><input class="zkf-dname" maxlength="28" value="${esc(d.name)}" aria-label="${T("Deck name", "套牌名称")}" /></span><em class="zkf-n ${full ? "full" : ""}"><b>${d.cards.length}</b>/${DECK_SIZE}</em></div>
+      ${curve(d.cards)}
+      <div class="zkf-strips edit">${d.cards.length ? strips(d.cards) : `<p class="zkf-none">${T("Click cards in the book to add them.", "点击卡册中的卡牌加入套牌。")}</p>`}</div>
+      <div class="zkf-row">
+        <button class="zkf-btn small" type="button" data-do="fill">${T("Fill", "补全")}</button>
+        <button class="zkf-btn small" type="button" data-do="del">${T("Delete", "删除")}</button>
+        <button class="zkf-btn gold" type="button" data-do="done">${T("Done", "完成")}</button>
       </div>`;
+    fillFaces(side);
+    fillArt(side);
     const nameIn = side.querySelector(".zkf-dname") as HTMLInputElement;
-    nameIn.addEventListener("input", () => (d.name = nameIn.value.trim() || d.name));
-    side.querySelector(".zkf-list")!.addEventListener("click", (e) => {
+    nameIn.addEventListener("input", () => {
+      d.name = nameIn.value.trim() || d.name;
+      this.dirty = true;
+    });
+    side.querySelector(".zkf-strips")!.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-rm]");
       if (b) this.removeCard(b.dataset.rm!);
+    });
+    side.querySelector(".zkf-strips")!.addEventListener("contextmenu", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-rm]");
+      if (!b) return;
+      e.preventDefault();
+      this.showDetail(b.dataset.rm!);
     });
     side.querySelector("[data-do=fill]")!.addEventListener("click", () => {
       // the pool's starter cards you own first, then your best owned cards of the pool and the neutrals
@@ -1030,50 +1126,41 @@ export class Menus {
           return card(id);
         })
         .filter((c) => c.faction === d.pool || c.faction === "neutral")
-        .sort((a, b) => ({ legendary: 0, epic: 1, rare: 2, common: 3, basic: 4 })[a.rarity] - ({ legendary: 0, epic: 1, rare: 2, common: 3, basic: 4 })[b.rarity]);
+        .sort((a, b) => TIER_RANK[a.rarity] - TIER_RANK[b.rarity]);
       for (const c of mine) while (d.cards.length < DECK_SIZE && can(c.id)) d.cards.push(c.id);
-      this.grid?.refresh();
+      this.dirty = true;
+      sfx(this.snd, "pick");
+      this.book?.refresh();
       this.side();
     });
-    side.querySelector("[data-do=del]")!.addEventListener("click", () => {
+    side.querySelector("[data-do=del]")!.addEventListener("click", (e) => {
+      const b = e.currentTarget as HTMLButtonElement;
+      if (!b.dataset.sure) {
+        b.dataset.sure = "1";
+        b.textContent = T("Sure?", "确定？");
+        b.classList.add("bad");
+        return;
+      }
       saveDecks(P.allDecks().filter((x) => x.id !== d.id));
       this.stopEdit();
     });
-    side.querySelector("[data-do=done]")!.addEventListener("click", () => this.stopEdit());
-    side.querySelector("[data-do=save]")!.addEventListener("click", () => {
-      if (d.cards.length !== DECK_SIZE) return;
-      const list = P.allDecks().filter((x) => x.id !== d.id);
-      list.push({ ...d, cards: d.cards.slice() });
-      saveDecks(list);
-      this.lastSaved = { ...d };
-      sfx(this.snd, "coin");
-      this.toast(T(`${d.name}: saved`, `${d.name}：已保存`));
-      this.stopEdit();
-    });
+    side.querySelector("[data-do=done]")!.addEventListener("click", () => this.doneEdit());
   }
 
   // ---- packs ------------------------------------------------------------------------------------------------------
 
   private packs() {
-    const s = P.load();
     const sec = this.root.querySelector(".zkf-packs") as HTMLElement;
     sec.innerHTML = `
-      <header class="zkf-head"><button class="zkf-back" type="button" aria-label="${T("Back", "返回")}">‹</button><h2>${T("Packs", "卡包")}</h2><span class="zkf-count">${T(`${s.opened} opened`, `已开 ${s.opened} 包`)}</span></header>
-      <div class="zkf-card zkf-packcard">
-        <div class="zkf-cname">ZK <em>${T("PACK", "卡包")}</em></div>
-        <div class="zkf-ctags"><span class="zkf-tag gold" data-left></span><span class="zkf-band">${T("5 cards", "5 张")}</span><span class="zkf-band">${T("mostly zkSNARKs", "以零知卡为主")}</span></div>
-        <dl class="zkf-traits">
-          <div><dt><i class="zkf-dotc" style="--c:${TIER_COLOR.legendary}"></i>${T("Legendary", "传说")}</dt><dd>${T("about 1 pack in 20", "约每 20 包 1 张")}</dd></div>
-          <div><dt><i class="zkf-dotc" style="--c:${TIER_COLOR.epic}"></i>${T("Epic", "史诗")}</dt><dd>${T("about 1 pack in 4", "约每 4 包 1 张")}</dd></div>
-          <div><dt><i class="zkf-dotc" style="--c:${TIER_COLOR.rare}"></i>${T("Rare", "稀有")}</dt><dd>${T("at least one a pack", "每包至少 1 张")}</dd></div>
-          <div><dt>${T("A legendary", "传说保底")}</dt><dd>${T("within 30 packs", "30 包内必出")}</dd></div>
-          <div class="wide"><dt>${T("Doubles", "重复卡")}</dt><dd>${T("become zats, to craft any card", "转为 zat，可合成任意卡")}</dd></div>
-        </dl>
-      </div>
-      <div class="zkf-pstage"><div class="zkf-ped"></div><div class="zkf-pile"></div><p class="zkf-phint"></p></div>
-      <div class="zkf-tools"><button class="zkf-btn ghost" data-do="buy"><span>${T("Buy a pack", "购买卡包")}</span><small><i class="zkf-ic gold"></i>${P.PACK_PRICE}</small></button></div>
-      <button class="zkf-btn gold zkf-go" data-do="open" type="button"><span>${T("Open a pack", "开启卡包")}</span>${TOUCH ? "" : "<small>Enter</small>"}</button>`;
-    sec.querySelector(".zkf-back")!.addEventListener("click", () => this.settled() && this.back());
+      ${head(T("Packs", "卡包"))}
+      <div class="zkf-pstage"><div class="zkf-pile"></div><p class="zkf-phint"></p></div>
+      <div class="zkf-packbar zkf-plate">
+        <span class="zkf-left"><b data-left></b><small>${T("Packs to open", "待开卡包")}</small></span>
+        <button class="zkf-btn" type="button" data-do="buy">${T("Buy", "购买")}<small><img src="${coinUrl("", 40)}" alt="" />${P.PACK_PRICE}</small></button>
+        <button class="zkf-btn gold" type="button" data-do="open">${T("Open", "开包")}</button>
+        <button class="zkf-q" type="button" data-do="odds" aria-label="${T("What's inside", "卡包内容")}">?</button>
+      </div>`;
+    wireBack(sec, () => this.settled() && this.back());
     sec.querySelector("[data-do=buy]")!.addEventListener("click", () => {
       if (!P.buyPack()) {
         sfx(this.snd, "error");
@@ -1083,6 +1170,19 @@ export class Menus {
       this.pile();
     });
     sec.querySelector("[data-do=open]")!.addEventListener("click", () => this.settled() && this.packKey());
+    sec.querySelector("[data-do=odds]")!.addEventListener("click", (e) => {
+      const old = sec.querySelector(".zkf-odds");
+      if (old) return old.remove();
+      const o = document.createElement("div");
+      o.className = "zkf-odds zkf-plate";
+      o.innerHTML = `<h4 class="zkf-lab">${T("In a pack", "每包")}</h4><dl class="zkf-facts">
+        <div><dt>${T("Cards", "卡牌")}</dt><dd>${T("5, mostly zkSNARKs", "5 张，以零知卡为主")}</dd></div>
+        <div><dt style="color:${TIER_COLOR.rare}">${rarityName("rare")}</dt><dd>${T("1 or more", "至少 1 张")}</dd></div>
+        <div><dt style="color:${TIER_COLOR.epic}">${rarityName("epic")}</dt><dd>${T("1 pack in 4", "约每 4 包 1 张")}</dd></div>
+        <div><dt style="color:${TIER_COLOR.legendary}">${rarityName("legendary")}</dt><dd>${T("1 pack in 20, sure within 30", "约每 20 包 1 张，30 包内必出")}</dd></div>
+        <div><dt>${T("Doubles", "重复卡")}</dt><dd>${T("Become zats", "转为 zat")}</dd></div></dl>`;
+      (e.currentTarget as HTMLElement).parentElement!.appendChild(o);
+    });
     this.pile();
   }
 
@@ -1096,8 +1196,8 @@ export class Menus {
       p.style.setProperty("--i", String(i));
       pile.appendChild(p);
     }
-    (sec.querySelector("[data-left]") as HTMLElement).textContent = n ? T(`${n} to open`, `${n} 个待开`) : T("none to open", "没有待开卡包");
-    (sec.querySelector(".zkf-phint") as HTMLElement).textContent = n ? "" : T("No pack: buy one with gold, or win duels.", "没有卡包：用金币购买，或赢下对决。");
+    (sec.querySelector("[data-left]") as HTMLElement).textContent = String(n);
+    (sec.querySelector(".zkf-phint") as HTMLElement).textContent = n ? "" : T("No pack left: buy one, or win duels.", "没有卡包了：购买，或赢下对决。");
     (sec.querySelector("[data-do=open]") as HTMLButtonElement).disabled = !n;
     (pile.lastElementChild as HTMLElement | null)?.addEventListener("click", () => this.packKey());
   }
@@ -1121,6 +1221,7 @@ export class Menus {
     if (!cards) return sfx(this.snd, "error");
     this.busyPack = true;
     const sec = this.root.querySelector(".zkf-packs") as HTMLElement;
+    sec.querySelector(".zkf-odds")?.remove();
     sec.classList.add("opening");
     const stage = sec.querySelector(".zkf-pstage") as HTMLElement;
     const pile = sec.querySelector(".zkf-pile") as HTMLElement;
@@ -1153,18 +1254,19 @@ export class Menus {
     const flash = document.createElement("div");
     flash.className = "zkf-flash";
     stage.appendChild(flash);
-    flash.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 0 }], { duration: 800 }).onfinish = () => flash.remove();
-    this.burst(stage, cx, cy, "#ffd76a", 50);
+    flash.animate([{ opacity: 0 }, { opacity: 0.8, offset: 0.12 }, { opacity: 0 }], { duration: 700 }).onfinish = () => flash.remove();
+    this.burst(stage, cx, cy, "#ffd76a", 40);
     pack.remove();
     const W = sr.width,
       H = sr.height;
     // a phone held upright: three cards over two
     const narrow = W < 600;
-    const cw = narrow ? Math.max(84, Math.min(150, (W - 30) / 3.25, H / 3.6)) : Math.max(100, Math.min(200, W / 5.8, H / 2.2));
+    const cw = narrow ? Math.max(84, Math.min(150, (W - 30) / 3.25, H / 3.6)) : Math.max(100, Math.min(210, W / 5.8, H / 2.3));
     let left = cards.length;
     const done = document.createElement("button");
-    done.className = "zkf-btn white zkf-done";
-    done.innerHTML = `<span>${T("Collect", "收下")}</span>${TOUCH ? "" : "<small>Enter</small>"}`;
+    done.type = "button";
+    done.className = "zkf-btn gold zkf-done";
+    done.textContent = T("Collect", "收下");
     done.style.display = "none";
     const flips: HTMLElement[] = [];
     cards.forEach((c, i) => {
@@ -1177,8 +1279,8 @@ export class Menus {
       f.querySelector(".front")!.appendChild(cardEl(c.id));
       const row = narrow && i >= 3 ? 1 : 0;
       const col = narrow ? (row ? i - 3 - 0.5 : i - 1) : i - 2;
-      const x = cx + col * cw * 1.08 - cw / 2,
-        y = narrow ? cy - cw * 1.5 + row * cw * 1.62 : cy - cw * 0.7 + (Math.abs(i - 2) === 2 ? 14 : Math.abs(i - 2) === 1 ? 4 : 0);
+      const x = cx + col * cw * 1.1 - cw / 2,
+        y = narrow ? cy - cw * 1.5 + row * cw * 1.66 : cy - cw * 0.76 + (Math.abs(i - 2) === 2 ? 14 : Math.abs(i - 2) === 1 ? 4 : 0);
       f.style.left = `${x}px`;
       f.style.top = `${y}px`;
       stage.appendChild(f);
@@ -1195,18 +1297,14 @@ export class Menus {
           py = fr.top - s2.top + fr.height / 2;
         if (d.rarity === "legendary") {
           this.root.animate([{ transform: "translate(0,0)" }, { transform: "translate(-7px,3px)" }, { transform: "translate(6px,-3px)" }, { transform: "translate(-3px,2px)" }, { transform: "translate(0,0)" }], { duration: 420 });
-          this.burst(stage, px, py, "#ffb02e", 46);
-        } else if (d.rarity === "epic") this.burst(stage, px, py, "#b07bff", 26);
-        else if (d.rarity === "rare") this.burst(stage, px, py, "#3fa8ff", 14);
+          this.burst(stage, px, py, "#ffb02e", 40);
+        } else if (d.rarity === "epic") this.burst(stage, px, py, "#b07bff", 22);
+        else if (d.rarity === "rare") this.burst(stage, px, py, "#3fa8ff", 12);
         const tag = document.createElement("div");
         tag.className = "zkf-pulled";
-        const bits = [`<b style="color:${TIER_COLOR[d.rarity]}">${rarityName(d.rarity)}</b>`];
-        if (z?.rank) bits.push(`${T("Rank", "排名")} ${fmt(z.rank)}`);
-        if (z?.apparition) bits.push(T("Apparition", "显灵者"));
-        if (z?.purged) bits.push(T("Purged", "已净化"));
-        if (c.zats) bits.push(`+${c.zats} zats`);
-        else if (c.isNew) bits.push(`<i class="zkf-tag new">${T("New", "新")}</i>`);
-        tag.innerHTML = bits.join(" · ");
+        tag.style.setProperty("--c", TIER_COLOR[d.rarity]);
+        const sub = [z?.rank ? `#${fmt(z.rank)}` : "", z?.apparition ? T("Apparition", "显灵者") : "", z?.purged ? T("Purged", "已净化") : ""].filter(Boolean).join(" · ");
+        tag.innerHTML = `<b>${rarityName(d.rarity)}</b>${sub ? `<span>${sub}</span>` : ""}${c.zats ? `<i class="zkf-tag ink">+${c.zats} zats</i>` : c.isNew ? `<i class="zkf-tag new">${T("New", "新")}</i>` : ""}`;
         f.appendChild(tag);
         if (!left) {
           done.style.display = "";
@@ -1231,11 +1329,11 @@ export class Menus {
     for (let i = 0; i < n; i++) {
       const d = document.createElement("i");
       d.className = "zkf-px";
-      const s = 4 + Math.random() * 8;
+      const s = 4 + Math.random() * 7;
       d.style.cssText = `left:${x}px;top:${y}px;width:${s}px;height:${s}px;background:${Math.random() < 0.3 ? "#fff" : color}`;
       host.appendChild(d);
       const a = Math.random() * Math.PI * 2,
-        r = 60 + Math.random() * 220;
+        r = 60 + Math.random() * 200;
       d.animate(
         [
           { transform: "translate(-50%,-50%)", opacity: 1 },
@@ -1246,92 +1344,96 @@ export class Menus {
     }
   }
 
-  // ---- how to play, settings: panels with tabs ---------------------------------------------------------------
+  // ---- how to play, settings: full screens with tabs across the top -------------------------------------------
 
-  private tabsPanel(title: string, sub: string, tabs: { k: string; label: string; html: () => string; wire?: (host: HTMLElement) => void }[]) {
+  private screen(title: string, tabs: { label: string; html: () => string; wire?: (host: HTMLElement) => void }[]) {
     let at = 0;
     const m = this.modalOpen(
-      `<aside class="zkf-ptabs"><h3>${esc(title)}</h3><small>${esc(sub)}</small><nav>${tabs.map((t, i) => `<button data-t="${i}" class="${i === 0 ? "on" : ""}">${esc(t.label)}</button>`).join("")}</nav><button class="zkf-btn white zkf-pback">${T("Back", "返回")}</button></aside><div class="zkf-pbody"></div>`,
-      "tabs",
+      `<header class="zkf-shead"><h2>${esc(title)}</h2><nav class="zkf-stabs">${tabs.map((t, i) => `<button type="button" data-t="${i}">${esc(t.label)}</button>`).join("")}</nav><button class="zkf-x" type="button" aria-label="${T("Close", "关闭")}"></button></header><div class="zkf-sbody"></div>`,
+      "screen",
     );
-    const body = m.querySelector(".zkf-pbody") as HTMLElement;
+    const body = m.querySelector(".zkf-sbody") as HTMLElement;
     const show = () => {
       m.querySelectorAll<HTMLElement>("[data-t]").forEach((b) => b.classList.toggle("on", Number(b.dataset.t) === at));
-      body.innerHTML = `<header><h3>${esc(tabs[at].label)}</h3><button class="zkf-x" aria-label="${T("Close", "关闭")}">×</button></header>${tabs[at].html()}`;
+      body.innerHTML = tabs[at].html();
       tabs[at].wire?.(body);
+      fillFaces(body);
     };
-    m.querySelector("nav")!.addEventListener("click", (e) => {
+    m.querySelector(".zkf-stabs")!.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-t]");
       if (!b) return;
       at = Number(b.dataset.t);
       sfx(this.snd, "ui", "click");
       show();
     });
-    m.querySelector(".zkf-pback")!.addEventListener("click", () => this.closeModal());
+    (this.modal as HTMLElement & { turn?: (d: number) => void }).turn = (d) => {
+      at = (at + d + tabs.length) % tabs.length;
+      sfx(this.snd, "ui", "hover");
+      show();
+    };
     show();
   }
 
   private rules() {
-    const p = (a: string, b: string) => `<p>${T(a, b)}</p>`;
-    this.tabsPanel(T("How to play", "玩法"), "ZK Legends", [
+    const step = (n: number, h: string, a: string, b: string) => `<div class="zkf-step zkf-plate"><i>${n}</i><h4>${h}</h4><p>${T(a, b)}</p></div>`;
+    this.screen(T("How to play", "玩法"), [
       {
-        k: "duel",
         label: T("The duel", "对决"),
         html: () =>
-          p("Two heroes, 30 Health each: bring the rival's to 0. Going first you start with 3 cards; going second with 4 and a Spare Zatoshi.", "两位英雄，各 30 点生命值：把对手的打到 0。先手起手 3 张牌；后手 4 张外加一枚零钱。") +
-          p("One more ZEC crystal each turn, up to 10, refilled every turn. Every card costs ZEC: the gold coin in its corner.", "每回合多一个 ZEC 水晶，最多 10 个，每回合补满。卡牌左上角的金币就是它的 ZEC 费用。") +
-          p("Drag a minion onto your side of the board. From your next turn it attacks: drag it onto an enemy minion or hero; both deal their Attack to each other. Spells act at once; a Secret waits hidden for your rival to set it off.", "把随从拖到你的战场。从下回合起它可以攻击：拖到敌方随从或英雄身上，双方互相造成攻击力的伤害。法术立即生效；奥秘会隐藏起来等对手触发。") +
-          p("Space or the END TURN plate ends your turn. Esc or a right click cancels a move.", "空格键或“结束回合”按钮结束回合。Esc 或右键取消操作。"),
+          `<div class="zkf-steps">${[
+            step(1, T("Two heroes", "两位英雄"), "30 Health each: bring the rival's to 0. Going first you start with 3 cards; going second with 4 and a Spare Zatoshi.", "各 30 点生命值：把对手的打到 0。先手起手 3 张牌；后手 4 张外加一枚零钱。"),
+            step(2, T("ZEC to spend", "花费 ZEC"), "One more ZEC crystal each turn, up to 10, refilled every turn. A card's cost is the gold coin in its corner.", "每回合多一个 ZEC 水晶，最多 10 个，每回合补满。卡牌左上角的金币就是它的费用。"),
+            step(3, T("Minions", "随从"), "Drag a minion onto your side. From your next turn it attacks: drag it onto an enemy minion or hero, and both deal their Attack to each other.", "把随从拖到你的战场。从下回合起它可以攻击：拖到敌方随从或英雄身上，双方互相造成攻击力的伤害。"),
+            step(4, T("Spells and secrets", "法术与奥秘"), "Spells act at once. A Secret waits hidden for your rival to set it off. Space ends your turn; Esc or a right click cancels a move.", "法术立即生效。奥秘会隐藏起来等对手触发。空格结束回合；Esc 或右键取消操作。"),
+          ].join("")}</div>`,
       },
       {
-        k: "snarks",
         label: T("The 10,000", "一万张零知卡"),
         html: () =>
-          p("Every zkSNARK of the collection is a card, and the rarer it is the stronger it is: its rank gives its rarity and a power budget on top of the usual stats for its cost.", "收藏中的每个零知证明者都是一张卡，越稀有越强：排名决定稀有度，并在同费用的常规属性之上额外加成。") +
-          p("Its traits make the rest: its skin sets its pool (warm: Transparent, green and blossom: Sapling, grey and violet: Sprout, blue and cosmic: Orchard, earth and metal: neutral), its head its tribe, its eyes what it does.", "其余由特征决定：皮肤决定池（暖色：透明池；绿色与花色：Sapling；灰与紫：Sprout；蓝与宇宙色：Orchard；大地与金属色：中立），头饰决定种族，眼睛决定能力。") +
-          p("Ranks 1–100 and the 26 Apparitions are legendary, 101–1,000 epic, 1,001–3,500 rare. The 676 snarks purged to raise the Apparitions are Ghosts of Sprout. A deck holds one of each zkSNARK.", "排名 1–100 与 26 个显灵者为传说，101–1,000 为史诗，1,001–3,500 为稀有。为唤出显灵者而被净化的 676 个成为 Sprout 的幽灵。每个零知证明者在一副套牌中只能放一张。"),
+          `<p class="zkf-lead">${T("Every zkSNARK of the collection is a card. The rarer it is, the stronger: its rank sets its rarity and its power, its skin its pool, its head its tribe, its eyes what it does.", "收藏中的每个零知证明者都是一张卡。越稀有越强：排名决定稀有度与强度，皮肤决定池，头饰决定种族，眼睛决定能力。")}</p>
+           <div class="zkf-tiers">${(
+             [
+               ["legendary", T("Ranks 1–100 and the 26 Apparitions", "排名 1–100 与 26 个显灵者")],
+               ["epic", T("Ranks 101–1,000", "排名 101–1,000")],
+               ["rare", T("Ranks 1,001–3,500, and the 676 Purged: Ghosts of Sprout", "排名 1,001–3,500，以及 676 个已净化者：Sprout 的幽灵")],
+               ["common", T("Ranks 3,501 and on", "排名 3,501 以后")],
+             ] as const
+           )
+             .map(([t, l]) => `<div class="zkf-tier zkf-plate" style="--c:${TIER_COLOR[t]}"><img src="${gemUrl(t, 64)}" alt="" /><b>${rarityName(t)}</b><p>${l}</p></div>`)
+             .join("")}</div>
+           <p class="zkf-note">${T("A deck holds one of each zkSNARK.", "每个零知证明者在一副套牌中只能放一张。")}</p>`,
       },
       {
-        k: "deck",
+        label: T("The pools", "四个池"),
+        html: () => `<div class="zkf-heroes static">${FACTIONS.map((f) => heroCol(f, 0, true)).join("")}</div>`,
+      },
+      {
+        label: T("Keywords", "关键词"),
+        html: () =>
+          `<dl class="zkf-kw">${Object.entries(KW_HELP)
+            .map(([k, v]) => `<div class="zkf-plate"><dt><span class="zkf-kwic" data-kw="${k}"></span>${kwLabel(k)}</dt><dd>${esc(T(v[0], v[1]))}</dd></div>`)
+            .join("")}</dl>`,
+        wire: (h) => {
+          for (const e of h.querySelectorAll<HTMLElement>("[data-kw]")) e.appendChild(iconCanvas(KW_ICON[e.dataset.kw!] ?? "q", "#f4b728"));
+        },
+      },
+      {
         label: T("Your deck", "你的套牌"),
         html: () =>
-          p("Thirty cards of one pool and the neutrals: two of a Classic, one of a legendary, one of each zkSNARK.", "三十张：一个池的卡加中立卡；经典卡最多 2 张，传说 1 张，每个零知证明者 1 张。") +
-          p("Win duels for gold, buy and open packs, turn your doubles into zats, craft the cards you miss.", "赢下对决拿金币，购买并开启卡包，把重复卡转为 zat，合成缺的卡。"),
-      },
-      {
-        k: "pools",
-        label: T("The four pools", "四个池"),
-        html: () => FACTIONS.map((f) => `<p><b style="color:${FACTION_INFO[f].color}">${factionName(f)}</b> — ${esc(T(FACTION_INFO[f].tag, FACTION_INFO[f].tagZh))}</p>`).join(""),
-      },
-      {
-        k: "kw",
-        label: T("Keywords", "关键词"),
-        html: () => `<dl class="zkf-kw">${Object.entries(KW_HELP)
-          .map(([k, v]) => `<div><dt>${kwLabel(k)}</dt><dd>${esc(T(v[0], v[1]))}</dd></div>`)
-          .join("")}</dl>`,
+          `<div class="zkf-steps three">${[
+            step(1, T("Thirty cards", "三十张"), "One pool and the neutrals: two of a Classic, one of a legendary, one of each zkSNARK.", "一个池的卡加中立卡；经典卡最多 2 张，传说 1 张，每个零知证明者 1 张。"),
+            step(2, T("Gold and packs", "金币与卡包"), "Win duels for gold, buy and open packs of five.", "赢下对决拿金币，购买并开启五张一包的卡包。"),
+            step(3, T("Zats", "Zat"), "Doubles turn into zats; spend them to craft the cards you miss.", "重复卡转为 zat，用来合成缺的卡。"),
+          ].join("")}</div>`,
       },
     ]);
   }
 
   private settings() {
-    const seg = (k: string, opts: [string, string, string][], cur: string) => `<div class="zkf-optseg" data-k="${k}">${opts.map(([v, a, b]) => `<button data-v="${v}" class="${v === cur ? "on" : ""}"><b>${a}</b><small>${b}</small></button>`).join("")}</div>`;
-    this.tabsPanel(T("Settings", "设置"), "ZK Legends", [
+    const toggle = (k: string, on: boolean, a: string, b: string) => `<div class="zkf-toggle" data-k="${k}"><button type="button" data-v="on" class="${on ? "on" : ""}">${a}</button><button type="button" data-v="off" class="${on ? "" : "on"}">${b}</button></div>`;
+    this.screen(T("Settings", "设置"), [
       {
-        k: "sound",
-        label: T("Sound", "声音"),
-        html: () => `<label class="zkf-opt">${T("Sound", "声音")}</label>${seg("sound", [["on", T("On", "开"), T("music and effects", "音乐与音效")], ["off", T("Off", "关"), T("silence", "静音")]], this.snd?.muted ? "off" : "on")}`,
-        wire: (h) =>
-          h.querySelector("[data-k=sound]")?.addEventListener("click", (e) => {
-            const b = (e.target as HTMLElement).closest<HTMLElement>("[data-v]");
-            if (!b || !this.snd) return;
-            this.snd.muted = b.dataset.v === "off";
-            if (!this.snd.muted) sfx(this.snd, "music", "menu");
-            h.querySelectorAll("[data-k=sound] button").forEach((x) => x.classList.toggle("on", x === b));
-          }),
-      },
-      {
-        k: "board",
-        label: T("Board", "棋盘"),
+        label: T("Game", "游戏"),
         html: () => {
           const info = (MAPS_MOD as unknown as { MAP_INFO?: Record<string, { name: string; zh: string }> }).MAP_INFO ?? {};
           let cur = "";
@@ -1340,10 +1442,24 @@ export class Menus {
           } catch {
             /* private mode */
           }
-          const opts: [string, string, string][] = [["", T("Random", "随机"), T("a new one each duel", "每局随机")], ...MAPS_MOD.MAPS.map((k): [string, string, string] => [k, info[k] ? T(info[k].name, info[k].zh) : k[0].toUpperCase() + k.slice(1), ""])];
-          return `<label class="zkf-opt">${T("The arena you duel in", "对决的场地")}</label><div class="zkf-optseg zkf-boards" data-k="board">${opts.map(([v, a, b]) => `<button data-v="${v}" class="${v === cur ? "on" : ""}"><b>${esc(a)}</b>${b ? `<small>${b}</small>` : ""}</button>`).join("")}</div>`;
+          const name = (k: string) => (info[k] ? T(info[k].name, info[k].zh) : MAP_NAMES[k] ? T(MAP_NAMES[k][0], MAP_NAMES[k][1]) : k[0].toUpperCase() + k.slice(1));
+          const boards = ["", ...MAPS_MOD.MAPS];
+          return `<section class="zkf-set">
+              <div class="zkf-setrow zkf-plate"><span><b>${T("Sound", "声音")}</b><small>${T("Music and effects", "音乐与音效")}</small></span>${toggle("sound", !this.snd?.muted, T("On", "开"), T("Off", "关"))}</div>
+              <h4 class="zkf-lab">${T("Board", "棋盘")}</h4>
+              <div class="zkf-boards" data-k="board">${boards
+                .map((k) => `<button type="button" data-v="${k}" class="zkf-board ${k === cur ? "on" : ""}" style="--c:${k ? (MAP_TINT[k] ?? "#a87a14") : "#a87a14"}"><i class="${k ? "" : "rnd"}"></i><b>${k ? esc(name(k)) : T("Random", "随机")}</b></button>`)
+                .join("")}</div>
+            </section>`;
         },
-        wire: (h) =>
+        wire: (h) => {
+          h.querySelector("[data-k=sound]")?.addEventListener("click", (e) => {
+            const b = (e.target as HTMLElement).closest<HTMLElement>("[data-v]");
+            if (!b || !this.snd) return;
+            this.snd.muted = b.dataset.v === "off";
+            if (!this.snd.muted) sfx(this.snd, "music", "menu");
+            h.querySelectorAll("[data-k=sound] button").forEach((x) => x.classList.toggle("on", x === b));
+          });
           h.querySelector("[data-k=board]")?.addEventListener("click", (e) => {
             const b = (e.target as HTMLElement).closest<HTMLElement>("[data-v]");
             if (!b) return;
@@ -1354,15 +1470,25 @@ export class Menus {
             }
             h.querySelectorAll("[data-k=board] button").forEach((x) => x.classList.toggle("on", x === b));
             sfx(this.snd, "ui", "click");
-          }),
+          });
+        },
       },
       {
-        k: "coll",
         label: T("Collection", "收藏"),
         html: () => {
           const s = P.load();
-          return `<label class="zkf-opt">${T("This browser keeps", "本浏览器保存")}</label><dl class="zkf-traits"><div><dt>${T("Gold", "金币")}</dt><dd>${fmt(s.gold)}</dd></div><div><dt>Zats</dt><dd>${fmt(s.zats)}</dd></div><div><dt>${T("Packs opened", "已开卡包")}</dt><dd>${s.opened}</dd></div><div><dt>${T("Duels won", "胜场")}</dt><dd>${s.wins} / ${s.played}</dd></div></dl>
-            <label class="zkf-opt">${T("Start again", "重新开始")}</label><button class="zkf-btn ghost" data-reset>${T("Reset the collection", "重置收藏")}</button>`;
+          const c = P.completion();
+          return `<section class="zkf-set">
+            <div class="zkf-stats four zkf-plate">
+              <span><b>${fmt(s.gold)}</b><small>${T("Gold", "金币")}</small></span>
+              <span><b>${fmt(s.zats)}</b><small>Zats</small></span>
+              <span><b>${s.opened}</b><small>${T("Packs opened", "已开卡包")}</small></span>
+              <span><b>${s.wins}<i>/${s.played}</i></b><small>${T("Duels won", "胜场")}</small></span>
+              <span><b>${fmt(c.snarks)}</b><small>zkSNARKs</small></span>
+              <span><b>${c.have}<i>/${c.total}</i></b><small>${T("Classics", "经典")}</small></span>
+            </div>
+            <div class="zkf-setrow zkf-plate"><span><b>${T("Start again", "重新开始")}</b><small>${T("This browser keeps your collection. Resetting it can't be undone.", "收藏保存在本浏览器中。重置后无法恢复。")}</small></span><button class="zkf-btn" type="button" data-reset>${T("Reset", "重置")}</button></div>
+          </section>`;
         },
         wire: (h) =>
           h.querySelector("[data-reset]")?.addEventListener("click", (e) => {
@@ -1375,6 +1501,7 @@ export class Menus {
               this.go(this.mode);
             } else {
               b.dataset.sure = "1";
+              b.classList.add("bad");
               b.textContent = T("Sure? Click again", "确定？再点一次");
             }
           }),
@@ -1399,6 +1526,7 @@ export class Menus {
   private closeModal() {
     this.modal?.remove();
     this.modal = null;
+    this.book?.select(null);
   }
   private toastT: ReturnType<typeof setTimeout> | undefined;
   private toast(s: string) {
@@ -1413,19 +1541,67 @@ export class Menus {
 
 // ---- pieces -------------------------------------------------------------------------------------------------------------
 
+/** A screen's head: the back slab and the title (and what's on the right). */
+function head(title: string, right = "") {
+  return `<header class="zkf-head"><button class="zkf-back" type="button" aria-label="${T("Back", "返回")}"><i></i></button><h2>${title}</h2>${right}</header>`;
+}
+function wireBack(sec: HTMLElement, f: () => void) {
+  sec.querySelector(".zkf-back")?.addEventListener("click", f);
+}
+
+/** A pool as a tall hero column: its champion big, its name, its hero power. */
+function heroCol(p: Pool, key = 0, still = false) {
+  const pw = POWERS.get(p)!;
+  const tag = still ? "div" : "button";
+  return `<${tag} ${still ? "" : 'type="button"'} class="zkf-hero" data-pool="${p}" ${key ? `data-i="${key}"` : ""} style="--fc:${FACTION_INFO[p].color}">
+    ${key && !TOUCH ? `<kbd>${key}</kbd>` : ""}
+    <span class="zkf-heroart" data-face="${champArt(p)}"></span>
+    <b>${factionName(p)}</b>
+    <p>${esc(T(FACTION_INFO[p].tag, FACTION_INFO[p].tagZh))}</p>
+    <span class="zkf-power"><img src="${coinUrl(pw.cost, 64)}" alt="" /><span><b>${esc(T(pw.name, pw.zh))}</b><small>${esc(T(pw.text, pw.textZh))}</small></span></span>
+  </${tag}>`;
+}
+
+/** Put the zkSNARK pictures into [data-face] holders. */
+function fillFaces(host: HTMLElement) {
+  for (const f of host.querySelectorAll<HTMLElement>("[data-face]")) if (!f.firstElementChild) f.appendChild(snarkCanvas(Number(f.dataset.face)));
+}
+/** Put the art crops into the strips. */
+function fillArt(host: HTMLElement) {
+  for (const f of host.querySelectorAll<HTMLElement>("[data-art]")) if (!f.firstElementChild) f.appendChild(snarkCanvas(Number(f.dataset.art)));
+}
+
+/** A deck as card strips: cost coin, name, a crop of the art, ×2. */
+function strips(deck: string[]) {
+  const n = new Map<string, number>();
+  for (const id of deck) n.set(id, (n.get(id) ?? 0) + 1);
+  const rows = [...n.keys()].sort((a, b) => card(a).cost - card(b).cost || cardName(card(a)).localeCompare(cardName(card(b))));
+  return rows
+    .map((id) => {
+      const c = card(id);
+      const k = n.get(id) ?? 0;
+      return `<button type="button" class="zkf-strip r-${c.rarity}" data-rm="${id}" style="--fc:${FACTION_INFO[c.faction].color};--c:${TIER_COLOR[c.rarity]}"><span class="art" data-art="${c.art}"></span><img class="cost" src="${coinUrl(c.cost, 64)}" alt="${c.cost}" /><span class="nm">${esc(cardName(c))}</span><b>${k > 1 ? `×${k}` : c.rarity === "legendary" ? "★" : ""}</b></button>`;
+    })
+    .join("");
+}
+
+const KW_ICON: Record<string, string> = { Guard: "shield", Shielded: "eye", Halo: "halo", Charge: "bolt", Rush: "bolt", "Double-spend": "x2", Dust: "skull", Drain: "drop", Reorg: "loop", Private: "lock", Mint: "card", Nullifier: "skull", Timelock: "lock", Redact: "door", Prover: "wave", Secret: "q", Discover: "eye" };
+
 let packData = "";
+function packUrl() {
+  return (packData ||= paintPack().toDataURL("image/webp", 0.92));
+}
 function packImg(): HTMLDivElement {
   const d = document.createElement("div");
   d.className = "zkf-pack";
-  d.style.backgroundImage = `url(${(packData ||= paintPack().toDataURL("image/webp", 0.92))})`;
+  d.style.backgroundImage = `url(${packUrl()})`;
   return d;
 }
 
 /** A deck's face: the pool's champion for a starter, else its rarest card. */
-function champion(d: DeckEntry): number {
-  const CHAMP: Record<Pool, string> = { transparent: "t_boss", sapling: "s_gardener", sprout: "p_crypt", orchard: "o_sentinel" };
-  if (!d.custom) return card(CHAMP[d.pool]).art;
-  const order: Record<string, number> = { legendary: 0, epic: 1, rare: 2, common: 3, basic: 4 };
+function champion(d: DeckEntry | undefined): number {
+  if (!d) return champArt("neutral");
+  if (!d.custom) return champArt(d.pool);
   const best = d.cards
     .map((id) => {
       try {
@@ -1435,8 +1611,8 @@ function champion(d: DeckEntry): number {
       }
     })
     .filter((c): c is CardDef => !!c)
-    .sort((a, b) => order[a.rarity] - order[b.rarity] || b.cost - a.cost)[0];
-  return best?.art ?? card(CHAMP[d.pool]).art;
+    .sort((a, b) => TIER_RANK[a.rarity] - TIER_RANK[b.rarity] || b.cost - a.cost)[0];
+  return best?.art ?? champArt(d.pool);
 }
 
 /** What keeps a deck from being played ("": nothing). */
@@ -1458,6 +1634,7 @@ function deckWhy(d: SavedDeck): string {
   return "";
 }
 
+/** The mana curve: a bar per cost, its count on top. */
 function curve(cards: string[]) {
   const n = new Array(8).fill(0);
   for (const id of cards) {
@@ -1468,7 +1645,7 @@ function curve(cards: string[]) {
     }
   }
   const max = Math.max(4, ...n);
-  return `<span class="zkf-curve">${n.map((k, i) => `<span><i style="height:${(k / max) * 100}%"></i><em>${i === 7 ? "7+" : i}</em></span>`).join("")}</span>`;
+  return `<div class="zkf-curve">${n.map((k, i) => `<span><em>${k || ""}</em><i style="height:${(k / max) * 100}%"></i><small>${i === 7 ? "7+" : i}</small></span>`).join("")}</div>`;
 }
 
 // ---- entry points -------------------------------------------------------------------------------------------------------

@@ -103,13 +103,16 @@ function carve(g: CanvasRenderingContext2D, W: number, H: number, ink: string, i
     Z = (z: number) => H / 2 + z * sz;
   const trim: Trim = inlay === "#f4b728" || inlay === "#c9a54a" || inlay === "#d9862c" ? { m0: "#4a3006", m1: "#a87a14", m2: "#f0c24a", m3: "#fff4c8" } : { m0: mixc(inlay, "#000000", 0.6), m1: mixc(inlay, "#000000", 0.25), m2: inlay, m3: mixc(inlay, "#ffffff", 0.7) };
   const r = mulberry(W + H);
-  // the frame band round the whole top (metal), and the top's worn edge inside it
+  // the lanes' inlay in a duller cut of the same metal: they frame the play, they don't shine
+  const dim: Trim = { m0: mixc(trim.m0, "#000000", 0.3), m1: mixc(trim.m1, "#000000", 0.35), m2: mixc(trim.m2, "#000000", 0.35), m3: mixc(trim.m3, trim.m1, 0.55) };
+  // the frame band round the whole top (metal, half-lit), and the top's worn edge inside it
+  const band2: Trim = { m0: trim.m0, m1: mixc(trim.m1, "#000000", 0.2), m2: mixc(trim.m2, "#000000", 0.28), m3: mixc(trim.m3, trim.m2, 0.6) };
   const band = new Path2D();
   band.rect(0, 0, W, H);
   band.rect(46, 46, W - 92, H - 92);
   g.save();
   g.clip(band, "evenodd");
-  metalFill(g, (() => { const p = new Path2D(); p.rect(0, 0, W, H); return p; })(), trim, 0, 0, W, H, 6);
+  metalFill(g, (() => { const p = new Path2D(); p.rect(0, 0, W, H); return p; })(), band2, 0, 0, W, H, 6);
   g.restore();
   innerShadow(g, stepRect(46, 46, W - 92, H - 92, 10), 40, 0.7, 0, 10);
   // scratches and scuffs
@@ -133,14 +136,14 @@ function carve(g: CanvasRenderingContext2D, W: number, H: number, ink: string, i
     const w = TABLE.laneW * sx,
       h = TABLE.laneD * sz;
     // the gold inlay round the lane, bevelled
-    const outer = stepRect(x0 - 20, y0 - 20, w + 40, h + 40, 14);
-    const inner = stepRect(x0 - 6, y0 - 6, w + 12, h + 12, 10);
+    const outer = stepRect(x0 - 13, y0 - 13, w + 26, h + 26, 12);
+    const inner = stepRect(x0 - 5, y0 - 5, w + 10, h + 10, 10);
     const ring = new Path2D();
     ring.addPath(outer);
     ring.addPath(inner);
     g.save();
     g.clip(ring, "evenodd");
-    metalFill(g, outer, trim, x0 - 20, y0 - 20, x0 + w + 20, y0 + h + 20, 4);
+    metalFill(g, outer, dim, x0 - 13, y0 - 13, x0 + w + 13, y0 + h + 13, 3);
     g.restore();
     // the sunken lane: its own darker surface, the rim's shadow falling in
     const recess = stepRect(x0 - 6, y0 - 6, w + 12, h + 12, 10);
@@ -151,30 +154,6 @@ function carve(g: CanvasRenderingContext2D, W: number, H: number, ink: string, i
     texture(g, grainTile(), 0.35, x0, y0, w, h);
     g.restore();
     innerShadow(g, recess, 28, 0.85, 0, 10);
-    // seven bays, engraved: a dark cut with a light lower edge
-    for (let i = 0; i < 7; i++) {
-      const cx = X((i - 3) * 1.95),
-        cy = Z(lz);
-      const bw = 1.62 * sx,
-        bh = 2.02 * sz;
-      const bay = stepRect(cx - bw / 2, cy - bh / 2, bw, bh, 12);
-      g.save();
-      g.lineWidth = 3;
-      g.strokeStyle = "rgba(0,0,0,0.5)";
-      g.stroke(bay);
-      g.translate(1.5, 2);
-      g.lineWidth = 1.5;
-      g.strokeStyle = ink;
-      g.stroke(bay);
-      g.restore();
-      // a small diamond at each bay's head
-      g.fillStyle = ink;
-      g.save();
-      g.translate(cx, cy - bh / 2 + 14);
-      g.rotate(Math.PI / 4);
-      g.fillRect(-4, -4, 8, 8);
-      g.restore();
-    }
     // studs at the lane's ends
     for (const sxp of [x0 - 34, x0 + w + 34]) stud(g, sxp, y0 + h / 2, 10, trim);
   }
@@ -436,7 +415,7 @@ export function buildMap(kind: MapKind, renderer: THREE.WebGLRenderer, scene: TH
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const top = new THREE.Mesh(
       new THREE.PlaneGeometry(TABLE.w, TABLE.d),
-      new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: 1.6, roughness: kind === "vault" ? 0.35 : 0.78, metalness: kind === "rigs" ? 0.35 : kind === "vault" ? 0.25 : 0.02 }),
+      new THREE.MeshStandardMaterial({ map: tex, bumpMap: tex, bumpScale: 1.6, roughness: kind === "vault" ? 0.5 : 0.8, metalness: kind === "rigs" ? 0.2 : kind === "vault" ? 0.15 : 0.02 }),
     );
     top.rotation.x = -Math.PI / 2;
     top.position.y = TABLE.top;
@@ -448,7 +427,7 @@ export function buildMap(kind: MapKind, renderer: THREE.WebGLRenderer, scene: TH
     slab.receiveShadow = true;
     slab.castShadow = true;
     group.add(slab);
-    const rimMat = new THREE.MeshStandardMaterial({ map: rimTex(th.rim, th.rimMetal > 0.5 ? "metal" : th.rimMetal > 0.15 ? "stone" : "wood"), roughness: th.rimMetal > 0.5 ? 0.35 : 0.7, metalness: th.rimMetal });
+    const rimMat = new THREE.MeshStandardMaterial({ map: rimTex(th.rim, th.rimMetal > 0.5 ? "metal" : th.rimMetal > 0.15 ? "stone" : "wood"), roughness: th.rimMetal > 0.5 ? 0.55 : 0.75, metalness: th.rimMetal * 0.8 });
     const rim = (w: number, d: number, x: number, z: number) => {
       const m = new THREE.Mesh(new RoundedBoxGeometry(w, 0.36, d, 2, 0.08), rimMat);
       m.position.set(x, 0.12, z);
@@ -477,16 +456,14 @@ export function buildMap(kind: MapKind, renderer: THREE.WebGLRenderer, scene: TH
       );
       t.position.set(x, 0, z);
       group.add(t);
-      const cap = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0).scale(1, 1.5, 1), new THREE.MeshStandardMaterial({ color: capCol, emissive: capCol, emissiveIntensity: 1.6, roughness: 0.1, metalness: 0.3, flatShading: true, toneMapped: false }));
+      const cap = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0).scale(1, 1.5, 1), new THREE.MeshStandardMaterial({ color: capCol, emissive: capCol, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.3, flatShading: true }));
       cap.position.set(x, 1.55, z);
       group.add(cap);
       const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 6, 24).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: "#d9a42a", metalness: 1, roughness: 0.3 }));
       halo.position.set(x, 1.28, z);
       group.add(halo);
       ticks.push((_dt, tt) => {
-        cap.rotation.y = tt * 0.8;
-        cap.position.y = 1.55 + Math.sin(tt * 1.6 + x) * 0.07;
-        halo.rotation.z = Math.sin(tt * 0.7 + z) * 0.15;
+        cap.rotation.y = tt * 0.25 + x;
       });
     }
   }

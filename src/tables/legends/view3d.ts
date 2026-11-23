@@ -413,8 +413,8 @@ function paintedMetal(color: string, kind: "metal" | "wood" | "stone"): THREE.Me
   if (!m) {
     m = new THREE.MeshStandardMaterial({
       map: rimTex(color, kind),
-      roughness: kind === "metal" ? 0.36 : kind === "wood" ? 0.7 : 0.85,
-      metalness: kind === "metal" ? 0.75 : 0.05,
+      roughness: kind === "metal" ? 0.5 : kind === "wood" ? 0.7 : 0.85,
+      metalness: kind === "metal" ? 0.62 : 0.05,
     });
     paintedCache.set(k, m);
   }
@@ -607,7 +607,7 @@ export class View3D {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.42, 0.4, 1.0);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.16, 0.35, 1.05);
     this.composer.addPass(this.bloom);
     // a soft vignette: the eye drawn to the board
     const vig = new ShaderPass(VignetteShader);
@@ -659,10 +659,10 @@ export class View3D {
     // fit the table's width (and enough depth), looking down at ~62° (a phone held upright: the lanes
     // only, from higher up)
     const dir = new THREE.Vector3(0, 17, portrait ? 4.2 : 9.2).normalize();
-    const half = portrait ? 7.5 : 11.2;
+    const half = portrait ? 7.5 : 10.4;
     const vt = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
     const dW = half / (vt * aspect);
-    const dH = (portrait ? 7.4 : 7.9) / vt;
+    const dH = (portrait ? 7.4 : 7.45) / vt;
     const D = Math.max(dW, dH);
     this.camLook.set(0, 0, portrait ? 0.4 : 0.75);
     this.camBase.copy(this.camLook).addScaledVector(dir, D);
@@ -731,7 +731,8 @@ export class View3D {
     const pg = new THREE.Group();
     const coin = new THREE.Group();
     const p = POWERS.get(f);
-    const coinMesh = new THREE.Mesh(geo("coin", () => new THREE.CylinderGeometry(0.7, 0.7, 0.18, 8)), [paintedMetal("#c89a2a", "metal"), new THREE.MeshStandardMaterial({ map: powerFace(f), roughness: 0.45, metalness: 0.2 }), new THREE.MeshStandardMaterial({ map: powerBack(), roughness: 0.6, metalness: 0.3 })]);
+    // its faces are printed (self-lit like the portraits): the room's reflections had washed them out
+    const coinMesh = new THREE.Mesh(geo("coin", () => new THREE.CylinderGeometry(0.7, 0.7, 0.18, 8)), [paintedMetal("#c89a2a", "metal"), new THREE.MeshBasicMaterial({ map: powerFace(f), color: new THREE.Color(0.78, 0.78, 0.78) }), new THREE.MeshBasicMaterial({ map: powerBack(), color: new THREE.Color(0.8, 0.8, 0.8) })]);
     coinMesh.rotation.y = Math.PI / 8;
     coinMesh.position.y = 0.2;
     coinMesh.castShadow = true;
@@ -741,6 +742,11 @@ export class View3D {
     (cost.material as THREE.MeshBasicMaterial).map = gemTex("cost", p?.cost ?? 2);
     cost.position.set(0, 0.34, -0.8);
     pg.add(cost);
+    // usable: a green line round the coin (Hearthstone's)
+    const pring = new THREE.Mesh(geo("coin-ring", () => new THREE.RingGeometry(0.74, 0.88, 8, 1, Math.PI / 8).rotateX(-Math.PI / 2)), new THREE.MeshBasicMaterial({ color: "#6ee07a", transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+    pring.position.y = 0.03;
+    pg.add(pring);
+    pg.userData.ring = pring;
     pg.position.set(2.85, 0, z + (s === 0 ? 0.35 : -0.05));
     pg.userData.coin = coin;
     pg.userData.cost = cost;
@@ -751,7 +757,7 @@ export class View3D {
 
     // the weapon, left of the hero
     const wg = new THREE.Group();
-    const wd = new THREE.Mesh(geo("weapon", () => new THREE.CylinderGeometry(0.72, 0.72, 0.2, 8)), [paintedMetal("#6c727a", "metal"), new THREE.MeshStandardMaterial({ map: weaponFace(), roughness: 0.55, metalness: 0.25 }), paintedMetal("#2a2622", "metal")]);
+    const wd = new THREE.Mesh(geo("weapon", () => new THREE.CylinderGeometry(0.72, 0.72, 0.2, 8)), [paintedMetal("#6c727a", "metal"), new THREE.MeshBasicMaterial({ map: weaponFace(), color: new THREE.Color(0.85, 0.85, 0.85) }), paintedMetal("#2a2622", "metal")]);
     wd.rotation.y = Math.PI / 8;
     wd.position.y = 0.2;
     wd.castShadow = true;
@@ -777,6 +783,8 @@ export class View3D {
     const rail = new THREE.Mesh(geo("mana-rail", () => new RoundedBoxGeometry(5.9, 0.12, 0.5, 2, 0.05)), paintedMetal("#8a6a20", "metal"));
     rail.position.set(4.2 + 4.5 * 0.56, 0.06, cz);
     rail.receiveShadow = true;
+    // (the HUD shows ZEC now: ui.ts setMana; the crystals stay as invisible anchors)
+    rail.visible = false;
     this.scene.add(rail);
     for (let i = 0; i < 10; i++) {
       const m = new THREE.Mesh(geo("crystal", () => new THREE.OctahedronGeometry(0.22, 0).scale(1, 1.4, 1)), CRYSTAL.off);
@@ -787,12 +795,14 @@ export class View3D {
       halo.visible = false;
       m.add(halo);
       m.userData.glow = halo;
+      m.visible = false;
       this.scene.add(m);
       row.push(m);
     }
     this.crystals[s] = row;
     const lab = new THREE.Mesh(geo("mana-label", () => new THREE.PlaneGeometry(1.4, 0.5).rotateX(-Math.PI / 2)), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
     lab.position.set(3.15, 0.32, cz);
+    lab.visible = false;
     this.scene.add(lab);
     this.manaLabel[s] = lab;
 
@@ -1882,9 +1892,9 @@ export class View3D {
   }
   lightPower(s: Side, on: boolean) {
     const coin = (this.powers[s].userData.coin as THREE.Group).children[0] as THREE.Mesh;
-    const mats = coin.material as THREE.MeshStandardMaterial[];
-    mats[1].emissive = new THREE.Color(on ? "#3a8a3a" : "#000");
-    mats[1].emissiveIntensity = on ? 0.9 : 0;
+    const mats = coin.material as THREE.MeshBasicMaterial[];
+    mats[1].color.setScalar(on || s === 1 ? 0.9 : 0.62);
+    ((this.powers[s].userData.ring as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = on ? 0.95 : 0;
   }
   /** A sleeping (just played) minion: a little dimmer, Zs rising. */
   sleep(uid: number, on: boolean) {

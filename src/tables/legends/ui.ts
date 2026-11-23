@@ -52,6 +52,8 @@ import { MAPS, type MapKind } from "./maps";
 import * as MAPS_MOD from "./maps";
 
 type XY = { x: number; y: number };
+/** Material Symbols' settings gear (Apache 2.0). */
+const GEAR = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z";
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** What the rival zkSNARK says, and what you can say (Hearthstone's emotes, ZStreet's words). */
@@ -337,6 +339,8 @@ export class LegendsTable {
       return `<div class="side ${k === this.me ? "me" : "foe"}" style="--fc:${FACTION_INFO[pool].color}"><div class="pic" data-pic="${k}"></div><b>${esc(this.names[k])}</b><small>${sub}</small></div>`;
     };
     const el = div("zkl-vsintro");
+    el.style.setProperty("--fc0", FACTION_INFO[this.pools[this.me]].color);
+    el.style.setProperty("--fc1", FACTION_INFO[this.pools[this.foe]].color);
     el.innerHTML = `${side(this.me)}<div class="vs">VS</div>${side(this.foe)}`;
     for (const k of [0, 1] as Side[]) el.querySelector(`[data-pic="${k}"]`)!.appendChild(snarkCanvas(s[k]?.id ?? k + 1));
     this.root.appendChild(el);
@@ -404,10 +408,9 @@ export class LegendsTable {
     this.view = new View3D(r, [this.pools[0], this.pools[1]], this.mapKind);
     this.view.setHeroArt(0, this.o.seats[0]?.id ?? 1);
     this.view.setHeroArt(1, this.o.seats[1]?.id ?? 2);
-    this.view.setEnd("wait", T("MULLIGAN", "换牌"));
+    this.view.setEnd("wait", "");
     for (const s of [0, 1] as Side[]) {
       this.view.setHero(s, this.g.s[s].hero);
-      this.view.setMana(s, this.g.s[s].mana, this.g.s[s].maxMana);
       this.view.setDeck(s, this.g.s[s].deck.length);
     }
     this.handLayer = div("zkl-layer zkl-hand");
@@ -421,38 +424,36 @@ export class LegendsTable {
     this.fxLayer.appendChild(this.previewEl);
     this.arrow = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     this.arrow.classList.add("zkl-arrow");
-    this.arrow.innerHTML = `<path d=""/><polygon points=""/><circle r="16" fill="none"/>`;
+    this.arrow.innerHTML = `<g class="tail"></g><polygon class="head" points=""/><g class="ret"><circle r="27"/><path d="M0 -38V-24M0 24V38M-38 0H-24M24 0H38"/></g>`;
     this.arrow.style.display = "none";
     this.fxLayer.appendChild(this.arrow);
-    // names by the heroes
-    for (const s of [0, 1] as Side[]) {
+    // the rival's name over its hero (yours you know)
+    for (const s of [this.foe]) {
       const n = div(`zkl-name ${s === this.me ? "me" : "foe"}`);
       n.innerHTML = `${esc(this.names[s])}<small>#${this.o.seats[s]?.id ?? (s ? 2 : 1)}</small>`;
       n.dataset.side = String(s);
       r.appendChild(n);
     }
 
-    // the keys, Rockstar-style, in the corner
-    const keys = div("zkl-keys");
-    keys.innerHTML = `<span><kbd>${T("Space", "空格")}</kbd>${T("End turn", "结束回合")}</span><span><kbd>Esc</kbd>${T("Cancel", "取消")}</span><span><kbd>${T("Drag", "拖动")}</kbd>${T("Play · attack", "出牌 · 攻击")}</span>`;
-    r.appendChild(keys);
-
-    // top-left chips
-    const chips = div("zkl-chips");
-    const menu = document.createElement("button");
-    menu.className = "zkl-chip";
-    menu.innerHTML = `☰ ${T("Menu", "菜单")}`;
-    menu.addEventListener("click", () => this.menu());
-    chips.appendChild(menu);
-    if (this.o.stake) {
-      const st = div("zkl-chip");
-      st.textContent = `ⓩ ${this.o.stake}`;
-      chips.appendChild(st);
+    // one gear in the corner for the menu, nothing else over the table
+    const gear = document.createElement("button");
+    gear.className = "zkl-gear";
+    gear.setAttribute("aria-label", T("Menu", "菜单"));
+    gear.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${GEAR}"/></svg>`;
+    gear.addEventListener("click", () => this.menu());
+    r.appendChild(gear);
+    // ZEC: yours by the hand, bottom right; the rival's top right
+    this.manaWas = [
+      [-1, -1],
+      [-1, -1],
+    ];
+    for (const s of [0, 1] as Side[]) {
+      const m = div(`zkl-mana ${s === this.me ? "me" : "foe"}`);
+      m.innerHTML = `<b></b><span></span>`;
+      r.appendChild(m);
+      this.manaEl[s] = m;
+      this.setMana(s, this.g.s[s].mana, this.g.s[s].maxMana);
     }
-    const dk = div("zkl-chip");
-    dk.textContent = this.deckName;
-    chips.appendChild(dk);
-    r.appendChild(chips);
 
     r.addEventListener("pointerdown", this.onDown);
     r.addEventListener("pointermove", this.onMove);
@@ -473,8 +474,10 @@ export class LegendsTable {
     if (!this.g || !W || !H || !this.view) return;
     const portrait = H > W * 1.1;
     this.view.resize(W, H);
-    const cw = Math.round(Math.max(88, Math.min(portrait ? W * 0.27 : W * 0.125, H * (portrait ? 0.17 : 0.225), 200)));
-    this.L = { W, H, portrait, cw, cx: W / 2, handY: H - cw * 1.4 * (portrait ? 0.56 : 0.58) };
+    // Hearthstone's hand: smallish cards on a fan, three quarters showing (cost, art, name, the top of
+    // the text); the one you point at rises whole
+    const cw = Math.round(Math.max(84, Math.min(portrait ? W * 0.24 : W * 0.098, H * (portrait ? 0.16 : 0.19), 176)));
+    this.L = { W, H, portrait, cw, cx: W / 2 - (portrait ? 0 : W * 0.01), handY: H - cw * 1.4 * (portrait ? 0.6 : 0.7) };
     this.root.classList.toggle("portrait", portrait);
     if (portrait && !this.root.querySelector(".zkl-turnhint") && !this.turnHintShown) {
       this.turnHintShown = true;
@@ -490,17 +493,22 @@ export class LegendsTable {
       const s = Number(n.dataset.side) as Side;
       const p = this.view.screenOf("hero", s);
       const px = this.view.tokenPx();
-      n.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y + (s === this.me ? px * 0.95 : -px * 1.05))}px) translate(-50%, -50%)`;
+      // the rival's plate hangs at its frame's top left, clear of the cards in its hand
+      n.style.transform = `translate(${Math.round(p.x - px * 0.95)}px, ${Math.round(p.y - px * 0.62)}px) translate(-100%, -50%)`;
     }
     this.layoutHand();
   }
 
+  /** A card's place on the fan: along an arc whose centre sits below the screen. */
   private handXY(i: number, n: number): { x: number; y: number; r: number } {
     const L = this.L;
     const cw = L.cw;
-    const spread = Math.min(cw * 0.8, (L.W * (L.portrait ? 0.92 : 0.5)) / Math.max(1, n));
+    const spread = Math.min(cw * 0.86, (L.W * (L.portrait ? 0.9 : 0.38)) / Math.max(1, n));
     const off = i - (n - 1) / 2;
-    return { x: L.cx + off * spread - cw / 2, y: L.handY + Math.abs(off) ** 1.6 * cw * 0.028, r: off * (L.portrait ? 3 : 3.4) };
+    const step = Math.min(5.2, 26 / Math.max(1, n)) * (L.portrait ? 0.7 : 1);
+    const a = (off * step * Math.PI) / 180;
+    const R = cw * 7;
+    return { x: L.cx + off * spread - cw / 2, y: L.handY + R * (1 - Math.cos(a)), r: off * step };
   }
   private layoutHand() {
     if (!this.L) return;
@@ -513,19 +521,52 @@ export class LegendsTable {
       el.style.setProperty("--w", `${L.cw}px`);
       const p = this.handXY(i, n);
       // the cards beside the one you point at step aside, so it can be read and grabbed
-      if (hi >= 0 && i !== hi) p.x += (i < hi ? -1 : 1) * L.cw * (n > 6 ? 0.3 : 0.22);
+      if (hi >= 0 && i !== hi) p.x += (i < hi ? -1 : 1) * L.cw * (n > 6 ? 0.34 : 0.26) * (Math.abs(i - hi) === 1 ? 1 : 0.7);
       const hover = this.hoverUid === uid && !this.drag && !this.tgt;
       const pick = this.picked === uid;
       if (hover || pick) {
-        const sc = L.portrait ? 1.25 : 1.5;
-        const lift = L.H - L.cw * 1.4 * sc - 4;
-        el.style.transform = `translate(${p.x}px, ${Math.min(p.y, lift)}px) scale(${sc})`;
+        // straight up, whole, its foot on the screen's edge
+        const sc = L.portrait ? 1.3 : 1.62;
+        const half = (L.cw * (sc - 1)) / 2;
+        const x = Math.max(8 + half, Math.min(L.W - 8 - L.cw - half, p.x));
+        el.style.transform = `translate(${x}px, ${L.H - 6 - L.cw * 1.4}px) scale(${sc})`;
         el.style.zIndex = "20";
+        el.classList.add("up");
       } else {
         el.style.transform = `translate(${p.x}px, ${p.y}px) rotate(${p.r}deg)`;
         el.style.zIndex = String(i + 1);
+        el.classList.remove("up");
       }
     });
+  }
+
+  private manaEl: HTMLDivElement[] = [];
+  private manaWas: [number, number][] = [
+    [-1, -1],
+    [-1, -1],
+  ];
+  /** ZEC as Hearthstone shows mana: the count, then one crystal per ZEC of the turn (lit, spent, borrowed). */
+  private setMana(s: Side, mana: number, max: number) {
+    const el = this.manaEl[s];
+    if (!el) return;
+    const [m0, x0] = this.manaWas[s];
+    if (m0 === mana && x0 === max) return;
+    this.manaWas[s] = [mana, max];
+    el.querySelector("b")!.innerHTML = `${mana}<small>/${max}</small>`;
+    const row = el.querySelector("span")!;
+    const n = Math.min(10, Math.max(max, mana));
+    while (row.childElementCount < n) row.appendChild(document.createElement("i"));
+    while (row.childElementCount > n) row.lastElementChild!.remove();
+    [...row.children].forEach((c, i) => {
+      const was = c.className;
+      const k = i < mana ? (i >= max ? "extra" : "on") : "off";
+      if (was !== k) {
+        c.className = k;
+        if (k !== "off" && was === "off") c.animate([{ transform: "scale(1.5)", filter: "brightness(2)" }, { transform: "scale(1)", filter: "none" }], { duration: 320, easing: "cubic-bezier(.2,.9,.3,1.2)" });
+      }
+    });
+    el.classList.toggle("spent", mana === 0 && max > 0);
+    el.classList.toggle("none", max === 0 && mana === 0);
   }
 
   // ---- reconcile the view with the state -------------------------------------------------------------
@@ -537,7 +578,7 @@ export class LegendsTable {
       const S = g.s[s];
       for (const m of S.board) this.snaps.set(m.uid, { ...m });
       this.view.setHero(s, S.hero);
-      this.view.setMana(s, S.mana, S.maxMana);
+      this.setMana(s, S.mana, S.maxMana);
       this.view.setDeck(s, S.deck.length);
       this.secretsN[s] = S.secrets.length;
       this.view.setSecrets(s, S.secrets.length);
@@ -786,7 +827,7 @@ export class LegendsTable {
         return;
       }
       case "mana":
-        v.setMana(e.side, e.mana, e.max);
+        this.setMana(e.side, e.mana, e.max);
         return;
       case "draw":
       case "give": {
@@ -1144,7 +1185,7 @@ export class LegendsTable {
       i.dataset.card = id;
     }
     this.logEl.appendChild(i);
-    while (this.logEl.childElementCount > Math.max(4, Math.floor((this.L.H * 0.6) / 49))) this.logEl.firstElementChild?.remove();
+    while (this.logEl.childElementCount > Math.max(4, Math.min(8, Math.floor((this.L.H * 0.56) / 50)))) this.logEl.firstElementChild?.remove();
   }
   private logPower(side: Side) {
     const f = this.g.s[side].hero.faction;
@@ -1285,7 +1326,7 @@ export class LegendsTable {
     if (e.button === 2) return this.cancel();
     const t = e.target as HTMLElement;
     if (this.emoteMenu && !t.closest(".zkl-emotes")) this.closeEmotes();
-    if (t.closest(".zkl-emotes") || t.closest(".zkl-chips")) return;
+    if (t.closest(".zkl-emotes") || t.closest(".zkl-gear")) return;
     // (while the last move still plays out, your next one may start: it is queued)
     if (this.busy && !(this.g.turn === this.me && this.g.phase === "play")) return;
     // a target being picked (click mode)
@@ -1497,22 +1538,76 @@ export class LegendsTable {
     this.drawArrow(t.from, p, !!hot);
   }
 
+  private arrowArgs: [XY, XY, boolean] | null = null;
+  private arrowRaf = 0;
+  /** The targeting arrow: a chain of chevrons marching from the source along a curve, a head, and a
+   * reticle on the target once it locks (red, Hearthstone's). Repainted every frame while it shows. */
   private drawArrow(a: XY, p: XY, hot: boolean) {
+    this.arrowArgs = [a, p, hot];
+    this.paintArrow(a, p, hot);
+    if (this.arrowRaf) return;
+    const tick = () => {
+      if (!this.arrowArgs || this.closed || this.arrow.style.display === "none") return void (this.arrowRaf = 0);
+      this.paintArrow(...this.arrowArgs);
+      this.arrowRaf = requestAnimationFrame(tick);
+    };
+    this.arrowRaf = requestAnimationFrame(tick);
+  }
+  private paintArrow(a: XY, p: XY, hot: boolean) {
     const dx = p.x - a.x,
       dy = p.y - a.y;
     const len = Math.hypot(dx, dy) || 1;
     const ux = dx / len,
       uy = dy / len;
-    const tip = { x: p.x, y: p.y };
-    const base = { x: tip.x - ux * 30, y: tip.y - uy * 30 };
-    const mid = { x: (a.x + base.x) / 2 - uy * len * 0.14, y: (a.y + base.y) / 2 + ux * len * 0.14 };
-    this.arrow.querySelector("path")!.setAttribute("d", `M ${a.x} ${a.y} Q ${mid.x} ${mid.y} ${base.x} ${base.y}`);
     const nx = -uy,
       ny = ux;
-    this.arrow.querySelector("polygon")!.setAttribute("points", `${tip.x},${tip.y} ${base.x + nx * 24},${base.y + ny * 24} ${base.x - nx * 24},${base.y - ny * 24}`);
-    const c = this.arrow.querySelector("circle")!;
-    c.setAttribute("cx", String(a.x));
-    c.setAttribute("cy", String(a.y));
+    const base = { x: p.x - ux * 26, y: p.y - uy * 26 };
+    // bow the curve upward on the screen, whichever way it points
+    const side = ny < 0 ? 1 : -1;
+    const bow = Math.min(len * 0.2, 90) * side;
+    const c = { x: (a.x + base.x) / 2 + nx * bow, y: (a.y + base.y) / 2 + ny * bow };
+    const B = (t: number) => ({ x: (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * c.x + t * t * base.x, y: (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * c.y + t * t * base.y });
+    // arc length table
+    const N = 40;
+    const pts = [B(0)];
+    const acc = [0];
+    for (let i = 1; i <= N; i++) {
+      const q = B(i / N);
+      acc.push(acc[i - 1] + Math.hypot(q.x - pts[i - 1].x, q.y - pts[i - 1].y));
+      pts.push(q);
+    }
+    const total = acc[N];
+    const at = (d: number) => {
+      let i = 1;
+      while (i < N && acc[i] < d) i++;
+      const k = (d - acc[i - 1]) / Math.max(1e-6, acc[i] - acc[i - 1]);
+      const q0 = pts[i - 1],
+        q1 = pts[i];
+      return { x: q0.x + (q1.x - q0.x) * k, y: q0.y + (q1.y - q0.y) * k, a: Math.atan2(q1.y - q0.y, q1.x - q0.x) };
+    };
+    const gap = 21;
+    const phase = ((performance.now() / 22) % gap) * (this.fast ? 0 : 1);
+    let html = "";
+    for (let d = 10 + phase; d < total - 8; d += gap) {
+      const q = at(d);
+      const s = 0.55 + 0.45 * Math.min(1, d / Math.max(1, total));
+      const ca = Math.cos(q.a) * s,
+        sa = Math.sin(q.a) * s;
+      const P = (x: number, y: number) => `${(q.x + x * ca - y * sa).toFixed(1)},${(q.y + x * sa + y * ca).toFixed(1)}`;
+      html += `<polygon class="chev" points="${P(-8, -11)} ${P(3, 0)} ${P(-8, 11)} ${P(-1, 11)} ${P(10, 0)} ${P(-1, -11)}"/>`;
+    }
+    (this.arrow.querySelector(".tail") as SVGGElement).innerHTML = html;
+    const end = at(Math.max(0, total - 1));
+    const ex = Math.cos(end.a),
+      ey = Math.sin(end.a);
+    const tip = { x: base.x + ex * 30, y: base.y + ey * 30 };
+    const hx = -ey,
+      hy = ex;
+    this.arrow
+      .querySelector(".head")!
+      .setAttribute("points", `${tip.x},${tip.y} ${base.x + hx * 22 - ex * 4},${base.y + hy * 22 - ey * 4} ${base.x + ex * 6},${base.y + ey * 6} ${base.x - hx * 22 - ex * 4},${base.y - hy * 22 - ey * 4}`);
+    const ret = this.arrow.querySelector(".ret") as SVGGElement;
+    ret.setAttribute("transform", `translate(${p.x} ${p.y})`);
     this.arrow.classList.toggle("bad", !hot && len > 40);
     this.arrow.classList.toggle("lock", hot);
   }

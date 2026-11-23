@@ -1,6 +1,14 @@
-/* ZK LEGENDS (ui.ts, art.ts, hudart.ts). Everything zkl-. ZStreet's language: stepped voxel corners,
- * pixel icons, DotGothic16 for what is engraved, Geist for what is read, gold Zcash coins for costs.
- * Cards size from one variable, --w: their insides are in em. The board itself is 3D (view3d.ts). */
+/* ZK LEGENDS (ui.ts, art.ts, hudart.ts). Everything zkl-. Painted metal and lacquer (hudart.ts) round
+ * Archivo condensed and heavy for what is engraved (names, numbers, banners, buttons), Geist for what is
+ * read, the same type as the menus (menus.css). The board itself is 3D (view3d.ts). */
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url(/fonts/archivo_v25_latin_var.woff2) format("woff2");
+}
 .zkl-root {
   --void: #0d0c0a;
   --paper: #ece8df;
@@ -12,7 +20,7 @@
   --blood: #e5484d;
   --ice: #9fd8ff;
   --ok: #7ee08a;
-  --display: "DotGothic16", "Geist Mono", ui-monospace, monospace;
+  --display: "Archivo", Geist, ui-sans-serif, system-ui, sans-serif;
   --text: Geist, Roboto, ui-sans-serif, system-ui, sans-serif;
   --mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
   --s: 0.32em;
@@ -32,6 +40,15 @@
 }
 .zkl-root * {
   box-sizing: border-box;
+}
+/* the table's own pointer everywhere, the hand where something can be grabbed */
+.zkl-root,
+.zkl-root * {
+  cursor: var(--hud-cursor) 1 1, default !important;
+}
+.zkl-root input,
+.zkl-root textarea {
+  cursor: text !important;
 }
 :where(.zkl-root) button {
   font-family: inherit;
@@ -162,6 +179,8 @@
 }
 .zkl-c-name {
   font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 0.86em;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -339,8 +358,7 @@
 /* local steps: these elements draw their own stepped corners at their own --s */
 .zkl-btn,
 .zkl-btn::before,
-.zkl-btn::after,
-.zkl-hand .zkl-card::after {
+.zkl-btn::after {
   --stepped: polygon(calc(var(--s) * 2) 0, calc(100% - var(--s) * 2) 0, calc(100% - var(--s) * 2) var(--s), calc(100% - var(--s)) var(--s), calc(100% - var(--s)) calc(var(--s) * 2), 100% calc(var(--s) * 2), 100% calc(100% - var(--s) * 2), calc(100% - var(--s)) calc(100% - var(--s) * 2), calc(100% - var(--s)) calc(100% - var(--s)), calc(100% - var(--s) * 2) calc(100% - var(--s)), calc(100% - var(--s) * 2) 100%, calc(var(--s) * 2) 100%, calc(var(--s) * 2) calc(100% - var(--s)), var(--s) calc(100% - var(--s)), var(--s) calc(100% - var(--s) * 2), 0 calc(100% - var(--s) * 2), 0 calc(var(--s) * 2), var(--s) calc(var(--s) * 2), var(--s) var(--s), calc(var(--s) * 2) var(--s));
 }
 
@@ -354,11 +372,6 @@
 }
 
 /* ---- the hand --------------------------------------------------------------------------------------- */
-@property --zkl-a {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
 .zkl-hand .zkl-card {
   position: absolute;
   left: 0;
@@ -368,40 +381,12 @@
   transform-origin: 50% 100%;
   filter: drop-shadow(0 0.5em 0.6em rgba(0, 0, 0, 0.55));
 }
-/* playable: a rim of light round the card's own stepped edge, a brighter spark running along it */
-.zkl-hand .zkl-card::after {
-  content: "";
-  position: absolute;
-  inset: -0.15em;
-  z-index: 2;
-  --s: 0.3em;
-  clip-path: var(--stepped);
-  padding: 0.26em;
-  background:
-    conic-gradient(from var(--zkl-a), rgba(230, 255, 220, 0) 0deg, rgba(240, 255, 230, 1) 26deg, rgba(230, 255, 220, 0) 70deg, rgba(230, 255, 220, 0) 180deg, rgba(240, 255, 230, 1) 206deg, rgba(230, 255, 220, 0) 250deg),
-    linear-gradient(180deg, #9dff8e, #39c24a 45%, #1d7a2c);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-  animation: zkl-rim 2.6s linear infinite;
+/* playable: a tight green edge that follows the painted card's own outline (gold when picked) */
+.zkl-hand .zkl-card.can-act {
+  filter: drop-shadow(0 0 1px #c8ffb0) drop-shadow(0 0 2px #3ee05a) drop-shadow(0 0 0.28em rgba(46, 210, 80, 0.75)) drop-shadow(0 0.5em 0.6em rgba(0, 0, 0, 0.55));
 }
-.zkl-hand .zkl-card.can-act::after {
-  opacity: 1;
-}
-.zkl-hand .zkl-card.picked::after {
-  opacity: 1;
-  background:
-    conic-gradient(from var(--zkl-a), rgba(255, 250, 220, 0) 0deg, #fffbe0 30deg, rgba(255, 250, 220, 0) 80deg, rgba(255, 250, 220, 0) 180deg, #fffbe0 210deg, rgba(255, 250, 220, 0) 260deg),
-    linear-gradient(180deg, #fff0b0, #f4b728 45%, #a86f06);
-  animation-duration: 1.4s;
-}
-@keyframes zkl-rim {
-  to {
-    --zkl-a: 360deg;
-  }
+.zkl-hand .zkl-card.picked {
+  filter: drop-shadow(0 0 1px #fff4c8) drop-shadow(0 0 2px #f4b728) drop-shadow(0 0 0.3em rgba(244, 183, 40, 0.8)) drop-shadow(0 0.5em 0.6em rgba(0, 0, 0, 0.55));
 }
 .zkl-hand .zkl-back {
   position: absolute;
@@ -411,7 +396,7 @@
   pointer-events: none;
 }
 
-/* ---- name plates and the top-left chips --------------------------------------------------------------- */
+/* ---- name plates, the gear, ZEC ---------------------------------------------------------------------- */
 .zkl-name {
   position: absolute;
   left: 0;
@@ -419,59 +404,109 @@
   z-index: 3;
   pointer-events: none;
   display: flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 8px;
-  border: 9px solid transparent;
-  border-image: var(--hud-thin) 14 fill / 9px stretch;
+  align-items: baseline;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 7px solid transparent;
+  border-image: var(--hud-thin) 14 fill / 7px stretch;
   font-family: var(--display);
-  font-size: 14px;
-  letter-spacing: 0.04em;
-  color: #ffe9b0;
-  text-shadow: 0 2px 0 #000;
+  font-stretch: 75%;
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f6ead0;
+  text-shadow: 0 1px 0 #000;
   white-space: nowrap;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
 }
 .zkl-name.foe {
   border-image-source: var(--hud-thin-bronze);
 }
-.zkl-chips {
+.zkl-gear {
   position: absolute;
-  left: 12px;
-  top: 12px;
-  z-index: 20;
-  display: flex;
-  gap: 6px;
-  align-items: center;
+  right: 14px;
+  bottom: 14px;
+  z-index: 22;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  background: var(--hud-knob) center / 100% 100% no-repeat;
+  transition: transform 0.12s;
 }
-.zkl-chip {
-  height: 38px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  border: 10px solid transparent;
-  border-image: var(--hud-thin) 14 fill / 10px stretch;
-  font-family: var(--display);
-  font-size: 14px;
-  color: #ffe9b0;
-  text-shadow: 0 2px 0 #000;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.55));
-  white-space: nowrap;
+.zkl-gear svg {
+  width: 22px;
+  height: 22px;
+  fill: #e8cf92;
+  filter: drop-shadow(0 1px 0 #000);
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), fill 0.15s;
 }
-.zkl-chip:not(button) {
-  border-image-source: var(--hud-thin-bronze);
-  color: #e8dcc4;
-  font-size: 13px;
+.zkl-gear:hover svg {
+  fill: #ffe9b0;
+  transform: rotate(60deg);
 }
-button.zkl-chip {
-  transition: filter 0.15s, transform 0.12s;
-}
-button.zkl-chip:hover {
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.55)) brightness(1.2);
-}
-button.zkl-chip:active {
+.zkl-gear:active {
   transform: translateY(1px);
+}
+.zkl-mana {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.zkl-mana.me {
+  right: 72px;
+  bottom: 18px;
+}
+.zkl-mana.foe {
+  right: 18px;
+  top: 14px;
+  transform-origin: 100% 0;
+  scale: 0.72;
+}
+.zkl-mana b {
+  min-width: 2.4em;
+  font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 900;
+  font-size: 34px;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 5px #2a1604;
+  paint-order: stroke fill;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.6));
+}
+.zkl-mana b small {
+  font-size: 0.62em;
+  color: #e8cf92;
+}
+.zkl-mana span {
+  display: flex;
+  gap: 1px;
+}
+.zkl-mana i {
+  width: 25px;
+  height: 28px;
+  background: var(--hud-zec-off) center / 100% 100% no-repeat;
+}
+.zkl-mana i.on {
+  background-image: var(--hud-zec-on);
+}
+.zkl-mana i.extra {
+  background-image: var(--hud-zec-extra);
+}
+.zkl-mana.none {
+  display: none;
+}
+.zkl-mana.spent b {
+  color: #c8bfae;
 }
 .zkl-turnhint {
   position: absolute;
@@ -483,6 +518,8 @@ button.zkl-chip:active {
   border: 10px solid transparent;
   border-image: var(--hud-thin) 14 fill / 10px stretch;
   font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 13px;
   color: #ffe9b0;
   white-space: nowrap;
@@ -591,7 +628,8 @@ button.zkl-chip:active {
   margin-bottom: 4px;
   padding-bottom: 4px;
   font-family: var(--display);
-  font-weight: 400;
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 14.5px;
   letter-spacing: 0.03em;
   color: var(--gold-hi);
@@ -604,67 +642,68 @@ button.zkl-chip:active {
   font-weight: 800;
 }
 
-/* ---- the targeting arrow: chunky gold blocks with a dark outline, a reticle at its root -------------- */
+/* ---- the targeting arrow: chevrons marching to the target, a head, a reticle once it locks ----------- */
 .zkl-arrow {
   position: absolute;
   inset: 0;
   z-index: 25;
   pointer-events: none;
   overflow: visible;
+  --ar: #ffe28a;
+  --ar-hi: #fff6d0;
+  --ar-ink: #2a1604;
 }
-.zkl-arrow path {
-  fill: none;
-  stroke: #ffd76a;
-  stroke-width: 15;
-  stroke-linecap: butt;
-  stroke-dasharray: 16 7;
-  animation: zkl-dash 0.42s linear infinite;
+.zkl-arrow .tail,
+.zkl-arrow .head {
+  filter: drop-shadow(0 5px 4px rgba(0, 0, 0, 0.55));
 }
-.zkl-arrow polygon {
-  fill: #ffd76a;
-  stroke: #ffefb8;
-  stroke-width: 2;
+.zkl-arrow .chev,
+.zkl-arrow .head {
+  fill: var(--ar);
+  stroke: var(--ar-ink);
+  stroke-width: 2.5;
   stroke-linejoin: round;
+  paint-order: stroke fill;
 }
-.zkl-arrow path,
-.zkl-arrow polygon,
-.zkl-arrow circle {
-  filter: drop-shadow(2px 0 0 #2a1604) drop-shadow(-2px 0 0 #2a1604) drop-shadow(0 2px 0 #2a1604) drop-shadow(0 -2px 0 #2a1604) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.55));
+.zkl-arrow .head {
+  stroke-width: 3;
 }
-.zkl-arrow circle {
-  fill: rgba(42, 22, 4, 0.35);
-  stroke: #ffd76a;
+.zkl-arrow .ret {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.zkl-arrow .ret circle,
+.zkl-arrow .ret path {
+  fill: none;
+  stroke: var(--ar);
   stroke-width: 5;
-  stroke-dasharray: 10 6;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: zkl-reticle 3s linear infinite;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 0 var(--ar-ink)) drop-shadow(0 2px 2px rgba(0, 0, 0, 0.7));
 }
-.zkl-arrow.lock path {
-  stroke: #ff7a5a;
+.zkl-arrow .ret path {
+  stroke-width: 6;
 }
-.zkl-arrow.lock polygon {
-  fill: #ff7a5a;
-  stroke: #ffd0c0;
+.zkl-arrow.lock,
+.zkl-arrow.foe {
+  --ar: #ff5a4a;
+  --ar-hi: #ffc0b0;
+  --ar-ink: #3a0604;
 }
-.zkl-arrow.lock circle {
-  stroke: #ff7a5a;
+.zkl-arrow.lock .ret {
+  opacity: 1;
 }
-.zkl-arrow.bad path {
-  stroke: #a8a296;
+.zkl-arrow.lock .ret circle {
+  animation: zkl-reticle 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+  transform-origin: 0 0;
 }
-.zkl-arrow.bad polygon {
-  fill: #a8a296;
-  stroke: #d8d2c6;
-}
-@keyframes zkl-dash {
-  to {
-    stroke-dashoffset: -23;
-  }
+.zkl-arrow.bad {
+  --ar: #b8b0a0;
+  --ar-ink: #1a1814;
 }
 @keyframes zkl-reticle {
-  to {
-    transform: rotate(360deg);
+  from {
+    transform: scale(1.6);
+    opacity: 0;
   }
 }
 
@@ -714,7 +753,8 @@ button.zkl-chip:active {
 }
 .zkl-float.buff span {
   font-family: var(--display);
-  font-weight: 400;
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 15px;
   color: #ffe9b0;
   -webkit-text-stroke: 0;
@@ -778,6 +818,8 @@ button.zkl-chip:active {
   justify-content: center;
   padding-top: 3.4%;
   font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: clamp(28px, 5vw, 62px);
   line-height: 1;
   letter-spacing: 0.05em;
@@ -858,6 +900,8 @@ button.zkl-chip:active {
   border: 13px solid transparent;
   border-image: var(--hud-parchment) 22 fill / 13px stretch;
   font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 16px;
   line-height: 1.25;
   color: #3a2208;
@@ -901,6 +945,8 @@ button.zkl-chip:active {
   border: 11px solid transparent;
   border-image: var(--hud-thin) 14 fill / 11px stretch;
   font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 15px;
   color: #ffe9b0;
   text-shadow: 0 2px 0 #000;
@@ -989,6 +1035,8 @@ button.zkl-chip:active {
   gap: 16px;
   margin: 0 0 6px;
   font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 38px;
   line-height: 1.05;
   letter-spacing: 0.04em;
@@ -1056,6 +1104,8 @@ button.zkl-chip:active {
   background: linear-gradient(180deg, #fff1c0 0%, #f6cc55 22%, #c08a14 55%, #7a5208 80%, #c99a2a 100%), var(--brushed);
   background-blend-mode: overlay;
   font-family: var(--display) !important;
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 21px;
   letter-spacing: 0.03em;
   color: #ffe9b0 !important;
@@ -1132,7 +1182,7 @@ button.zkl-chip:active {
   margin: 18px 0 26px;
 }
 .zkl-mull .zkl-card {
-  --w: 214px;
+  --w: clamp(170px, 15.5vw, 260px);
   cursor: pointer;
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3);
   filter: drop-shadow(0 16px 22px rgba(0, 0, 0, 0.65));
@@ -1192,7 +1242,7 @@ button.zkl-chip:active {
   flex-wrap: wrap;
 }
 .zkl-discover .zkl-card {
-  --w: 210px;
+  --w: clamp(170px, 15vw, 250px);
   cursor: pointer;
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3);
   filter: drop-shadow(0 16px 22px rgba(0, 0, 0, 0.65));
@@ -1223,6 +1273,8 @@ button.zkl-chip:active {
   justify-content: center;
   padding-top: 3.6%;
   font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: clamp(40px, 6.4vw, 80px);
   letter-spacing: 0.06em;
   color: #ffe28a;
@@ -1296,6 +1348,8 @@ button.zkl-chip:active {
   border: 10px solid transparent;
   border-image: var(--hud-thin) 14 fill / 10px stretch;
   font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 16px;
   color: #ffe9b0;
   text-shadow: 0 2px 0 #000;
@@ -1338,7 +1392,8 @@ button.zkl-chip:active {
   display: block;
   margin-bottom: 3px;
   font-family: var(--display);
-  font-weight: 400;
+  font-stretch: 75%;
+  font-weight: 800;
   font-size: 15px;
   color: var(--gold-hi);
   text-shadow: 0 2px 0 #000;
@@ -1409,14 +1464,41 @@ button.zkl-chip:active {
     -webkit-text-stroke-width: 6px;
   }
   .zkl-log-i {
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 34px;
   }
   .zkl-log-i > canvas:not([style]) {
-    left: 5px;
-    top: 5px;
-    width: 30px;
-    height: 30px;
+    left: 4px;
+    top: 4px;
+    width: 26px;
+    height: 26px;
+  }
+  .zkl-gear {
+    width: 34px;
+    height: 34px;
+    right: 8px;
+    bottom: 8px;
+  }
+  .zkl-gear svg {
+    width: 16px;
+    height: 16px;
+  }
+  .zkl-mana.me {
+    right: 48px;
+    bottom: 8px;
+    transform-origin: 100% 100%;
+    scale: 0.66;
+  }
+  .zkl-mana.foe {
+    right: 8px;
+    top: 6px;
+    scale: 0.5;
+  }
+  .zkl-name {
+    height: 20px;
+    padding: 0 6px;
+    border-width: 5px;
+    font-size: 10px;
   }
 }
 
@@ -1467,52 +1549,14 @@ button.zkl-chip:active {
   pointer-events: none;
 }
 
-/* ---- round-4 details: the rival's aim, numbers on the name plates, the keys, hand notes ---------------- */
-.zkl-arrow.foe path {
-  stroke: #ff5a4a;
-}
-.zkl-arrow.foe polygon {
-  fill: #ff5a4a;
-}
+/* ---- the rival's aim, numbers on the name plates, hand notes -------------------------------------------- */
 .zkl-name small {
-  margin-left: 7px;
-  font-family: var(--mono);
-  font-size: 0.78em;
-  opacity: 0.7;
-}
-.zkl-keys {
-  position: absolute;
-  left: 16px;
-  bottom: 12px;
-  z-index: 5;
-  display: flex;
-  gap: 14px;
-  pointer-events: none;
-  font-family: Geist, Roboto, sans-serif;
-  font-size: 12px;
+  font-family: var(--display);
+  font-stretch: 75%;
   font-weight: 600;
-  color: rgba(236, 232, 223, 0.72);
-  text-shadow: 0 1px 3px #000;
-}
-.zkl-keys span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.zkl-keys kbd {
-  min-width: 22px;
-  height: 20px;
-  padding: 0 6px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 4px;
-  background: rgba(18, 16, 12, 0.85);
-  box-shadow: inset 0 0 0 1px rgba(244, 183, 40, 0.35);
-  font: 700 11px Geist, Roboto, sans-serif;
-  color: #f3ead6;
-}
-.zkl-root.portrait .zkl-keys {
-  display: none;
+  font-size: 0.9em;
+  letter-spacing: 0.02em;
+  color: #b8a888;
 }
 .zkl-handnotes {
   position: absolute;
@@ -1535,13 +1579,33 @@ button.zkl-chip:active {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 4vw;
-  padding: 0 6vw;
-  background: radial-gradient(70% 70% at 50% 50%, rgba(10, 8, 6, 0.55), rgba(4, 3, 2, 0.92));
-  font-family: Archivo, Geist, sans-serif;
+  gap: 3vw;
+  padding: 0 8vw;
+  background: rgba(4, 3, 2, 0.78);
   pointer-events: none;
   animation: zkl-vsin 0.3s ease;
   transition: opacity 0.45s;
+}
+/* a lacquered band across the middle, brass along its edges */
+.zkl-vsintro::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: min(46vh, 380px);
+  transform: translateY(-50%);
+  background:
+    linear-gradient(180deg, #d9a42a, #6a4808) top / 100% 3px no-repeat,
+    linear-gradient(0deg, #d9a42a, #6a4808) bottom / 100% 3px no-repeat,
+    linear-gradient(90deg, color-mix(in srgb, var(--fc0) 30%, #0b0907) 0%, #0b0907 42%, #0b0907 58%, color-mix(in srgb, var(--fc1) 30%, #0b0907) 100%);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  animation: zkl-vsband 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes zkl-vsband {
+  from {
+    transform: translateY(-50%) scaleY(0);
+  }
 }
 .zkl-vsintro.out {
   opacity: 0;
@@ -1552,10 +1616,10 @@ button.zkl-chip:active {
   }
 }
 .zkl-vsintro .side {
+  position: relative;
   display: grid;
   justify-items: center;
-  gap: 10px;
-  color: #fff;
+  gap: 6px;
   text-align: center;
   animation: zkl-vsl 0.6s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
 }
@@ -1573,16 +1637,16 @@ button.zkl-chip:active {
   }
 }
 .zkl-vsintro .pic {
-  width: min(30vh, 22vw);
+  width: min(30vh, 20vw);
   aspect-ratio: 1;
-  --s: 14px;
-  clip-path: var(--stepped);
-  background:
-    radial-gradient(70% 70% at 50% 65%, color-mix(in srgb, var(--fc) 55%, #000), #050505 85%);
-  box-shadow: inset 0 0 0 6px color-mix(in srgb, var(--fc) 70%, #d9a42a);
+  padding: 0;
+  border: 22px solid transparent;
+  border-image: var(--hud-frame-hollow) 30 / 22px stretch;
+  background: radial-gradient(70% 70% at 50% 70%, color-mix(in srgb, var(--fc) 50%, #000), #050505 85%) padding-box;
   display: grid;
   place-items: end center;
   overflow: hidden;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.7));
 }
 .zkl-vsintro .pic canvas {
   width: 100%;
@@ -1590,32 +1654,39 @@ button.zkl-chip:active {
   image-rendering: pixelated;
 }
 .zkl-vsintro b {
+  margin-top: 6px;
+  font-family: var(--display);
+  font-stretch: 75%;
   font-weight: 900;
-  font-stretch: 125%;
-  font-size: clamp(28px, 4.4vw, 64px);
-  letter-spacing: -0.01em;
+  font-size: clamp(30px, 3.6vw, 54px);
   line-height: 1;
-  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff4d6;
+  -webkit-text-stroke: 0.09em #1a0e02;
+  paint-order: stroke fill;
+  text-shadow: 0 0.06em 0 #8a5a0a, 0 0.12em 0 #1a0e02, 0 0.18em 0.2em rgba(0, 0, 0, 0.6);
 }
 .zkl-vsintro small {
-  font: 600 clamp(12px, 1.3vw, 17px) Geist, sans-serif;
-  color: rgba(255, 255, 255, 0.72);
-}
-.zkl-vsintro .side small::before {
-  content: "";
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  margin-right: 7px;
-  background: var(--fc);
+  font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 700;
+  font-size: clamp(12px, 1.1vw, 15px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--fc) 45%, #e8dcc0);
 }
 .zkl-vsintro .vs {
+  position: relative;
+  font-family: var(--display);
+  font-stretch: 75%;
   font-weight: 900;
-  font-stretch: 125%;
-  font-size: clamp(60px, 10vw, 150px);
-  color: #f4b728;
-  text-shadow: 0 6px 0 #6a4808, 0 0 40px rgba(0, 0, 0, 0.8);
+  font-size: clamp(64px, 9vw, 140px);
+  line-height: 1;
+  color: #ffe28a;
+  -webkit-text-stroke: 0.08em #2a1604;
+  paint-order: stroke fill;
+  text-shadow: 0 0.05em 0 #c4780a, 0 0.1em 0 #2a1604, 0 0.16em 0.2em rgba(0, 0, 0, 0.6);
   animation: zkl-vsslam 0.5s 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both;
 }
 @keyframes zkl-vsslam {

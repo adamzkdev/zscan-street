@@ -1257,7 +1257,7 @@ function fonts() {
     document.fonts.load('700 40px "Geist"'),
     document.fonts.load('500 30px "Geist"'),
     document.fonts.load('600 19px "Geist Mono"'),
-    document.fonts.load('40px "DotGothic16"'),
+    document.fonts.load('900 condensed 40px "Archivo"'),
   ])
     .then(() => {
       fontsOk = true;
@@ -1417,7 +1417,7 @@ function paintBackInto(cv: HTMLCanvasElement) {
   g.restore();
   // the name on a plate below
   g.save();
-  g.font = `40px DotGothic16, "Geist Mono", monospace`;
+  g.font = `900 condensed 42px Archivo, Geist, sans-serif`;
   g.textAlign = "center";
   g.textBaseline = "middle";
   g.lineWidth = 8;
@@ -1425,11 +1425,11 @@ function paintBackInto(cv: HTMLCanvasElement) {
   g.strokeText("ZK LEGENDS", 256, 586);
   g.fillStyle = GOLD.m2;
   g.fillText("ZK LEGENDS", 256, 586);
-  g.font = `22px DotGothic16, monospace`;
+  g.font = `700 20px Geist, sans-serif`;
   g.fillStyle = rgba(GOLD.m2, 0.7);
   g.fillText("零知传奇", 256, 626);
-  g.font = `22px DotGothic16, monospace`;
-  g.fillText("ZSTREET", 256, 128);
+  g.font = `800 condensed 22px Archivo, Geist, sans-serif`;
+  g.fillText("Z S T R E E T", 256, 128);
   g.restore();
 }
 export function paintBack(): HTMLCanvasElement {
@@ -1527,13 +1527,13 @@ export function paintPack(): HTMLCanvasElement {
   g.save();
   g.textAlign = "center";
   g.textBaseline = "middle";
-  g.font = `44px DotGothic16, monospace`;
+  g.font = `900 condensed 48px Archivo, Geist, sans-serif`;
   g.lineWidth = 8;
   g.strokeStyle = "#0b0805";
   g.strokeText("ZK LEGENDS", W / 2, 400);
   g.fillStyle = GOLD.m2;
   g.fillText("ZK LEGENDS", W / 2, 400);
-  g.font = `20px "Geist Mono", monospace`;
+  g.font = `700 condensed 20px Archivo, Geist, sans-serif`;
   g.fillStyle = "rgba(255,240,200,0.8)";
   g.fillText(T("5 CARDS · 1 RARE OR BETTER", "5 张卡 · 至少 1 张稀有"), W / 2, 440);
   g.restore();

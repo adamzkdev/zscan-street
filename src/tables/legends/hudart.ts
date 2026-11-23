@@ -589,6 +589,111 @@ function packIcon() {
   return c.toDataURL();
 }
 
+
+/** A ZEC crystal (Hearthstone's mana gem): a cut hexagon, facets lit from the top left, in a thin rim. */
+function crystal(face: [string, string, string, string], rim: Tones) {
+  const [c, g] = cv(64, 72);
+  const cx = 32,
+    cy = 36;
+  const R = 26;
+  const pts: [number, number][] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 3;
+    pts.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R * 1.18]);
+  }
+  const outer = poly(pts.map(([x, y]) => [cx + (x - cx) * 1.16, cy + (y - cy) * 1.12] as [number, number]));
+  g.save();
+  g.shadowColor = "rgba(0,0,0,0.7)";
+  g.shadowBlur = 4;
+  g.shadowOffsetY = 2;
+  g.fillStyle = rim.m0;
+  g.fill(outer);
+  g.restore();
+  metal(g, outer, rim, 2, 70, 1.5);
+  // facets: a small table in the middle, six panels round it
+  const inner: [number, number][] = pts.map(([x, y]) => [cx + (x - cx) * 0.42, cy - 3 + (y - cy) * 0.42]);
+  const shades = [face[3], face[2], face[1], face[0], face[1], face[2]];
+  for (let i = 0; i < 6; i++) {
+    const j = (i + 1) % 6;
+    g.fillStyle = shades[i];
+    g.fill(poly([pts[i], pts[j], inner[j], inner[i]]));
+  }
+  g.fillStyle = face[2];
+  g.fill(poly(inner));
+  // the table's glint
+  g.fillStyle = "rgba(255,255,255,0.55)";
+  g.fill(poly([inner[5], inner[0], [inner[0][0] - 2, inner[0][1] + 5], [inner[5][0] + 3, inner[5][1] + 2]]));
+  g.lineWidth = 1;
+  g.strokeStyle = "rgba(0,0,0,0.35)";
+  g.stroke(poly(pts));
+  return c.toDataURL();
+}
+
+/** The round brass button the gear sits in. */
+function knob() {
+  const [c, g] = cv(96, 96);
+  const o = new Path2D();
+  o.arc(48, 48, 44, 0, Math.PI * 2);
+  g.save();
+  g.shadowColor = "rgba(0,0,0,0.65)";
+  g.shadowBlur = 8;
+  g.shadowOffsetY = 3;
+  g.fillStyle = GOLD.m0;
+  g.fill(o);
+  g.restore();
+  metal(g, o, GOLD, 4, 92, 2.5);
+  const i = new Path2D();
+  i.arc(48, 48, 35, 0, Math.PI * 2);
+  lacquer(g, i, 13, 13, 70, 70, "#3a2a1a", "#0c0805");
+  g.save();
+  g.clip(i);
+  g.lineWidth = 6;
+  g.strokeStyle = "rgba(0,0,0,0.55)";
+  g.beginPath();
+  g.arc(49, 51, 35, 0, Math.PI * 2);
+  g.stroke();
+  g.restore();
+  return c.toDataURL();
+}
+
+
+/** The table's pointer: a pixel arrow in gold with a dark edge (2 px a pixel). */
+function cursor() {
+  const rows = [
+    "X...........",
+    "XX..........",
+    "XOX.........",
+    "XOOX........",
+    "XOOOX.......",
+    "XOOOOX......",
+    "XOOOOOX.....",
+    "XOOOOOOX....",
+    "XOOOOOOOX...",
+    "XOOOOOOOOX..",
+    "XOOOOOOOOOX.",
+    "XOOOOOOXXXXX",
+    "XOOOXOOX....",
+    "XOOXXOOX....",
+    "XOX..XOOX...",
+    "XX...XOOX...",
+    "X.....XOOX..",
+    "......XOOX..",
+    ".......XX...",
+  ];
+  const [c, g] = cv(32, 40);
+  const P = 2;
+  rows.forEach((r, y) =>
+    [...r].forEach((ch, x) => {
+      if (ch === ".") return;
+      // gold lit from the top left: lighter near the tip and the left edge
+      const k = (x + y * 0.6) / 14;
+      g.fillStyle = ch === "X" ? "#1a0e02" : k < 0.35 ? GOLD.m3 : k < 0.75 ? GOLD.m2 : GOLD.m1;
+      g.fillRect(x * P, y * P, P, P);
+    }),
+  );
+  return c.toDataURL();
+}
+
 // ---- install ---------------------------------------------------------------------------------------------
 
 let urls: Record<string, string> | null = null;
@@ -621,6 +726,11 @@ function paintAll(): Record<string, string> {
     "--hud-coin": `url(${coinIcon()})`,
     "--hud-rule": `url(${rule()})`,
     "--hud-pack": `url(${packIcon()})`,
+    "--hud-zec-on": `url(${crystal(["#7a4a04", "#c8860c", "#f4b728", "#fff0b0"], GOLD)})`,
+    "--hud-zec-extra": `url(${crystal(["#0e4a18", "#2a9a3a", "#7ee08a", "#e0ffd8"], GOLD)})`,
+    "--hud-zec-off": `url(${crystal(["#0c0a08", "#1a1612", "#2a241c", "#3a3226"], BRONZE)})`,
+    "--hud-knob": `url(${knob()})`,
+    "--hud-cursor": `url(${cursor()})`,
   };
 }
 
