@@ -110,6 +110,11 @@ export class GtaCamera {
     this.applyShake(dt, speed);
   }
 
+  /** On foot with the follow camera: in behind the body's heading, faster when running. */
+  follow(dt: number, heading: number, speed: number) {
+    this.ease(heading, this.footFar ? -0.26 : -0.2, dt, 3 + Math.min(4, speed * 0.6));
+  }
+
   private ease(yaw: number, pitch: number, dt: number, k: number) {
     let d = yaw - this.yaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));

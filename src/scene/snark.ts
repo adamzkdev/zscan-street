@@ -452,6 +452,8 @@ export class Snark {
   private far = false;
   private legsOn = true;
   private applyDetail() {
+    // (drawn in 3D by the game: the flat figure stays hidden, see set3D)
+    if (this.in3D) return;
     const near = !this.far;
     for (const l of this.legs) l.visible = near && this.legsOn;
     if (this.lap) this.lap.visible = near && !!this.seat;
@@ -781,6 +783,29 @@ export class Snark {
 
   get isSeated() {
     return this.seated;
+  }
+
+  /** Drawn as a 3D body by the game (src/gta/people3d.ts): the flat figure and its blob shadow hidden, the bubbles kept. */
+  set3D(on: boolean) {
+    if (this.in3D === on) return;
+    this.in3D = on;
+    for (const o of [this.body, this.glow, this.hold, ...this.legs]) o.visible = !on && (o !== this.glow || this.glowWas);
+    this.shadow.visible = !on;
+    if (this.lap) this.lap.visible = !on && !!this.seat;
+  }
+  private in3D = false;
+  private glowWas = false;
+  /** How far over it is right now (0 standing, 1 flat), and to which side. */
+  get down() {
+    if (this.knockT < 0) return { k: 0, side: this.knockSide };
+    const t = this.knockT;
+    const fall = Math.min(1, t / 0.32);
+    const up = t > 3.1 ? Math.min(1, (t - 3.1) / 0.5) : 0;
+    return { k: (1 - (1 - fall) ** 2) * (1 - up * up), side: this.knockSide };
+  }
+  /** Seated (a bench, a chair): the seat's height over its feet, else 0. */
+  get seatHeight() {
+    return this.perchH;
   }
 
   // ---- knocked over (the game, src/gta: a car or a sprint into them) ----

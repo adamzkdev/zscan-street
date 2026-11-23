@@ -80,7 +80,7 @@ export class FootPlayer {
   /**
    * One frame: `mx`, `my` the stick (right, forward) relative to the camera's heading `camYaw`.
    */
-  update(dt: number, mx: number, my: number, mag: number, sprint: boolean, jump: boolean, camYaw: number, world: FootWorld) {
+  update(dt: number, mx: number, my: number, mag: number, sprint: boolean, jump: boolean, camYaw: number, world: FootWorld, turnTo = true) {
     const fx = -Math.sin(camYaw),
       fz = -Math.cos(camYaw);
     // the camera's right
@@ -97,8 +97,8 @@ export class FootPlayer {
     const k = this.grounded ? (want > 0 ? 12 : 16) : 2.5;
     this.vel.x += (tx - this.vel.x) * Math.min(1, dt * k);
     this.vel.z += (tz - this.vel.z) * Math.min(1, dt * k);
-    // turn to face the way you go
-    if (l > 1e-3 && want > 0.2) {
+    // turn to face the way you go (unless backing up, the follow camera's way)
+    if (turnTo && l > 1e-3 && want > 0.2) {
       const target = Math.atan2(-dx, -dz);
       let d = target - this.facing;
       d = Math.atan2(Math.sin(d), Math.cos(d));

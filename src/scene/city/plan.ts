@@ -403,6 +403,9 @@ export interface PropJob {
 const VOX = 1 / 6;
 
 /** Every building and prop of the city, as jobs for the workers, plus extra collision shapes. */
+/** Small street furniture that steps aside from a bigger thing it was put on top of. */
+const SMALL = new Set(["bollard", "cone", "hydrant", "trashBin", "mailbox", "stopPole", "streetSign"]);
+
 export function planCity() {
   const jobs: BuildingJob[] = [];
   const props: PropJob[] = [];
@@ -1082,6 +1085,20 @@ export function planCity() {
     circles.push([x, z, 0.5]);
     if (circles.length > 400) break;
   }
+
+  // street furniture standing in each other (a bollard in a lamp post, a cone in a hydrant): the
+  // small one steps along a little, the way the two are apart most
+  for (let i = 0; i < props.length; i++)
+    for (let j = 0; j < i; j++) {
+      const a = props[i],
+        b = props[j];
+      if (a.type === b.type || Math.hypot(a.x - b.x, a.z - b.z) > 0.65) continue;
+      if (!SMALL.has(a.type) && !SMALL.has(b.type)) continue;
+      const m = SMALL.has(a.type) ? a : b;
+      const o = m === a ? b : a;
+      if (Math.abs(m.x - o.x) >= Math.abs(m.z - o.z)) m.x = o.x + (m.x >= o.x ? 0.75 : -0.75);
+      else m.z = o.z + (m.z >= o.z ? 0.75 : -0.75);
+    }
 
   return {
     jobs,

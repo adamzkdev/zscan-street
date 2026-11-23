@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { bothWays } from "./textures";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { DecalGeometry } from "three/examples/jsm/geometries/DecalGeometry.js";
 import { CURB, type City } from "./city";
@@ -115,7 +116,7 @@ export class Anniversary {
     g.fillText("A DECADE OF FINANCIAL PRIVACY", 512, 254);
     const texture = new THREE.CanvasTexture(label);
     texture.colorSpace = THREE.SRGBColorSpace;
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 2.31), new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false }));
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 2.31), bothWays(new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false })));
     panel.position.set(-0.4, -1.6, 0.05);
     ten.add(panel);
     this.group.add(ten);

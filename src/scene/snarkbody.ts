@@ -391,6 +391,45 @@ export function preloadSnarks(ids: number[], wait = 4000): Promise<void> {
   return Promise.race([Promise.all(ids.map((id) => loadModel(id))).then(() => {}), new Promise<void>((r) => setTimeout(r, wait))]);
 }
 
+/** A zkSNARK's parts for the game's 3D street people (src/gta/people3d.ts): its head and body merged, colours, proportions. */
+export interface SnarkParts {
+  geo: THREE.BufferGeometry;
+  cloth: number;
+  trousers: number;
+  skin: number;
+  neckY: number;
+  halfW: number;
+  real: boolean;
+  /** Done with it (the model cache may free it). */
+  release(): void;
+}
+export async function snarkParts(id: number): Promise<SnarkParts> {
+  const m = await loadModel(id);
+  m.users++;
+  const geo = mergeHeadBody(m);
+  geo.computeBoundingBox();
+  let done = false;
+  return {
+    geo,
+    cloth: m.cloth,
+    trousers: m.trousers,
+    skin: m.skin,
+    neckY: m.neckY,
+    halfW: m.halfW,
+    real: m.real,
+    release: () => {
+      if (done) return;
+      done = true;
+      m.users--;
+      geo.dispose();
+    },
+  };
+}
+/** The body's measures (m), for limbs drawn elsewhere. */
+export const SNARK_DIMS = { get LEG() { return LEG; }, get ARM_W() { return ARM_W; }, get UPPER() { return UPPER; }, get FORE() { return FORE; }, get HAND() { return HAND; }, get LEG_W() { return LEG_W; } };
+/** The party's cel-shaded steps, for materials drawn elsewhere. */
+export const snarkToon = () => toonSteps();
+
 // ---- materials -------------------------------------------------------------------------------------
 
 let steps: THREE.DataTexture | null = null;

@@ -534,6 +534,41 @@ export class Crowd {
     return true;
   }
 
+  /** Hide walker `i` (the game draws it in 3D, src/gta/people3d.ts) or show it again. */
+  hide(i: number, on: boolean) {
+    const c = this.mesh.geometry.getAttribute("iC") as THREE.InstancedBufferAttribute;
+    c.setY(i, on ? 0 : (this.people[i].scale ?? 1));
+    c.needsUpdate = true;
+  }
+
+  /** Everyone but dogs and runners within `r` of (x, z), the fallen included. */
+  near(x: number, z: number, r: number): number[] {
+    const out: number[] = [];
+    const tmp = new THREE.Vector3();
+    for (let i = 0; i < this.people.length; i++) {
+      const k = this.people[i].kind;
+      if (k === Kind.Race || k === Kind.DogLoop || k === Kind.DogStand || k === Kind.DogPath) continue;
+      this.positionOf(i, tmp);
+      if ((tmp.x - x) ** 2 + (tmp.z - z) ** 2 < r * r) out.push(i);
+    }
+    return out;
+  }
+
+  /** How far over walker `i` is (0 standing, 1 flat on the ground), as its shader draws it. */
+  fallen(i: number) {
+    const p = this.people[i];
+    if (p.kind !== Kind.Down) return 0;
+    const t = this.uniforms.uTime.value - p.a[3];
+    const fall = Math.min(1, Math.max(0, t / 0.32));
+    const up = Math.min(1, Math.max(0, (t - 3.1) / 0.5));
+    return (1 - (1 - fall) ** 2) * (1 - up * up);
+  }
+
+  /** Walker `i`'s zkSNARK slot. */
+  slotOf(i: number) {
+    return this.people[i].slot ?? 0;
+  }
+
   /** Everyone (not dogs, not runners) within `r` of (x, z). */
   within(x: number, z: number, r: number): number[] {
     const out: number[] = [];

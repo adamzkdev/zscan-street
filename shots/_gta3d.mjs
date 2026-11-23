@@ -1,0 +1,33 @@
+// node shots/_gta3d.mjs [URL] [OUT]: the follow camera and the street's people in 3D (src/gta)
+import puppeteer from "puppeteer-core";
+const [URL = "http://localhost:3061/?debug&gta=1192&theme=day", OUT = "shots/gta/p3d"] = process.argv.slice(2);
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1600, height: 900 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push("pageerror " + e.message));
+p.on("console", (m) => (m.type() === "error" || /gta:/.test(m.text())) && errs.push(m.text().slice(0, 300)));
+await p.goto(URL);
+await p.waitForFunction(() => window.__streetUp && window.street?.gta?.solid?.ready, { timeout: 240000, polling: 300 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await p.evaluate(() => { const g = street.gta; g.hud.coach(-1); g.player.place(-40, 0.2, 4.5, -Math.PI / 2); g.cam.behind(-Math.PI / 2, -0.15); });
+await sleep(3500);
+await p.screenshot({ path: `${OUT}-1.png` });
+console.log(await p.evaluate(() => JSON.stringify({ in3d: street.gta.people.slots.size, geos: street.gta.people.geos.size, calls: street.renderer.info.render.calls })));
+await p.keyboard.down("KeyW");
+await sleep(1500);
+await p.keyboard.down("KeyD");
+await sleep(700);
+await p.keyboard.up("KeyD");
+await sleep(1200);
+await p.keyboard.up("KeyW");
+await sleep(300);
+await p.screenshot({ path: `${OUT}-2.png` });
+console.log(await p.evaluate(() => JSON.stringify({ facing: street.gta.player.facing.toFixed(2), cam: street.gta.cam.yaw.toFixed(2), in3d: street.gta.people.slots.size })));
+// a busy pavement: the heart's south side
+await p.evaluate(() => { const g = street.gta; g.player.place(0, 0.2, 9, Math.PI); g.cam.behind(Math.PI, -0.12); });
+await sleep(3000);
+await p.screenshot({ path: `${OUT}-3.png` });
+const perf = await p.evaluate(async () => { let n = 0; const t0 = performance.now(); await new Promise((r) => { const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); }); return (n / ((performance.now() - t0) / 1000)).toFixed(1); });
+console.log("fps", perf, await p.evaluate(() => JSON.stringify({ in3d: street.gta.people.slots.size, calls: street.renderer.info.render.calls })));
+console.log("errors", errs.length, errs.slice(0, 5).join("\n"));
+await b.close();

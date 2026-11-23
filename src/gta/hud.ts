@@ -76,6 +76,8 @@ export interface MenuHost {
 }
 
 export interface Settings {
+  /** On foot: the camera follows behind by itself (W ahead, A/D turn), or the mouse turns it. */
+  follow: boolean;
   carView: 0 | 1 | 2;
   footFar: boolean;
   fovAdd: number;
@@ -86,7 +88,7 @@ export interface Settings {
   units: "kmh" | "mph";
   volume: number;
 }
-export const DEFAULTS: Settings = { carView: 0, footFar: false, fovAdd: 0, sens: 1, vibe: true, blur: "subtle", hud: "full", units: "kmh", volume: 1 };
+export const DEFAULTS: Settings = { follow: true, carView: 0, footFar: false, fovAdd: 0, sens: 1, vibe: true, blur: "subtle", hud: "full", units: "kmh", volume: 1 };
 
 const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 const COACH = TOUCH
@@ -97,7 +99,7 @@ const COACH = TOUCH
       { eye: "Find your way · 4 / 4", title: "The map", text: `MAP: tap a street to go there. Walk up to a lit door and tap ENTER to go in. MENU for the camera, the graphics and your zkSNARK.` },
     ]
   : [
-      { eye: "Welcome to ZStreet · 1 / 4", title: "Move", text: `${kbd("W")}${kbd("A")}${kbd("S")}${kbd("D")} or ${kbd("Z")}${kbd("Q")}${kbd("S")}${kbd("D")} to run · ${kbd("Shift")} sprint · ${kbd("Space")} jump. Click the street to steer the camera with the mouse.` },
+      { eye: "Welcome to ZStreet · 1 / 4", title: "Move", text: `${kbd("W")} or ${kbd("Z")} to run, ${kbd("A")}${kbd("D")} or ${kbd("Q")}${kbd("D")} to turn, ${kbd("S")} back · ${kbd("Shift")} sprint · ${kbd("Space")} jump. The camera follows you (Menu › Camera for a free one).` },
       { eye: "Get a ride · 2 / 4", title: "Take a car", text: `Walk up to any car and press ${kbd("F")}. ${kbd("Space")} handbrake to drift · ${kbd("Shift")} nitrous · ${kbd("C")} camera · ${kbd("E")} horn · ${kbd("R")} back on the road.` },
       { eye: "The chain is the clock · 3 / 4", title: "Beat the block", text: `Blocks are real. The gold beam is the MEMPOOL HQ: take a parcel there and deliver it before the next block is mined.` },
       { eye: "Find your way · 4 / 4", title: "The map", text: `${kbd("M")} opens the map: click a street to go there. Walk up to a lit door and press ${kbd("E")} to go in. ${kbd("Esc")} for the menu, ${kbd("T")} day or night.` },
@@ -735,7 +737,8 @@ export class GtaHud {
     const slider = (key: string, min: number, max: number, step: number, v: number, unit = "") => `<div class="gh-slide"><input type="range" data-key="${key}" min="${min}" max="${max}" step="${step}" value="${v}"/><b>${v}${unit}</b></div>`;
     let body = "";
     if (this.tab === "camera")
-      body = `<h3>At the wheel <span>C</span></h3>${seg("carView", [["0", "Chase"], ["1", "Far chase"], ["2", "Bonnet"]], String(S.carView))}
+      body = `<h3>Camera</h3>${seg("follow", [["1", "Follows you", "always behind · A/D turn"], ["0", "Free", "the mouse turns it"]], S.follow ? "1" : "0")}
+        <h3>At the wheel <span>C</span></h3>${seg("carView", [["0", "Chase"], ["1", "Far chase"], ["2", "Bonnet"]], String(S.carView))}
         <h3>On foot <span>C</span></h3>${seg("footFar", [["0", "Near", "over the shoulder"], ["1", "Far", "more of the street"]], S.footFar ? "1" : "0")}
         <h3>Field of view</h3>${slider("fovAdd", -10, 20, 1, S.fovAdd, "°")}
         <h3>Mouse and stick</h3>${slider("sens", 0.4, 2.2, 0.1, S.sens, "×")}
@@ -780,7 +783,7 @@ export class GtaHud {
             if ((v === "1") !== this.menu.sound()) this.menu.toggleSound();
           } else {
             const s = { ...S } as Record<string, unknown>;
-            s[key] = key === "carView" ? Number(v) : key === "footFar" || key === "vibe" ? v === "1" : v;
+            s[key] = key === "carView" ? Number(v) : key === "footFar" || key === "vibe" || key === "follow" ? v === "1" : v;
             this.menu.apply(s as unknown as Settings);
           }
           this.renderMenu();

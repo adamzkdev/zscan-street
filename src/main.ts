@@ -19,6 +19,7 @@ import { memeStats, posterHit, updateMemes } from "./scene/memes";
 import { cityMemes } from "./scene/memewalls";
 import { LampLights, speedBlur, tiltShift } from "./scene/post";
 import { GtaMode } from "./gta";
+import type { Person3 } from "./gta/people3d";
 import { FinishPass, GradePass, ScenePass } from "./scene/finish";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { applyTheme, setRainWanted, type Theme } from "./scene/theme";
@@ -2929,6 +2930,9 @@ const swing = new StreetSwing({
   sound: () => sound.on,
 });
 // ---- the game: ZStreet in the third person, cars, challenges (src/gta) ----------------------------
+/** The game's keys for the street's people drawn in 3D (src/gta/people3d.ts). */
+const gtaKeys = new WeakMap<Snark, string>();
+let gtaKeyN = 0;
 /** Who already shouted at your car, until when (ms). */
 const gtaShouted = new WeakMap<Snark, number>();
 const GTA_SHOUTS = ["HEY!", "WATCH IT!", "Slow down!", "Shielded driving, please!", "My parcel!", "Not on the pavement!"];
@@ -2953,6 +2957,41 @@ gta = new GtaMode({
       .map((d) => ({ key: d.key, x: d.at.x, z: d.at.z, fx: d.front.x, fz: d.front.z, label: PLACES[d.key] ?? d.key, y: groundAt(d.at.x, d.at.z) ?? CURB })),
   enter: (key) => {
     if (!jumping && !closeChoice) enterPlace(key);
+  },
+  people3d: (x, z, r) => {
+    const out: Person3[] = [];
+    for (const s of director.snarks) {
+      if (!s.root.visible || s.root.parent !== scene || s.state === "riding") continue;
+      const p = s.root.position;
+      if ((p.x - x) ** 2 + (p.z - z) ** 2 > r * r) continue;
+      let k = gtaKeys.get(s);
+      if (!k) gtaKeys.set(s, (k = `s${++gtaKeyN}`));
+      out.push({
+        key: k,
+        id: s.id,
+        pos: (o) => o.copy(s.root.position),
+        down: () => s.down,
+        face: () => s.faceDir,
+        seat: () => s.seatHeight,
+        hide: (on) => s.set3D(on),
+        alive: () => s.root.visible && s.root.parent === scene && s.state !== "riding",
+      });
+    }
+    const crowd = crowdOf();
+    if (crowd)
+      for (const i of crowd.near(x, z, r)) {
+        const id = slotId(crowd.slotOf(i));
+        out.push({
+          key: `c${i}`,
+          id,
+          pos: (o) => crowd.positionOf(i, o),
+          down: () => ({ k: crowd.fallen(i), side: i % 2 ? 1 : -1 }),
+          face: () => null,
+          hide: (on) => crowd.hide(i, on),
+          alive: () => true,
+        });
+      }
+    return out;
   },
   knock: (x, z, vx, vz, r) => {
     let n = 0;

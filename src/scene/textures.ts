@@ -597,3 +597,23 @@ export function waterTexture() {
   }
   return tex(c, { repeat: [1, 1] });
 }
+
+/**
+ * A sign seen from both sides reads right from both: the back face samples its picture mirrored
+ * back (a plain DoubleSide plane shows its text backwards from behind).
+ */
+export function bothWays<T extends THREE.Material>(m: T): T {
+  m.side = THREE.DoubleSide;
+  m.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace(
+      "#include <map_fragment>",
+      `#ifdef USE_MAP
+        vec2 bwUv = gl_FrontFacing ? vMapUv : vec2(1.0 - vMapUv.x, vMapUv.y);
+        vec4 sampledDiffuseColor = texture2D( map, bwUv );
+        diffuseColor *= sampledDiffuseColor;
+      #endif`,
+    );
+  };
+  m.customProgramCacheKey = () => "bothWays";
+  return m;
+}

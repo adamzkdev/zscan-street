@@ -12,6 +12,7 @@ import { DEFAULTS, GtaHud, type Settings } from "./hud";
 import { GtaInput } from "./input";
 import { Missions } from "./missions";
 import { WorldNet } from "./net";
+import { People3D, type Person3 } from "./people3d";
 import { Heat } from "./police";
 import { Roads } from "./roads";
 import { GtaSound, type AudioOut } from "./sound";
@@ -43,6 +44,8 @@ export interface GtaHost {
   /** The walk-in places' doors, and going in. */
   doors(): DoorSpot[];
   enter(key: string): void;
+  /** The street's people within `r` of (x, z), to be drawn in 3D. */
+  people3d(x: number, z: number, r: number): Person3[];
   /** Knock over whoever stands within `r` of (x, z), flung along (fx, fz): how many went down. */
   knock(x: number, z: number, fx: number, fz: number, r: number): number;
   canvas: HTMLCanvasElement;
@@ -103,6 +106,7 @@ export class GtaMode {
   readonly solid: StreetSolid;
   readonly doors: Doors;
   readonly net: WorldNet;
+  readonly people: People3D;
   car: DriveCar | null = null;
   /** Cars you left (and your own ZK-GT), parked where you got out. */
   parked: DriveCar[] = [];
@@ -176,11 +180,12 @@ export class GtaMode {
     this.apply(this.settings);
     this.doors = new Doors(host.scene);
     this.net = new WorldNet(host.scene);
+    this.people = new People3D(host.scene, (x, z, r) => host.people3d(x, z, r));
     this.solid = new StreetSolid({
       renderer: host.renderer,
       scene: host.scene,
       area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
-      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
+      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
       surface: (x, z) => this.roads.surface(x, z),
     });
     host.scene.add(this.player.group);
@@ -189,7 +194,7 @@ export class GtaMode {
     host.walker.mover = () => this.active;
     // the mouse: locked to the view while playing on a desktop
     host.canvas.addEventListener("click", () => {
-      if (!this.active || this.paused || matchMedia("(pointer: coarse)").matches) return;
+      if (!this.active || this.paused || this.settings.follow || matchMedia("(pointer: coarse)").matches) return;
       if (document.pointerLockElement !== host.canvas) void host.canvas.requestPointerLock?.()?.catch?.(() => {});
     });
     document.addEventListener("pointerlockchange", () => {
@@ -317,6 +322,7 @@ export class GtaMode {
     this.doors.set(this.host.doors());
     this.doors.show(true);
     this.net.join(true);
+    this.people.show(true);
     this.hud.show(true);
     // the street's solid shape (once, and again when the far city has streamed in)
     if (!this.solid.ready) {
@@ -347,6 +353,7 @@ export class GtaMode {
     this.missions.setVisible(false);
     this.doors.show(false);
     this.net.join(false);
+    this.people.show(false);
     this.heat.clear();
     this.sound.siren(0);
     this.player.group.visible = false;
@@ -583,6 +590,7 @@ export class GtaMode {
     const vel = this.car ? { vx: this.car.vel.x, vz: this.car.vel.y } : { vx: this.player.vel.x, vz: this.player.vel.z };
     const near = this.heat.update(dt, { x: at.x, z: at.z, ...vel, speed: this.car?.speed ?? this.player.speed, inCar: !!this.car }, (self) => this.carWorld(self));
     this.sound.siren(this.heat.chasers.length ? Math.max(0.15, 1 - near / 140) : 0);
+    this.people.update(dt, at.x, at.z, this.car ? null : this.player.pos, this.cam.camera.position);
     this.net.update(dt, { x: at.x, y: this.car ? 0 : this.player.pos.y, z: at.z, h: heading, c: this.car?.kind ?? "", v: this.car?.speed ?? this.player.speed, s: this.player.id });
     this.hudFrame(dt, at, heading);
   }
@@ -621,7 +629,18 @@ export class GtaMode {
     const m = this.paused ? { x: 0, y: 0, mag: 0 } : i.move();
     const solid = this.solid;
     const pl = this.player;
-    this.player.update(dt, m.x, m.y, m.mag, !this.paused && i.sprint, !this.paused && i.jump, this.cam.yaw, {
+    // the follow camera: A/D turn the body, W/S go ahead and back; the camera swings in behind
+    const follow = this.settings.follow;
+    let mx = m.x,
+      my = m.y,
+      ref = this.cam.yaw;
+    if (follow) {
+      pl.facing += -m.x * (pl.speed > 5 ? 2.2 : 2.8) * dt;
+      ref = pl.facing;
+      mx = 0;
+      my = m.y < 0 ? m.y * 0.4 : m.y;
+    }
+    this.player.update(dt, mx, my, follow ? Math.abs(my) + (m.x !== 0 && my === 0 ? 0 : 0) : m.mag, !this.paused && i.sprint && my > 0, !this.paused && i.jump, ref, {
       blocked: (x, z) => {
         if (this.parkedAt(x, z)) return true;
         // (the rock, the bridge, the woods, the platforms: their own rules)
@@ -636,8 +655,10 @@ export class GtaMode {
         const f = solid.foot(x, z, pl.floor);
         return f.ok && Number.isFinite(f.floor) ? Math.max(-0.05, f.floor) : pl.floor;
       },
-    });
-    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready ? solid.wall(x, z) : h.nav.wall(x, z)) });
+    }, !follow || my >= 0);
+    // behind you again a moment after a look round (always, with the follow camera)
+    if (follow && i.idleLook > 0.6) this.cam.follow(dt, pl.facing, pl.speed);
+    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z)) || h.nav.wall(x, z) });
     // sprinting into people: they go down
     if (pl.speed > 6 && !this.paused) {
       this.reactT -= dt;
@@ -721,7 +742,7 @@ export class GtaMode {
     const horn = !this.paused && i.down("KeyE", "KeyQ");
     if (horn !== this.horn) this.sound.hornOn((this.horn = horn));
     this.cam.back = !this.paused && i.down("KeyB");
-    this.cam.car(dt, car.group.position, car.yaw, car.speed, car.vF < 0, i.idleLook, { wall: (x, z) => (this.solid.ready ? this.solid.wall(x, z) : h.nav.wall(x, z)) }, car.spec.len);
+    this.cam.car(dt, car.group.position, car.yaw, car.speed, car.vF < 0, this.settings.follow ? Math.max(i.idleLook, i.idleLook > 0.5 ? 2 : 0) : i.idleLook, { wall: (x, z) => (this.solid.ready && this.solid.wall(x, z)) || h.nav.wall(x, z) }, car.spec.len);
     this.sound.drive({ rpm: car.rpm, throttle: d.throttle, drift: car.drifting, nitro: car.nosOn, speed: car.speed });
     const strong = this.settings.blur === "strong";
     const blur = this.settings.blur === "off" ? 0 : Math.max(0, car.speed - (strong ? 12 : 28)) / (strong ? 30 : 70);
