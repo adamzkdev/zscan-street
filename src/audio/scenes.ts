@@ -10,6 +10,7 @@ import { bell, brass, burst, clank, clap, drum, type Room, type Scene, tone, whi
 import { loop, preload, shot } from "./samples";
 import { pyramidMusic } from "./egypt";
 import { DOME, planetariumMusic } from "./fedos";
+import { blankCanvasMusic, WAREHOUSE } from "./blank";
 
 export interface SceneEnv {
   night: boolean;
@@ -174,6 +175,16 @@ const planetarium: Preset = {
   build(s) {
     loop(s, "museum", 0.18, { lp: 1400 });
     planetariumMusic(s);
+  },
+};
+
+/** The Louvre's A BLANK CANVAS: a bare warehouse, the hush of the museum far off, its own music (./blank.ts). */
+const blankCanvas: Preset = {
+  room: WAREHOUSE,
+  rain: 0.04,
+  build(s) {
+    loop(s, "museum", 0.12, { lp: 900 });
+    blankCanvasMusic(s);
   },
 };
 
@@ -639,6 +650,7 @@ export const PRESETS: Record<string, Preset> = {
   hypogeum,
   museum,
   planetarium,
+  "blank-canvas": blankCanvas,
   auction: auctionRoom,
   "quiet-hall": quietHall,
   "hotel-lobby": hotelLobby,
@@ -757,7 +769,7 @@ export function presetFor(key: string, floor: number, name: string): string {
     case "colosseum":
       return has("hypogeum") ? "hypogeum" : "colosseum";
     case "museum":
-      return has("planetarium") ? "planetarium" : "museum";
+      return has("planetarium") ? "planetarium" : has("blank canvas") ? "blank-canvas" : "museum";
     case "hotel":
       if (has("casino")) return "casino";
       if (has("spa")) return "spa";

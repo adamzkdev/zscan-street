@@ -6,6 +6,7 @@ import { aile } from "./aile";
 import { apartments } from "./apartments";
 import { memorial } from "./memorial";
 import { planetarium } from "./planetarium";
+import { blankCanvas } from "./blankcanvas";
 import { Collection } from "./data";
 import { etats } from "./etats";
 import { galerie } from "./galerie";
@@ -14,13 +15,15 @@ import { FLOOR_Y, MuseumKit } from "./kit";
 import { FLOORS } from "./parts";
 
 /**
- * LOUVRE · zkSNARK MUSEUM, entered through the glass pyramid. Six levels, stacked in one scene
+ * LOUVRE · zkSNARK MUSEUM, entered through the glass pyramid. Eight levels, stacked in one scene
  * (only the one you stand on is drawn): the Hall Napoléon under the pyramid; the Grande Galerie,
  * the collection's rarest hung in gilt frames down a long vaulted gallery; the Daru staircase with
  * the winged Victory and the Salle des États where zkSNARKs #1, the original, hangs alone behind
  * glass; the Napoleon III apartments; the Aile des Apparitions, the zkSNARKs purge as a
  * sculpture of pixels and the explorer's charts; the Memorial of the Purged, for the 676; and the
- * FedosArt Planetarium, the artist behind zkSNARKs and his works under a turning sky. Every painting
+ * FedosArt Planetarium, the artist behind zkSNARKs and his works under a turning sky; and A BLANK
+ * CANVAS, zkSNARKs' Experiment_002: a bare warehouse where his pieces are thrown across the walls
+ * and through a monolith cut in the shape of a zkSNARK, a first look at each. Every painting
  * is a real zkSNARK (or one of his works): hover for its name, click for its data.
  */
 export function buildMuseum(ctx: InteriorContext): Interior {
@@ -33,7 +36,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
   const k = new MuseumKit(ctx, scene);
   const data = new Collection();
 
-  const built: { spawn: THREE.Vector3; yaw: number; onData?: (d: Collection) => void; fill?: () => void }[] = [hall(k, data), galerie(k, data), etats(k, data), apartments(k, data), aile(k, data), memorial(k, data), planetarium(k, data)];
+  const built: { spawn: THREE.Vector3; yaw: number; onData?: (d: Collection) => void; fill?: () => void }[] = [hall(k, data), galerie(k, data), etats(k, data), apartments(k, data), aile(k, data), memorial(k, data), planetarium(k, data), blankCanvas(k)];
 
   // ---- the paintings get their zkSNARKs once the collection is known -------------------------
   const idOf: (number | null)[][] = k.hangs.map((l) => l.map((h) => h.id ?? null));
@@ -69,7 +72,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
   };
 
   let theme: Theme = ctx.theme;
-  const backgrounds = [3, 30, 30, 30, 30, 30, 30];
+  const backgrounds = [3, 30, 30, 30, 30, 30, 30, 34];
   const setFloor = (n: number) => {
     k.current = n;
     k.visit(n);
@@ -77,8 +80,9 @@ export function buildMuseum(ctx: InteriorContext): Interior {
     const view = ctx.cityView("museum", backgrounds[n], 4);
     if (view) scene.background = view;
     const night = theme === "night";
-    if (hemi) hemi.intensity = [1.05, 0.55, 0.6, 0.45, 0.4, 0.6, 0.18][n] * (night ? 0.5 : 1);
-    scene.environmentIntensity = night ? 0.22 : 0.45;
+    if (hemi) hemi.intensity = [1.05, 0.55, 0.6, 0.45, 0.4, 0.6, 0.18, 0.1][n] * (night ? 0.5 : 1);
+    // the warehouse (7) is lit by its projection, not the room
+    scene.environmentIntensity = (night ? 0.22 : 0.45) * (n === 7 ? 0.35 : 1);
     k.setNight(night);
   };
   const setTheme = (t: Theme) => {

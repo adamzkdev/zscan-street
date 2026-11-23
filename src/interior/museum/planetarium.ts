@@ -1149,7 +1149,7 @@ function drawName(c: CanvasRenderingContext2D, w: number, h: number) {
 }
 
 /** "FedosArt" over his head, in the city's pixel letters. */
-function nameSprite() {
+export function nameSprite() {
   const t = canvasTex(512, 128, drawName, { repeat: false });
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, toneMapped: false }));
   s.scale.set(1.15, 0.29, 1);
@@ -1166,7 +1166,7 @@ function nameSprite() {
 // ---- textures --------------------------------------------------------------------------------------
 
 /** A four-pointed spark, his signature light. */
-function sparkTexture() {
+export function sparkTexture() {
   return canvasTex(
     256,
     256,
