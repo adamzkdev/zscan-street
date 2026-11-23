@@ -19,7 +19,7 @@ import { FieldBuilder } from "../scene/swing/field";
 const LOW = -3.5;
 const HIGH = 2.4;
 /** On foot: what a step climbs. */
-export const STEP = 0.48;
+export const STEP = 0.62;
 /** At the wheel: over the road's own surface, this stops a car. */
 const CURB_CAR = 0.45;
 /** Under this (or nothing at all drawn): water, a hole. */

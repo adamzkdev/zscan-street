@@ -402,6 +402,10 @@ export class Metro {
   readonly group = new THREE.Group();
   readonly route: Route;
   readonly stations: Station[] = [];
+  /** Each station's stairs, how far out from the track (over the pavement of the street below). */
+  private stairZ: number[] = [];
+  /** Each station's ends that have a flight (one that would land in a crossing street has none). */
+  private stairEnds: number[][] = [];
   trains: Train[] = [];
   /** Each station's frame (to walk its platforms and stairs on foot). */
   private frames: THREE.Matrix4[] = [];
@@ -539,6 +543,29 @@ export class Metro {
         return o;
       };
       const L = 28;
+      // the street under the track: its half width, so the stairs come down on the pavement
+      const near = (list: number[], v: number) => list.findIndex((a) => Math.abs(a - v) < 1.5);
+      const zi = near(GRID.zs, z),
+        xi = near(GRID.xs, x);
+      const half = along === "x" ? (zi >= 0 ? GRID.zw[zi] / 2 : 5) : xi >= 0 ? GRID.xw[xi] / 2 : 5;
+      const SZ = Math.max(5.2, half + 1.3);
+      this.stairZ.push(SZ);
+      // each end's flight must come down on a pavement, never across a street that crosses the line
+      g.updateMatrixWorld(true);
+      const inRoad = (x: number, z: number) =>
+        x > CITY.minX && x < CITY.maxX && z > CITY.minZ && z < CITY.maxZ && (GRID.xs.some((c, i) => Math.abs(x - c) < GRID.xw[i] / 2 + 0.3) || GRID.zs.some((c, i) => Math.abs(z - c) < GRID.zw[i] / 2 + 0.3));
+      const clear = (end: number) => {
+        for (let t = 0; t <= 12.6; t += 0.6) {
+          const w = new THREE.Vector3(end * (L / 2 + 0.3 + t), 0, SZ).applyMatrix4(g.matrixWorld);
+          if (inRoad(w.x, w.z)) return false;
+        }
+        return true;
+      };
+      const ends = [-1, 1].filter(clear);
+      if (!ends.length) ends.push(1);
+      this.stairEnds.push(ends);
+      // the one walked (the game's way up): the +x end when it can be
+      const walkEnd = ends.includes(1) ? 1 : -1;
       // platforms either side of the track, a canopy over all
       for (const side of [-1, 1]) {
         box(L, 0.5, 2.2, platformM, 0, this.deck - 0.15, side * 3.3);
@@ -548,12 +575,17 @@ export class Metro {
       }
       box(L + 1, 0.25, 9.6, roofM, 0, this.deck + 3.6, 0);
       box(L, 0.06, 0.3, glow, 0, this.deck + 3.45, 0);
-      // stairs down to the street at both ends, on the north/outer side
-      for (const end of [-1, 1]) {
+      // stairs down to the street at both ends, on the north/outer side, over the pavement; a
+      // walkway from the platform out to their head when the street is wide
+      for (const end of ends) {
         const steps = 22;
         for (let k = 0; k < steps; k++) {
           const t = k / steps;
-          box(0.6, 0.18, 2, platformM, end * (L / 2 + 0.3 + t * 12), this.deck - 0.2 - t * (this.deck - CURB - 0.2), 5.2);
+          box(0.6, 0.18, 2, platformM, end * (L / 2 + 0.3 + t * 12), this.deck - 0.2 - t * (this.deck - CURB - 0.2), SZ);
+        }
+        if (SZ > 5.3) {
+          box(2.2, 0.3, SZ - 4.2, platformM, end * (L / 2 - 0.8), this.deck - 0.15, (SZ + 4.2) / 2);
+          for (const side of [-1, 1]) box(0.08, 0.9, SZ - 4.2, roofM, end * (L / 2 - 0.8) + side * 1.1, this.deck + 0.45, (SZ + 4.2) / 2);
         }
       }
       // the name, lit, on both faces of the canopy
@@ -598,9 +630,10 @@ export class Metro {
       const stairs: THREE.Vector3[] = [];
       for (let k = 22; k >= 0; k--) {
         const t = k / 22;
-        stairs.push(new THREE.Vector3(L / 2 + 0.3 + t * 12, this.deck - 0.2 - t * (this.deck - CURB - 0.2) + 0.1, 5.2).applyMatrix4(g.matrixWorld));
+        stairs.push(new THREE.Vector3(walkEnd * (L / 2 + 0.3 + t * 12), this.deck - 0.2 - t * (this.deck - CURB - 0.2) + 0.1, SZ).applyMatrix4(g.matrixWorld));
       }
-      stairs.push(new THREE.Vector3(L / 2 - 1, this.deck + 0.1, 3.4).applyMatrix4(g.matrixWorld));
+      if (SZ > 5.3) stairs.push(new THREE.Vector3(walkEnd * (L / 2 - 0.8), this.deck + 0.1, SZ).applyMatrix4(g.matrixWorld));
+      stairs.push(new THREE.Vector3(walkEnd * (L / 2 - 1), this.deck + 0.1, 3.4).applyMatrix4(g.matrixWorld));
       const platform = new THREE.Vector3(4, this.deck + 0.1, 3.3).applyMatrix4(g.matrixWorld);
       const side = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), g.rotation.y);
       this.stations.push({ name, kanji, at, pos, board: { ctx, tex }, stairs, platform, side });
@@ -634,11 +667,15 @@ export class Metro {
   heightAt(x: number, z: number): number | null {
     const L = 28,
       p = new THREE.Vector3();
-    for (const inv of this.frames) {
+    for (let i = 0; i < this.frames.length; i++) {
+      const inv = this.frames[i];
+      const SZ = this.stairZ[i] ?? 5.2;
       p.set(x, 0, z).applyMatrix4(inv);
       const ax = Math.abs(p.x);
       if (ax <= L / 2 + 0.3 && Math.abs(p.z) <= 4.4) return this.deck + 0.1;
-      if (p.z >= 4.0 && p.z <= 6.4 && ax <= L / 2 + 12.3) {
+      // the walkway out to the stairs' head
+      if (SZ > 5.3 && p.z > 4.0 && p.z <= SZ && Math.abs(ax - (L / 2 - 0.8)) <= 1.1) return this.deck + 0.1;
+      if (p.z >= SZ - 1.2 && p.z <= SZ + 1.2 && ax <= L / 2 + 12.3 && (ax <= L / 2 + 0.3 || (this.stairEnds[i] ?? [-1, 1]).includes(Math.sign(p.x)))) {
         if (ax <= L / 2 + 0.3) return this.deck + 0.1;
         const t = (ax - L / 2 - 0.3) / 12;
         return this.deck - t * (this.deck - CURB);

@@ -141,7 +141,7 @@ export class GtaHud {
     this.root.innerHTML = `
       <div class="gh-live"><i></i><span class="gh-live-t"></span></div>
       <div class="gh-next"><span class="gh-ni"></span><span class="gh-nt"><em class="gh-ne"></em><b class="gh-nl"></b></span><span class="gh-nd"></span></div>
-      <div class="gh-top"><button class="gta-chip" data-act="map" title="Map (M)">Map</button><button class="gta-chip" data-act="menu" title="Menu (Esc)">Menu</button></div>
+      <div class="gh-top"><button class="gta-chip" data-act="map" title="Map (M)">Map <kbd>M</kbd></button><button class="gta-chip" data-act="menu" title="Menu (Esc)">Menu <kbd>Esc</kbd></button></div>
       <div class="gh-heat"><span class="gh-stars"></span><b>Exposed</b><i class="gh-lose"><i></i></i></div>
       <div class="gh-card"><em></em><b></b><p></p><span class="gh-timer"></span></div>
       <div class="gh-coach"><em></em><b></b><p></p><div class="gh-cf"><span class="gh-dots"></span><button class="gta-btn ghost" data-act="skip">Skip</button><button class="gta-btn gold" data-act="nextc">Next ↵</button></div></div>
@@ -149,7 +149,7 @@ export class GtaHud {
       <div class="gh-prompt"></div>
       <div class="gh-drift">Drift</div>
       <div class="gh-mini"><canvas></canvas><b class="gh-n">N</b></div>
-      <div class="gh-where"><b class="gh-dist gta-disp"></b><span class="gh-st"></span><span class="gh-nx"></span></div>
+      <div class="gh-where"><b class="gh-dist"></b><span class="gh-st"></span><span class="gh-nx"></span></div>
       <div class="gh-speed">
         <svg viewBox="0 0 240 240" aria-hidden="true">
           <circle class="face" cx="120" cy="120" r="104"/>
@@ -160,17 +160,17 @@ export class GtaHud {
           <path class="nosT" d="${arc(120, 120, 82, 150, 240)}"/>
           <path class="nos" d="${arc(120, 120, 82, 150, 240)}" pathLength="100"/>
         </svg>
-        <div class="gh-sc"><b class="gh-sv gta-disp">000</b><small class="gh-su">KM/H</small><span class="gh-gear">1</span></div>
+        <div class="gh-sc"><b class="gh-sv gta-disp">000</b><small class="gh-su">km/h</small><span class="gh-gear">1</span></div>
       </div>
       <div class="gh-touch">
         <button data-t="drift">Drift</button><button data-t="nos">NOS</button><button data-t="jump">Jump</button><button data-t="car">Car</button><button data-t="door">Enter</button><button data-t="hit">Hit</button>
       </div>
       <div class="gh-map">
         <canvas></canvas>
-        <header><h2 class="gta-disp">ZStreet</h2><span class="gh-msub"></span></header>
+        <header><h2>Map</h2><span class="gh-msub"></span></header>
         <aside class="gh-legend"></aside>
         <div class="gh-mctl"><button data-act="zin" title="Zoom in">+</button><button data-act="zout" title="Zoom out">−</button><button data-act="me" title="On me">◎</button><button data-act="mclose" title="Close (M)">×</button></div>
-        <footer>Scroll to zoom · drag to move · click a street to go there · M / Esc to close</footer>
+        <footer>Scroll to zoom · drag to move · click a street to go there · <kbd>M</kbd> close</footer>
       </div>
       <div class="gh-pause" role="dialog" aria-modal="true" aria-label="Menu"><div class="gh-pcard">
         <nav><h2>Menu<small>Paused</small></h2><div class="gh-tabs"></div><div class="grow"></div><button class="gta-btn white" data-act="resume">Resume</button></nav>
@@ -283,7 +283,7 @@ export class GtaHud {
       const mph = settings.units === "mph";
       const v = Math.round(s.speed * (mph ? 2.237 : 3.6));
       this.$(".gh-sv").textContent = String(Math.min(999, v)).padStart(3, "0");
-      this.$(".gh-su").textContent = mph ? "MPH" : "KM/H";
+      this.$(".gh-su").textContent = mph ? "mph" : "km/h";
       this.$(".gh-gear").textContent = s.gear < 0 ? "R" : s.speed < 0.3 ? "N" : String(s.gear);
       this.$<SVGPathElement & HTMLElement>(".gh-speed .rpm").style.strokeDasharray = `${(s.rpm * 100).toFixed(1)} 100`;
       this.$<SVGPathElement & HTMLElement>(".gh-speed .nos").style.strokeDasharray = `${(s.nos * 100).toFixed(1)} 100`;
@@ -335,7 +335,7 @@ export class GtaHud {
     g.beginPath();
     g.arc(cx, cy, R - dpr, 0, Math.PI * 2);
     g.clip();
-    g.fillStyle = "#0b0d12";
+    g.fillStyle = "#1e4e76";
     g.fillRect(0, 0, W, H);
     // the city turns so the camera's way is up
     const rot = s.camYaw;
@@ -499,10 +499,16 @@ export class GtaHud {
 
   // ---- the whole map ---------------------------------------------------------------------------------
 
+  /** The street's joystick steps aside while the map or the menu is up. */
+  private cover() {
+    this.root.parentElement?.classList.toggle("gta-map-on", this.mapOpen || this.paused);
+  }
+
   toggleMap(open = !this.mapOpen) {
     if (open === this.mapOpen) return;
     this.mapOpen = open;
     this.$(".gh-map").classList.toggle("on", open);
+    this.cover();
     if (open && this.last) {
       this.mapAt = { x: this.last.x, z: this.last.z };
       this.legend();
@@ -572,7 +578,7 @@ export class GtaHud {
     const fixed: Kind[] = ["board", "trap"];
     const total = fixed.reduce((a, k) => a + count(k).of, 0),
       done = fixed.reduce((a, k) => a + count(k).done, 0);
-    this.$(".gh-msub").textContent = `Map · ${s.district} · challenges ${done} / ${total}`;
+    this.$(".gh-msub").textContent = `${s.district} · ${done} of ${total} challenges`;
     this.$(".gh-legend").innerHTML =
       `<h3>Challenges <span>${done} / ${total}</span></h3>` +
       kinds
@@ -603,7 +609,8 @@ export class GtaHud {
     const k = this.mapScale();
     const at = (x: number, z: number) => [W / 2 + (x - this.mapAt.x) * k, H / 2 + (z - this.mapAt.z) * k] as const;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = "#07080b";
+    // round the island: the sea (the base map's own water colour)
+    g.fillStyle = "#1e4e76";
     g.fillRect(0, 0, W, H);
     if (base) {
       const span = MAP_FRAME.span;
@@ -660,7 +667,7 @@ export class GtaHud {
   toast(title: string, sub = "", tone?: "gold" | "teal" | "bad") {
     const t = document.createElement("div");
     t.className = `gh-toast ${tone ?? ""}`;
-    t.innerHTML = `<b class="gta-disp">${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ""}`;
+    t.innerHTML = `<b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ""}`;
     this.toasts.prepend(t);
     while (this.toasts.children.length > 3) this.toasts.lastElementChild!.remove();
     requestAnimationFrame(() => t.classList.add("in"));
@@ -676,6 +683,10 @@ export class GtaHud {
     this.cardTimer = c?.timer ?? null;
     if (!c) return;
     el.querySelector("em")!.textContent = c.eyebrow;
+    // the mission's own colour on its dot
+    const kind = (Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[]).find((k) => c.eyebrow.startsWith(KIND_LABEL[k]));
+    if (kind) el.style.setProperty("--k", KIND_COLOR[kind]);
+    else el.style.removeProperty("--k");
     el.querySelector("b")!.textContent = c.title;
     el.querySelector("p")!.textContent = c.text;
     el.querySelector(".gh-timer")!.textContent = c.timer?.() ?? "";
@@ -725,6 +736,7 @@ export class GtaHud {
   pause(on: boolean) {
     this.paused = on;
     this.$(".gh-pause").classList.toggle("on", on);
+    this.cover();
     if (on) this.renderMenu();
   }
 

@@ -394,6 +394,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   extension(g, nav);
   river(g, nav, animated, boats);
   bay(g, nav, animated);
+  coast(g, animated);
   arcade(g, flicker, nav);
   tunnels(g);
   wires(g, animated);
@@ -1336,6 +1337,89 @@ function terrain(g: THREE.Group, x0: number, x1: number, z0: number, z1: number,
   const m = new THREE.Mesh(mergeGeometries(geos, false), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
   m.castShadow = m.receiveShadow = true;
   g.add(m);
+}
+
+/**
+ * The sea all round the island: one wide plane of water to the horizon, and a beach sloping down
+ * from the land's edge into it on the west, north and east (the bay keeps its quay on the south),
+ * rounded at the corners; dry sand up top, wet and darker lower down, a line of foam where the
+ * water meets it.
+ */
+function coast(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
+  const CT = CITY;
+  const wt = waterTexture();
+  wt.wrapS = wt.wrapT = THREE.RepeatWrapping;
+  wt.repeat.set(5000 / 8, 5000 / 8);
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), addDetail(new THREE.MeshStandardMaterial({ map: wt, color: "#2f7392", roughness: 0.16, metalness: 0.25, emissive: "#05263a", emissiveIntensity: 0.7 }), "water"));
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(0, BAY.water - 0.06, 0);
+  sea.receiveShadow = true;
+  sea.name = "sea";
+  g.add(sea);
+  animated.push((_t, dt) => ((wt.offset.x += dt * 0.01), (wt.offset.y += dt * 0.005)));
+  // the beach: a height field round the land's rectangle (west, north and east; the bay to the south)
+  const X0 = CT.minX,
+    X1 = CT.maxX,
+    Z0 = CT.minZ,
+    Z1 = BAY.z0;
+  const W = 20,
+    TOP = CURB,
+    LOW = BAY.water - 1.2;
+  const out = (x: number, z: number) => {
+    const dx = Math.max(X0 - x, 0, x - X1),
+      dz = Math.max(Z0 - z, 0, z - Z1);
+    return Math.hypot(dx, dz);
+  };
+  const h = (x: number, z: number) => {
+    const d = out(x, z);
+    const t = Math.min(1, d / W);
+    // a gentle beach that steepens under the water
+    return TOP + (LOW - TOP) * (t < 0.55 ? t * 0.9 : 0.495 + (t - 0.55) * 1.12);
+  };
+  const STEP = 2;
+  const pos: number[] = [],
+    col: number[] = [];
+  const dry = new THREE.Color("#e6d3a3"),
+    wet = new THREE.Color("#b49a6c"),
+    foam = new THREE.Color("#f4f2ea"),
+    c = new THREE.Color();
+  const tint = (x: number, z: number, y: number) => {
+    const n = Math.sin(x * 0.7) * Math.cos(z * 0.55) * 0.04 + Math.sin((x + z) * 1.3) * 0.02;
+    if (Math.abs(y - (BAY.water - 0.06)) < 0.14) c.copy(foam);
+    else c.copy(dry).lerp(wet, Math.min(1, Math.max(0, (0 - y) / 1.4)));
+    return c.multiplyScalar(1 + n);
+  };
+  for (let x = X0 - W - STEP; x < X1 + W + STEP; x += STEP)
+    for (let z = Z0 - W - STEP; z < Z1 + W + STEP; z += STEP) {
+      const d0 = Math.min(out(x, z), out(x + STEP, z), out(x, z + STEP), out(x + STEP, z + STEP));
+      const d1 = Math.max(out(x, z), out(x + STEP, z), out(x, z + STEP), out(x + STEP, z + STEP));
+      // only the ring round the land (not the bay's side: there the quay meets the water)
+      if (d1 <= 0 || d0 > W + 2 || z > Z1 - 0.01) continue;
+      const q = [
+        [x, z],
+        [x, z + STEP],
+        [x + STEP, z],
+        [x + STEP, z],
+        [x, z + STEP],
+        [x + STEP, z + STEP],
+      ];
+      for (const [px, pz] of q) {
+        const y = h(px, pz);
+        pos.push(px, y, pz);
+        const k = tint(px, pz, y);
+        col.push(k.r, k.g, k.b);
+      }
+    }
+  // the beach on the sides of the bay beyond the quay (west and east of the bay's water)
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const sand = addDetail(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 }), "paving");
+  const beach = new THREE.Mesh(geo, sand);
+  beach.receiveShadow = true;
+  beach.name = "beach";
+  g.add(beach);
 }
 
 /**

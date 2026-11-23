@@ -399,6 +399,7 @@ export class GtaMode {
         this.placeSpots = this.host.doors().flatMap((d) => this.snapDoor(d) ?? []);
         this.buildingSpots = null;
         this.doors.set(this.placeSpots);
+        this.computeAccess();
       });
       setTimeout(() => this.active && void this.solid.build(), 40_000);
     }
@@ -419,7 +420,9 @@ export class GtaMode {
     this.paused = false;
     this.input.active = false;
     this.input.release();
-    h.ui.classList.remove("gta-on");
+    h.ui.classList.remove("gta-on", "gta-map-on");
+    this.hud.pause(false);
+    this.hud.toggleMap(false);
     this.hud.show(false);
     this.hud.card(null);
     this.hud.prompt(null);
@@ -779,8 +782,14 @@ export class GtaMode {
     // at a door: in
     if (!this.car && this.doors.at && i.hit("KeyE", "pad:x", "touch:door")) {
       this.sound.blip("door");
-      const d = this.doors.at as DoorSpot & { type?: string; seed?: number };
-      if (d.key.startsWith("building:")) this.host.enterBuilding({ x: d.x, z: d.z, fx: d.fx, fz: d.fz, type: d.type ?? "office", name: d.label, seed: d.seed ?? 1 });
+      const d = this.doors.at as DoorSpot & { type?: string; seed?: number; to?: { x: number; z: number } };
+      if (d.key.startsWith("ferry:") && d.to) {
+        const t = d.to;
+        this.hud.toast(d.label, "across the bay", "teal");
+        this.player.place(t.x, this.solid.topAt(t.x, t.z) ?? 0.2, t.z, d.fz > 0 ? Math.PI : 0);
+        this.cam.behind(this.player.facing, -0.15);
+        this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.35));
+      } else if (d.key.startsWith("building:")) this.host.enterBuilding({ x: d.x, z: d.z, fx: d.fx, fz: d.fz, type: d.type ?? "office", name: d.label, seed: d.seed ?? 1 });
       else this.host.enter(d.key);
     }
     if (this.hud.coaching && i.hit("Enter")) this.hud.coach(-1);
@@ -806,6 +815,11 @@ export class GtaMode {
     this.player.update(dt, mx, my, follow ? Math.abs(my) + (m.x !== 0 && my === 0 ? 0 : 0) : m.mag, !this.paused && i.sprint && my > 0, !this.paused && i.jump, ref, {
       blocked: (x, z, feet) => {
         if (this.parkedAt(x, z) && feet < 1.2) return true;
+        // in front of a door: always a way in (whatever stands there, short of water)
+        if (solid.ready && this.doorway(x, z)) {
+          const t = solid.topAt(x, z);
+          return t === undefined || t !== t || t < -0.35;
+        }
         // (the rock, the bridge, the woods, the platforms: their own rules)
         if (!solid.ready || h.footSpecial(x, z)) return h.footBlocked(x, z);
         if (x < h.bounds.x0 || x > h.bounds.x1 || z < h.bounds.z0 || z > h.bounds.z1) return true;
@@ -814,6 +828,11 @@ export class GtaMode {
         return !solid.foot(x, z, up).ok || (feet < pl.floor + 0.5 && (h.footSmall(x, z) || h.dynamicHit(x, z)));
       },
       floor: (x, z, feet) => {
+        if (solid.ready && this.doorway(x, z)) {
+          // the steps up to a door: climbed; anything higher walked past
+          const t = solid.topAt(x, z) ?? pl.floor;
+          return t === t && t < pl.floor + 1.05 ? Math.max(-0.05, t) : pl.floor;
+        }
         const g = h.ground(x, z);
         if (g !== null) return g;
         if (!solid.ready) return h.curb;
@@ -847,7 +866,7 @@ export class GtaMode {
     const touch = matchMedia("(pointer: coarse)").matches;
     this.hud.prompt(
       door
-        ? `<kbd>${touch ? "Tap" : "E"}</kbd> Enter · ${door.label}`
+        ? `<kbd>${touch ? "Tap" : "E"}</kbd> ${door.key.startsWith("ferry:") ? "Board" : "Enter"} · ${door.label}`
         : r
           ? `<kbd>F</kbd> ${r.car ? (r.kind === "gt" ? "Get in your ZK-GT" : `Get in the ${r.name.toLowerCase()}`) : `Take the ${r.name.toLowerCase()}`}`
           : null,
@@ -1177,6 +1196,200 @@ export class GtaMode {
   }
 
   /**
+   * The way in to every place, from the street: the cheapest path on a half-metre grid from the
+   * nearest road to its door, where what blocks a body costs a lot but is not impossible (water is),
+   * kept clear on foot 1.5 m wide. Whatever the place or the street put in the way, you get in.
+   */
+  private access: Set<string> | null = null;
+  private computeAccess() {
+    const s = this.solid,
+      h = this.host;
+    if (!s.ready) return;
+    const set = new Set<string>();
+    const C = 0.5;
+    for (const d of this.placeSpots) {
+      const st = this.roads.nearest(d.x + d.fx * 6, d.z + d.fz * 6);
+      const R = Math.ceil(Math.max(50, Math.hypot(st.x - d.x, st.z - d.z) + 12));
+      const N = (2 * R) / C;
+      const ox = d.x - R,
+        oz = d.z - R;
+      // a cell's own cost (what stands there), its floor; a step up of more than a body climbs costs too
+      const cellCost = (x: number, z: number) => {
+        const t = s.topAt(x, z);
+        if (t === undefined || t !== t || t < -0.35) return Infinity;
+        if (h.footSpecial(x, z)) return h.footBlocked(x, z) ? 40 : 1;
+        return s.foot(x, z, Math.max(0.2, Math.min(t, 1))).ok && !h.footSmall(x, z) ? 1 : 40;
+      };
+      const floorOf = (x: number, z: number) => {
+        const g = h.ground(x, z);
+        if (g !== null) return g;
+        const t = s.topAt(x, z) ?? 0.2;
+        return t === t ? t : 0.2;
+      };
+      const si = Math.round((st.x - ox) / C),
+        sj = Math.round((st.z - oz) / C);
+      const ti = Math.round((d.x + d.fx * 0.8 - ox) / C),
+        tj = Math.round((d.z + d.fz * 0.8 - oz) / C);
+      if (si < 0 || sj < 0 || si >= N || sj >= N) continue;
+      const dist = new Float32Array(N * N).fill(Infinity);
+      const prev = new Int32Array(N * N).fill(-1);
+      // a small binary heap of [cost, cell]
+      const heap: [number, number][] = [];
+      const push = (c: number, k: number) => {
+        heap.push([c, k]);
+        let i = heap.length - 1;
+        while (i > 0) {
+          const pi = (i - 1) >> 1;
+          if (heap[pi][0] <= heap[i][0]) break;
+          [heap[pi], heap[i]] = [heap[i], heap[pi]];
+          i = pi;
+        }
+      };
+      const pop = () => {
+        const top = heap[0];
+        const last = heap.pop()!;
+        if (heap.length) {
+          heap[0] = last;
+          let i = 0;
+          for (;;) {
+            const l = i * 2 + 1,
+              r = l + 1;
+            let m = i;
+            if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+            if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+            if (m === i) break;
+            [heap[m], heap[i]] = [heap[i], heap[m]];
+            i = m;
+          }
+        }
+        return top;
+      };
+      const s0 = sj * N + si,
+        t0 = tj * N + ti;
+      dist[s0] = 0;
+      push(0, s0);
+      const cache = new Float32Array(N * N).fill(-1);
+      const tops = new Float32Array(N * N).fill(NaN);
+      const topOf = (k: number) => {
+        if (tops[k] !== tops[k]) tops[k] = floorOf(ox + (k % N) * C, oz + ((k / N) | 0) * C);
+        return tops[k];
+      };
+      // (what each cell on the path cost to step onto: the cleared stretch is where it was more than 1)
+      const stepCost = new Float32Array(N * N);
+      while (heap.length) {
+        const [c, k] = pop();
+        if (c > dist[k]) continue;
+        if (k === t0) break;
+        const i = k % N,
+          j = (k / N) | 0;
+        for (const [di, dj] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ]) {
+          const ni = i + di,
+            nj = j + dj;
+          if (ni < 0 || nj < 0 || ni >= N || nj >= N) continue;
+          const nk = nj * N + ni;
+          if (cache[nk] < 0) cache[nk] = cellCost(ox + ni * C, oz + nj * C);
+          const climb = topOf(nk) - topOf(k) > 0.6 ? 40 : 0;
+          const sc = Math.max(cache[nk], climb || 1);
+          const nc = c + sc;
+          if (nc < dist[nk]) {
+            dist[nk] = nc;
+            prev[nk] = k;
+            stepCost[nk] = sc;
+            push(nc, nk);
+          }
+        }
+      }
+      // and straight out from the door to the street (or the water), whatever is in between
+      for (let k = 0; k < 26; k += 0.5) {
+        const x = d.x + d.fx * k,
+          z = d.z + d.fz * k;
+        const t = s.topAt(x, z);
+        if (t === undefined || t !== t || t < -0.35 || this.roads.road(x, z)) break;
+        for (let a = -1.5; a <= 1.5; a += 0.5) set.add(`${Math.floor((x - d.fz * a) * 2)},${Math.floor((z + d.fx * a) * 2)}`);
+      }
+      if (!Number.isFinite(dist[t0])) continue;
+      // the path back from the door, widened: only the stretch that needed it is cleared
+      // (the whole way, not only what was in the way: a narrow gap the grid just fits is no way in)
+      for (let k = t0; k >= 0; k = prev[k]) {
+        if (stepCost[k] <= 1 && k !== t0 && dist[k] < 2 && this.roads.road(ox + (k % N) * C, oz + ((k / N) | 0) * C)) continue;
+        const i = k % N,
+          j = (k / N) | 0;
+        const x = ox + i * C,
+          z = oz + j * C;
+        for (let a = -1.5; a <= 1.5; a += 0.5) for (let b = -1.5; b <= 1.5; b += 0.5) set.add(`${Math.floor((x + a) * 2)},${Math.floor((z + b) * 2)}`);
+      }
+    }
+    this.access = set;
+    this.ferries = this.findFerries();
+    this.doors.set([...this.placeSpots, ...this.ferries]);
+  }
+
+  /**
+   * The places on the bay's islands (Liberty, the rock) can't be walked to: a ferry from the quay
+   * across from each, E on the landing stage takes you over, and back.
+   */
+  private ferries: DoorSpot[] = [];
+  private findFerries(): DoorSpot[] {
+    const s = this.solid;
+    const out: DoorSpot[] = [];
+    const walk = (x: number, z: number) => {
+      const t = s.topAt(x, z);
+      return t !== undefined && t === t && t > -0.3 && t < 2 && s.foot(x, z, Math.max(0.2, t)).ok;
+    };
+    for (const d of this.placeSpots) {
+      if (d.key !== "statue" && d.key !== "prison") continue;
+      // the landing on the island: the nearest spot a body can stand, round the door
+      let land: { x: number; z: number } | null = null;
+      for (let r = 1.5; r < 12 && !land; r += 0.5)
+        for (let a = 0; a < Math.PI * 2 && !land; a += Math.PI / 12) {
+          const x = d.x + Math.cos(a) * r,
+            z = d.z + Math.sin(a) * r;
+          if (walk(x, z)) land = { x, z };
+        }
+      if (!land) continue;
+      // the quay across the water, north of it (toward the city)
+      let quay: { x: number; z: number } | null = null;
+      let wet = false;
+      for (let z = land.z - 1; z > land.z - 90; z -= 0.5) {
+        const t = s.topAt(land.x, z);
+        if (t === undefined) break;
+        if (t !== t || t < -0.35) wet = true;
+        else if (wet && walk(land.x, z - 1.5)) {
+          quay = { x: land.x, z: z - 1.5 };
+          break;
+        }
+      }
+      if (!quay) continue;
+      const name = d.label;
+      out.push({ key: `ferry:${d.key}:go`, x: quay.x, z: quay.z, fx: 0, fz: -1, y: s.topAt(quay.x, quay.z) ?? 0.2, label: `Ferry · ${name}`, bare: true, to: land } as DoorSpot & { to: { x: number; z: number } });
+      out.push({ key: `ferry:${d.key}:back`, x: land.x, z: land.z, fx: 0, fz: 1, y: s.topAt(land.x, land.z) ?? 0.2, label: "Ferry · back to the city", bare: true, to: quay } as DoorSpot & { to: { x: number; z: number } });
+    }
+    return out;
+  }
+
+  /**
+   * In front of a place's door (a lane 3.4 m wide, 6 m out from it): the game keeps it clear on foot,
+   * whatever the place or the street put there (a queue's rails, planters, a kerb's posts).
+   */
+  doorway(x: number, z: number) {
+    if (this.access?.has(`${Math.floor(x * 2)},${Math.floor(z * 2)}`)) return true;
+    for (const d of this.placeSpots) {
+      const dx = x - d.x,
+        dz = z - d.z;
+      if (dx * dx + dz * dz > 49) continue;
+      const along = dx * d.fx + dz * d.fz,
+        across = Math.abs(-dx * d.fz + dz * d.fx);
+      if (along > -0.3 && along < 6 && across < 1.7) return true;
+    }
+    return false;
+  }
+
+  /**
    * The doors of the city's buildings: one in the middle of each street front, against its wall
    * (the solid shape says where the wall is and that the pavement in front is free), not near a
    * place's own door. Only the nearest dozen are drawn.
@@ -1246,7 +1459,7 @@ export class GtaMode {
       .sort((p, q) => p.d - q.d)
       .slice(0, 12)
       .map((o) => o.b);
-    this.doors.set([...this.placeSpots, ...near]);
+    this.doors.set([...this.placeSpots, ...this.ferries, ...near]);
   }
 
   /**

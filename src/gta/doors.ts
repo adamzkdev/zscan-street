@@ -222,6 +222,8 @@ export class Doors {
   readonly group = new THREE.Group();
   private list: Door[] = [];
   private bare: DoorSpot[] = [];
+  /** The ferry landings' markers (a lit sign on a post, a ring on the stage). */
+  private stages = new Map<string, THREE.Group>();
   /** The door you are at (in reach, outside it, facing it more or less), or null. */
   at: DoorSpot | null = null;
 
@@ -239,6 +241,23 @@ export class Doors {
   /** The places' doors (made again when the list changes: a place that opened). */
   set(all: DoorSpot[]) {
     this.bare = all.filter((s) => s.bare);
+    for (const sp of this.bare)
+      if (sp.key.startsWith("ferry:") && !this.stages.has(sp.key)) {
+        const g = new THREE.Group();
+        g.position.set(sp.x, sp.y, sp.z);
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.6, 0.14), FRAME);
+        post.position.set(1.2, 1.3, 0);
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.45), new THREE.MeshBasicMaterial({ map: signTexture("FERRY"), toneMapped: false, side: THREE.DoubleSide }));
+        sign.position.set(1.2, 2.75, 0);
+        sign.rotation.y = Math.atan2(sp.fx, sp.fz);
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.05, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color("#3fd6c6").multiplyScalar(2), toneMapped: false, transparent: true, opacity: 0.85 }));
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.03;
+        g.add(post, sign, ring);
+        g.traverse((o) => (o.userData.noField = true));
+        this.group.add(g);
+        this.stages.set(sp.key, g);
+      }
     const spots = all.filter((s) => !s.bare);
     const key = (s: DoorSpot) => `${s.key}@${s.x.toFixed(1)},${s.z.toFixed(1)}`;
     const want = new Map(spots.map((s) => [key(s), s]));
@@ -286,7 +305,7 @@ export class Doors {
         const dx = me.x - sp.x,
           dz = me.z - sp.z;
         const dist = Math.hypot(dx, dz);
-        if (dist < 3.4 && dx * sp.fx + dz * sp.fz > -0.6 && dist < best) {
+        if (dist < (sp.key.startsWith("ferry:") ? 2.6 : 3.4) && (sp.key.startsWith("ferry:") || dx * sp.fx + dz * sp.fz > -0.6) && dist < best) {
           best = dist;
           this.at = sp;
         }

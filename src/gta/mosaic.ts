@@ -56,7 +56,7 @@ export class Mosaic {
     this.el = document.createElement("div");
     this.el.className = "gg-mosaic";
     this.el.innerHTML = `
-      <header><h2 class="gta-disp">The 10,000</h2><span class="gm-count"></span>
+      <header><h2>The 10,000</h2><span class="gm-count"></span>
         <form class="gm-find"><input type="number" min="1" max="10000" placeholder="Find # (1–10000)" aria-label="zkSNARK number"/></form>
         <div class="gm-sort"><button data-sort="rank" class="on">By rank</button><button data-sort="id">By number</button></div>
         <button class="gm-x" type="button" aria-label="Close">×</button></header>
@@ -266,7 +266,7 @@ export class Mosaic {
       .filter((x) => x[0] && x[1] && SHOWN.includes(x[0]))
       .map(([k, v]) => `<span><em>${esc(k!)}</em>${esc(v!)}</span>`)
       .join("");
-    this.tip.innerHTML = `<b class="gta-disp">#${it.id}</b>${band ? `<i style="--c:${band.color}">${band.name} · rank ${it.rank}</i>` : ""}${traits}${it.ask != null ? `<span><em>For sale</em>${(it.ask / 1e8).toFixed(2)} ZEC</span>` : ""}<small>Click to play as it</small>`;
+    this.tip.innerHTML = `<b>zkSNARK #${it.id}</b>${band ? `<i style="--c:${band.color}">${band.name} · rank ${it.rank}</i>` : ""}${traits}${it.ask != null ? `<span><em>For sale</em>${(it.ask / 1e8).toFixed(2)} ZEC</span>` : ""}<small>Click to play as it</small>`;
     const r = this.cv.getBoundingClientRect();
     const x = e.clientX - r.left,
       y = e.clientY - r.top;

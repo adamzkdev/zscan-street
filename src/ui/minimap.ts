@@ -45,6 +45,7 @@ const enum K {
   Pave = 3,
   Green = 4,
   Building = 5,
+  Sand = 6,
 }
 
 const VERT = /* glsl */ `
@@ -74,6 +75,7 @@ const FRAG = /* glsl */ `
 #include <color_pars_fragment>
 uniform vec4 uPark;
 uniform vec4 uLake;
+uniform vec3 uLand;
 varying float vY;
 varying vec2 vXZ;
 void main() {
@@ -89,7 +91,10 @@ void main() {
   if (park && dot(lk, lk) < 1.0) { gl_FragColor = vec4(1.0 / 255.0, 0.0, 0.0, 1.0); return; }
   green = green || park;
   float cls;
+  // the beach round the island (outside the land's rectangle, above the water)
+  bool shore = vXZ.x < uLand.x || vXZ.x > uLand.y || vXZ.y < uLand.z;
   if (vY < -0.45) cls = 1.0;
+  else if (shore) cls = 6.0;
   else if (green) cls = 4.0;
   else if (vY < 0.1) cls = 2.0;
   else if (vY < 0.9) cls = 3.0;
@@ -106,6 +111,7 @@ function bake(renderer: THREE.WebGLRenderer, scene: THREE.Scene): HTMLCanvasElem
     uniforms: {
       uPark: { value: new THREE.Vector4(GRID.park.x0, GRID.park.x1, GRID.park.z0, GRID.park.z1) },
       uLake: { value: new THREE.Vector4(PARK.lake.x, PARK.lake.z, PARK.lake.rx, PARK.lake.rz) },
+      uLand: { value: new THREE.Vector3(CITY.minX, CITY.maxX, CITY.minZ) },
     },
   });
   const cam = new THREE.OrthographicCamera(-SPAN / 2, SPAN / 2, SPAN / 2, -SPAN / 2, 1, 310);
@@ -195,6 +201,7 @@ function paint(px: Uint8Array): HTMLCanvasElement {
   const COL: Record<number, [number, number, number]> = {
     [K.Void]: [14, 16, 22],
     [K.Water]: [30, 78, 118],
+    [K.Sand]: [176, 158, 118],
     [K.Road]: [112, 118, 132],
     [K.Pave]: [40, 43, 53],
     [K.Green]: [42, 82, 54],
