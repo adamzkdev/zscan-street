@@ -192,6 +192,26 @@ export class Quality {
     } else this.good = 0;
   }
 
+  /** The game menu's choice (src/gta): a tier held, or null for automatic again. */
+  pin(level: number | null) {
+    if (level === null) {
+      this.fixed = false;
+      this.changes = 0;
+      return;
+    }
+    this.fixed = true;
+    this.cpuLight = false;
+    this.set(Math.max(0, Math.min(TIERS.length - 1, level)));
+  }
+
+  get pinned() {
+    return this.fixed;
+  }
+
+  get tiers() {
+    return TIERS.length;
+  }
+
   private set(level: number) {
     this.level = level;
     this.changes++;

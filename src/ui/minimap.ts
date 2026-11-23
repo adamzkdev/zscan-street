@@ -1,6 +1,22 @@
 import * as THREE from "three";
 import { CITY, PARK, GRID } from "../scene/city/plan";
 
+/** The base map's frame (the game's own maps, src/gta, draw from the same picture). */
+export const MAP_FRAME = {
+  get span() {
+    return SPAN;
+  },
+  get cx() {
+    return CX;
+  },
+  get cz() {
+    return CZ;
+  },
+  get res() {
+    return RES;
+  },
+};
+
 /** Something marked on the map. Goals, secrets and the whale stay pinned to the rim when far. */
 export interface Blip {
   x: number;
@@ -269,6 +285,12 @@ export class Minimap {
     this.on = on;
     this.el.classList.toggle("on", on);
     if (!on) this.toggle(false);
+  }
+
+  /** The base map (drawn the first time it is asked for). */
+  baseMap() {
+    if (!this.base) this.base = bake(this.renderer, this.scene);
+    return this.base;
   }
 
   /** Throw the base map away (the city changed: a plot was built). */

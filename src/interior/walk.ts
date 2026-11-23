@@ -191,6 +191,11 @@ export class WalkControls {
   }
   // ---- (end of the mover) ----
 
+  /** Stand on this floor now (the game's third-person body moves the walker itself, src/gta). */
+  setFloor(y: number) {
+    this.floorY = y;
+  }
+
   /** The floor height when there is no special ground under the walker. */
   setBase(y: number) {
     this.baseFloor = y;

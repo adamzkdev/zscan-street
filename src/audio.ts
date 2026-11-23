@@ -115,6 +115,11 @@ export class Soundscape {
     }, 900);
   }
 
+  /** The game's own sounds (src/gta) go through the master: the sound button and fades rule them. */
+  output(): { ctx: AudioContext; out: AudioNode } | null {
+    return this.ctx && this.on ? { ctx: this.ctx, out: this.master } : null;
+  }
+
   setRain(on: boolean) {
     this.rainOn = on;
     if (this.ctx) this.fade(this.rainGain, on ? 0.55 * this.rainIn : 0, 1.2);

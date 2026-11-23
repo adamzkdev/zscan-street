@@ -1,0 +1,24 @@
+// node shots/_gtamobile.mjs [URL] [OUT]: the game (src/gta) on a phone held sideways: on foot, at the wheel, the map
+import puppeteer from "puppeteer-core";
+const [URL = "http://localhost:3061/?debug&gta=1192&theme=day", OUT = "shots/gta/phone"] = process.argv.slice(2);
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"] });
+const p = await b.newPage();
+await p.emulate({ viewport: { width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true, isLandscape: true }, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" });
+const errs = [];
+p.on("pageerror", (e) => errs.push("pageerror " + e.message));
+p.on("console", (m) => /error/.test(m.type()) && errs.push(m.text().slice(0, 200)));
+await p.goto(URL);
+await p.waitForFunction(() => window.__streetUp && window.street?.gta?.active, { timeout: 240000, polling: 300 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await sleep(3000);
+await p.screenshot({ path: `${OUT}-1-foot.png` });
+await p.evaluate(() => { const g = street.gta; g.hud.coach(-1); const c = g.parked[0]; const q = c.group.position; g.player.place(q.x - 2, 0.2, q.z + 2, 0); g.input.tap("touch:car"); });
+await sleep(800);
+await p.evaluate(() => { street.gta.input.stick.y = 1; });
+await sleep(3000);
+await p.screenshot({ path: `${OUT}-2-drive.png` });
+await p.evaluate(() => { street.gta.input.stick.y = 0; street.gta.hud.toggleMap(true); });
+await sleep(800);
+await p.screenshot({ path: `${OUT}-3-map.png` });
+console.log("errors", errs.length, errs.slice(0, 5).join("\n"));
+await b.close();

@@ -17,7 +17,8 @@ import { buildDecor } from "./scene/decor";
 import { Soundscape } from "./audio";
 import { memeStats, posterHit, updateMemes } from "./scene/memes";
 import { cityMemes } from "./scene/memewalls";
-import { LampLights, tiltShift } from "./scene/post";
+import { LampLights, speedBlur, tiltShift } from "./scene/post";
+import { GtaMode } from "./gta";
 import { FinishPass, GradePass, ScenePass } from "./scene/finish";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { applyTheme, setRainWanted, type Theme } from "./scene/theme";
@@ -252,6 +253,9 @@ const finish = new FinishPass(rig.camera, renderPass);
 composer.addPass(finish);
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.38, 0.4, 0.95);
 composer.addPass(bloom);
+// the game's speed blur (src/gta), off unless driving fast
+const speedFx = speedBlur();
+composer.addPass(speedFx.pass);
 const tilt = tiltShift();
 for (const p of tilt.passes) composer.addPass(p);
 const grade = new GradePass();
@@ -797,7 +801,8 @@ hud = new Hud(
     leave: () => leavePlace(),
     talk: (s) => talk.show(snarkSpeaker(s, director, agents)),
     dive: (s, tx) => void diveInto(s, tx),
-    walk: (on) => setWalking(on),
+    // on foot is the game now (src/gta): the garage first, then the street in the third person
+    walk: (on) => (on && gta ? gta.start() : gta?.active ? gta.stop() : setWalking(on)),
   },
   director,
   themePref,
@@ -1236,6 +1241,8 @@ onFoot.collide = (x, z) => {
   return !city.nav.free(x, z, 0.28) || dynamicHit(x, z);
 };
 let walking = false;
+/** ZStreet as an open-world game: third person, cars, challenges (src/gta). Made once everything it uses exists. */
+let gta: GtaMode | null = null;
 /** The place walked into, to step back out of its door. */
 let cameIn: Interior["key"] | null = null;
 /** Walk-in doors on the street (the Proof Factory's is on the avenue, in line with the others). */
@@ -1506,6 +1513,8 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key !== "Escape") return;
+  // (the game's garage closes itself)
+  if (gta?.garage.open) return;
   // one handler for Escape, innermost first
   if (arcade.open) arcade.close();
   else if (reader.open) reader.close();
@@ -1514,7 +1523,8 @@ window.addEventListener("keydown", (e) => {
   else if (interiors.active) {
     if (document.querySelector("#ui .panel.open")) select(null);
     else leavePlace();
-  } else if (walking && !document.querySelector("#ui .panel.open")) setWalking(false);
+  } else if (gta?.active && !document.querySelector("#ui .panel.open")) gta.escape();
+  else if (walking && !document.querySelector("#ui .panel.open")) setWalking(false);
   else hud.escape();
 });
 
@@ -2649,6 +2659,9 @@ if (new URLSearchParams(location.search).has("debug")) {
       prison,
       arrest: () => arrest(),
       walk: (on: boolean) => setWalking(on),
+      get gta() {
+        return gta;
+      },
       storeAt: (x: number, y: number) => storeAt(x, y)?.id ?? null,
       openStore: (id: string) => openStore(id),
       residents,
@@ -2897,7 +2910,7 @@ const swing = new StreetSwing({
   canvas,
   ui: document.getElementById("ui")!,
   walker: onFoot,
-  street: () => walking && !interiors.active,
+  street: () => walking && !interiors.active && !gta?.active,
   free: () => walking && !interiors.active && !talk.open && !payDesk.open && !arcade.open && !reader.open && !venues.open && !(CAPTURE && capShot) && !document.querySelector("#ui.photo, #ui .panel.open, .bigmap.on"),
   depth: () => renderPass.rt.depthTexture,
   solid: (x, z) => !city.nav.free(x, z, 0.28),
@@ -2915,6 +2928,81 @@ const swing = new StreetSwing({
   ],
   sound: () => sound.on,
 });
+// ---- the game: ZStreet in the third person, cars, challenges (src/gta) ----------------------------
+/** Who already shouted at your car, until when (ms). */
+const gtaShouted = new WeakMap<Snark, number>();
+const GTA_SHOUTS = ["HEY!", "WATCH IT!", "Slow down!", "Shielded driving, please!", "My parcel!", "Not on the pavement!"];
+gta = new GtaMode({
+  scene,
+  canvas,
+  ui: document.getElementById("ui")!,
+  walker: onFoot,
+  setWalking: (on) => setWalking(on),
+  walking: () => walking,
+  indoors: () => !!interiors.active,
+  footBlocked: (x, z) => onFoot.collide!(x, z),
+  ground: groundAt,
+  curb: CURB,
+  nav: city.nav,
+  bounds: BOARD,
+  traffic: cityTraffic,
+  *vehicles() {
+    for (const v of director.traffic.vehicles) {
+      const p = v.mover.group.position;
+      yield { x: p.x, z: p.z, hx: v.mover.length / 2, hz: 1 };
+    }
+    for (const b of director.buses) {
+      const p = b.group.position;
+      yield { x: p.x, z: p.z, hx: 4.6, hz: 1.3 };
+    }
+    for (const t of tram.sets) {
+      const p = t.group.position;
+      yield { x: p.x, z: p.z, hx: 7.4, hz: 1.5 };
+    }
+  },
+  *people() {
+    for (const s of director.snarks) if (s.root.visible && s.root.parent === scene) yield { x: s.root.position.x, z: s.root.position.z };
+  },
+  baseMap: () => minimap.baseMap(),
+  places: () => placeBlips.map((b) => ({ x: b.x, z: b.z, label: b.label ?? "", icon: b.icon })),
+  hq: () => (city.shops[0] ? { x: city.shops[0].door.x, z: city.shops[0].door.z } : null),
+  audio: () => sound.output(),
+  soundOn: () => sound.on,
+  toggleSound: () => {
+    const on = !sound.on;
+    master.set(on);
+    if (on) void sound.start();
+    else sound.stop();
+    hud.setSoundButton(on);
+    try {
+      localStorage.setItem("street.sound", on ? "1" : "0");
+    } catch {}
+  },
+  night: () => theme === "night",
+  cycleTheme: () => setThemePref(theme === "day" ? "night" : "day"),
+  height: () => chainClock.height || director.blockHeight || 0,
+  lastBlockAt: () => chainClock.at || director.lastBlockTime || 0,
+  mempool: () => mempoolCount,
+  quality: () => ({ level: quality.level, pinned: quality.pinned, tiers: quality.tiers }),
+  pinQuality: (l) => quality.pin(l),
+  blur: (a) => speedFx.set(a),
+  react: (x, z, fx, fz) => {
+    const now = performance.now();
+    for (const s of director.snarks) {
+      if (!s.root.visible || s.root.parent !== scene) continue;
+      const dx = s.root.position.x - x,
+        dz = s.root.position.z - z;
+      const ahead = dx * fx + dz * fz;
+      if (ahead < 0 || ahead > 10 || Math.abs(-dx * fz + dz * fx) > 2.4) continue;
+      if ((gtaShouted.get(s) ?? 0) > now) continue;
+      gtaShouted.set(s, now + 5000);
+      s.emote("!", 1.6);
+      if (Math.random() < 0.4) s.say(GTA_SHOUTS[Math.floor(Math.random() * GTA_SHOUTS.length)], 1.8, "shout");
+    }
+  },
+  arrest: () => void arrest(),
+});
+
 // the Needle's base jump (src/game/wingsuit.ts): off the 150 m deck in a wingsuit, through a ring per
 // recent block, down into Block Stadium
 const wingSound = new SwingSound(() => sound.on);
@@ -3095,8 +3183,23 @@ function frameBody(stepDt?: number) {
     hud.frame(() => null);
     return again();
   }
+  // the game's garage: its own little scene, the city living on unseen
+  if (gta?.garage.open) {
+    gta.update(dt);
+    runDirector(sim, t, gta.garage.camera.quaternion, camRight.set(1, 0, 0).applyQuaternion(gta.garage.camera.quaternion));
+    load.view(gta.garage.camera);
+    renderPass.scene = gta.garage.scene;
+    renderPass.camera = finish.camera = gta.garage.camera;
+    tilt.set(0);
+    speedFx.set(0);
+    bloom.threshold = 0.9;
+    composer.render();
+    hud.frame(() => null);
+    return again();
+  }
   // inside a place: its own scene and the walking camera; the city keeps living (but unseen)
   if (interiors.active) {
+    gta?.update(dt);
     // the street's little map has nothing to say inside
     if (minimapOn) minimap.show((minimapOn = false));
     load.view(interiors.walk.camera);
@@ -3143,15 +3246,18 @@ function frameBody(stepDt?: number) {
   renderPass.scene = scene;
   bloom.threshold = bloomThreshold;
   if (!walking) prompt(null);
-  const mapOn = walking && !interiors.active;
+  const mapOn = walking && !interiors.active && !gta?.active;
   if (mapOn !== minimapOn) minimap.show((minimapOn = mapOn));
   if (walking) {
     onFoot.update(dt);
-    // (in the air or up on a roof on the swing: no door to walk into)
-    if (swing.active) prompt(null);
+    // the game moves the walker (its body, its car) and films it
+    gta?.update(dt);
+    // (in the air or up on a roof on the swing, at the wheel: no door to walk into)
+    if (swing.active || gta?.driving) prompt(null);
     else throughDoors(dt);
     if (interiors.active) return again();
   } else {
+    gta?.update(dt);
     rig.update(dt);
     sky.aim(rig.persp);
     // from a capsule or the gondola you see the whole city: draw farther while riding
@@ -3166,7 +3272,7 @@ function frameBody(stepDt?: number) {
     // lights and shadows follow the point the shot looks at
     rig.controls.target.set(capShot!.look[0], 1, capShot!.look[2]);
   }
-  const cam = capturing ? capCam : dive.inCity || dive.inProof ? dive.camera : wing.active ? wing.camera : walking ? onFoot.camera : rig.camera;
+  const cam = capturing ? capCam : dive.inCity || dive.inProof ? dive.camera : wing.active ? wing.camera : gta?.active ? gta.camera : walking ? onFoot.camera : rig.camera;
   // the fog is measured from the camera: the iso camera stands far back, so push it out by as much
   if (scene.fog instanceof THREE.Fog) {
     const iso = cam === rig.iso;
@@ -3186,7 +3292,7 @@ function frameBody(stepDt?: number) {
 
   // lights and shadows follow what the camera looks at
   // on foot, lights and shadows follow a point a few steps ahead
-  const focus = dive.active ? dive.focus : wing.active ? wing.focus : walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
+  const focus = dive.active ? dive.focus : wing.active ? wing.focus : gta?.active ? gta.focus : walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
   lampLights.update(t, focus);
   // the whole-city map: the lamps' pools are a few pixels there, the lights cost a third of the frame
   lampLights.setOn(!(cam === rig.iso && pxPerMetre(renderer, rig.iso) < 6));
@@ -3311,7 +3417,7 @@ function frameBody(stepDt?: number) {
   if (walking) mayor?.treasure.near(onFoot.camera.position);
   agents?.update(dt, focus);
   marks.update(dt);
-  if (walking && !interiors.active && !swing.active) talkUpdate(dt);
+  if (walking && !interiors.active && !swing.active && !gta?.driving) talkUpdate(dt);
   else if (talkPrompt.classList.contains("on")) talkPrompt.classList.remove("on");
   npcs.update(dt);
   if (minimapOn) {
@@ -3366,6 +3472,15 @@ orientRule(() => (walking || interiors.active ? "landscape" : "any"), {
 });
 console.info(`city up at ${Math.round(performance.now())} ms`);
 frame();
+// ?gta opens the game's garage at once; ?gta=<id> plays straight away as zkSNARK #id
+{
+  const g = new URLSearchParams(location.search).get("gta");
+  if (g !== null && gta) {
+    const id = Number(g);
+    if (id >= 1 && id <= 10000) gta.play(id);
+    else gta.start();
+  }
+}
 // the city is up: the boot screen goes, the chain's first snapshot or not (it was asked while the
 // city was built: the strip says CONNECTING meanwhile and the street fills when it lands); a
 // snapshot already in lifts it sooner (connectFeed above)

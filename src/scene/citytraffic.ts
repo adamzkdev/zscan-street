@@ -188,6 +188,15 @@ export class CityTraffic {
     for (let i = 0; i < max * 2 && this.cars.size < max; i++) this.spawn(true);
   }
 
+  /** The player takes this car (src/gta): it leaves the traffic, its group (body, light bar) handed over. */
+  take(m: Mover): THREE.Group {
+    this.cars.delete(m);
+    this.group.remove(m.group);
+    if (m === this.police) this.police = null;
+    for (const b of m.bar) b.visible = true;
+    return m.group;
+  }
+
   /** Is the given axis green right now? */
   green(axis: Axis) {
     const t = this.clock % PERIOD;

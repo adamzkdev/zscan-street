@@ -114,3 +114,38 @@ export class LampLights {
     });
   }
 }
+
+/**
+ * Speed blur for the game's chase camera (src/gta): the picture smeared toward its centre, more at
+ * the edges than in the middle, by `amount` (0 off: the pass is skipped).
+ */
+const SpeedBlur = {
+  uniforms: {
+    tDiffuse: { value: null as THREE.Texture | null },
+    amount: { value: 0 },
+  },
+  vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float amount;
+    varying vec2 vUv;
+    void main(){
+      vec2 d = vUv - vec2(0.5, 0.52);
+      float edge = smoothstep(0.12, 0.62, length(d));
+      vec2 step = d * amount * edge * 0.016;
+      vec4 c = vec4(0.0);
+      for (int i = 0; i < 8; i++) c += texture2D(tDiffuse, vUv - step * float(i));
+      gl_FragColor = c / 8.0;
+    }`,
+};
+
+export function speedBlur() {
+  const p = new ShaderPass(SpeedBlur);
+  p.enabled = false;
+  return {
+    pass: p,
+    set(amount: number) {
+      p.uniforms.amount.value = amount;
+      p.enabled = amount > 0.02;
+    },
+  };
+}
