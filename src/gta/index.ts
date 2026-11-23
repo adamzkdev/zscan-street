@@ -506,8 +506,10 @@ export class GtaMode {
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
         const px = x + Math.cos(a) * r,
           pz = z + Math.sin(a) * r;
-        if (!this.host.footBlocked(px, pz)) {
-          this.player.place(px, this.host.ground(px, pz) ?? this.host.curb, pz, this.cam.yaw);
+        const top = this.solid.topAt(px, pz);
+        const free = this.solid.ready && !this.host.footSpecial(px, pz) ? top !== undefined && top === top && top > -0.3 && top < 0.5 && this.solid.foot(px, pz, top).ok && !this.host.footSmall(px, pz) : !this.host.footBlocked(px, pz);
+        if (free) {
+          this.player.place(px, this.host.ground(px, pz) ?? (top !== undefined && top === top ? Math.max(0, top) : this.host.curb), pz, this.cam.yaw);
           this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.55));
           return;
         }

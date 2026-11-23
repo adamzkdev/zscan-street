@@ -71,6 +71,7 @@ function noise(ctx: CanvasRenderingContext2D, w: number, h: number, amount: numb
 
 /** Cracked asphalt with lane markings and a zebra crossing. Road spans `len` × `width` world units. */
 export function roadTexture(len: number, width: number, crossAt: number[], lanes = 2, day = false) {
+  if (day) return dayRoadTexture(len, width, crossAt, lanes);
   const P = 32;
   const [c, ctx] = canvas(len * P, width * P);
   const r = rng(7);
@@ -122,8 +123,126 @@ export function roadTexture(len: number, width: number, crossAt: number[], lanes
   return tex(c);
 }
 
+/**
+ * Tarmac by day, as a street really looks from a car: dark grey aggregate with its blotches, the
+ * wheels' polished tracks and an oil line down each lane, sealed cracks and patched trenches, the
+ * paint white and worn. Everything wraps along the street (the texture repeats every `len` m).
+ */
+function dayRoadTexture(len: number, width: number, crossAt: number[], lanes: number) {
+  const P = 32;
+  const [c, ctx] = canvas(len * P, width * P);
+  const W = c.width,
+    H = c.height;
+  const r = rng(11 + width);
+  /** Draw `fn` at x and at x ± W, so what crosses the ends tiles. */
+  const wrap = (x: number, w: number, fn: (dx: number) => void) => {
+    fn(0);
+    if (x - w < 0) fn(W);
+    if (x + w > W) fn(-W);
+  };
+  ctx.fillStyle = "#5c5b63";
+  ctx.fillRect(0, 0, W, H);
+  // big soft blotches: the surface's age, lighter and darker
+  for (let i = 0; i < 26; i++) {
+    const x = r() * W,
+      y = r() * H,
+      rad = 40 + r() * 160;
+    const light = r() < 0.5;
+    wrap(x, rad, (dx) => {
+      const g = ctx.createRadialGradient(x + dx, y, 0, x + dx, y, rad);
+      g.addColorStop(0, light ? "rgba(140,138,146,0.16)" : "rgba(30,30,36,0.16)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x + dx - rad, y - rad, rad * 2, rad * 2);
+    });
+  }
+  // the aggregate
+  noise(ctx, W, H, 0.16, r, 1);
+  noise(ctx, W, H, 0.07, r, 3);
+  // the lanes: wheel tracks a shade darker and smoother, an oil line in the middle of each
+  const laneW = H / lanes;
+  for (let k = 0; k < lanes; k++) {
+    const mid = laneW * (k + 0.5);
+    for (const off of [-0.78 * P, 0.78 * P]) {
+      const g = ctx.createLinearGradient(0, mid + off - 0.35 * P, 0, mid + off + 0.35 * P);
+      g.addColorStop(0, "rgba(28,28,34,0)");
+      g.addColorStop(0.5, "rgba(28,28,34,0.16)");
+      g.addColorStop(1, "rgba(28,28,34,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, mid + off - 0.35 * P, W, 0.7 * P);
+    }
+    for (let i = 0; i < 14; i++) {
+      const x = r() * W,
+        y = mid + (r() - 0.5) * 0.5 * P;
+      const rx = 6 + r() * 26,
+        ry = 3 + r() * 9;
+      wrap(x, rx, (dx) => {
+        ctx.fillStyle = `rgba(18,18,22,${0.12 + r() * 0.16})`;
+        ctx.beginPath();
+        ctx.ellipse(x + dx, y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  }
+  // patched trenches: darker, sharp-edged, a sealed seam round them
+  for (let i = 0; i < 4; i++) {
+    const w = (1.2 + r() * 4) * P,
+      h = (0.8 + r() * 2.5) * P;
+    const x = r() * W,
+      y = r() * (H - h);
+    wrap(x + w / 2, w, (dx) => {
+      ctx.fillStyle = r() < 0.5 ? "rgba(56,55,62,0.55)" : "rgba(84,83,90,0.45)";
+      ctx.fillRect(x + dx, y, w, h);
+      ctx.strokeStyle = "rgba(22,22,26,0.45)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x + dx, y, w, h);
+    });
+  }
+  noise(ctx, W, H, 0.06, r, 1);
+  // cracks, sealed in tar
+  ctx.strokeStyle = "rgba(24,24,28,0.42)";
+  for (let i = 0; i < 9; i++) {
+    let x = r() * W,
+      y = r() * H;
+    ctx.lineWidth = 0.8 + r() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let k = 0; k < 4; k++) {
+      x += (r() - 0.5) * 22;
+      y += (r() - 0.5) * 14;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // the paint: drawn, then worn (specks of tarmac through it)
+  const paint = (fill: string, x: number, y: number, w: number, h: number) => {
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, y, w, h);
+    const n = Math.max(2, Math.floor((w * h) / 90));
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = `rgba(92,91,99,${0.25 + r() * 0.5})`;
+      ctx.fillRect(x + r() * w, y + r() * h, 1 + r() * 3, 1 + r() * 2);
+    }
+  };
+  const white = "rgba(238,238,232,0.92)",
+    yellow = "rgba(232,182,52,0.9)";
+  if (lanes === 4) {
+    paint(yellow, 0, H / 2 - 7, W, 4);
+    paint(yellow, 0, H / 2 + 3, W, 4);
+    for (const k of [0.25, 0.75]) for (let x = 10; x < W; x += 90) paint(white, x, H * k - 3, 46, 6);
+  } else for (let x = 10; x < W; x += 90) paint(white, x, H / 2 - 3, 46, 6);
+  paint(yellow, 0, 10, W, 4);
+  paint(yellow, 0, H - 14, W, 4);
+  for (const cx of crossAt) {
+    const px = cx * P;
+    for (let y = 22; y < H - 22; y += 26) paint(white, px - 40, y, 80, 14);
+  }
+  return tex(c);
+}
+
 /** Square paving slabs for sidewalks; `tiles` slabs across the texture. */
 export function pavingTexture(seed: number, tiles = 4, day = false) {
+  if (day) return dayPavingTexture(seed, tiles);
   const [c, ctx] = canvas(256, 256);
   const r = rng(seed);
   const s = 256 / tiles;
@@ -136,6 +255,56 @@ export function pavingTexture(seed: number, tiles = 4, day = false) {
   noise(ctx, 256, 256, day ? 0.035 : 0.1, r, 2);
   ctx.strokeStyle = day ? "rgba(150,146,175,0.55)" : "rgba(20,18,26,0.85)";
   ctx.lineWidth = day ? 2 : 3;
+  for (let i = 0; i <= tiles; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * s, 0);
+    ctx.lineTo(i * s, 256);
+    ctx.moveTo(0, i * s);
+    ctx.lineTo(256, i * s);
+    ctx.stroke();
+  }
+  return tex(c, { repeat: [1, 1] });
+}
+
+/** Concrete slabs by day: each its own shade, a bevelled edge, grit, a stain or two, the joints. */
+function dayPavingTexture(seed: number, tiles: number) {
+  const [c, ctx] = canvas(256, 256);
+  const r = rng(seed);
+  const s = 256 / tiles;
+  for (let y = 0; y < tiles; y++)
+    for (let x = 0; x < tiles; x++) {
+      const g = 178 + Math.floor(r() * 20);
+      ctx.fillStyle = `rgb(${g},${g - 2},${g - 6})`;
+      ctx.fillRect(x * s, y * s, s, s);
+      // the bevel: a light edge up and left, a dark one down and right
+      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      ctx.fillRect(x * s + 2, y * s + 2, s - 4, 2);
+      ctx.fillRect(x * s + 2, y * s + 2, 2, s - 4);
+      ctx.fillStyle = "rgba(0,0,0,0.12)";
+      ctx.fillRect(x * s + 2, y * s + s - 4, s - 4, 2);
+      ctx.fillRect(x * s + s - 4, y * s + 2, 2, s - 4);
+    }
+  noise(ctx, 256, 256, 0.07, r, 1);
+  noise(ctx, 256, 256, 0.05, r, 4);
+  // stains and the odd chewing gum
+  for (let i = 0; i < 5; i++) {
+    const x = 20 + r() * 216,
+      y = 20 + r() * 216,
+      rad = 6 + r() * 22;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, "rgba(70,64,58,0.14)");
+    g.addColorStop(1, "rgba(70,64,58,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+  }
+  for (let i = 0; i < 8; i++) {
+    ctx.fillStyle = `rgba(90,88,92,${0.3 + r() * 0.3})`;
+    ctx.beginPath();
+    ctx.arc(r() * 256, r() * 256, 1 + r() * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = "rgba(96,92,88,0.75)";
+  ctx.lineWidth = 2;
   for (let i = 0; i <= tiles; i++) {
     ctx.beginPath();
     ctx.moveTo(i * s, 0);

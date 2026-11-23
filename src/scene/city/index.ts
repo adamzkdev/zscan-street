@@ -986,7 +986,7 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
     [C.road.z1, B.maxZ],
   ];
   const curbM = mat("#6d6876");
-  curbM.userData.dayColor = "#e9e7f2";
+  curbM.userData.dayColor = "#bdb9b3";
   xs.forEach(([x0, x1], i) =>
     zs.forEach(([z0, z1], j) => {
       const t = pavingTexture(11 + i * 2 + j, 4);
@@ -1130,7 +1130,7 @@ function streetGeo(axis: "x" | "z", at: number, from: number, to: number, width:
 let pavings: THREE.MeshStandardMaterial[] | null = null;
 function pavingMats() {
   if (pavings) return pavings;
-  pavings = [40, 41, 42, 43, 44].map((seed) => dayAlt(new THREE.MeshStandardMaterial({ map: pavingTexture(seed, 4), roughness: 0.62, metalness: 0.05, color: "#e8e4ee" }), () => pavingTexture(seed, 4, true)));
+  pavings = [40, 41, 42, 43, 44].map((seed) => dayAlt(new THREE.MeshStandardMaterial({ map: pavingTexture(seed, 4), roughness: 0.72, metalness: 0.02, color: "#ffffff" }), () => pavingTexture(seed, 4, true)));
   return pavings;
 }
 
@@ -1162,7 +1162,7 @@ function extension(g: THREE.Group, nav: Nav) {
   av.flush(g);
   // raised blocks, paved, with kerbs; grass on the strips outside the ring and the pocket parks
   const curbM = mat("#6d6876");
-  curbM.userData.dayColor = "#e9e7f2";
+  curbM.userData.dayColor = "#bdb9b3";
   const lawnT = grassTexture(12);
   lawnT.wrapS = lawnT.wrapT = THREE.RepeatWrapping;
   const lawn = addDetail(new THREE.MeshStandardMaterial({ map: lawnT, roughness: 0.95 }), "grass");
