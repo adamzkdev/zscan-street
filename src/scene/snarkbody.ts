@@ -26,6 +26,7 @@
 import * as THREE from "three";
 import { ZScan } from "../data/zscan";
 import { portraitImage } from "../data/portrait";
+import { atlasBitmap } from "../data/atlas";
 
 const GRID = 26;
 /** One voxel (m). */
@@ -43,11 +44,69 @@ type Cells = Int32Array;
 
 const cellCache = new Map<number, Promise<Cells | null>>();
 
+/**
+ * Many bodies at once (the game's passers-by, src/gta): their cells read from the collection's
+ * atlas (one picture of all 10,000, 32 px each, already shared by the crowds) in batches — one
+ * decode for all those asked within a moment — instead of a request per zkSNARK, which the API
+ * rate-limits.
+ */
+let atlasQueue: { id: number; done: (c: Cells | null) => void }[] = [];
+let atlasTimer: ReturnType<typeof setTimeout> | null = null;
+function fromAtlas(id: number): Promise<Cells | null> {
+  return new Promise((done) => {
+    atlasQueue.push({ id, done });
+    atlasTimer ??= setTimeout(async () => {
+      const q = atlasQueue;
+      atlasQueue = [];
+      atlasTimer = null;
+      let bmp: ImageBitmap | null = null;
+      try {
+        bmp = await atlasBitmap();
+        const c = document.createElement("canvas");
+        c.width = c.height = 32;
+        const g = c.getContext("2d", { willReadFrequently: true })!;
+        const cellPx = bmp.width / 100;
+        let k = 0;
+        for (const it of q) {
+          // a few a frame: each one becomes a body (meshing it takes a moment), never all at once
+          if (++k % 4 === 0) await new Promise((r) => requestAnimationFrame(() => r(null)));
+          const s = it.id - 1;
+          g.clearRect(0, 0, 32, 32);
+          g.drawImage(bmp, (s % 100) * cellPx, Math.floor(s / 100) * cellPx, cellPx, cellPx, 0, 0, 32, 32);
+          const d = g.getImageData(0, 0, 32, 32).data;
+          const out = new Int32Array(GRID * GRID);
+          for (let r = 0; r < GRID; r++)
+            for (let k = 0; k < GRID; k++) {
+              const i = (Math.floor(((r + 0.5) * 32) / GRID) * 32 + Math.floor(((k + 0.5) * 32) / GRID)) * 4;
+              out[r * GRID + k] = d[i + 3] < 128 ? -1 : (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+            }
+          keyOut(out);
+          it.done(out);
+        }
+      } catch {
+        for (const it of q) it.done(null);
+      } finally {
+        bmp?.close();
+      }
+    }, 120);
+  });
+}
+
+/** Read zkSNARKs from the atlas from now on (many at once: the game's streets), not one request each. */
+export let cellsFromAtlas = false;
+export function useAtlasCells(on: boolean) {
+  cellsFromAtlas = on;
+}
+
 /** zkSNARK #id's cells (null: the picture could not be read). */
 export function snarkCells(id: number): Promise<Cells | null> {
   let p = cellCache.get(id);
   if (!p) {
     p = (async () => {
+      if (cellsFromAtlas) {
+        const c = await fromAtlas(id);
+        if (c) return c;
+      }
       try {
         const img = await portraitImage(ZScan.zkSnarkImage(id));
         const c = document.createElement("canvas");
@@ -72,7 +131,7 @@ export function snarkCells(id: number): Promise<Cells | null> {
       }
     })();
     cellCache.set(id, p);
-    if (cellCache.size > 160) cellCache.delete(cellCache.keys().next().value!);
+    if (cellCache.size > 640) cellCache.delete(cellCache.keys().next().value!);
   }
   return p;
 }

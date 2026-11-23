@@ -35,8 +35,8 @@ interface Spec {
 }
 
 export const SPECS: Record<VehicleKind, Spec> = {
-  gt: { name: "ZK-GT", accel: 11.5, vmax: 58, grip: 8.5, turn: 1, len: GT_SPEC.w * VOX, wid: GT_SPEC.d * VOX, wheelR: 0.32, wheels: [6, 21], vox: 27, track: 5.1, gears: 7 },
-  moto: { name: "ZK-R motorbike", accel: 13.5, vmax: 64, grip: 9.5, turn: 1.25, len: MOTO_SPEC.w * VOX, wid: 0.85, wheelR: 0.33, wheels: [2.5, 11.5], vox: MOTO_SPEC.w, track: 0, gears: 6, bike: true },
+  gt: { name: "ZK-GT", accel: 11, vmax: 50, grip: 8.5, turn: 1, len: GT_SPEC.w * VOX, wid: GT_SPEC.d * VOX, wheelR: 0.32, wheels: [6, 21], vox: 27, track: 5.1, gears: 7 },
+  moto: { name: "ZK-R motorbike", accel: 12.5, vmax: 54, grip: 9.5, turn: 1, len: MOTO_SPEC.w * VOX, wid: 0.85, wheelR: 0.33, wheels: [2.5, 11.5], vox: MOTO_SPEC.w, track: 0, gears: 6, bike: true },
   sedan: { name: "Sedan", accel: 7, vmax: 40, grip: 7.5, turn: 0.9, len: 4, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 18], vox: 24, track: 4.6, gears: 5 },
   taxi: { name: "Taxi", accel: 6.5, vmax: 38, grip: 7.5, turn: 0.9, len: 4.5, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 21], vox: 27, track: 4.6, gears: 5 },
   police: { name: "Police cruiser", accel: 8.5, vmax: 47, grip: 8, turn: 0.95, len: 26 * VOX, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 20], vox: 26, track: 4.6, gears: 6 },
@@ -210,64 +210,75 @@ export class DriveCar {
     this.pose(dt, inp, world);
   }
 
+  /**
+   * One step of the arcade model. The steering asks for a turn rate (not a wheel angle): it builds
+   * up from a standstill (no turning on the spot), peaks in town and eases off at speed, so a held
+   * key never throws the car round at 150 km/h. The tyres keep it on its line (the speed follows
+   * the heading quickly); only the handbrake lets the back go, and the steering then holds the
+   * angle (counter-steer to catch it).
+   */
   private step(dt: number, inp: DriveIn, world: CarWorld) {
     const s = this.spec;
-    const fx = Math.cos(this.yaw),
+    let fx = Math.cos(this.yaw),
       fz = -Math.sin(this.yaw);
-    const rx = -fz,
-      rz = fx;
-    // (right = forward turned clockwise seen from above: (sin, cos))
+    // the car's sideways (its right): (sin, cos) of the heading
+    let lx = -fz,
+      lz = fx;
     let vF = this.vel.x * fx + this.vel.y * fz;
-    let vR = this.vel.x * (-rx) + this.vel.y * (-rz);
+    let vL = this.vel.x * lx + this.vel.y * lz;
     // the engine, the brakes, the drag
     const nitro = inp.nitro && this.nos > 0.02 && inp.throttle > 0.1;
     this.nosOn = nitro;
     if (nitro) this.nos = Math.max(0, this.nos - dt * 0.28);
     else this.nos = Math.min(1, this.nos + dt * 0.05);
-    const vmax = s.vmax * (nitro ? 1.22 : 1);
+    const vmax = s.vmax * (nitro ? 1.2 : 1);
     let a = 0;
     if (inp.throttle > 0) {
-      if (vF < -0.5) a += 14 * inp.throttle;
-      else a += inp.throttle * s.accel * Math.max(0, 1 - (vF / vmax) ** 2) * (nitro ? 1.7 : 1);
+      if (vF < -0.5) a += 16 * inp.throttle;
+      else a += inp.throttle * s.accel * Math.max(0, 1 - (vF / vmax) ** 2) * (nitro ? 1.6 : 1);
     }
     if (inp.brake > 0) {
-      if (vF > 0.5) a -= 15 * inp.brake;
-      else if (vF > -s.vmax * 0.28) a -= 6 * inp.brake;
+      if (vF > 0.5) a -= 18 * inp.brake;
+      else if (vF > -s.vmax * 0.25) a -= 7 * inp.brake;
     }
-    if (inp.handbrake) a -= Math.sign(vF) * Math.min(Math.abs(vF) / dt, 5.5);
-    // rolling and air
-    a -= Math.sign(vF) * Math.min(Math.abs(vF) / dt, 0.35 + 0.0028 * vF * vF + (inp.throttle < 0.05 ? 0.9 : 0));
+    const sp0 = Math.abs(vF);
+    const drift = inp.handbrake && sp0 > 6;
+    if (inp.handbrake) a -= Math.sign(vF) * Math.min(sp0 / dt, drift ? 3.5 : 9);
+    // rolling and air; off the throttle the car slows gently (engine braking)
+    a -= Math.sign(vF) * Math.min(sp0 / dt, 0.3 + 0.0024 * vF * vF + (inp.throttle < 0.05 && inp.brake < 0.05 ? 1.4 : 0));
     vF += a * dt;
-    // the tyres: the sideways speed dies away, a lot less on the handbrake (the back lets go)
-    const speed = Math.abs(vF);
-    const drift = inp.handbrake && speed > 6;
-    const grip = drift ? 1.4 : s.grip * (Math.abs(vR) > 5 ? 0.55 : 1);
-    vR *= Math.exp(-grip * dt);
-    // the steering: less lock at speed, and it turns in over a moment
-    this.steerNow += (inp.steer - this.steerNow) * Math.min(1, dt * (inp.steer === 0 ? 7 : 5));
-    const lock = THREE.MathUtils.lerp(0.58, 0.13, Math.min(1, speed / 38)) * s.turn;
-    const wb = s.len * 0.62;
-    let target = (-vF * Math.tan(this.steerNow * lock)) / wb;
-    // a drift swings the tail out (counter-steer pulls it back)
-    if (drift) target *= 1.75;
-    this.yawRate += (target - this.yawRate) * Math.min(1, dt * (drift ? 4 : 9));
+    // the steering: quick to turn in, quicker back to the middle
+    const back = inp.steer === 0 || Math.sign(inp.steer) !== Math.sign(this.steerNow);
+    this.steerNow += (inp.steer - this.steerNow) * Math.min(1, dt * (back ? 11 : 6));
+    const sp = Math.abs(vF);
+    const peak = (s.bike ? 1.9 : 1.65) * s.turn;
+    const build = Math.min(1, sp / 5);
+    const ease = 1 / (1 + Math.max(0, sp - 10) / (s.bike ? 20 : 16));
+    let target = -this.steerNow * peak * build * ease * (vF >= 0 ? 1 : -1);
+    // the handbrake: the tail swings out, the steering holds the slide
+    if (drift) target = target * 1.55 + -Math.sign(vL) * 0.15 * (this.steerNow === 0 ? 1 : 0);
+    // no input: the car straightens itself (no wobble after a turn)
+    const k = drift ? 4 : this.steerNow === 0 ? 14 : 9;
+    this.yawRate += (target - this.yawRate) * Math.min(1, dt * k);
+    // the speed in the world (the engine's change along the car as it was)
+    const wx = fx * vF + lx * vL,
+      wz = fz * vF + lz * vL;
     this.yaw += this.yawRate * dt;
-    // a drift turns the car's heading without its direction of travel: what was forward is now part sideways
-    const nfx = Math.cos(this.yaw),
-      nfz = -Math.sin(this.yaw);
-    const vx = fx * vF - rx * vR,
-      vz = fz * vF - rz * vR;
-    if (drift || Math.abs(vR) > 1.5) {
-      this.vel.set(vx, vz);
-    } else {
-      // with grip the speed turns with the car
-      const nrx = -nfz,
-        nrz = nfx;
-      this.vel.set(nfx * vF - nrx * vR, nfz * vF - nrz * vR);
-    }
-    this.vF = this.vel.x * nfx + this.vel.y * nfz;
-    this.vR = this.vel.x * nfz - this.vel.y * nfx;
-    this.drifting = Math.abs(this.vR) > 3.2 && speed > 7 ? Math.min(1, (Math.abs(this.vR) - 3.2) / 5) : 0;
+    fx = Math.cos(this.yaw);
+    fz = -Math.sin(this.yaw);
+    lx = -fz;
+    lz = fx;
+    // seen from the turned car: what was ahead is now partly sideways, and the tyres take that out
+    let nF = wx * fx + wz * fz;
+    let nL = wx * lx + wz * lz;
+    const grip = drift ? 1.5 : s.grip * 1.6;
+    nL *= Math.exp(-grip * dt);
+    // the tyres scrub speed while the car slides
+    nF -= Math.sign(nF) * Math.min(Math.abs(nF), Math.abs(nL) * 0.6 * dt);
+    this.vel.set(fx * nF + lx * nL, fz * nF + lz * nL);
+    this.vF = nF;
+    this.vR = nL;
+    this.drifting = Math.abs(nL) > 2.6 && sp > 7 ? Math.min(1, (Math.abs(nL) - 2.6) / 5) : 0;
     const p = this.group.position;
     p.x += this.vel.x * dt;
     p.z += this.vel.y * dt;
@@ -339,10 +350,13 @@ export class DriveCar {
       nz = pz / len;
     const into = this.vel.x * nx + this.vel.y * nz;
     if (into < 0) {
-      this.vel.x -= 1.25 * into * nx;
-      this.vel.y -= 1.25 * into * nz;
-      this.vel.multiplyScalar(0.985);
-      this.yawRate *= 0.6;
+      this.vel.x -= 1.12 * into * nx;
+      this.vel.y -= 1.12 * into * nz;
+      // a glancing touch keeps most of the speed along the wall; a head-on hit stops it
+      const along = Math.hypot(this.vel.x, this.vel.y);
+      const head = Math.min(1, -into / Math.max(1, along - into));
+      this.vel.multiplyScalar(1 - 0.25 * head);
+      this.yawRate *= 0.4;
       const hs = -into;
       if (hs > 1.5 && (!this.hit || hs > this.hit.speed)) {
         this.hit = { speed: hs, x: p.x - nx * r, z: p.z - nz * r, what };

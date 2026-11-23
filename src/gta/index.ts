@@ -13,6 +13,7 @@ import { GtaInput } from "./input";
 import { Missions } from "./missions";
 import { WorldNet } from "./net";
 import { People3D, type Person3 } from "./people3d";
+import { useAtlasCells } from "../scene/snarkbody";
 import { Peds } from "./peds";
 import { Debris } from "./debris";
 import { Breakables } from "./breakables";
@@ -378,6 +379,8 @@ export class GtaMode {
     this.props.show(true);
     this.peds.show(true);
     this.peds.crowd = this.settings.crowd;
+    // dozens of zkSNARKs in 3D: their pictures from the collection's atlas, not a request each
+    useAtlasCells(true);
     this.debris.into(this.host.scene);
     this.hud.show(true);
     // the street's solid shape (once, and again when the far city has streamed in)
@@ -863,6 +866,7 @@ export class GtaMode {
     // the passers-by
     if (this.solid.ready) {
       this.peds.build(this.roads, this.pedWorld());
+      this.peds.room = Math.round(this.people.limit * 0.6);
       const at = this.car ? this.car.group.position : this.player.pos;
       const fy = this.cam.yaw;
       this.peds.update(dt, { x: at.x, z: at.z, onFoot: !this.car, speed: this.car?.speed ?? this.player.speed, id: this.player.id, fx: -Math.sin(fy), fz: -Math.cos(fy) }, this.pedWorld(), { height: this.host.height(), at: this.host.lastBlockAt(), mempool: this.host.mempool() });

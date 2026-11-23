@@ -146,6 +146,10 @@ export class Peds {
   private chatterT = 2;
   private seenBlock = 0;
   crowd: Crowd = "normal";
+  /** At most this many (what the 3D bodies can take now). */
+  room = 999;
+  /** The faces of the town: 140 zkSNARKs drawn once (their pictures are read once and kept). */
+  private pool = Array.from({ length: 140 }, () => 1 + Math.floor(Math.random() * 10000));
   private scale: number;
 
   constructor(scene: THREE.Scene) {
@@ -219,7 +223,7 @@ export class Peds {
       const r = Math.random();
       const make = (mode: Mode, ps: THREE.Vector3, ss: number): Ped => ({
         key: `g${++this.n}`,
-        id: 1 + Math.floor(Math.random() * 10000),
+        id: this.pool[Math.floor(Math.random() * this.pool.length)],
         pos: ps,
         heading: 0,
         line: l,
@@ -256,7 +260,7 @@ export class Peds {
   /** Each frame: births and departures round (x, z), everyone's step, the bubbles. */
   update(dt: number, me: { x: number; z: number; onFoot: boolean; speed: number; id: number; fx: number; fz: number }, world: PedWorld, live: { height: number; at: number; mempool: number }) {
     if (!this.lines.length) return;
-    const target = Math.round(TARGET[this.crowd] * this.scale);
+    const target = Math.min(Math.round(TARGET[this.crowd] * this.scale), this.room);
     for (let i = this.peds.length - 1; i >= 0; i--) {
       const p = this.peds[i];
       if (Math.hypot(p.pos.x - me.x, p.pos.z - me.z) > GONE && p.knockT < 0) {

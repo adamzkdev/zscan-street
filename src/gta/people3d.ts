@@ -74,6 +74,10 @@ export class People3D {
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
   enabled = true;
+  /** How many are drawn in 3D now: the most, or fewer while the frame rate suffers (it climbs back). */
+  limit: number;
+  private frameAvg = 1 / 60;
+  private judgeT = 0;
 
   /** Where the people come from instead (inside a place), or null: the street's. */
   source: ((x: number, z: number, r: number) => Person3[]) | null = null;
@@ -85,6 +89,7 @@ export class People3D {
     const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
     this.max = coarse ? 44 : 112;
     this.radius = coarse ? 32 : 46;
+    this.limit = this.max;
     const toon = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: snarkToon() });
     this.batch = new THREE.BatchedMesh(this.max, 260_000, 0, toon);
     this.batch.castShadow = true;
@@ -128,6 +133,14 @@ export class People3D {
   update(dt: number, x: number, z: number, me: THREE.Vector3 | null = null, eye: THREE.Vector3 | null = null) {
     this.eye = eye;
     if (!this.group.visible || !this.enabled) return;
+    // the frame rate decides how many: under ~45 fps a few go back to flat, over ~57 a few come in
+    this.frameAvg += (dt - this.frameAvg) * 0.05;
+    this.judgeT += dt;
+    if (this.judgeT > 3) {
+      this.judgeT = 0;
+      if (this.frameAvg > 1 / 45) this.limit = Math.max(Math.round(this.max * 0.4), this.limit - 12);
+      else if (this.frameAvg < 1 / 57) this.limit = Math.min(this.max, this.limit + 6);
+    }
     this.scanT -= dt;
     if (this.scanT <= 0) {
       this.scanT = 0.25;
@@ -149,7 +162,7 @@ export class People3D {
     const ranked = list.map((p) => ({ p, d: d(p) - (p.own ? 1e6 : 0) })).sort((a, b) => a.d - b.d);
     const keep = new Set<string>();
     for (const { p, d: dd } of ranked) {
-      if (keep.size >= this.max) break;
+      if (keep.size >= this.limit) break;
       const held = this.slots.has(p.key);
       // (a little farther for those already in: no flicker at the edge)
       if (!p.own && dd > (this.radius + (held ? 4 : 0)) ** 2) continue;
@@ -284,9 +297,11 @@ export class People3D {
       at.z += sl.aside.z;
       const seat = sl.p.seat?.() ?? 0;
       // right by the camera: not drawn (it would fill the picture), as the games fade them
-      const close = !!this.eye && Math.hypot(at.x - this.eye.x, at.z - this.eye.z) < 1.5;
+      const camD = this.eye ? Math.hypot(at.x - this.eye.x, at.z - this.eye.z) : 0;
+      const close = !!this.eye && camD < 1.5;
       this.batch.setVisibleAt(sl.geo, !close);
-      this.inks.setVisibleAt(sl.ink, !close);
+      // (the ink outline only where it reads: a few pixels wide far off, it is all cost)
+      this.inks.setVisibleAt(sl.ink, !close && camD < 16);
       sl.phase = (sl.phase + (sl.speed / K) * dt * 0.95) % 1;
       const st = Math.sin(sl.phase * Math.PI * 2);
       const walk = Math.min(1, sl.speed * 1.4);
