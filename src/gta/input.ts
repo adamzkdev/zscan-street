@@ -29,7 +29,7 @@ export class GtaInput {
   /** On-screen buttons held (touch): "gas", "brake", "drift", "nos", "jump", "car". */
   touch = new Set<string>();
   active = false;
-  private drag: { id: number; x: number; y: number } | null = null;
+  private drag: { id: number; x: number; y: number; x0: number; y0: number; t0: number; button: number; mouse: boolean } | null = null;
   pad = { lx: 0, ly: 0, rx: 0, ry: 0, rt: 0, lt: 0, a: false, b: false, x: false, y: false, lb: false, rb: false, start: false, back: false, down: false, connected: false };
   private padWas: Record<string, boolean> = {};
 
@@ -45,15 +45,28 @@ export class GtaInput {
     );
     window.addEventListener("keyup", (e) => this.held.delete(e.code), true);
     window.addEventListener("blur", () => this.held.clear());
+    window.addEventListener("mouseup", (e) => e.button === 2 && this.held.delete("Mouse2"));
     window.addEventListener("mousemove", (e) => {
       if (!this.active || document.pointerLockElement !== this.canvas) return;
       this.lookAcc.x += e.movementX;
       this.lookAcc.y += e.movementY;
     });
     canvas.addEventListener("pointerdown", (e) => {
-      if (!this.active || document.pointerLockElement === this.canvas) return;
+      if (!this.active) return;
+      // the mouse's buttons: the left one punches, the right one holds the guard up
+      if (e.pointerType === "mouse") {
+        if (e.button === 2) this.held.add("Mouse2");
+        if (document.pointerLockElement === this.canvas) {
+          if (e.button === 0) this.fresh.add("Mouse0");
+          return;
+        }
+      }
+      if (document.pointerLockElement === this.canvas) return;
       if (this.drag) return;
-      this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), button: e.button, mouse: e.pointerType === "mouse" };
+    });
+    canvas.addEventListener("contextmenu", (e) => {
+      if (this.active) e.preventDefault();
     });
     window.addEventListener("pointermove", (e) => {
       if (!this.active || !this.drag || e.pointerId !== this.drag.id) return;
@@ -64,7 +77,12 @@ export class GtaInput {
       this.drag.y = e.clientY;
     });
     const up = (e: PointerEvent) => {
-      if (this.drag?.id === e.pointerId) this.drag = null;
+      if (e.pointerType === "mouse" && e.button === 2) this.held.delete("Mouse2");
+      const d = this.drag;
+      if (d?.id !== e.pointerId) return;
+      // a click (not a drag to look round): a punch
+      if (this.active && d.mouse && d.button === 0 && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 7 && performance.now() - d.t0 < 450) this.fresh.add("Mouse0");
+      this.drag = null;
     };
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
@@ -173,6 +191,11 @@ export class GtaInput {
 
   get sprint() {
     return this.down("ShiftLeft", "ShiftRight") || this.pad.b || Math.hypot(this.stick.x, this.stick.y) > 0.92;
+  }
+
+  /** Fists up: the right mouse button, Q, the gamepad's left bumper. */
+  get guard() {
+    return this.down("Mouse2", "KeyQ") || this.pad.lb;
   }
 
   get jump() {

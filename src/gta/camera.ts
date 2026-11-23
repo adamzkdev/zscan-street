@@ -153,7 +153,7 @@ export class GtaCamera {
     let len = arm;
     for (let d = 0.6; d <= arm; d += 0.25) {
       if (world.wall(ox + bx * d, oz + bz * d)) {
-        len = Math.max(0.6, d - 0.45);
+        len = Math.max(0.9, d - 0.45);
         break;
       }
     }

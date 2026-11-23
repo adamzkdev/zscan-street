@@ -1121,6 +1121,24 @@ export function planCity() {
     if (circles.length > 400) break;
   }
 
+  // no lamp post on the asphalt: one the wider streets reached steps back onto the pavement, just
+  // past the kerb it was nearest (the streets as the game drives them: the grid's, the avenue, the
+  // heart's two side streets)
+  {
+    const asphalt = streetSegments().map((q) => (q.axis === "x" ? { x0: q.from, x1: q.to, z0: q.at - q.width / 2, z1: q.at + q.width / 2, axis: "x" as const } : { x0: q.at - q.width / 2, x1: q.at + q.width / 2, z0: q.from, z1: q.to, axis: "z" as const }));
+    asphalt.push({ x0: CITY.minX, x1: CITY.maxX, z0: CITY.road.z0, z1: CITY.road.z1, axis: "x" });
+    for (const x of CITY.cross) asphalt.push({ x0: x - 4, x1: x + 4, z0: CORE.minZ, z1: CORE.maxZ, axis: "z" });
+    for (let pass = 0; pass < 2; pass++)
+      for (const q of props) {
+        if (q.type !== "lamp") continue;
+        for (const r of asphalt) {
+          if (q.x <= r.x0 || q.x >= r.x1 || q.z <= r.z0 || q.z >= r.z1) continue;
+          if (r.axis === "x") q.z = q.z - r.z0 < r.z1 - q.z ? r.z0 - 0.5 : r.z1 + 0.5;
+          else q.x = q.x - r.x0 < r.x1 - q.x ? r.x0 - 0.5 : r.x1 + 0.5;
+        }
+      }
+  }
+
   // street furniture standing in each other (a bollard in a lamp post, a cone in a hydrant): the
   // small one steps along a little, the way the two are apart most
   for (let i = 0; i < props.length; i++)

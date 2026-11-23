@@ -104,9 +104,9 @@ const COACH = TOUCH
     ]
   : [
       { eye: "Welcome to ZStreet · 1 / 4", title: "Move", text: `${kbd("W")} or ${kbd("Z")} to run, ${kbd("A")}${kbd("D")} or ${kbd("Q")}${kbd("D")} to turn, ${kbd("S")} back · ${kbd("Shift")} sprint · ${kbd("Space")} jump. The camera follows you (Menu › Camera for a free one).` },
-      { eye: "Get a ride · 2 / 4", title: "Take a car", text: `${kbd("X")} punches and smashes things. Walk up to any car and press ${kbd("F")}. ${kbd("Space")} handbrake to drift · ${kbd("Shift")} nitrous · ${kbd("C")} camera · ${kbd("E")} horn · ${kbd("R")} back on the road.` },
+      { eye: "Get a ride · 2 / 4", title: "Fists and wheels", text: `${kbd("Click")} punches (hold ${kbd("Right click")} for your guard: it turns you to whoever is in front). ${kbd("E")} by someone to talk. Walk up to any car and press ${kbd("F")} · ${kbd("Space")} drift · ${kbd("Shift")} nitrous · ${kbd("R")} back on the road.` },
       { eye: "The chain is the clock · 3 / 4", title: "Beat the block", text: `Blocks are real. The gold beam is the MEMPOOL HQ: take a parcel there and deliver it before the next block is mined.` },
-      { eye: "Find your way · 4 / 4", title: "The map", text: `${kbd("M")} opens the map: click a street to go there. Walk up to a lit door and press ${kbd("E")} to go in. ${kbd("Esc")} for the menu, ${kbd("T")} day or night.` },
+      { eye: "Find your way · 4 / 4", title: "The map", text: `${kbd("M")} opens the map: click a street to go there. Doors are shut: walk up to one and press ${kbd("E")} to go in (inside, ${kbd("E")} uses what is in front of you). ${kbd("Esc")} for the menu, ${kbd("T")} day or night.` },
     ];
 
 export class GtaHud {
@@ -149,6 +149,9 @@ export class GtaHud {
       <div class="gh-prompt"></div>
       <div class="gh-drift">Drift</div>
       <div class="gh-mini"><canvas></canvas><b class="gh-n">N</b></div>
+      <div class="gh-hp" style="--hp:1" title="Health"><i></i></div>
+      <div class="gh-hurtfx"></div>
+      <div class="gh-wasted"><b>Wasted</b><span>Knocked out cold. Back on your feet in a moment.</span></div>
       <div class="gh-where"><b class="gh-dist"></b><span class="gh-st"></span><span class="gh-nx"></span></div>
       <div class="gh-speed">
         <svg viewBox="0 0 240 240" aria-hidden="true">
@@ -221,6 +224,26 @@ export class GtaHud {
       b.addEventListener("pointerleave", up);
     }
     this.mapEvents();
+  }
+
+  /** Your health (0…100) on the bar under the radar; `k` > 0: a hit just landed (the screen's edge flashes red). */
+  hurt(hp: number, k: number) {
+    const bar = this.$(".gh-hp") as HTMLElement;
+    bar.style.setProperty("--hp", (Math.max(0, hp) / 100).toFixed(3));
+    bar.classList.toggle("low", hp < 30);
+    bar.classList.toggle("full", hp >= 99.5);
+    if (k > 0) {
+      const fx = this.$(".gh-hurtfx") as HTMLElement;
+      fx.style.setProperty("--k", Math.min(1, 0.35 + k * 0.5).toFixed(2));
+      fx.classList.remove("on");
+      void fx.offsetWidth;
+      fx.classList.add("on");
+    }
+  }
+
+  /** Knocked out: the street in grey, the word over it. */
+  wasted(on: boolean) {
+    this.root.classList.toggle("wasted", on);
   }
 
   /** Inside a place: no street radar, no street objective. */
@@ -793,12 +816,13 @@ export class GtaHud {
         <div><dt>${kbd("Shift")}</dt><dd>sprint · nitrous</dd></div>
         <div><dt>${kbd("Space")}</dt><dd>jump · handbrake (drift)</dd></div>
         <div><dt>${kbd("F")}</dt><dd>get in / out of a car</dd></div>
-        <div><dt>${kbd("X")}</dt><dd>punch · smash things, inside and out</dd></div>
-        <div><dt>${kbd("E")}</dt><dd>enter a door · talk · horn</dd></div>
+        <div><dt>${kbd("Click")} / ${kbd("X")}</dt><dd>punch · smash things, inside and out</dd></div>
+        <div><dt>${kbd("Right click")}</dt><dd>guard up · turn to who is in front</dd></div>
+        <div><dt>${kbd("E")}</dt><dd>open a door · talk to someone · use · horn</dd></div>
         <div><dt>${kbd("C")} ${kbd("B")}</dt><dd>camera · look back</dd></div>
         <div><dt>${kbd("R")}</dt><dd>back on the road</dd></div>
         <div><dt>${kbd("M")} ${kbd("Esc")} ${kbd("T")}</dt><dd>map · menu · day / night</dd></div>
-      </dl><h3>Gamepad</h3><p class="gh-note">RT / LT gas and brake, left stick steer, right stick camera, A jump / handbrake, X nitrous, Y car, B sprint, Start menu.</p><button class="gta-btn" data-do="coach">Show the first steps again</button>`;
+      </dl><h3>Gamepad</h3><p class="gh-note">RT / LT gas and brake, left stick steer, right stick camera, A jump / handbrake, X punch / nitrous, LB guard, Y car, B sprint, Start menu.</p><button class="gta-btn" data-do="coach">Show the first steps again</button>`;
     const pane = this.$(".gh-pane");
     pane.innerHTML = `<header><h2>${tabs.find(([k]) => k === this.tab)?.[1] ?? ""}</h2><button class="gh-px" data-act="resume" aria-label="Close">×</button></header>${body}`;
     for (const sg of pane.querySelectorAll<HTMLElement>(".gh-seg"))

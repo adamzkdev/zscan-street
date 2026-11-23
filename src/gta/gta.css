@@ -526,6 +526,89 @@
   font: 800 10px/18px var(--g-disp);
   text-align: center;
 }
+/* your health: a slim bar between the radar and where you are */
+.gh-hp {
+  position: absolute;
+  left: 40px;
+  bottom: 93px;
+  width: 170px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--g-panel);
+  box-shadow: 0 0 0 1px var(--g-line), var(--g-shadow);
+  overflow: hidden;
+}
+.gh-hp i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(var(--hp));
+  background: #5ccf7d;
+  transition: transform 0.25s ease, background 0.2s;
+}
+.gh-hp.low i {
+  background: var(--g-bad);
+  animation: gh-hp-low 0.9s ease-in-out infinite;
+}
+@keyframes gh-hp-low {
+  50% {
+    opacity: 0.55;
+  }
+}
+/* a hit: the screen's edge goes red a moment */
+.gh-hurtfx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(200, 30, 24, 0.55) 100%);
+}
+.gh-hurtfx.on {
+  animation: gh-hurt 0.6s ease-out;
+}
+@keyframes gh-hurt {
+  0% {
+    opacity: var(--k, 0.6);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* knocked out: the street in grey, one word */
+.gh-wasted {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+  backdrop-filter: grayscale(0.92) brightness(0.72);
+  -webkit-backdrop-filter: grayscale(0.92) brightness(0.72);
+  animation: gh-fade 0.6s ease-out;
+}
+.gta-hud.wasted .gh-wasted {
+  display: flex;
+}
+.gh-wasted b {
+  font: 800 72px/1 var(--g-disp);
+  font-stretch: 112%;
+  color: var(--g-bad);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5);
+}
+.gh-wasted span {
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: var(--g-panel);
+  font: 600 14px var(--g-disp);
+  color: var(--g-ink2);
+}
+@keyframes gh-fade {
+  from {
+    opacity: 0;
+  }
+}
 .gh-where {
   position: absolute;
   left: 22px;
@@ -779,10 +862,21 @@
     width: 108px;
     height: 108px;
   }
+  .gh-hp {
+    left: auto;
+    right: 18px;
+    top: 122px;
+    bottom: auto;
+    width: 100px;
+    height: 5px;
+  }
+  .gh-wasted b {
+    font-size: 48px;
+  }
   .gh-where {
     left: auto;
     right: 10px;
-    top: 124px;
+    top: 132px;
     bottom: auto;
     width: 116px;
     padding: 6px 9px 7px;
@@ -1411,6 +1505,7 @@
 
 /* inside a place: the street's radar, where you are and what's next step aside */
 .gta-hud.inside .gh-mini,
+.gta-hud.inside .gh-hp.full,
 .gta-hud.inside .gh-where,
 .gta-hud.inside .gh-next,
 .gta-hud.inside .gh-top [data-act="map"],

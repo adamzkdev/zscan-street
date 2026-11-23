@@ -1587,7 +1587,61 @@ canvas.addEventListener("pointerdown", (e) => {
   down = { x: e.clientX, y: e.clientY };
   rig.interrupt();
 });
+/** Inside a place: what is at (x, y) on the screen, used (a person talked to, a panel opened, a game, a book). */
+function interiorUse(x: number, y: number) {
+  // the people inside: talk to them
+  const npc = interiors.snarkAt(x, y);
+  if (npc && interiors.active) {
+    bubbles.address(npc.root);
+    const place = interiors.active;
+    const floor = place.floors[interiors.floor];
+    const job = npc.role ?? "visitor";
+    return talk.show(
+      npcSpeaker(
+        `${place.key}-${npc.id}-${job}`,
+        `${npc.name} · ${job}`,
+        `${npc.name}, the ${job.toLowerCase()} at the ${place.title} in ZStreet`,
+        ZScan.zkSnarkImage(npc.id),
+        `Welcome to the ${place.title}! I'm the ${job.toLowerCase()} here. What can I tell you?`,
+        () => `You work at the ${place.title} (${floor.name}). ${PLACE_LORE[place.key] ?? PLACE_ABOUT[place.key] ?? ""}${npc.txs.length ? ` You hold transaction ${npc.txs[0].txid} (${npc.txs[0].kind}).` : ""}`,
+        director,
+      ),
+    );
+  }
+  const info = interiors.pickAt(x, y);
+  if (info?.panel === "wallets" || info?.panel === "guestbook") {
+    interiors.walk.enabled = false;
+    return info.panel === "wallets" ? payDesk.gallery(info.wallet === "zlab" ? null : (info.wallet ?? null)) : payDesk.compose("guestbook");
+  }
+  if (info?.panel === "zsalab") {
+    interiors.walk.enabled = false;
+    return void zsaLab.open(info.zsa ?? "mint");
+  }
+  if (info?.panel) return venues.show(info.panel);
+  // the tower: its elevator doors, its arcade games
+  // old elevator doors, escalators: no teleport, the lift cars and the stairs are walked
+  if (info?.floor !== undefined && interiors.active) return void hud.showPick({ ...info, floor: undefined, body: `${info.body ?? ""}<p>Floors are reached on foot: walk into a lift car and press a floor, or take the stairs and escalators.</p>` });
+  if (info?.game) {
+    interiors.walk.enabled = false;
+    return void arcade.show(info.game);
+  }
+  // ZK PARTY (port): the ZK TOWER's party cabinets, the GAME HOUSE's wall, desk and tables
+  if (info?.party) return void openPartyHall(info.party === true ? "board" : info.party, info.partyGame);
+  // the NU7 TOWER's pit garage: its RACE terminal and its karts race the NU7 GRAND PRIX
+  if (info?.race) return void raceNu7();
+  // the Needle's base jump: its desk in the lobby, the board on the 150 m terrace
+  if (info?.jump) return void jumpFromNeedle();
+  if (info?.table) return void openTableGame(info.table);
+  // a book in the library: open it and read
+  if (info?.book) {
+    interiors.walk.enabled = false;
+    return void reader.show(info.book);
+  }
+  if (info) hud.showPick(info);
+}
 canvas.addEventListener("pointerup", (e) => {
+  // the game (src/gta) has the mouse: a click is a punch there, never a pick
+  if (gta?.active) return;
   if (wing.active) return;
   // a click in a proof: back out to the street
   if (dive.active) return void dive.leave();
@@ -1596,55 +1650,7 @@ canvas.addEventListener("pointerup", (e) => {
   // inside a place: a click (not a look-around drag) inspects what is under it
   if (interiors.active) {
     if (e.button !== 0 || interiors.walk.dragged) return;
-    // the people inside: talk to them
-    const npc = interiors.snarkAt(e.clientX, e.clientY);
-    if (npc && interiors.active) {
-      bubbles.address(npc.root);
-      const place = interiors.active;
-      const floor = place.floors[interiors.floor];
-      const job = npc.role ?? "visitor";
-      return talk.show(
-        npcSpeaker(
-          `${place.key}-${npc.id}-${job}`,
-          `${npc.name} · ${job}`,
-          `${npc.name}, the ${job.toLowerCase()} at the ${place.title} in ZStreet`,
-          ZScan.zkSnarkImage(npc.id),
-          `Welcome to the ${place.title}! I'm the ${job.toLowerCase()} here. What can I tell you?`,
-          () => `You work at the ${place.title} (${floor.name}). ${PLACE_LORE[place.key] ?? PLACE_ABOUT[place.key] ?? ""}${npc.txs.length ? ` You hold transaction ${npc.txs[0].txid} (${npc.txs[0].kind}).` : ""}`,
-          director,
-        ),
-      );
-    }
-    const info = interiors.pickAt(e.clientX, e.clientY);
-    if (info?.panel === "wallets" || info?.panel === "guestbook") {
-      interiors.walk.enabled = false;
-      return info.panel === "wallets" ? payDesk.gallery(info.wallet === "zlab" ? null : (info.wallet ?? null)) : payDesk.compose("guestbook");
-    }
-    if (info?.panel === "zsalab") {
-      interiors.walk.enabled = false;
-      return void zsaLab.open(info.zsa ?? "mint");
-    }
-    if (info?.panel) return venues.show(info.panel);
-    // the tower: its elevator doors, its arcade games
-    // old elevator doors, escalators: no teleport, the lift cars and the stairs are walked
-    if (info?.floor !== undefined && interiors.active) return void hud.showPick({ ...info, floor: undefined, body: `${info.body ?? ""}<p>Floors are reached on foot: walk into a lift car and press a floor, or take the stairs and escalators.</p>` });
-    if (info?.game) {
-      interiors.walk.enabled = false;
-      return void arcade.show(info.game);
-    }
-    // ZK PARTY (port): the ZK TOWER's party cabinets, the GAME HOUSE's wall, desk and tables
-    if (info?.party) return void openPartyHall(info.party === true ? "board" : info.party, info.partyGame);
-    // the NU7 TOWER's pit garage: its RACE terminal and its karts race the NU7 GRAND PRIX
-    if (info?.race) return void raceNu7();
-    // the Needle's base jump: its desk in the lobby, the board on the 150 m terrace
-    if (info?.jump) return void jumpFromNeedle();
-    if (info?.table) return void openTableGame(info.table);
-    // a book in the library: open it and read
-    if (info?.book) {
-      interiors.walk.enabled = false;
-      return void reader.show(info.book);
-    }
-    if (info) hud.showPick(info);
+    interiorUse(e.clientX, e.clientY);
     return;
   }
   if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
@@ -1707,6 +1713,14 @@ canvas.addEventListener("pointerup", (e) => {
   }
 });
 canvas.addEventListener("pointermove", (e) => {
+  if (gta?.active) {
+    if (canvas.style.cursor) {
+      canvas.style.cursor = "";
+      hud.hover(null);
+      highlight(null);
+    }
+    return;
+  }
   if (interiors.active) {
     highlight(null);
     if (e.buttons) return void hud.hover(null);
@@ -3143,6 +3157,20 @@ gta = new GtaMode({
     }
   },
   arrest: () => void arrest(),
+  talk: (id, done) => {
+    if (!agents || talk.open) return false;
+    talk.show(crowdSpeaker(id, director, agents), done);
+    return true;
+  },
+  talking: () => talk.open,
+  closeTalk: () => talk.close(),
+  useAt: (x, y) => {
+    if (!interiors.active) return false;
+    if (!interiors.snarkAt(x, y) && !interiors.pickAt(x, y)) return false;
+    interiorUse(x, y);
+    return true;
+  },
+  useLabel: (x, y) => (interiors.active ? (interiors.hoverAt(x, y) ?? null) : null),
 });
 
 // the Needle's base jump (src/game/wingsuit.ts): off the 150 m deck in a wingsuit, through a ring per
@@ -3559,7 +3587,9 @@ function frameBody(stepDt?: number) {
   if (walking) mayor?.treasure.near(onFoot.camera.position);
   agents?.update(dt, focus);
   marks.update(dt);
-  if (walking && !interiors.active && !swing.active && !gta?.driving) talkUpdate(dt);
+  // (in the game, its own E: doors, cars, the people it draws)
+  if (walking && !interiors.active && !swing.active && !gta?.active) talkUpdate(dt);
+  else if (gta?.active && talkPrompt.classList.contains("on")) talkPrompt.classList.remove("on");
   else if (talkPrompt.classList.contains("on")) talkPrompt.classList.remove("on");
   npcs.update(dt);
   if (minimapOn) {

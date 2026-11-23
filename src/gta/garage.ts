@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { ZScan } from "../data/zscan";
 import { profile } from "../game/profile";
-import { makeSnarkBody, preloadSnarks, type SnarkBody } from "../scene/snarkbody";
-import { BODY_SCALE } from "./foot";
+import { faces } from "./faces";
+import { Human } from "./human";
 import { Mosaic } from "./mosaic";
 
 /**
@@ -22,7 +22,7 @@ export class Garage {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(34, 1, 0.1, 80);
   private el: HTMLElement;
-  private body: SnarkBody | null = null;
+  private body: Human | null = null;
   private stand = new THREE.Group();
   private turn = 0;
   private dragX: number | null = null;
@@ -39,8 +39,8 @@ export class Garage {
 
   constructor(ui: HTMLElement) {
     this.id = Garage.chosen();
-    this.camera.position.set(0, 0.95, 4.6);
-    this.camera.lookAt(0, 0.5, 0);
+    this.camera.position.set(0, 1.2, 4.6);
+    this.camera.lookAt(0, 0.92, 0);
     this.build();
     this.el = document.createElement("div");
     this.el.className = "gta-garage";
@@ -159,17 +159,14 @@ export class Garage {
     const set = new Set<number>([this.id, profile.p.avatar].filter((x) => x >= 1 && x <= 10000));
     while (set.size < 7) set.add(1 + Math.floor(Math.random() * 10000));
     this.picks = [...set];
-    void preloadSnarks(this.picks, 2500);
+    faces.want(this.picks, true);
   }
 
   private wear(id: number) {
     this.id = id;
     const old = this.body;
-    const b = makeSnarkBody(id);
-    b.root.scale.setScalar(BODY_SCALE);
-    b.root.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) o.castShadow = !o.userData.noShadow;
-    });
+    faces.want([id], true);
+    const b = new Human(id);
     this.stand.add(b.root);
     this.body = b;
     old?.dispose();

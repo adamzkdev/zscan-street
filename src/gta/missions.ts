@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { profile } from "../game/profile";
-import { makeSnarkBody, type SnarkBody } from "../scene/snarkbody";
+import { faces } from "./faces";
+import { Human } from "./human";
 import { ST } from "../scene/city/plan";
-import { BODY_SCALE } from "./foot";
 import type { Roads } from "./roads";
 
 /**
@@ -210,7 +210,7 @@ export class Missions {
   private hqBeacon: Beacon | null = null;
   private goalBeacon: Beacon | null = null;
   /** A passenger waiting, riding. */
-  private ride: { id: number; at: { x: number; z: number }; body: SnarkBody | null; to: { x: number; z: number; label: string } | null; hits0: number; line: string; t: number } | null = null;
+  private ride: { id: number; at: { x: number; z: number }; body: Human | null; to: { x: number; z: number; label: string } | null; hits0: number; line: string; t: number } | null = null;
   private rideBeacon: Beacon | null = null;
   private rideCool = 6;
   private lastBlock = 0;
@@ -456,13 +456,10 @@ export class Missions {
       const w = half ? (half.axis === "x" ? half.z1 - half.z0 : half.x1 - half.x0) / 2 : 4;
       const at = p.axis === "x" ? { x: p.x, z: p.z + w + 1.1 } : { x: p.x + w + 1.1, z: p.z };
       const id = 1 + Math.floor(Math.random() * 10000);
-      const body = makeSnarkBody(id);
-      body.root.scale.setScalar(BODY_SCALE);
+      faces.want([id], true);
+      const body = new Human(id);
       body.root.position.set(at.x, 0.2, at.z);
       body.root.rotation.y = p.axis === "x" ? Math.PI : -Math.PI / 2;
-      body.root.traverse((o) => {
-        if ((o as THREE.Mesh).isMesh) o.castShadow = !o.userData.noShadow;
-      });
       this.group.add(body.root);
       const LINES = ["No questions. Just go.", "To the block, and step on it.", "Shielded, please. Nobody needs to know.", "I've got a viewing key and a train to catch.", "Take the long way. I like this city at night.", "Fast. My note expires.", "Drop me where the proofs are fresh."];
       this.ride = { id, at, body, to: null, hits0: me.hits, line: LINES[Math.floor(Math.random() * LINES.length)], t: 0 };

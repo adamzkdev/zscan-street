@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { makeSnarkBody, type SnarkBody } from "../scene/snarkbody";
+import { faces } from "./faces";
+import { Human } from "./human";
 import { sharedObject } from "../scene/voxel/mesher";
 import { policeModel, sedanModel, taxiModel, truckModel } from "../scene/voxel/vehicles";
-import { BODY_SCALE } from "./foot";
 import { gtModel, motoModel } from "./models";
 
 /**
@@ -40,7 +40,7 @@ interface Peer {
   s: number;
   c: string;
   root: THREE.Group;
-  body: SnarkBody | null;
+  body: Human | null;
   car: THREE.Object3D | null;
   tag: THREE.Sprite;
   snaps: Snap[];
@@ -197,8 +197,8 @@ export class WorldNet {
       p.tag.position.y = 2.6;
     } else {
       if (!p.body) {
-        const b = makeSnarkBody(p.s);
-        b.root.scale.setScalar(BODY_SCALE);
+        faces.want([p.s]);
+        const b = new Human(p.s);
         p.body = b;
         p.root.add(b.root);
       }
@@ -247,7 +247,7 @@ export class WorldNet {
       if (p.car) p.car.rotation.y = h + Math.PI / 2;
       if (p.body) {
         p.body.root.rotation.y = h + Math.PI;
-        p.body.update(dt, { speed: (a.v + (b.v - a.v) * k) / BODY_SCALE, grounded: true, heading: h });
+        p.body.update(dt, { speed: a.v + (b.v - a.v) * k, grounded: true });
       }
     }
   }

@@ -1,10 +1,12 @@
 import * as THREE from "three";
-import { makeSnarkBody, preloadSnarks, type SnarkBody } from "../scene/snarkbody";
+import { faces } from "./faces";
+import { Human } from "./human";
 
 /**
- * Your zkSNARK on foot (src/gta): its voxel body (scene/snarkbody.ts), moving the way the camera
- * looks, as in the open-world games: it turns to face where it goes, jogs by default, sprints on
- * Shift, jumps on Space. The street's own walker (interior/walk.ts) keeps its place: the body stands
+ * Your zkSNARK on foot (src/gta): a person (human.ts) with your zkSNARK's head, moving the way the
+ * camera looks, as in the open-world games: it turns to face where it goes, jogs by default, sprints
+ * on Shift, jumps on Space, throws punches (left and right in turn, a guard up between them), takes
+ * hits and goes down. The street's own walker (interior/walk.ts) keeps its place: the body stands
  * where the walker's feet are, so the doors, the talk, the minimap and the traffic all see you.
  */
 
@@ -13,8 +15,8 @@ const WALK = 1.7;
 const SPRINT = 7.6;
 const GRAVITY = 17;
 const JUMP = 5.6;
-/** The voxel body is ~1.85 m at scale 1 (a 26-voxel bust on its legs): the street's people are ~1.6 m. */
-export const BODY_SCALE = 0.86;
+/** (The bodies are drawn at their own size now: a person is ~1.72 m.) */
+export const BODY_SCALE = 1;
 
 export interface FootWorld {
   /** A body at (x, z) with its feet at `feet` would be inside something (a jump clears a hedge). */
@@ -25,7 +27,7 @@ export interface FootWorld {
 
 export class FootPlayer {
   readonly group = new THREE.Group();
-  body: SnarkBody | null = null;
+  body: Human | null = null;
   id = 0;
   /** Feet. */
   readonly pos = new THREE.Vector3();
@@ -41,14 +43,31 @@ export class FootPlayer {
   /** A punch under way (seconds into it), or −1. */
   private punchT = -1;
   private punchSide = 1;
+  /** Fists up (held: the right mouse button), and how far up now. */
+  guard = false;
+  private guardK = 0;
+  /** After a punch the guard stays up a moment. */
+  private guardFor = 0;
+  /** Hit (seconds since), knocked down (0…1), on a bike's saddle. */
+  private hitT = 9;
+  private hitFrom = 1;
+  down = 0;
+  riding = false;
 
   /** Throw a punch (true if it started: not one already). */
   punch() {
-    if (this.punchT >= 0 || !this.body) return false;
+    if (this.punchT >= 0 || !this.body || this.down > 0.05) return false;
     this.punchT = 0;
     this.punchSide = -this.punchSide;
-    this.body.holdArms(true);
+    this.guardFor = 1.6;
     return true;
+  }
+
+  /** Hit (from the front: 1, behind: −1): the body reels. */
+  hit(from = 1) {
+    this.hitT = 0;
+    this.hitFrom = from;
+    this.punchT = -1;
   }
 
   /** The fist has landed this frame (once per punch). */
@@ -62,17 +81,9 @@ export class FootPlayer {
   wear(id: number) {
     if (this.id === id && this.body) return;
     this.id = id;
-    void preloadSnarks([id], 3000);
+    faces.want([id], true);
     const old = this.body;
-    const b = makeSnarkBody(id);
-    b.root.scale.setScalar(BODY_SCALE);
-    b.root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        m.castShadow = !m.userData.noShadow;
-        m.receiveShadow = false;
-      }
-    });
+    const b = new Human(id);
     this.group.add(b.root);
     this.body = b;
     old?.dispose();
@@ -138,7 +149,6 @@ export class FootPlayer {
     if (this.grounded && jump) {
       this.vy = JUMP;
       this.grounded = false;
-      this.body?.jump();
     }
     if (!this.grounded || this.hop > 0) {
       this.vy -= GRAVITY * dt;
@@ -149,7 +159,6 @@ export class FootPlayer {
         this.floorY = floor;
       }
       if (this.hop <= 0) {
-        if (this.vy < -2) this.body?.land(-this.vy);
         this.hop = 0;
         this.vy = 0;
         this.grounded = true;
@@ -170,29 +179,42 @@ export class FootPlayer {
     this.pose(dt);
   }
 
+  /** Posed where it is (on a bike: the bike carries it). */
+  poseOnly(dt: number) {
+    this.pose(dt);
+  }
+
   private pose(dt: number) {
     this.group.position.copy(this.pos);
-    if (!this.body) return;
-    this.body.root.rotation.y = this.facing + Math.PI;
-    this.body.update(dt, { speed: this.speed / BODY_SCALE, grounded: this.grounded, vy: this.vy, heading: this.facing });
+    const b = this.body;
+    if (!b) return;
+    if (!this.riding) {
+      b.root.position.set(0, 0, 0);
+      b.root.rotation.set(0, this.facing + Math.PI, 0);
+    }
+    const a = b.act;
     this.landed = false;
+    this.guardFor = Math.max(0, this.guardFor - dt);
+    this.guardK += ((this.guard || this.guardFor > 0 ? 1 : 0) - this.guardK) * Math.min(1, dt * 10);
+    a.guard = this.guardK;
     if (this.punchT >= 0) {
       const was = this.punchT;
       this.punchT += dt;
-      const t = this.punchT;
-      // wind up, out, back: the punching arm straight ahead, the other one back
-      const out = t < 0.08 ? -t / 0.08 * 0.6 : t < 0.18 ? -0.6 - ((t - 0.08) / 0.1) * 1.1 : -1.7 + Math.min(1, (t - 0.18) / 0.18) * 1.7;
-      const [hit, other] = this.punchSide > 0 ? [this.body.armR, this.body.armL] : [this.body.armL, this.body.armR];
-      hit.rotation.set(out, 0, this.punchSide * 0.15);
-      other.rotation.set(0.4, 0, -this.punchSide * 0.12);
-      this.body.foreArmR.rotation.set(0, 0, 0);
-      this.body.foreArmL.rotation.set(-0.6, 0, 0);
-      if (was < 0.16 && t >= 0.16) this.landed = true;
-      if (t > 0.38) {
+      a.punch = Math.min(1, this.punchT / 0.36);
+      a.punchSide = this.punchSide;
+      if (was < 0.11 && this.punchT >= 0.11) this.landed = true;
+      if (this.punchT > 0.36) {
         this.punchT = -1;
-        this.body.holdArms(false);
+        a.punch = -1;
       }
-    }
+    } else a.punch = -1;
+    this.hitT += dt;
+    a.hit = this.hitT;
+    a.hitFrom = this.hitFrom;
+    a.down = this.down;
+    a.downSide = 0;
+    a.ride = this.riding;
+    b.update(dt, { speed: this.riding ? 0 : this.speed, grounded: this.grounded || this.riding });
   }
 
   dispose() {
