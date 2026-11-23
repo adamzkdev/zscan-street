@@ -17,10 +17,10 @@ import { ANGEL, CD, CHAPEL, COLUMBARIUM, CRYPT, CW, FENCE, FX0, FX1, FZ0, FZ1, G
  * `chapelDoor`, `cryptDoor`, `camPos` / `camLook`.
  */
 export function cemetery(_seed: number, o: LandmarkOpts): Built {
-  const k = 1;
+  // (a lot smaller than the layout's 61 × 27 m, the streets having grown: the whole thing a little smaller)
+  const k = Math.min(1, (o.d ?? 27) / 27, (o.w ?? 61) / 61);
   const W = CW,
     D = CD;
-  void o;
   const H = 98;
   const m = new VoxelModel(W, H, D);
   const lights: Built["lights"] = [];

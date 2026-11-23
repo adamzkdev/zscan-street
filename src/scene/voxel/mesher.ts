@@ -354,7 +354,7 @@ export function ownMaterial(kind: Kind) {
  * colour is ever changed on MATERIALS at run time, theme.ts: the twin shares that very object.)
  */
 const twins = new Map<string, THREE.Material>();
-export function sharedFor(kind: Kind, use: "instanced" | "batched") {
+export function sharedFor(kind: Kind, use: "instanced" | "batched" | "props") {
   const k = kind + use;
   let m = twins.get(k);
   if (!m) {
@@ -362,9 +362,59 @@ export function sharedFor(kind: Kind, use: "instanced" | "batched") {
     const c = base.clone();
     c.color = base.color;
     c.onBeforeCompile = base.onBeforeCompile;
+    // the street furniture's own: what the game knocks down is taken out of it (PROP_HOLES)
+    if (use === "props") {
+      const prev = base.onBeforeCompile;
+      c.onBeforeCompile = (sh, r) => {
+        prev.call(c, sh, r);
+        propHoles(sh);
+      };
+      const key = base.customProgramCacheKey.bind(base);
+      c.customProgramCacheKey = () => `${key()}|holes`;
+    }
     twins.set(k, (m = c));
   }
   return m;
+}
+
+/**
+ * The street furniture knocked down in the game (src/gta): (x, z, radius, height) each; whatever of
+ * the props' batch stands in such a column is folded away in the vertex shader (it lies on the
+ * ground as the game's own fallen copy). Up to 48 at once, the oldest stand up again.
+ */
+export const PROP_HOLES = { value: Array.from({ length: 48 }, () => new THREE.Vector4(0, 0, 0, 0)) };
+export const PROP_HOLE_N = { value: 0 };
+function propHoles(sh: THREE.WebGLProgramParametersWithUniforms) {
+  sh.uniforms.uHoles = PROP_HOLES;
+  sh.uniforms.uHoleN = PROP_HOLE_N;
+  sh.vertexShader = sh.vertexShader
+    .replace("#include <common>", "#include <common>\nuniform vec4 uHoles[48];\nuniform int uHoleN;")
+    .replace(
+      "#include <project_vertex>",
+      `{
+        vec4 hw = vec4(transformed, 1.0);
+        #ifdef USE_BATCHING
+        hw = batchingMatrix * hw;
+        #endif
+        hw = modelMatrix * hw;
+        for (int i = 0; i < 48; i++) {
+          if (i >= uHoleN) break;
+          vec4 h = uHoles[i];
+          if (hw.y < h.w && distance(hw.xz, h.xy) < h.z) { transformed = vec3(0.0, -500.0, 0.0); break; }
+        }
+      }
+      #include <project_vertex>`,
+    );
+}
+
+/** The depth material for the props' shadows, with the same holes. */
+let propDepth: THREE.MeshDepthMaterial | null = null;
+export function propDepthMaterial() {
+  if (propDepth) return propDepth;
+  const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  m.onBeforeCompile = (sh) => propHoles(sh);
+  m.customProgramCacheKey = () => "propdepth-holes";
+  return (propDepth = m);
 }
 
 /** A model as a group of up to three meshes (solid, glass, light). */

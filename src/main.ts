@@ -2671,6 +2671,25 @@ if (new URLSearchParams(location.search).has("debug")) {
       get gta() {
         return gta;
       },
+      /** What is drawn at (x, z) from y down to the ground (a vertical ray): names up the tree. */
+      whatIs: (x: number, z: number, y = 3) => {
+        const rc = new THREE.Raycaster(new THREE.Vector3(x, y, z), new THREE.Vector3(0, -1, 0), 0, y + 4);
+        const hits: THREE.Intersection[] = [];
+        scene.traverse((o) => {
+          if (!(o as THREE.Mesh).isMesh || !o.visible) return;
+          try {
+            rc.intersectObject(o, false, hits);
+          } catch {
+            /* (a mesh the raycaster can't take) */
+          }
+        });
+        hits.sort((a, b) => a.distance - b.distance);
+        return hits.slice(0, 6).map((h) => {
+          const names: string[] = [];
+          for (let o: THREE.Object3D | null = h.object; o; o = o.parent) names.push(o.name || o.type);
+          return `${h.point.y.toFixed(2)} ${names.slice(0, 5).join("<")}`;
+        });
+      },
       storeAt: (x: number, y: number) => storeAt(x, y)?.id ?? null,
       openStore: (id: string) => openStore(id),
       residents,
@@ -2940,6 +2959,7 @@ const swing = new StreetSwing({
 // ---- the game: ZStreet in the third person, cars, challenges (src/gta) ----------------------------
 /** The street trees for the game's camera (from the plan, once). */
 let gtaTrees: { x: number; z: number }[] | null = null;
+let gtaFurniture: { type: string; x: number; z: number; y: number }[] | null = null;
 /** The game's keys for the street's people drawn in 3D (src/gta/people3d.ts). */
 const gtaKeys = new WeakMap<Snark, string>();
 let gtaKeyN = 0;
@@ -2990,6 +3010,7 @@ gta = new GtaMode({
     });
   },
   trees: () => gtaTrees ??= planCity().props.filter((q) => q.type === "tree" || q.type === "maple").map((q) => ({ x: q.x, z: q.z })),
+  furniture: () => gtaFurniture ??= planCity().props.map((q) => ({ type: q.type, x: q.x, z: q.z, y: q.y ?? CURB })),
   people3d: (x, z, r) => {
     const out: Person3[] = [];
     for (const s of director.snarks) {

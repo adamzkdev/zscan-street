@@ -103,18 +103,18 @@ export class StreetProps {
       for (let s = 6 + rnd() * 20; s < len - 6; s += 18 + rnd() * 30) {
         const side = rnd() < 0.5 ? -1 : 1;
         const kind = kinds[Math.floor(rnd() * kinds.length)];
-        // on the pavement, just past the kerb (barriers and cones in the road's edge)
-        const off = kind === "cone" || kind === "barrier" ? -0.6 : 0.7;
+        // on the pavement, just past the kerb (never in the road, never in a junction)
+        const off = 0.9;
         const x = r.axis === "x" ? r.x0 + s : (side < 0 ? r.x0 : r.x1) + side * off;
         const z = r.axis === "x" ? (side < 0 ? r.z0 : r.z1) + side * off : r.z0 + s;
-        if (world.blocked(x, z) || spots.some((o) => Math.hypot(o.x - x, o.z - z) < 4)) continue;
+        if (world.blocked(x, z) || roads.road(x, z) || spots.some((o) => Math.hypot(o.x - x, o.z - z) < 4)) continue;
         spots.push({ x, z, rot: (r.axis === "x" ? 0 : Math.PI / 2) + (rnd() - 0.5) * 0.4, kind });
         // a few cones come in threes
         if (kind === "cone" && rnd() < 0.5)
           for (const d of [1.1, 2.2]) {
             const cx = r.axis === "x" ? x + d : x,
               cz = r.axis === "x" ? z : z + d;
-            if (!world.blocked(cx, cz)) spots.push({ x: cx, z: cz, rot: 0, kind });
+            if (!world.blocked(cx, cz) && !roads.road(cx, cz)) spots.push({ x: cx, z: cz, rot: 0, kind });
           }
       }
     }

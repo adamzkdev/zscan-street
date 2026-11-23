@@ -15,7 +15,8 @@ import { WorldNet } from "./net";
 import { People3D, type Person3 } from "./people3d";
 import { useAtlasCells } from "../scene/snarkbody";
 import { Peds } from "./peds";
-import { Debris } from "./debris";
+import { Debris, Fallen } from "./debris";
+import { PROP_HOLES, PROP_HOLE_N } from "../scene/voxel/mesher";
 import { Breakables } from "./breakables";
 import { StreetProps } from "./streetprops";
 import { Heat } from "./police";
@@ -65,6 +66,8 @@ export interface GtaHost {
   people3d(x: number, z: number, r: number): Person3[];
   /** The street trees (their crowns stop the camera, not the walk). */
   trees(): { x: number; z: number }[];
+  /** The street furniture as the plan has it (what a car can knock down). */
+  furniture(): { type: string; x: number; z: number; y: number }[];
   /** Knock over whoever stands within `r` of (x, z), flung along (fx, fz): how many went down. */
   knock(x: number, z: number, fx: number, fz: number, r: number): number;
   canvas: HTMLCanvasElement;
@@ -134,6 +137,10 @@ export class GtaMode {
   readonly people: People3D;
   readonly peds: Peds;
   readonly debris = new Debris();
+  readonly fallen = new Fallen();
+  /** The furniture knocked down (keys), in the order it went (the oldest stands up again past 48). */
+  private down: string[] = [];
+  private furnGrid: Map<string, { type: string; x: number; z: number; y: number; key: string }[]> | null = null;
   readonly breakables: Breakables;
   readonly props: StreetProps;
   car: DriveCar | null = null;
@@ -235,6 +242,7 @@ export class GtaMode {
       area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
       movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
       surface: (x, z) => this.roads.surface(x, z),
+      road: (x, z) => this.roads.road(x, z),
     });
     host.scene.add(this.player.group);
     this.player.group.visible = false;
@@ -377,6 +385,7 @@ export class GtaMode {
     this.net.join(true);
     this.people.show(true);
     this.props.show(true);
+    this.host.scene.add(this.fallen.group);
     this.peds.show(true);
     this.peds.crowd = this.settings.crowd;
     // dozens of zkSNARKs in 3D: their pictures from the collection's atlas, not a request each
@@ -422,6 +431,10 @@ export class GtaMode {
     this.props.show(false);
     this.peds.show(false);
     this.props.reset();
+    // everything knocked down stands again
+    this.fallen.clear();
+    this.down = [];
+    PROP_HOLE_N.value = 0;
     this.breakables.restore();
     this.host.pickCamera(null);
     this.host.setSky(this.skyWas);
@@ -854,7 +867,9 @@ export class GtaMode {
       },
     };
     if (this.solid.ready) this.props.place(this.roads, { blocked: (x, z) => !this.solid.foot(x, z, this.roads.surface(x, z), 0.5).ok, floor: world.floor });
+    this.fallen.update(dt);
     const car = this.car;
+    if (car && car.speed > 4) this.knockFurniture(car);
     if (car && car.speed > 1) {
       const f = car.fwd();
       const p = car.group.position;
@@ -908,6 +923,88 @@ export class GtaMode {
     for (let i = -1; i <= 1; i++)
       for (let j = -1; j <= 1; j++) for (const t of this.treeGrid.get(`${cx + i},${cz + j}`) ?? []) if ((t.x - x) ** 2 + (t.z - z) ** 2 < 1.5 * 1.5) return true;
     return false;
+  }
+
+  /** Kinds a car knocks down: how close it must come, the column taken out of the city (radius, height), the pieces. */
+  private static FURN: Record<string, { hit: number; r: number; h: number; colors: string[]; slow: number }> = {
+    lamp: { hit: 0.35, r: 1.5, h: 7.5, colors: ["#2a2a32", "#3a3a44", "#fff1d6"], slow: 0.8 },
+    tree: { hit: 0.45, r: 2.7, h: 11, colors: ["#3f8a3a", "#2f6b2c", "#5a3d26", "#4f9a44"], slow: 0.75 },
+    maple: { hit: 0.45, r: 2.7, h: 11, colors: ["#c0482e", "#e06a3a", "#5a3d26"], slow: 0.75 },
+    bench: { hit: 0.7, r: 1.2, h: 1.6, colors: ["#7a5236", "#2a2a32"], slow: 0.9 },
+    bollard: { hit: 0.3, r: 0.5, h: 2, colors: ["#1a1a20", "#f4b728"], slow: 0.95 },
+    hydrant: { hit: 0.35, r: 0.5, h: 2, colors: ["#c0302e", "#e8e4dc"], slow: 0.9 },
+    trashBin: { hit: 0.45, r: 0.7, h: 2, colors: ["#2a4a3a", "#1a1a20"], slow: 0.93 },
+    vending: { hit: 0.6, r: 0.9, h: 2.8, colors: ["#e8e4dc", "#3fa8ff", "#c0302e"], slow: 0.85 },
+    bicycle: { hit: 0.6, r: 1, h: 1.8, colors: ["#c0302e", "#1a1a20"], slow: 0.95 },
+    cone: { hit: 0.3, r: 0.4, h: 1.2, colors: ["#ff6a1a", "#f2f2ee"], slow: 0.98 },
+    mailbox: { hit: 0.35, r: 0.5, h: 2, colors: ["#c0302e"], slow: 0.93 },
+    streetSign: { hit: 0.3, r: 0.5, h: 3.5, colors: ["#2a4fa8", "#e8e4dc"], slow: 0.95 },
+    stopPole: { hit: 0.3, r: 0.5, h: 3.5, colors: ["#e8e4dc", "#c0302e"], slow: 0.95 },
+    taxiSign: { hit: 0.3, r: 0.5, h: 3.5, colors: ["#f2c230", "#1a1a20"], slow: 0.95 },
+    planter: { hit: 0.6, r: 1, h: 2.5, colors: ["#6a6470", "#3f8a3a"], slow: 0.88 },
+    stoneLantern: { hit: 0.4, r: 0.6, h: 2.2, colors: ["#8a8690"], slow: 0.9 },
+    barrel: { hit: 0.4, r: 0.6, h: 1.6, colors: ["#7a5236"], slow: 0.93 },
+  };
+
+  /** The car's front sweeps the street furniture: what it touches goes down. */
+  private knockFurniture(car: DriveCar) {
+    if (!this.furnGrid) {
+      this.furnGrid = new Map();
+      for (const [i, f] of this.host.furniture().entries()) {
+        if (!GtaMode.FURN[f.type]) continue;
+        const k = `${Math.floor(f.x / 4)},${Math.floor(f.z / 4)}`;
+        (this.furnGrid.get(k) ?? this.furnGrid.set(k, []).get(k)!).push({ ...f, key: `f${i}` });
+      }
+    }
+    const p = car.group.position;
+    const fx = Math.cos(car.yaw),
+      fz = -Math.sin(car.yaw);
+    const dir = Math.sign(car.vF) || 1;
+    const cx = Math.floor(p.x / 4),
+      cz = Math.floor(p.z / 4);
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++)
+        for (const f of this.furnGrid.get(`${cx + i},${cz + j}`) ?? []) {
+          if (this.down.includes(f.key)) continue;
+          const spec = GtaMode.FURN[f.type];
+          // in the car's box (along its length, across its width), the front half when going forward
+          const dx = f.x - p.x,
+            dz = f.z - p.z;
+          const along = (dx * fx + dz * fz) * dir,
+            across = Math.abs(-dx * fz + dz * fx);
+          if (along < -car.spec.len * 0.1 || along > car.spec.len / 2 + spec.hit || across > car.spec.wid / 2 + spec.hit) continue;
+          this.knockDown(f, spec, car.vel.x, car.vel.y);
+          car.vel.multiplyScalar(spec.slow);
+          car.vF *= spec.slow;
+          this.cam.shake(spec.slow < 0.85 ? 0.35 : 0.15);
+          this.sound.crash(spec.slow < 0.85 ? 0.5 : 0.25);
+        }
+  }
+
+  private knockDown(f: { type: string; x: number; z: number; y: number; key: string }, spec: (typeof GtaMode.FURN)[string], vx: number, vz: number) {
+    // the standing copy folded away (the oldest knocked down stands again past 48)
+    if (this.down.length >= 48) {
+      const back = this.down.shift()!;
+      this.fallen.raise(back);
+    }
+    this.down.push(f.key);
+    const H = PROP_HOLES.value;
+    const n = this.down.length - 1;
+    // (the holes in the same order as `down`: the list rewritten when the oldest goes)
+    if (n < H.length) H[n].set(f.x, f.z, spec.r, f.y + spec.h);
+    if (this.down.length === 48) {
+      const all = this.host.furniture();
+      this.down.forEach((k, i) => {
+        const g = all[Number(k.slice(1))];
+        const sp = GtaMode.FURN[g.type];
+        H[i].set(g.x, g.z, sp.r, g.y + sp.h);
+      });
+    }
+    PROP_HOLE_N.value = this.down.length;
+    this.fallen.fall(f.key, f.type, f.x, f.y, f.z, vx, vz);
+    const box = new THREE.Box3(new THREE.Vector3(f.x - spec.r * 0.4, f.y, f.z - spec.r * 0.4), new THREE.Vector3(f.x + spec.r * 0.4, f.y + Math.min(spec.h, 3), f.z + spec.r * 0.4));
+    this.debris.into(this.host.scene);
+    this.debris.burst(box, spec.colors.map((c) => new THREE.Color(c)), new THREE.Vector3(vx, 0, vz).multiplyScalar(0.5), f.y, f.type === "lamp" || f.type === "tree" || f.type === "maple" ? 10 : undefined);
   }
 
   /** Everyone hit within `r` of (x, z): the street's people and the game's passers-by. */
@@ -1250,7 +1347,6 @@ export class GtaMode {
       resolve: (p: THREE.Vector3, r: number) => {
         if (!this.solid.ready) return h.nav.resolve(p, r);
         this.solid.resolve(p, r);
-        h.nav.resolveSmall(p, r);
       },
       outside: (x: number, z: number) => x < h.bounds.x0 || x > h.bounds.x1 || z < h.bounds.z0 || z > h.bounds.z1,
       surface: (x: number, z: number) => this.roads.surface(x, z),

@@ -3,7 +3,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { Nav } from "../nav";
 import { addDetail } from "../detail";
 import { blobTexture, concreteTexture, grassTexture, neonTexture, pavingTexture, releaseAfterUpload, roadTexture, waterTexture } from "../textures";
-import { MATERIALS, ownMaterial, sharedFor, toObject } from "../voxel/mesher";
+import { MATERIALS, ownMaterial, propDepthMaterial, sharedFor, toObject } from "../voxel/mesher";
 import { C, E, G, VOX, VoxelModel, type Kind } from "../voxel/model";
 import type { SignSpot } from "../voxel/parts";
 import { mat } from "./kit";
@@ -306,7 +306,7 @@ function mergeGround(g: THREE.Group) {
  * Every copy gets one instance per level; lod() shows the right one.
  */
 type LodSet = { mats: THREE.Matrix4[]; levels: (Geos | undefined)[]; at: THREE.Vector3[]; ids: { mesh: THREE.BatchedMesh; id: number; level: number; copy: number; shown: boolean }[] };
-function extBatch(g: THREE.Group, lods: LodSet[], shadows = false) {
+function extBatch(g: THREE.Group, lods: LodSet[], shadows = false, use: "batched" | "props" = "batched") {
   const size = new Map<Kind, { n: number; v: number; i: number; seen: Set<object> }>();
   for (const l of lods)
     for (const geos of l.levels)
@@ -320,7 +320,11 @@ function extBatch(g: THREE.Group, lods: LodSet[], shadows = false) {
         s.i += d.idx.length;
       }
   for (const [kind, s] of size) {
-    const mesh = new THREE.BatchedMesh(s.n, s.v, s.i, sharedFor(kind, "batched"));
+    const mesh = new THREE.BatchedMesh(s.n, s.v, s.i, sharedFor(kind, use));
+    if (use === "props") {
+      mesh.customDepthMaterial = propDepthMaterial();
+      mesh.name = "props";
+    }
     // (the far level never casts: shadows are drawn round the focus only, where the near one is)
     mesh.castShadow = shadows && kind !== "emit";
     mesh.receiveShadow = kind !== "emit";
@@ -750,7 +754,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     }),
   ]);
   extBatch(g, lods);
-  extBatch(g, propChunks, true);
+  extBatch(g, propChunks, true, "props");
   // the batches hold their own copy of every level: the workers' arrays (~85 MB on a phone) were
   // kept alive for nothing by these lists (lod() only needs the ids and positions)
   for (const l of [...lods, ...propChunks]) l.levels = [];

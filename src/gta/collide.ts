@@ -25,6 +25,11 @@ const CURB_CAR = 0.45;
 /** Under this (or nothing at all drawn): water, a hole. */
 const HOLE = -0.35;
 
+/** At the wheel: anything thinner than this (m) is driven through (a post, a trunk, a rail, a bench). */
+const THIN = 2.4;
+/** On the asphalt only what stands this tall stops a car (a pillar, a building): never a rail or a low wall. */
+const ROAD_TALL = 2.15;
+
 export interface SolidHost {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -33,6 +38,8 @@ export interface SolidHost {
   movers(): THREE.Object3D[];
   /** The road's own height at (x, z) (0 on the asphalt, the kerb's elsewhere). */
   surface(x: number, z: number): number;
+  /** On the asphalt. */
+  road(x: number, z: number): boolean;
 }
 
 export class StreetSolid {
@@ -46,6 +53,8 @@ export class StreetSolid {
   private top: Float32Array | null = null;
   /** Signed distance (m) to what stops a car: + outside, − inside. */
   private sdf: Float32Array | null = null;
+  /** What a car hits but goes through (thin things): 1 per cell. */
+  private thin: Uint8Array | null = null;
   private building = false;
 
   constructor(private host: SolidHost) {
@@ -80,25 +89,93 @@ export class StreetSolid {
     }
   }
 
-  /** Every cell a car cannot drive on, then the signed distance to them (two chamfer passes each way). */
+  /**
+   * What stops a car: every cell over the kerb by more than a car climbs, or a hole; on the asphalt
+   * only what stands tall. Then everything thinner than THIN taken out (an opening: eroded, then grown
+   * back), so posts, trunks, rails, bollards, benches and low walls are driven through (the game
+   * knocks them down) and only buildings, big walls and the water stop it. The signed distance to
+   * what is left pushes the car out.
+   */
   private async distance(top: Float32Array) {
     const N = this.size;
-    const block = new Uint8Array(N * N);
+    const raw = new Uint8Array(N * N);
     for (let j = 0; j < N; j++) {
       const z = this.z0 + (j + 0.5) * this.cell;
       for (let i = 0; i < N; i++) {
         const k = j * N + i;
         const t = top[k];
         const x = this.x0 + (i + 0.5) * this.cell;
-        block[k] = t !== t || t < HOLE || t > this.host.surface(x, z) + CURB_CAR ? 1 : 0;
+        if (t !== t || t < HOLE) raw[k] = 1;
+        else if (this.host.road(x, z)) raw[k] = t > ROAD_TALL ? 1 : 0;
+        else raw[k] = t > this.host.surface(x, z) + CURB_CAR ? 1 : 0;
       }
       if ((j & 255) === 255) await frame();
     }
+    // the small things on their own (a post, a trunk, a bin, a bench: a patch no bigger than THIN
+    // across) are driven through; anything bigger (a wall, a building, a long railing) stays
+    const block = new Uint8Array(N * N);
+    const thin = new Uint8Array(N * N);
+    const label = new Int32Array(N * N);
+    const stack = new Int32Array(N * N);
+    const lim = THIN / this.cell;
+    let id = 0;
+    for (let k0 = 0; k0 < N * N; k0++) {
+      if (!raw[k0] || label[k0]) continue;
+      id++;
+      let sp = 0;
+      stack[sp++] = k0;
+      label[k0] = id;
+      let i0 = N,
+        i1 = -1,
+        j0 = N,
+        j1 = -1,
+        hole = false;
+      const members: number[] = [];
+      while (sp) {
+        const k = stack[--sp];
+        members.push(k);
+        const i = k % N,
+          j = (k / N) | 0;
+        if (i < i0) i0 = i;
+        if (i > i1) i1 = i;
+        if (j < j0) j0 = j;
+        if (j > j1) j1 = j;
+        const t = top[k];
+        if (t !== t || t < HOLE) hole = true;
+        for (let dj = -1; dj <= 1; dj++)
+          for (let di = -1; di <= 1; di++) {
+            const ni = i + di,
+              nj = j + dj;
+            if (ni < 0 || nj < 0 || ni >= N || nj >= N) continue;
+            const nk = nj * N + ni;
+            if (raw[nk] && !label[nk]) {
+              label[nk] = id;
+              stack[sp++] = nk;
+            }
+          }
+      }
+      const small = !hole && i1 - i0 < lim && j1 - j0 < lim;
+      for (const k of members) (small ? thin : block)[k] = 1;
+      if ((id & 4095) === 0) await frame();
+    }
+    this.thin = thin;
     const outside = await chamfer(block, N, 0);
-    const inside = await chamfer(block, N, 1);
+    const inside2 = await chamfer(block, N, 1);
     const sdf = new Float32Array(N * N);
-    for (let k = 0; k < N * N; k++) sdf[k] = (outside[k] - inside[k]) * this.cell;
+    for (let k = 0; k < N * N; k++) sdf[k] = (outside[k] - inside2[k]) * this.cell;
     return sdf;
+  }
+
+  /** Something thin a car goes through at (x, z) (a post, a rail): the game knocks it about. */
+  thinAt(x: number, z: number) {
+    if (!this.thin) return false;
+    const k = this.index(x, z);
+    return k >= 0 && this.thin[k] === 1;
+  }
+
+  /** Can a car be here (for the reachability check)? */
+  drivable(x: number, z: number, r = 1) {
+    return this.dist(x, z) >= r;
   }
 
   private index(x: number, z: number) {

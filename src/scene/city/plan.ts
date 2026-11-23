@@ -231,9 +231,10 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
 ];
 
 /**
- * Wider streets (the game asked for room to drive): every street of the grid 2 m wider than it was
- * drawn, except those round the hand-made heart and the river; the blocks, the lots and Central
- * Park give up a metre on each side to them.
+ * Wider streets (the game asked for room to drive, twice): every street of the grid 6 m wider than
+ * it was drawn — two lanes each way on the ordinary streets (14 m), 20 m boulevards, a 16 m ring —
+ * except those round the hand-made heart, the river's and the covered shōtengai (2 m more, under its
+ * canopy); the blocks, the lots and Central Park give up the difference on each side.
  */
 (function widen() {
   const keepX = new Set([ST.heartW, ST.heartE]);
@@ -241,10 +242,10 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
   const oldX = [...GRID.xw],
     oldZ = [...GRID.zw];
   GRID.xs.forEach((x, i) => {
-    if (!keepX.has(x)) GRID.xw[i] += 2;
+    if (!keepX.has(x)) GRID.xw[i] += x === ST.shotengai ? 2 : 6;
   });
   GRID.zs.forEach((z, i) => {
-    if (!keepZ.has(z)) GRID.zw[i] += 2;
+    if (!keepZ.has(z)) GRID.zw[i] += 6;
   });
   const near = (a: number, b: number) => Math.abs(a - b) < 0.05;
   const trim = (a: { x0: number; x1: number; z0: number; z1: number }) => {
@@ -865,14 +866,17 @@ export function planCity() {
         east = true,
         west = true;
       // facing the park from the east and from the north: the supertalls
-      const parkEast = x0 > ST.east1 && x0 < ST.east1 + 12 && z1 <= P.z1 + 0.1 && z0 >= P.z0 - 0.1;
-      const parkNorth = z1 <= P.z0 - S2 && z1 > P.z0 - 14 && x0 >= P.x0 - 0.1 && x1 <= P.x1 + 0.1;
+      const wx = (x: number) => GRID.xw[GRID.xs.indexOf(x)] ?? S2,
+        wz = (z: number) => GRID.zw[GRID.zs.indexOf(z)] ?? S2;
+      const parkEast = x0 > ST.east1 && x0 < ST.east1 + wx(ST.east1) / 2 + 4 && z1 <= P.z1 + 0.1 && z0 >= P.z0 - 0.1;
+      const parkNorth = Math.abs(z1 - (ST.parkN - wz(ST.parkN) / 2)) < 0.1 && x0 >= P.x0 - 0.1 && x1 <= P.x1 + 0.1;
       let tall = 0,
         slot = 0;
       // the two rows facing the shōtengai street, along the heart
       const along = z0 >= CORE.minZ - 0.1 && z1 <= CORE.maxZ + 0.1;
       // the block west of the street fronts it with its east face, the block east with its west one
-      const shotengaiFace = !along ? null : Math.abs(x1 - (ST.shotengai - S2 / 2)) < 0.1 ? "e" : Math.abs(x0 - (ST.shotengai + S2 / 2)) < 0.1 ? "w" : null;
+      const sw = wx(ST.shotengai);
+      const shotengaiFace = !along ? null : Math.abs(x1 - (ST.shotengai - sw / 2)) < 0.1 ? "e" : Math.abs(x0 - (ST.shotengai + sw / 2)) < 0.1 ? "w" : null;
       const fill = (face: BuildingJob["face"], a: number, b: number, front: number, main: boolean) => {
         let at = a;
         const branch = face === "s" ? branchAt.get(`${x0},${z0}`) : undefined;
