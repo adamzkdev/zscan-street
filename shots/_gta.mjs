@@ -7,7 +7,7 @@ const p = await b.newPage();
 const errs = [];
 p.on("console", (m) => /error/.test(m.type()) && errs.push(m.text().slice(0, 300)));
 p.on("pageerror", (e) => errs.push("pageerror " + e.message));
-p.on("response", (r) => r.status() >= 500 && errs.push(`${r.status()} ${r.url().slice(0, 140)}`));
+p.on("response", (r) => r.status() >= 400 && errs.push(`${r.status()} ${r.url().slice(0, 140)}`));
 await p.goto(URL);
 await p.waitForFunction(() => window.__streetUp && window.street, { timeout: 240000, polling: 300 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

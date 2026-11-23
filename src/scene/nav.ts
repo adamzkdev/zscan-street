@@ -69,6 +69,31 @@ export class Nav {
     }
   }
 
+  /** `resolve` for the small obstacles only (see `freeSmall`): a car's circle off the posts and rails. */
+  resolveSmall(p: THREE.Vector3, rad: number, thin = 0.8) {
+    const c = this.grid.get(`${Math.floor(p.x / CELL)},${Math.floor(p.z / CELL)}`);
+    if (!c) return;
+    for (const o of c.circles) {
+      if (o.r >= 1.6) continue;
+      const dx = p.x - o.x,
+        dz = p.z - o.z;
+      const d = Math.hypot(dx, dz);
+      const min = o.r + rad;
+      if (d < min && d > 1e-4) {
+        p.x = o.x + (dx / d) * min;
+        p.z = o.z + (dz / d) * min;
+      }
+    }
+    for (const o of c.rects) {
+      if (Math.min(o.x1 - o.x0, o.z1 - o.z0) >= thin) continue;
+      if (p.x < o.x0 - rad || p.x > o.x1 + rad || p.z < o.z0 - rad || p.z > o.z1 + rad) continue;
+      const out = [o.x0 - rad - p.x, o.x1 + rad - p.x, o.z0 - rad - p.z, o.z1 + rad - p.z];
+      const k = out.reduce((best, v, i) => (Math.abs(v) < Math.abs(out[best]) ? i : best), 0);
+      if (k < 2) p.x += out[k];
+      else p.z += out[k];
+    }
+  }
+
   /** Is this spot free for a body of radius `rad`? */
   /** Inside something big (a building, a wall), not just a bench or a lamp post. */
   wall(x: number, z: number) {
@@ -76,6 +101,18 @@ export class Nav {
     if (!c) return false;
     for (const o of c.rects) if (o.x1 - o.x0 > 2.5 && o.z1 - o.z0 > 2.5 && x > o.x0 && x < o.x1 && z > o.z0 && z < o.z1) return true;
     return false;
+  }
+
+  /**
+   * Is this spot clear of the small obstacles (posts, trunks, benches; rails and fences under
+   * `thin` metres wide)? The game (src/gta) takes the buildings from what is drawn instead.
+   */
+  freeSmall(x: number, z: number, rad: number, thin = 0.8) {
+    const c = this.grid.get(`${Math.floor(x / CELL)},${Math.floor(z / CELL)}`);
+    if (!c) return true;
+    for (const o of c.circles) if (o.r < 1.6 && Math.hypot(x - o.x, z - o.z) < o.r + rad) return false;
+    for (const o of c.rects) if (Math.min(o.x1 - o.x0, o.z1 - o.z0) < thin && x > o.x0 - rad && x < o.x1 + rad && z > o.z0 - rad && z < o.z1 + rad) return false;
+    return true;
   }
 
   free(x: number, z: number, rad: number) {

@@ -672,6 +672,13 @@
     background: var(--g-gold);
     color: #17120a;
   }
+  .gta-hud:not(.gh-at-door) .gh-touch [data-t="door"] {
+    display: none;
+  }
+  .gh-touch [data-t="door"] {
+    background: var(--g-gold);
+    color: #17120a;
+  }
   .gta-hud:not(.car) .gh-touch [data-t="nos"],
   .gta-hud:not(.car) .gh-touch [data-t="drift"],
   .gta-hud.car .gh-touch [data-t="jump"] {

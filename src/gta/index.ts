@@ -4,6 +4,8 @@ import type { WalkControls } from "../interior/walk";
 import type { CityTraffic } from "../scene/citytraffic";
 import type { Nav } from "../scene/nav";
 import { CAR_VIEWS, GtaCamera } from "./camera";
+import { StreetSolid } from "./collide";
+import { Doors, type DoorSpot } from "./doors";
 import { FootPlayer } from "./foot";
 import { Garage } from "./garage";
 import { DEFAULTS, GtaHud, type Settings } from "./hud";
@@ -28,6 +30,20 @@ import { DriveCar, SPECS, type VehicleKind } from "./vehicle";
 
 export interface GtaHost {
   scene: THREE.Scene;
+  renderer: THREE.WebGLRenderer;
+  /** What moves in the street (left out of its solid shape). */
+  movers(): THREE.Object3D[];
+  /** Somewhere with its own ground rules (the rock, the bridge, the woods, a platform): the walker's own collisions there. */
+  footSpecial(x: number, z: number): boolean;
+  /** A post, a trunk, a bench, a rail there. */
+  footSmall(x: number, z: number): boolean;
+  /** Someone or something moving there (people, vehicles, trams). */
+  dynamicHit(x: number, z: number): boolean;
+  /** The walk-in places' doors, and going in. */
+  doors(): DoorSpot[];
+  enter(key: string): void;
+  /** Knock over whoever stands within `r` of (x, z), flung along (fx, fz): how many went down. */
+  knock(x: number, z: number, fx: number, fz: number, r: number): number;
   canvas: HTMLCanvasElement;
   ui: HTMLElement;
   walker: WalkControls;
@@ -83,6 +99,8 @@ export class GtaMode {
   readonly missions: Missions;
   readonly sound: GtaSound;
   readonly heat: Heat;
+  readonly solid: StreetSolid;
+  readonly doors: Doors;
   car: DriveCar | null = null;
   /** Cars you left (and your own ZK-GT), parked where you got out. */
   parked: DriveCar[] = [];
@@ -122,7 +140,7 @@ export class GtaMode {
       if (open && document.pointerLockElement) document.exitPointerLock();
     };
     this.hud.onTouch = (btn, down) => {
-      if (btn === "car" || btn === "jump") {
+      if (btn === "car" || btn === "jump" || btn === "door") {
         if (down) this.input.tap(`touch:${btn}`);
       } else if (down) this.input.touch.add(btn);
       else this.input.touch.delete(btn);
@@ -154,6 +172,14 @@ export class GtaMode {
       this.placed = true;
     };
     this.apply(this.settings);
+    this.doors = new Doors(host.scene);
+    this.solid = new StreetSolid({
+      renderer: host.renderer,
+      scene: host.scene,
+      area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
+      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
+      surface: (x, z) => this.roads.surface(x, z),
+    });
     host.scene.add(this.player.group);
     this.player.group.visible = false;
     // the walker's own movement steps aside while the game moves it
@@ -172,7 +198,7 @@ export class GtaMode {
       "keydown",
       (e) => {
         if (!this.active || this.garage.open || /input|textarea|select/i.test((e.target as HTMLElement)?.tagName ?? "")) return;
-        const own = ["Tab", "KeyF", "KeyC", "KeyT", "KeyB", "KeyP", "KeyM", "KeyR"].includes(e.code) || (this.car && ["KeyE", "Space", "KeyQ"].includes(e.code));
+        const own = ["Tab", "KeyF", "KeyC", "KeyT", "KeyB", "KeyP", "KeyM", "KeyR"].includes(e.code) || (this.car && ["KeyE", "Space", "KeyQ"].includes(e.code)) || (!this.car && e.code === "KeyE" && !!this.doors.at);
         if (own) {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -285,7 +311,14 @@ export class GtaMode {
     this.cam.behind(h.walker.heading, -0.22);
     this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.55));
     this.missions.setVisible(true);
+    this.doors.set(this.host.doors());
+    this.doors.show(true);
     this.hud.show(true);
+    // the street's solid shape (once, and again when the far city has streamed in)
+    if (!this.solid.ready) {
+      void this.solid.build();
+      setTimeout(() => this.active && void this.solid.build(), 40_000);
+    }
     // your own car, parked on the nearest street
     if (!this.parked.some((c) => c.kind === "gt")) this.spawnGt();
     if (!GtaHud.coached()) this.hud.coach(0);
@@ -308,6 +341,7 @@ export class GtaMode {
     this.hud.prompt(null);
     this.missions.stop();
     this.missions.setVisible(false);
+    this.doors.show(false);
     this.heat.clear();
     this.sound.siren(0);
     this.player.group.visible = false;
@@ -565,6 +599,11 @@ export class GtaMode {
       }
     }
     if (i.hit("KeyR", "pad:down") && this.car) this.reset();
+    // at a door: in
+    if (!this.car && this.doors.at && i.hit("KeyE", "pad:x", "touch:door")) {
+      this.sound.blip("door");
+      this.host.enter(this.doors.at.key);
+    }
     if (this.hud.coaching && i.hit("Enter")) this.hud.coach(-1);
   }
 
@@ -572,14 +611,47 @@ export class GtaMode {
     const h = this.host;
     const i = this.input;
     const m = this.paused ? { x: 0, y: 0, mag: 0 } : i.move();
+    const solid = this.solid;
+    const pl = this.player;
     this.player.update(dt, m.x, m.y, m.mag, !this.paused && i.sprint, !this.paused && i.jump, this.cam.yaw, {
-      blocked: (x, z) => h.footBlocked(x, z) || this.parkedAt(x, z),
-      floor: (x, z) => h.ground(x, z) ?? h.curb,
+      blocked: (x, z) => {
+        if (this.parkedAt(x, z)) return true;
+        // (the rock, the bridge, the woods, the platforms: their own rules)
+        if (!solid.ready || h.footSpecial(x, z)) return h.footBlocked(x, z);
+        if (x < h.bounds.x0 || x > h.bounds.x1 || z < h.bounds.z0 || z > h.bounds.z1) return true;
+        return !solid.foot(x, z, pl.floor).ok || h.footSmall(x, z) || h.dynamicHit(x, z);
+      },
+      floor: (x, z) => {
+        const g = h.ground(x, z);
+        if (g !== null) return g;
+        if (!solid.ready) return h.curb;
+        const f = solid.foot(x, z, pl.floor);
+        return f.ok && Number.isFinite(f.floor) ? Math.max(-0.05, f.floor) : pl.floor;
+      },
     });
-    this.cam.foot(dt, this.player.pos, { wall: (x, z) => h.nav.wall(x, z) });
-    // a car within reach: say so
-    const r = this.reachable();
-    this.hud.prompt(r ? `<kbd>F</kbd> ${r.car ? (r.kind === "gt" ? "Get in your ZK-GT" : `Get in the ${r.name.toLowerCase()}`) : `Take the ${r.name.toLowerCase()}`}` : null);
+    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready ? solid.wall(x, z) : h.nav.wall(x, z)) });
+    // sprinting into people: they go down
+    if (pl.speed > 6 && !this.paused) {
+      this.reactT -= dt;
+      if (this.reactT <= 0) {
+        this.reactT = 0.12;
+        const l = Math.hypot(pl.vel.x, pl.vel.z) || 1;
+        h.knock(pl.pos.x + (pl.vel.x / l) * 0.5, pl.pos.z + (pl.vel.z / l) * 0.5, pl.vel.x / l, pl.vel.z / l, 0.75);
+      }
+    }
+    // a door within reach first, then a car
+    this.doors.update(dt, { x: pl.pos.x, z: pl.pos.z, heading: pl.facing });
+    const door = this.doors.at;
+    const r = door ? null : this.reachable();
+    const touch = matchMedia("(pointer: coarse)").matches;
+    this.hud.prompt(
+      door
+        ? `<kbd>${touch ? "Tap" : "E"}</kbd> Enter · ${door.label}`
+        : r
+          ? `<kbd>F</kbd> ${r.car ? (r.kind === "gt" ? "Get in your ZK-GT" : `Get in the ${r.name.toLowerCase()}`) : `Take the ${r.name.toLowerCase()}`}`
+          : null,
+    );
+    this.hud.doorButton(!!door);
     this.host.blur(0);
   }
 
@@ -609,12 +681,24 @@ export class GtaMode {
       if (this.heat.near(car.hit.x, car.hit.z, 4.5)) this.heat.raise(0.9, "you rammed a police cruiser");
       else this.heat.raise(0.45, `you hit a car at ${Math.round(car.hit.speed * 3.6)} km/h`);
     }
-    // people in the way: a shout, a jump
+    this.doors.update(dt, null);
+    this.hud.doorButton(false);
+    // people in the way: hit, they go down (stunned a moment); further ahead, a shout
     this.reactT -= dt;
-    if (car.speed > 6 && this.reactT <= 0) {
-      this.reactT = 0.15;
+    if (car.speed > 2.5 && this.reactT <= 0) {
+      this.reactT = 0.08;
       const f = car.fwd();
-      h.react(car.group.position.x, car.group.position.z, f.x, f.y);
+      const p = car.group.position;
+      const dir = Math.sign(car.vF) || 1;
+      const nx = p.x + f.x * dir * car.spec.len * 0.42,
+        nz = p.z + f.y * dir * car.spec.len * 0.42;
+      const n = h.knock(nx, nz, car.vel.x, car.vel.y, car.spec.wid * 0.65 + Math.min(0.6, car.speed * 0.02));
+      if (n) {
+        this.sound.crash(Math.min(0.5, car.speed / 40));
+        this.cam.shake(0.2);
+        if (car.speed > 8) this.heat.raise(0.3 * n, n > 1 ? `you knocked ${n} people down` : "you knocked someone down");
+      }
+      if (car.speed > 6) h.react(p.x, p.z, f.x, f.y);
     }
     if (car.hit) {
       const k = Math.min(1, car.hit.speed / 18);
@@ -629,7 +713,7 @@ export class GtaMode {
     const horn = !this.paused && i.down("KeyE", "KeyQ");
     if (horn !== this.horn) this.sound.hornOn((this.horn = horn));
     this.cam.back = !this.paused && i.down("KeyB");
-    this.cam.car(dt, car.group.position, car.yaw, car.speed, car.vF < 0, i.idleLook, { wall: (x, z) => h.nav.wall(x, z) }, car.spec.len);
+    this.cam.car(dt, car.group.position, car.yaw, car.speed, car.vF < 0, i.idleLook, { wall: (x, z) => (this.solid.ready ? this.solid.wall(x, z) : h.nav.wall(x, z)) }, car.spec.len);
     this.sound.drive({ rpm: car.rpm, throttle: d.throttle, drift: car.drifting, nitro: car.nosOn, speed: car.speed });
     const strong = this.settings.blur === "strong";
     const blur = this.settings.blur === "off" ? 0 : Math.max(0, car.speed - (strong ? 12 : 28)) / (strong ? 30 : 70);
@@ -641,7 +725,11 @@ export class GtaMode {
   private carWorld(self: DriveCar) {
     const h = this.host;
     return {
-      resolve: (p: THREE.Vector3, r: number) => h.nav.resolve(p, r),
+      resolve: (p: THREE.Vector3, r: number) => {
+        if (!this.solid.ready) return h.nav.resolve(p, r);
+        this.solid.resolve(p, r);
+        h.nav.resolveSmall(p, r);
+      },
       outside: (x: number, z: number) => x < h.bounds.x0 || x > h.bounds.x1 || z < h.bounds.z0 || z > h.bounds.z1,
       surface: (x: number, z: number) => this.roads.surface(x, z),
       boxes: () => this.boxes(self),

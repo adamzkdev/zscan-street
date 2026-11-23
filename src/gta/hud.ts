@@ -91,13 +91,13 @@ const COACH = TOUCH
       { eye: "Welcome to ZStreet · 1 / 4", title: "Move", text: `The left stick runs (all the way out: sprint) · JUMP · drag anywhere else to look round.` },
       { eye: "Get a ride · 2 / 4", title: "Take a car", text: `By any car, press CAR. At the wheel the stick drives: up the gas, down the brake · DRIFT · NOS.` },
       { eye: "The chain is the clock · 3 / 4", title: "Beat the block", text: `Blocks are real. The gold beam is the MEMPOOL HQ: take a parcel there and deliver it before the next block is mined.` },
-      { eye: "Find your way · 4 / 4", title: "The map", text: `MAP: tap a street to go there. MENU for the camera, the graphics and your zkSNARK.` },
+      { eye: "Find your way · 4 / 4", title: "The map", text: `MAP: tap a street to go there. Walk up to a lit door and tap ENTER to go in. MENU for the camera, the graphics and your zkSNARK.` },
     ]
   : [
       { eye: "Welcome to ZStreet · 1 / 4", title: "Move", text: `${kbd("W")}${kbd("A")}${kbd("S")}${kbd("D")} or ${kbd("Z")}${kbd("Q")}${kbd("S")}${kbd("D")} to run · ${kbd("Shift")} sprint · ${kbd("Space")} jump. Click the street to steer the camera with the mouse.` },
       { eye: "Get a ride · 2 / 4", title: "Take a car", text: `Walk up to any car and press ${kbd("F")}. ${kbd("Space")} handbrake to drift · ${kbd("Shift")} nitrous · ${kbd("C")} camera · ${kbd("E")} horn · ${kbd("R")} back on the road.` },
       { eye: "The chain is the clock · 3 / 4", title: "Beat the block", text: `Blocks are real. The gold beam is the MEMPOOL HQ: take a parcel there and deliver it before the next block is mined.` },
-      { eye: "Find your way · 4 / 4", title: "The map", text: `${kbd("Tab")} opens the map: click a street to go there. ${kbd("Esc")} for the menu, ${kbd("T")} day or night.` },
+      { eye: "Find your way · 4 / 4", title: "The map", text: `${kbd("M")} opens the map: click a street to go there. Walk up to a lit door and press ${kbd("E")} to go in. ${kbd("Esc")} for the menu, ${kbd("T")} day or night.` },
     ];
 
 export class GtaHud {
@@ -132,7 +132,7 @@ export class GtaHud {
     this.root.innerHTML = `
       <div class="gh-live"><i></i><span class="gh-live-t"></span></div>
       <div class="gh-next"><span class="gh-ni"></span><span class="gh-nt"><em class="gh-ne"></em><b class="gh-nl"></b></span><span class="gh-nd"></span></div>
-      <div class="gh-top"><button class="gta-chip" data-act="map" title="Map (Tab)">Map</button><button class="gta-chip" data-act="menu" title="Menu (Esc)">Menu</button></div>
+      <div class="gh-top"><button class="gta-chip" data-act="map" title="Map (M)">Map</button><button class="gta-chip" data-act="menu" title="Menu (Esc)">Menu</button></div>
       <div class="gh-heat"><span class="gh-stars"></span><b>Exposed</b><i class="gh-lose"><i></i></i></div>
       <div class="gh-card"><em></em><b></b><p></p><span class="gh-timer"></span></div>
       <div class="gh-coach"><em></em><b></b><p></p><div class="gh-cf"><span class="gh-dots"></span><button class="gta-btn ghost" data-act="skip">Skip</button><button class="gta-btn gold" data-act="nextc">Next ↵</button></div></div>
@@ -154,14 +154,14 @@ export class GtaHud {
         <div class="gh-sc"><b class="gh-sv gta-disp">000</b><small class="gh-su">KM/H</small><span class="gh-gear">1</span></div>
       </div>
       <div class="gh-touch">
-        <button data-t="drift">Drift</button><button data-t="nos">NOS</button><button data-t="jump">Jump</button><button data-t="car">Car</button>
+        <button data-t="drift">Drift</button><button data-t="nos">NOS</button><button data-t="jump">Jump</button><button data-t="car">Car</button><button data-t="door">Enter</button>
       </div>
       <div class="gh-map">
         <canvas></canvas>
         <header><h2 class="gta-disp">ZStreet</h2><span class="gh-msub"></span></header>
         <aside class="gh-legend"></aside>
-        <div class="gh-mctl"><button data-act="zin" title="Zoom in">+</button><button data-act="zout" title="Zoom out">−</button><button data-act="me" title="On me">◎</button><button data-act="mclose" title="Close (Tab)">×</button></div>
-        <footer>Scroll to zoom · drag to move · click a street to go there · Tab / Esc to close</footer>
+        <div class="gh-mctl"><button data-act="zin" title="Zoom in">+</button><button data-act="zout" title="Zoom out">−</button><button data-act="me" title="On me">◎</button><button data-act="mclose" title="Close (M)">×</button></div>
+        <footer>Scroll to zoom · drag to move · click a street to go there · M / Esc to close</footer>
       </div>
       <div class="gh-pause" role="dialog" aria-modal="true" aria-label="Menu"><div class="gh-pcard">
         <nav><h2>Menu<small>Paused</small></h2><div class="gh-tabs"></div><div class="grow"></div><button class="gta-btn white" data-act="resume">Resume</button></nav>
@@ -212,6 +212,11 @@ export class GtaHud {
       b.addEventListener("pointerleave", up);
     }
     this.mapEvents();
+  }
+
+  /** The touch "Enter" button, shown at a door. */
+  doorButton(on: boolean) {
+    this.root.classList.toggle("gh-at-door", on);
   }
 
   show(on: boolean) {
@@ -743,10 +748,10 @@ export class GtaHud {
         <div><dt>${kbd("Shift")}</dt><dd>sprint · nitrous</dd></div>
         <div><dt>${kbd("Space")}</dt><dd>jump · handbrake (drift)</dd></div>
         <div><dt>${kbd("F")}</dt><dd>get in / out of a car</dd></div>
-        <div><dt>${kbd("E")}</dt><dd>talk · horn</dd></div>
+        <div><dt>${kbd("E")}</dt><dd>enter a door · talk · horn</dd></div>
         <div><dt>${kbd("C")} ${kbd("B")}</dt><dd>camera · look back</dd></div>
         <div><dt>${kbd("R")}</dt><dd>back on the road</dd></div>
-        <div><dt>${kbd("Tab")} ${kbd("Esc")} ${kbd("T")}</dt><dd>map · menu · day / night</dd></div>
+        <div><dt>${kbd("M")} ${kbd("Esc")} ${kbd("T")}</dt><dd>map · menu · day / night</dd></div>
       </dl><h3>Gamepad</h3><p class="gh-note">RT / LT gas and brake, left stick steer, right stick camera, A jump / handbrake, X nitrous, Y car, B sprint, Start menu.</p><button class="gta-btn" data-do="coach">Show the first steps again</button>`;
     const pane = this.$(".gh-pane");
     pane.innerHTML = `<header><h2>${tabs.find(([k]) => k === this.tab)?.[1] ?? ""}</h2><button class="gh-px" data-act="resume" aria-label="Close">×</button></header>${body}`;

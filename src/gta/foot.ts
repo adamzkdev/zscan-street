@@ -135,7 +135,13 @@ export class FootPlayer {
         this.grounded = true;
       }
     }
-    this.floorY += (floor - this.floorY) * Math.min(1, dt * 14);
+    // off a ledge: a fall (the height kept as the jump's, gravity takes it)
+    if (this.grounded && floor < this.floorY - 0.42) {
+      this.grounded = false;
+      this.hop = this.floorY - floor;
+      this.vy = 0;
+      this.floorY = floor;
+    } else this.floorY += (floor - this.floorY) * Math.min(1, dt * (floor > this.floorY ? 20 : 14));
     p.y = this.floorY + this.hop;
     this.speed = Math.hypot(this.vel.x, this.vel.z);
     this.pose(dt);

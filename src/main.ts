@@ -1217,7 +1217,7 @@ function dynamicHit(x: number, z: number) {
     if (Math.abs(x - p.x) < 7.4 && Math.abs(z - p.z) < 1.5) return true;
   }
   for (const s of director.snarks) {
-    if (!s.root.visible || s.root.parent !== scene || s.state === "riding") continue;
+    if (!s.root.visible || s.root.parent !== scene || s.state === "riding" || s.knocked) continue;
     const p = s.root.position;
     if ((x - p.x) ** 2 + (z - p.z) ** 2 < 0.5 * 0.5) return true;
   }
@@ -2934,6 +2934,48 @@ const gtaShouted = new WeakMap<Snark, number>();
 const GTA_SHOUTS = ["HEY!", "WATCH IT!", "Slow down!", "Shielded driving, please!", "My parcel!", "Not on the pavement!"];
 gta = new GtaMode({
   scene,
+  renderer,
+  movers: () => [
+    ...[...director.snarks].map((s) => s.root),
+    ...[...director.traffic.vehicles].map((v) => v.mover.group),
+    ...[...director.buses].map((b) => b.group),
+    ...[...cityTraffic.movers].map((m) => m.group),
+    ...tram.sets.map((t) => t.group),
+    ...[...metro.trains, ...metro2.trains].map((t) => t.group),
+    sky.blimp.group,
+  ],
+  footSpecial: (x, z) => (x > PRISON.x0 && x < PRISON.x1 && z > PRISON.z0 && z < PRISON.z1) || goldenGate.onDeck(x, z) || forest.owns(x, z) || groundAt(x, z) !== null,
+  footSmall: (x, z) => !city.nav.freeSmall(x, z, 0.28),
+  dynamicHit: (x, z) => dynamicHit(x, z),
+  doors: () =>
+    doors
+      .filter((d) => d.key !== "nu7tower" || nu7Quarter.done)
+      .map((d) => ({ key: d.key, x: d.at.x, z: d.at.z, fx: d.front.x, fz: d.front.z, label: PLACES[d.key] ?? d.key, y: groundAt(d.at.x, d.at.z) ?? CURB })),
+  enter: (key) => {
+    if (!jumping && !closeChoice) enterPlace(key);
+  },
+  knock: (x, z, vx, vz, r) => {
+    let n = 0;
+    const sp = Math.hypot(vx, vz);
+    const power = Math.max(2.4, Math.min(9, sp * 0.5));
+    for (const s of director.snarks) {
+      if (!s.root.visible || s.root.parent !== scene || s.state === "riding" || s.knocked) continue;
+      const dx = s.root.position.x - x,
+        dz = s.root.position.z - z;
+      if (dx * dx + dz * dz > r * r) continue;
+      // flung the way the car goes, and off to the side it was on
+      const l = Math.hypot(dx, dz) || 1;
+      if (s.knock(vx / (sp || 1) + (dx / l) * 0.6, vz / (sp || 1) + (dz / l) * 0.6, power)) n++;
+    }
+    const crowd = crowdOf();
+    if (crowd)
+      for (const i of crowd.within(x, z, r)) {
+        if (!crowd.knock(i, vx, vz)) continue;
+        n++;
+        setTimeout(() => crowd.release(i), 3700);
+      }
+    return n;
+  },
   canvas,
   ui: document.getElementById("ui")!,
   walker: onFoot,
@@ -3252,8 +3294,8 @@ function frameBody(stepDt?: number) {
     onFoot.update(dt);
     // the game moves the walker (its body, its car) and films it
     gta?.update(dt);
-    // (in the air or up on a roof on the swing, at the wheel: no door to walk into)
-    if (swing.active || gta?.driving) prompt(null);
+    // (in the air or up on a roof on the swing, in the game (its doors open with E): no door to walk into)
+    if (swing.active || gta?.active) prompt(null);
     else throughDoors(dt);
     if (interiors.active) return again();
   } else {

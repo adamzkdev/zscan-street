@@ -783,6 +783,55 @@ export class Snark {
     return this.seated;
   }
 
+  // ---- knocked over (the game, src/gta: a car or a sprint into them) ----
+  private knockT = -1;
+  private knockV = new THREE.Vector3();
+  private knockY = 0;
+  private knockSide = 1;
+  private knockPaused = false;
+  /** Flung along (dx, dz) at `power` m/s: in the air, flat on the ground a moment, stunned, back up. */
+  knock(dx: number, dz: number, power: number) {
+    if (this.knockT >= 0) return false;
+    const l = Math.hypot(dx, dz) || 1;
+    this.knockT = 0;
+    this.knockPaused = this.paused;
+    this.paused = true;
+    this.knockY = this.root.position.y;
+    this.knockV.set((dx / l) * power, 2.2 + power * 0.22, (dz / l) * power);
+    this.knockSide = Math.random() < 0.5 ? -1 : 1;
+    this.emote("!", 0.7);
+    return true;
+  }
+  /** On the ground (or flying there) right now. */
+  get knocked() {
+    return this.knockT >= 0;
+  }
+  /** The fall's roll (0 standing … 1 flat), and the stunned stars once down. */
+  private knockStep(dt: number) {
+    if (this.knockT < 0) return 0;
+    const was = this.knockT;
+    this.knockT += dt;
+    const t = this.knockT;
+    const p = this.root.position;
+    if (t < 0.7) {
+      p.addScaledVector(this.knockV, dt);
+      this.knockV.y -= 16 * dt;
+      this.knockV.x *= Math.exp(-dt * 2.5);
+      this.knockV.z *= Math.exp(-dt * 2.5);
+      if (p.y < this.knockY) (p.y = this.knockY), (this.knockV.y = Math.abs(this.knockV.y) * 0.25);
+    } else p.y = this.knockY;
+    if (was < 0.7 && t >= 0.7) this.emote("star", 2.4);
+    if (t > 3.6) {
+      this.knockT = -1;
+      this.paused = this.knockPaused;
+      p.y = this.knockY;
+      return 0;
+    }
+    const fall = Math.min(1, t / 0.32);
+    const up = t > 3.1 ? Math.min(1, (t - 3.1) / 0.5) : 0;
+    return (1 - (1 - fall) ** 2) * (1 - up * up);
+  }
+
   /** Walking through others for now (see `ghostFor`): collisions leave this one alone. */
   get ghosting() {
     return this.ghostFor > 0;
@@ -790,6 +839,7 @@ export class Snark {
 
   update(dt: number, t: number, camQuat: THREE.Quaternion, camRight: THREE.Vector3) {
     if (this.ghostFor > 0) this.ghostFor -= dt;
+    const down = this.knockStep(dt);
     if (this.seekSeat > 0 && --this.seekSeat === 0 && !this.findSeat()) this.seekSeat = 30;
     // Out of the picture (or hidden), only where it is and where it goes are kept up: the figure's
     // own animation (billboard, waddle, arms) is set again the frame it is in view, from the same
@@ -896,6 +946,8 @@ export class Snark {
     this.hold.position.y = this.body.position.y - base;
     this.hold.rotation.z = this.body.rotation.z * 0.5;
     this.visual.scale.set(this.facing * this.scaleK, this.scaleK, this.scaleK);
+    // knocked over: the cut-out falls on its side, in the picture's plane
+    if (down > 0) this.visual.rotateZ(down * (Math.PI / 2) * this.knockSide);
     this.ring.rotation.z += dt;
   }
 

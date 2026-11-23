@@ -51,24 +51,41 @@ export class FieldBuilder {
   /** Where every mesh stood when `watch()` was called (its world matrix, or its instances' version). */
   private seen = new Map<THREE.Object3D, Float32Array | number>();
 
+  /** What a pixel with nothing drawn reads as (the swing: the ground, 0; the game: NaN). */
+  private empty: number;
+
   constructor(
     private renderer: THREE.WebGLRenderer,
     private scene: THREE.Scene,
     area: Area,
     private hide: () => THREE.Object3D[],
+    /** A finer picture (`size` pixels a side), only what is between `band` heights (world m), an `empty` value. */
+    opts: { size?: number; band?: [number, number]; empty?: number; shear?: number } = {},
   ) {
     const w = Math.max(area.x1 - area.x0, area.z1 - area.z0);
     // (a metre or so a pixel, no finer: reading it back is the slow part)
-    this.size = Math.min(1024, Math.ceil(w));
+    this.size = opts.size ?? Math.min(1024, Math.ceil(w));
+    this.empty = opts.empty ?? 0;
     this.half = w / 2;
     this.cx = (area.x0 + area.x1) / 2;
     this.cz = (area.z0 + area.z1) / 2;
     const h = this.half;
-    this.top = new THREE.OrthographicCamera(-h, h, h, -h, 1, 1400);
-    this.top.position.set(this.cx, 900, this.cz);
+    const band = opts.band;
+    // a band: the camera just over its top, the far plane at its bottom
+    this.top = new THREE.OrthographicCamera(-h, h, h, -h, band ? 0.5 : 1, band ? 0.5 + band[1] - band[0] : 1400);
+    this.top.position.set(this.cx, band ? band[1] + 0.5 : 900, this.cz);
     this.top.up.set(0, 0, -1);
     this.top.lookAt(this.cx, 0, this.cz);
     this.top.updateMatrixWorld();
+    // A slant (the game's collisions): seen straight down a wall has no width and draws nothing;
+    // sheared a little along the diagonal, every wall shows as a thin strip, the ground stays put.
+    if (opts.shear) {
+      const a = opts.shear,
+        y = this.top.position.y;
+      const S = new THREE.Matrix4().set(1, 0, a, a * y, 0, 1, -a, -a * y, 0, 0, 1, 0, 0, 0, 0, 1);
+      this.top.projectionMatrix.multiply(S);
+      this.top.projectionMatrixInverse.copy(this.top.projectionMatrix).invert();
+    }
   }
 
   /** Note where everything stands now: whatever has moved by the time the field is drawn is left out. */
@@ -160,7 +177,7 @@ export class FieldBuilder {
     for (let j = 0; j < size; j++)
       for (let i = 0; i < size; i++) {
         const k = ((size - 1 - j) * size + i) * 4;
-        h[j * size + i] = px[k] | px[k + 1] | px[k + 2] | px[k + 3] ? unpack(px, k) * SPAN + LOW : 0;
+        h[j * size + i] = px[k] | px[k + 1] | px[k + 2] | px[k + 3] ? unpack(px, k) * SPAN + LOW : this.empty;
       }
     return { x0: this.cx - this.half, z0: this.cz - this.half, cell: (2 * this.half) / this.size, size, h };
   }

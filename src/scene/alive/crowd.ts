@@ -17,10 +17,12 @@ import { atlasBitmap } from "../../data/atlas";
  *  5 dancing at iA = (x, z, heading, 0)
  *  6 a dog standing (like 1)
  *  7 a dog back and forth (like 3)
+ *  8 knocked over (the game, src/gta): from (x, z) = iA.xy flung 2 m along the heading iA.z at the
+ *    time iA.w, flat on the ground, then back up
  * iB = (speed m/s, phase m, y, kind); iC = (slot, scale).
  */
 
-export const Kind = { Loop: 0, Stand: 1, DogLoop: 2, Path: 3, Race: 4, Dance: 5, DogStand: 6, DogPath: 7 } as const;
+export const Kind = { Loop: 0, Stand: 1, DogLoop: 2, Path: 3, Race: 4, Dance: 5, DogStand: 6, DogPath: 7, Down: 8 } as const;
 export type Kind = (typeof Kind)[keyof typeof Kind];
 
 const S = 1.42;
@@ -82,6 +84,12 @@ bool walker(out vec3 P, out vec2 D, out float amp, out float anim) {
     if (uRace < 0.0 || s < 0.0 || s > len) return false;
     P.xz = iA.xy + ab * (s / len);
     D = ab / len;
+  } else if (kind == 8) {
+    float k = clamp((uTime - iA.w) / 0.55, 0.0, 1.0);
+    D = vec2(cos(iA.z), sin(iA.z));
+    P.xz = iA.xy + D * 2.2 * (1.0 - (1.0 - k) * (1.0 - k));
+    P.y += sin(k * 3.14159) * 0.7;
+    amp = 0.0;
   } else {
     P.xz = iA.xy;
     D = vec2(cos(iA.z), sin(iA.z));
@@ -123,7 +131,18 @@ void main() {
   vec2 q = position.xy;
   float lx = (q.x + 0.5) * 26.0;
   float feet = vDog > 0.5 ? 13.0 : (flip > 0.0 ? 15.5 : 10.5);
-  vec3 wp = P + right * ((lx - feet) * px) + vec3(0.0, q.y * 35.0 * px, 0.0);
+  // knocked over: the figure turned on its side round its feet, in the picture's plane
+  float ox = (lx - feet) * px, oy = q.y * 35.0 * px;
+  if (kind == 8) {
+    float t = uTime - iA.w;
+    float a = 1.5708 * (1.0 - pow(1.0 - clamp(t / 0.32, 0.0, 1.0), 2.0)) * (1.0 - pow(clamp((t - 3.1) / 0.5, 0.0, 1.0), 2.0));
+    float sd = hh(iB.y) < 0.5 ? -1.0 : 1.0;
+    float c = cos(a), sn = sin(a) * sd;
+    float rx = ox * c - oy * sn, ry = ox * sn + oy * c;
+    ox = rx;
+    oy = max(ry, 0.0) + sin(a) * 0.12;
+  }
+  vec3 wp = P + right * ox + vec3(0.0, oy, 0.0);
   vPx = vec2(flip > 0.0 ? lx : 26.0 - lx, q.y * 35.0);
   vSlot = iC.x;
   vCloth = iCloth;
@@ -445,6 +464,10 @@ export class Crowd {
       else if (s < w + h) out.set(bx, out.y, az + s - w);
       else if (s < 2 * w + h) out.set(bx - (s - w - h), out.y, bz);
       else out.set(ax, out.y, bz - (s - 2 * w - h));
+    } else if (p.kind === Kind.Down) {
+      const k = Math.min(1, Math.max(0, (t - bz) / 0.55));
+      const e = 2.2 * (1 - (1 - k) * (1 - k));
+      out.set(ax + Math.cos(bx) * e, out.y, az + Math.sin(bx) * e);
     } else if (p.kind === Kind.Path || p.kind === Kind.DogPath) {
       const len = Math.max(Math.hypot(bx - ax, bz - az), 0.01);
       const s = (ph + Math.abs(sp) * t) % (2 * len);
@@ -494,13 +517,30 @@ export class Crowd {
     this.A.needsUpdate = this.B.needsUpdate = true;
   }
 
+  /** Knocked over: walker `i` flung along (dx, dz), down a few seconds, then on its way (`release`). */
+  knock(i: number, dx: number, dz: number) {
+    const p = this.people[i];
+    if (p.kind === Kind.Down || p.kind === Kind.Race) return false;
+    const at = this.positionOf(i, new THREE.Vector3());
+    const t = this.uniforms.uTime.value;
+    if (!this.held.has(i)) {
+      const sp = p.speed ?? 0;
+      const s = (p.phase ?? 0) + (p.kind === Kind.Loop || p.kind === Kind.DogLoop ? sp : Math.abs(sp)) * t;
+      this.held.set(i, { a: [...p.a], kind: p.kind, s });
+    }
+    p.a = [at.x, at.z, Math.atan2(dz, dx), t];
+    p.kind = Kind.Down;
+    this.write(i);
+    return true;
+  }
+
   /** Everyone (not dogs, not runners) within `r` of (x, z). */
   within(x: number, z: number, r: number): number[] {
     const out: number[] = [];
     const tmp = new THREE.Vector3();
     for (let i = 0; i < this.people.length; i++) {
       const k = this.people[i].kind;
-      if (k === Kind.Race || k === Kind.DogLoop || k === Kind.DogStand || k === Kind.DogPath) continue;
+      if (k === Kind.Race || k === Kind.DogLoop || k === Kind.DogStand || k === Kind.DogPath || k === Kind.Down) continue;
       this.positionOf(i, tmp);
       if ((tmp.x - x) ** 2 + (tmp.z - z) ** 2 < r * r) out.push(i);
     }
