@@ -14,6 +14,8 @@ import { BODY_SCALE } from "./foot";
 export interface Person3 {
   /** Who it is in the street's own terms (stable while it is about). */
   key: string;
+  /** The game's own passers-by: they have no flat figure to fall back on, so they come first. */
+  own?: boolean;
   /** The zkSNARK. */
   id: number;
   /** Where its feet are now. */
@@ -24,6 +26,8 @@ export interface Person3 {
   face(): THREE.Vector3 | null;
   /** Seated: the seat's height over its feet, else 0. */
   seat?(): number;
+  /** A gesture now: talking with its hands, waving, both arms up, a phone at its ear. */
+  pose?(): "talk" | "wave" | "cheer" | "phone" | null;
   /** Its flat figure hidden (true) or shown. */
   hide(on: boolean): void;
   /** Still in the street (not gone, not on a bus). */
@@ -79,8 +83,8 @@ export class People3D {
     private find: (x: number, z: number, r: number) => Person3[],
   ) {
     const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-    this.max = coarse ? 28 : 56;
-    this.radius = coarse ? 30 : 42;
+    this.max = coarse ? 44 : 112;
+    this.radius = coarse ? 32 : 46;
     const toon = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: snarkToon() });
     this.batch = new THREE.BatchedMesh(this.max, 260_000, 0, toon);
     this.batch.castShadow = true;
@@ -142,13 +146,13 @@ export class People3D {
       p.pos(this.tmp);
       return (this.tmp.x - x) ** 2 + (this.tmp.z - z) ** 2;
     };
-    const ranked = list.map((p) => ({ p, d: d(p) })).sort((a, b) => a.d - b.d);
+    const ranked = list.map((p) => ({ p, d: d(p) - (p.own ? 1e6 : 0) })).sort((a, b) => a.d - b.d);
     const keep = new Set<string>();
     for (const { p, d: dd } of ranked) {
       if (keep.size >= this.max) break;
       const held = this.slots.has(p.key);
       // (a little farther for those already in: no flicker at the edge)
-      if (dd > (this.radius + (held ? 4 : 0)) ** 2) continue;
+      if (!p.own && dd > (this.radius + (held ? 4 : 0)) ** 2) continue;
       keep.add(p.key);
     }
     for (const s of [...this.slots.values()]) if (!keep.has(s.p.key) || !s.p.alive()) this.drop(s);
@@ -306,11 +310,18 @@ export class People3D {
       this.inks.setMatrixAt(sl.ink, new THREE.Matrix4().copy(m).multiply(m2));
       // arms and legs
       const pr = sl.parts;
+      const pose = fall.k > 0.05 ? null : (sl.p.pose?.() ?? null);
       for (const side of [-1, 1]) {
         const i = sl.inst * 4 + (side < 0 ? 0 : 1);
-        const swing = -st * stride * 0.9 * side;
+        let swing = -st * stride * 0.9 * side,
+          roll = side * -0.12;
+        // the gestures (side −1 is its right arm)
+        if (pose === "cheer") (swing = -2.9 + Math.sin(sl.t * 12 + side) * 0.2), (roll = side * -0.35);
+        else if (pose === "wave" && side < 0) (swing = -2.7), (roll = 0.35 + Math.sin(sl.t * 11) * 0.45);
+        else if (pose === "phone" && side < 0) (swing = -2.4), (roll = 0.55);
+        else if (pose === "talk") swing = -0.5 - Math.max(0, Math.sin(sl.t * (side < 0 ? 5 : 3.7))) * 0.8;
         const sx = side * (Math.max(pr.halfW * 0.92, 0.2) + D.ARM_W * 0.5);
-        const pivot = new THREE.Matrix4().compose(v.set(sx, pr.neckY - 0.058 * 1.2, 0), q.setFromEuler(e.set(swing, 0, side * -0.12)), s.set(1, 1, 1));
+        const pivot = new THREE.Matrix4().compose(v.set(sx, pr.neckY - 0.058 * 1.2, 0), q.setFromEuler(e.set(swing, 0, roll)), s.set(1, 1, 1));
         const arm = new THREE.Matrix4().compose(v.set(0, -(D.UPPER + D.FORE) / 2, 0), q.identity(), s.set(D.ARM_W, D.UPPER + D.FORE + D.HAND, D.ARM_W));
         this.limbs.setMatrixAt(i, m2.copy(m).multiply(pivot).multiply(arm));
         const lx = side * Math.min(Math.max(pr.halfW * 0.42, D.LEG_W * 0.75), pr.halfW - D.LEG_W * 0.5);

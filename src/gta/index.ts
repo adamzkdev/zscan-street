@@ -13,6 +13,7 @@ import { GtaInput } from "./input";
 import { Missions } from "./missions";
 import { WorldNet } from "./net";
 import { People3D, type Person3 } from "./people3d";
+import { Peds } from "./peds";
 import { Debris } from "./debris";
 import { Breakables } from "./breakables";
 import { StreetProps } from "./streetprops";
@@ -61,6 +62,8 @@ export interface GtaHost {
   pickCamera(cam: THREE.Camera | null): void;
   /** The street's people within `r` of (x, z), to be drawn in 3D. */
   people3d(x: number, z: number, r: number): Person3[];
+  /** The street trees (their crowns stop the camera, not the walk). */
+  trees(): { x: number; z: number }[];
   /** Knock over whoever stands within `r` of (x, z), flung along (fx, fz): how many went down. */
   knock(x: number, z: number, fx: number, fz: number, r: number): number;
   canvas: HTMLCanvasElement;
@@ -128,6 +131,7 @@ export class GtaMode {
   readonly doors: Doors;
   readonly net: WorldNet;
   readonly people: People3D;
+  readonly peds: Peds;
   readonly debris = new Debris();
   readonly breakables: Breakables;
   readonly props: StreetProps;
@@ -219,7 +223,8 @@ export class GtaMode {
     this.apply(this.settings);
     this.doors = new Doors(host.scene);
     this.net = new WorldNet(host.scene);
-    this.people = new People3D(host.scene, (x, z, r) => host.people3d(x, z, r));
+    this.peds = new Peds(host.scene);
+    this.people = new People3D(host.scene, (x, z, r) => [...this.peds.near(x, z, r), ...host.people3d(x, z, r)]);
     this.breakables = new Breakables(this.debris);
     this.props = new StreetProps(host.scene, this.debris);
     host.interiorWalker.mover = () => this.active;
@@ -227,7 +232,7 @@ export class GtaMode {
       renderer: host.renderer,
       scene: host.scene,
       area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
-      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
+      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
       surface: (x, z) => this.roads.surface(x, z),
     });
     host.scene.add(this.player.group);
@@ -300,6 +305,7 @@ export class GtaMode {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
     } catch {}
     this.skyT = -1;
+    if (this.peds) this.peds.crowd = this.settings.crowd;
     this.cam.carView = this.settings.carView;
     this.cam.footFar = this.settings.footFar;
     this.cam.fovAdd = this.settings.fovAdd;
@@ -370,6 +376,8 @@ export class GtaMode {
     this.net.join(true);
     this.people.show(true);
     this.props.show(true);
+    this.peds.show(true);
+    this.peds.crowd = this.settings.crowd;
     this.debris.into(this.host.scene);
     this.hud.show(true);
     // the street's solid shape (once, and again when the far city has streamed in)
@@ -409,6 +417,7 @@ export class GtaMode {
     this.net.join(false);
     this.people.show(false);
     this.props.show(false);
+    this.peds.show(false);
     this.props.reset();
     this.breakables.restore();
     this.host.pickCamera(null);
@@ -798,7 +807,7 @@ export class GtaMode {
     }, !follow || my >= 0);
     // behind you again a moment after a look round (always, with the follow camera)
     if (follow && i.idleLook > 0.6) this.cam.follow(dt, pl.facing, pl.speed);
-    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z)) || h.nav.wall(x, z) });
+    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z)) || h.nav.wall(x, z) || this.crown(x, z) });
     pl.group.visible = this.cam.armLength > 1.15;
     // sprinting into people: they go down
     if (pl.speed > 6 && !this.paused) {
@@ -806,7 +815,7 @@ export class GtaMode {
       if (this.reactT <= 0) {
         this.reactT = 0.12;
         const l = Math.hypot(pl.vel.x, pl.vel.z) || 1;
-        h.knock(pl.pos.x + (pl.vel.x / l) * 0.5, pl.pos.z + (pl.vel.z / l) * 0.5, pl.vel.x / l, pl.vel.z / l, 0.75);
+        this.knockAll(pl.pos.x + (pl.vel.x / l) * 0.5, pl.pos.z + (pl.vel.z / l) * 0.5, pl.vel.x / l, pl.vel.z / l, 0.75);
       }
     }
     // the nearest buildings get their doors
@@ -851,6 +860,13 @@ export class GtaMode {
     } else if (!car && this.player.speed > 2.5) this.props.push(this.player.pos.x, this.player.pos.z, 0.35, this.player.vel.x * 0.7, this.player.vel.z * 0.7, 0.5);
     this.props.update(dt, world);
     this.debris.update(dt);
+    // the passers-by
+    if (this.solid.ready) {
+      this.peds.build(this.roads, this.pedWorld());
+      const at = this.car ? this.car.group.position : this.player.pos;
+      const fy = this.cam.yaw;
+      this.peds.update(dt, { x: at.x, z: at.z, onFoot: !this.car, speed: this.car?.speed ?? this.player.speed, id: this.player.id, fx: -Math.sin(fy), fz: -Math.cos(fy) }, this.pedWorld(), { height: this.host.height(), at: this.host.lastBlockAt(), mempool: this.host.mempool() });
+    }
     if (this.player.landed) this.punchLanded(null);
   }
 
@@ -873,6 +889,57 @@ export class GtaMode {
     }
   }
 
+  /** A tree's crown over (x, z): the camera stops short of it (it would sit inside the leaves). */
+  private treeGrid: Map<string, { x: number; z: number }[]> | null = null;
+  private crown(x: number, z: number) {
+    if (!this.treeGrid) {
+      this.treeGrid = new Map();
+      for (const t of this.host.trees()) {
+        const k = `${Math.floor(t.x / 4)},${Math.floor(t.z / 4)}`;
+        (this.treeGrid.get(k) ?? this.treeGrid.set(k, []).get(k)!).push(t);
+      }
+    }
+    const cx = Math.floor(x / 4),
+      cz = Math.floor(z / 4);
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++) for (const t of this.treeGrid.get(`${cx + i},${cz + j}`) ?? []) if ((t.x - x) ** 2 + (t.z - z) ** 2 < 1.5 * 1.5) return true;
+    return false;
+  }
+
+  /** Everyone hit within `r` of (x, z): the street's people and the game's passers-by. */
+  private knockAll(x: number, z: number, vx: number, vz: number, r: number) {
+    return this.host.knock(x, z, vx, vz, r) + this.peds.knock(x, z, vx, vz, r);
+  }
+
+  /** The people in the road the traffic must wait for (you on foot, passers-by crossing). */
+  trafficBlockers(): { x: number; z: number }[] {
+    if (!this.active || this.wasIndoors) return [];
+    const out = [...this.peds.inRoad(this.pedWorld())];
+    if (!this.car && this.roads.road(this.player.pos.x, this.player.pos.z)) out.push({ x: this.player.pos.x, z: this.player.pos.z });
+    return out;
+  }
+
+  private pedWorldCache: { free(x: number, z: number): boolean; wall(x: number, z: number): boolean; floor(x: number, z: number): number; road(x: number, z: number): boolean } | null = null;
+  private pedWorld() {
+    return (this.pedWorldCache ??= {
+      free: (x: number, z: number) => {
+        if (!this.solid.ready) return !this.host.nav.wall(x, z);
+        const t = this.solid.topAt(x, z);
+        return t !== undefined && t === t && t > -0.3 && t < 0.7 && !this.host.footSmall(x, z);
+      },
+      floor: (x: number, z: number) => {
+        const t = this.solid.topAt(x, z);
+        return t !== undefined && t === t && t > -0.3 && t < 0.7 ? t : 0.2;
+      },
+      wall: (x: number, z: number) => {
+        if (!this.solid.ready) return this.host.nav.wall(x, z);
+        const t = this.solid.topAt(x, z);
+        return !(t !== undefined && t === t && t > -0.3 && t < 0.7);
+      },
+      road: (x: number, z: number) => this.roads.road(x, z),
+    });
+  }
+
   /** The fist lands: a thing in reach breaks (inside), a street thing flies, a person goes down. */
   private punchLanded(inside: { walk: WalkControls; scene: THREE.Scene } | null) {
     const pl = this.player;
@@ -882,11 +949,12 @@ export class GtaMode {
     if (inside) hit = this.breakables.hit(inside.scene, at, dir, pl.floor, [inside.walk.colliders, inside.walk.extra]);
     else {
       hit = this.props.push(at.x, at.z, 0.45, dir.x * 7, dir.z * 7, 1.6) > 0;
-      if (this.host.knock(at.x, at.z, dir.x * 6, dir.z * 6, 0.8)) hit = true;
+      if (this.knockAll(at.x, at.z, dir.x * 6, dir.z * 6, 0.8)) hit = true;
     }
     if (hit) {
       this.sound.crash(0.35);
       this.cam.shake(0.18);
+      if (!inside) this.peds.panic(at.x, at.z, 9);
     } else this.sound.blip("click");
   }
 
@@ -1141,7 +1209,7 @@ export class GtaMode {
       const dir = Math.sign(car.vF) || 1;
       const nx = p.x + f.x * dir * car.spec.len * 0.42,
         nz = p.z + f.y * dir * car.spec.len * 0.42;
-      const n = h.knock(nx, nz, car.vel.x, car.vel.y, car.spec.wid * 0.65 + Math.min(0.6, car.speed * 0.02));
+      const n = this.knockAll(nx, nz, car.vel.x, car.vel.y, car.spec.wid * 0.65 + Math.min(0.6, car.speed * 0.02));
       if (n) {
         this.sound.crash(Math.min(0.5, car.speed / 40));
         this.cam.shake(0.2);
@@ -1156,6 +1224,7 @@ export class GtaMode {
       const now = performance.now();
       if (now - this.lastHitAt > 600) this.hits++;
       this.lastHitAt = now;
+      if (car.hit.speed > 8) this.peds.panic(car.hit.x, car.hit.z, 16);
       if (car.hit.speed > 14) this.hud.toast("Crash", `${Math.round(car.hit.speed * 3.6)} km/h into ${car.hit.what === "car" ? "a car" : "a wall"}`, "bad");
     }
     // the horn on E (held), the look back on B
@@ -1215,6 +1284,7 @@ export class GtaMode {
     const w = this.roads.where(at.x, at.z, -Math.sin(heading), -Math.cos(heading));
     const people: { x: number; z: number }[] = [];
     for (const p of h.people()) people.push(p);
+    for (const p of this.peds.positions()) people.push(p);
     const cars: { x: number; z: number }[] = [];
     for (const m of h.traffic.movers) cars.push({ x: m.group.position.x, z: m.group.position.z });
     for (const c of this.parked) cars.push({ x: c.group.position.x, z: c.group.position.z });

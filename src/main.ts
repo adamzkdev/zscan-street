@@ -10,7 +10,7 @@ import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
 import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
-import { NU7Q, RIVER, ST } from "./scene/city/plan";
+import { NU7Q, RIVER, ST, planCity } from "./scene/city/plan";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
 import { buildDecor } from "./scene/decor";
@@ -484,7 +484,8 @@ let paradeBlocks: { x: number; z: number }[] = [];
 let titanBlocks: () => { x: number; z: number }[] = () => [];
 cityTraffic.blockers = () => {
   const t = titanBlocks();
-  return t.length ? paradeBlocks.concat(t) : paradeBlocks;
+  const g = gta?.trafficBlockers() ?? [];
+  return t.length || g.length ? paradeBlocks.concat(t, g) : paradeBlocks;
 };
 // Shibuya: the scramble crossing, its crowd and its screens
 const shibuya = new Shibuya(scene, city, cityTraffic, { count: [300, 260, 200, 140, 90][worldLevel()], director });
@@ -2937,6 +2938,8 @@ const swing = new StreetSwing({
   sound: () => sound.on,
 });
 // ---- the game: ZStreet in the third person, cars, challenges (src/gta) ----------------------------
+/** The street trees for the game's camera (from the plan, once). */
+let gtaTrees: { x: number; z: number }[] | null = null;
 /** The game's keys for the street's people drawn in 3D (src/gta/people3d.ts). */
 const gtaKeys = new WeakMap<Snark, string>();
 let gtaKeyN = 0;
@@ -2986,6 +2989,7 @@ gta = new GtaMode({
       enterPlace("building");
     });
   },
+  trees: () => gtaTrees ??= planCity().props.filter((q) => q.type === "tree" || q.type === "maple").map((q) => ({ x: q.x, z: q.z })),
   people3d: (x, z, r) => {
     const out: Person3[] = [];
     for (const s of director.snarks) {
