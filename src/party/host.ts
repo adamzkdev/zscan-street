@@ -554,8 +554,16 @@ const NO3D = LAB && new URLSearchParams(location.search).has("no3d");
 /** The bench: `&cine=0` no intro cinematic, `&cine=full` the whole one even for four AIs, `&cine=short` the short one. */
 const CINE = LAB ? new URLSearchParams(location.search).get("cine") : null;
 
-/** One mini-game, from its card to its podium. */
-export function playMini(stage: Stage, def: MiniDef, players: Player[], rnd: Rnd, opts: MiniOpts = {}): Promise<number[] | null> {
+/** One mini-game, from its card to its podium (a game loaded on demand is fetched first: gp/). */
+export async function playMini(stage: Stage, def: MiniDef, players: Player[], rnd: Rnd, opts: MiniOpts = {}): Promise<number[] | null> {
+  if (def.load) {
+    try {
+      await def.load();
+    } catch (e) {
+      console.warn(`[party] ${def.key} did not load`, e);
+      return null;
+    }
+  }
   if (opts.net) return playNet(stage, def, players, opts, opts.net);
   return hold<number[]>(
     stage,

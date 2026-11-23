@@ -273,7 +273,8 @@ export class Board implements Scene {
     this.r = new Rules(this.map, players.map((p) => ({ human: p.human, skill: p.skill })), rnd, { turns, startTurn: this.lab.startTurn, coins: this.lab.coins, dice: this.lab.dice, at: this.lab.at }, graph);
     this.v = new BoardView(this.map, graph, players, rnd);
     this.dispCoins = this.r.coins.slice();
-    this.games = GAMES.slice();
+    // (online, only the games every client plays the same: not the GAMEPARTY ones, gp/index.ts)
+    this.games = GAMES.filter((g) => !opts.net || g.net !== false);
     for (let i = this.games.length - 1; i > 0; i--) {
       const j = Math.floor(rnd() * (i + 1));
       [this.games[i], this.games[j]] = [this.games[j], this.games[i]];

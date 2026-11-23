@@ -3,7 +3,8 @@ import "./select.css";
 import { T } from "../i18n/lang";
 import { profile } from "../game/profile";
 import { bank } from "./bank";
-import { GAMES } from "./games";
+import { DUELS, GAMES } from "./games";
+import { GENRES, genreName, genreOf, seatsName } from "./genres";
 import { ord, sfx, stickOf, variantPick, type Btn, type MiniDef } from "./kit";
 import { touchWords, touchy } from "./hud";
 import { actsOf, actSvg, actWord } from "./acts";
@@ -89,11 +90,16 @@ export function cardHtml(g: MiniDef, i: number, on = false, tag = "") {
 /** How many rounds a match is played over. */
 export const ROUND_CHOICES = [1, 3, 5];
 
+/** Every game the hall plays on the stage: the four-player ones, then the duels. */
+const LIST: MiniDef[] = [...GAMES, ...DUELS];
+
 export class MiniSelect {
   readonly el: HTMLElement;
   open = false;
-  /** The card picked (an index in GAMES). */
+  /** The card picked (an index in LIST). */
   at = 0;
+  /** The shelf shown ("all", or a genre: genres.ts). */
+  genre = "all";
   /** The practice rivals' level (0…3). */
   level = 1;
   private sheet = false;
@@ -116,9 +122,11 @@ export class MiniSelect {
 
   /** Open it (on a game, by its key). */
   show(key?: string) {
-    const i = key ? GAMES.findIndex((g) => g.key === key) : -1;
+    const i = key ? LIST.findIndex((g) => g.key === key) : -1;
     if (i >= 0) this.at = i;
-    this.at = Math.max(0, Math.min(GAMES.length - 1, this.at));
+    // (a game asked for on another shelf: all of them)
+    if (i >= 0 && this.genre !== "all" && genreOf(LIST[i]) !== this.genre) this.genre = "all";
+    this.at = Math.max(0, Math.min(LIST.length - 1, this.at));
     if (!this.open) {
       this.open = true;
       window.addEventListener("keydown", this.key, true);
@@ -158,7 +166,12 @@ export class MiniSelect {
   }
 
   private get def() {
-    return GAMES[this.at];
+    return LIST[this.at];
+  }
+
+  /** Is card i on the shelf shown? */
+  private shown(i: number) {
+    return this.genre === "all" || genreOf(LIST[i]) === this.genre;
   }
 
   private card(i: number) {
@@ -178,7 +191,7 @@ export class MiniSelect {
     const def = this.def;
     const medals = [0, 0, 0];
     let played = 0;
-    for (const g of GAMES) {
+    for (const g of LIST) {
       const b = places[g.key];
       if (b !== undefined) played++;
       if (b !== undefined && b < 3) medals[b]++;
@@ -188,17 +201,24 @@ export class MiniSelect {
       <div class="sel-bg"><i></i></div>
       <header class="sel-head">
         <button class="sel-back" data-s="back" title="${T("Back to the hall (Esc)", "返回大厅（Esc）")}"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span>${T("Hall", "大厅")}</span></button>
-        <div class="sel-title"><small>ZK PARTY</small><b>${T("Mini-games", "小游戏")}<em>${GAMES.length}</em></b></div>
+        <div class="sel-title"><small>ZK PARTY</small><b>${T("Mini-games", "小游戏")}<em>${LIST.length}</em></b></div>
         ${this.hooks.chain()}
         <div class="sel-sum">
           <span title="${T("Gold medals", "金牌")}">${medalHtml(0, "xs")}<b>${medals[0]}</b></span>
           <span title="${T("Silver medals", "银牌")}">${medalHtml(1, "xs")}<b>${medals[1]}</b></span>
           <span title="${T("Bronze medals", "铜牌")}">${medalHtml(2, "xs")}<b>${medals[2]}</b></span>
-          <span class="sel-played"><b>${played}/${GAMES.length}</b><small>${T("played", "已玩")}</small></span>
+          <span class="sel-played"><b>${played}/${LIST.length}</b><small>${T("played", "已玩")}</small></span>
         </div>
       </header>
+      <nav class="sel-genres" aria-label="${T("Kinds of games", "游戏类型")}">
+        <button data-s="genre" data-v="all" class="${this.genre === "all" ? "on" : ""}">${T("All", "全部")}<em>${LIST.length}</em></button>
+        ${GENRES.map((g) => {
+          const n = LIST.filter((x) => genreOf(x) === g.k).length;
+          return n ? `<button data-s="genre" data-v="${g.k}" class="${this.genre === g.k ? "on" : ""}">${T(g.en, g.zh)}<em>${n}</em></button>` : "";
+        }).join("")}
+      </nav>
       <div class="sel-main">
-        <div class="sel-grid" role="listbox" aria-label="${T("Mini-games", "小游戏")}">${GAMES.map((g, i) => this.cardHtml(g, i)).join("")}</div>
+        <div class="sel-grid" role="listbox" aria-label="${T("Mini-games", "小游戏")}">${LIST.map((g, i) => this.cardHtml(g, i)).join("")}</div>
       </div>
       <footer class="sel-hints">
         <span><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>${T("Choose", "选择")}</span>
@@ -219,7 +239,8 @@ export class MiniSelect {
   }
 
   private cardHtml(g: MiniDef, i: number) {
-    return cardHtml(g, i, i === this.at);
+    const html = cardHtml(g, i, i === this.at);
+    return this.shown(i) ? html : html.replace(/^<(\w+)/, "<$1 hidden");
   }
 
   private detailHtml(def: MiniDef) {
@@ -233,6 +254,7 @@ export class MiniSelect {
         <div class="sel-big">${thumbHtml(this.bigDef(def), "big")}
           ${best === undefined ? "" : `<span class="sel-bestb">${medalHtml(best)}<span>${T("Your best", "你的最佳")} <b>${ord(best)}</b></span>`}
         </div>
+        <p class="sel-kind"><span>${genreName(genreOf(def))}</span><span>${seatsName(def)}</span></p>
         <p class="sel-tag">${esc(T(def.tag, def.tagZh))}</p>
         <section class="sel-arena-picker">
           ${this.tracksHtml(def)}
@@ -279,7 +301,7 @@ export class MiniSelect {
     const stakes = this.hooks.stakes();
     const st = stakes.find((s) => s.on) ?? stakes[0];
     return `<div class="sel-stake">
-      <small>${T(`1st wins ${bank.money((st?.v ?? 0) * 3)} · 2nd gets the stake back`, `第一赢 ${bank.money((st?.v ?? 0) * 3)} · 第二退回押注`)}</small>
+      <small>${this.def.seats === 2 ? T(`Win and take ${bank.money((st?.v ?? 0) * 2)}`, `获胜拿走 ${bank.money((st?.v ?? 0) * 2)}`) : T(`1st wins ${bank.money((st?.v ?? 0) * 3)} · 2nd gets the stake back`, `第一赢 ${bank.money((st?.v ?? 0) * 3)} · 第二退回押注`)}</small>
       <div class="pt-chips sm">${stakes.map((s, i) => `<button data-s="stakev" data-v="${i}" class="${s.on ? "on" : ""}" aria-pressed="${s.on}" ${s.ok ? "" : "disabled"}>${bank.amount(s.v)}</button>`).join("")}</div>
       <button class="pt-gold" data-s="stake" ${st?.ok ? "" : "disabled"}>${T("Play", "开玩")} <span>${bank.money(st?.v ?? 0)}</span></button>
     </div>`;
@@ -315,7 +337,7 @@ export class MiniSelect {
 
   /** Pick card i: the highlight moves, the panel shows it. */
   private pick(i: number, o: { focus?: boolean; sound?: boolean } = {}) {
-    i = Math.max(0, Math.min(GAMES.length - 1, i));
+    i = Math.max(0, Math.min(LIST.length - 1, i));
     const was = this.at;
     this.at = i;
     if (was !== i) {
@@ -358,7 +380,7 @@ export class MiniSelect {
 
   /** How many cards on a row of the grid, as laid out now. */
   private cols() {
-    const cards = this.el.querySelectorAll<HTMLElement>(".sel-card");
+    const cards = [...this.el.querySelectorAll<HTMLElement>(".sel-card")].filter((c) => !c.hidden);
     if (!cards.length) return 1;
     const top = cards[0].offsetTop;
     let n = 0;
@@ -379,7 +401,11 @@ export class MiniSelect {
     const c = e.code;
     const move = (d: number) => {
       e.preventDefault();
-      this.pick(this.at + d, { focus: true });
+      // (along the cards on the shelf shown)
+      const vis = LIST.map((_, i) => i).filter((i) => this.shown(i));
+      const at = Math.max(0, vis.indexOf(this.at));
+      const to = vis[Math.max(0, Math.min(vis.length - 1, at + d))];
+      if (to !== undefined) this.pick(to, { focus: true });
     };
     if (c === "ArrowLeft" || c === "KeyA" || c === "KeyQ") return move(-1);
     if (c === "ArrowRight" || c === "KeyD") return move(1);
@@ -410,6 +436,13 @@ export class MiniSelect {
     const a = b.dataset.s;
     const v = Number(b.dataset.v ?? 0);
     if (a === "back") return this.esc();
+    if (a === "genre") {
+      this.genre = b.dataset.v ?? "all";
+      sfx.blip(2);
+      if (!this.shown(this.at)) this.at = LIST.findIndex((_, i) => this.shown(i));
+      this.render();
+      return;
+    }
     if (a === "close") return (sfx.blip(1), this.closeDetails());
     if (a === "practice") return this.hooks.practice(this.def, this.level);
     if (a === "stake") return this.hooks.stake(this.def);

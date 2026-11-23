@@ -682,6 +682,16 @@ export interface MiniDef {
   teams?: boolean;
   /** `variant`: one of `variants`' keys (none: the game draws one with `rnd`). */
   make(players: Player[], rnd: Rnd, variant?: string): Mini;
+  /** Its code, fetched before the first make() (the host awaits it): a game loaded on demand (gp/). */
+  load?(): Promise<unknown>;
+  /** Played by two (a duel: the hall seats you and one rival); none: by all four. */
+  seats?: number;
+  /** Its shelf in the hall (gp/text.ts Genre). */
+  genre?: string;
+  /** false: never in an online room (its AIs are not deterministic). */
+  net?: false;
+  /** A GAMEPARTY game (gp/): how its players line up there. */
+  gp?: "ffa" | "2v2" | "1v3" | "duel";
 }
 
 /** Its arrows are a stick on a touch screen (MiniDef.stick; by default, a game with all four arrows). */

@@ -1,0 +1,646 @@
+/*
+ * ZK PARTY's hall (index.ts renderHub, .pt-hub.zc), a games console over the 3D hall (hall3d.ts):
+ * the hall fills the screen, the game picked speaks in big pixel letters on the left, the shelves
+ * and the dock of games run along the bottom. The city's look: dark ink, DotGothic16 signs with
+ * their Japanese, stepped voxel corners, the games' own colours as the only accents.
+ */
+.pt-root > .zc-3d {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pt-hub.zc {
+  --ink: #0b0913;
+  --panel: rgba(21, 18, 31, 0.94);
+  --line: #2a2540;
+  --text: #f2f0f7;
+  --muted: #b3acc9;
+  --faint: #7b7398;
+  --flare: #ff6b35;
+  --pix: "DotGothic16", "Geist Mono", ui-monospace, monospace;
+  --step: polygon(0 6px, 6px 6px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 6px), 0 calc(100% - 6px));
+  --step4: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+  color: var(--text);
+  background: transparent;
+}
+.zc-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px) 0 0 / 100% 3px,
+    linear-gradient(90deg, rgba(7, 5, 14, 0.9) 0%, rgba(7, 5, 14, 0.62) 30%, rgba(7, 5, 14, 0) 56%),
+    linear-gradient(0deg, rgba(7, 5, 14, 0.96) 0%, rgba(7, 5, 14, 0.55) 30%, rgba(7, 5, 14, 0) 46%),
+    linear-gradient(180deg, rgba(7, 5, 14, 0.75) 0%, rgba(7, 5, 14, 0) 14%);
+}
+.pt-hub.zc > :not(.zc-shade):not(dialog):not(.zc-panel) {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+/* ---- the top bar ----------------------------------------------------------------------------- */
+.zc-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: max(14px, env(safe-area-inset-top)) max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-right)) 8px max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-left));
+}
+.zc-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.zc-brand b {
+  font: 400 30px/1 var(--pix);
+  letter-spacing: 0.05em;
+  color: #fff;
+}
+.zc-brand b i {
+  margin-left: 0.3em;
+  font-style: normal;
+  color: var(--flare);
+}
+.zc-brand small {
+  font: 400 14px var(--pix);
+  letter-spacing: 0.1em;
+  color: #ff5fa2;
+}
+.zc-gap {
+  flex: 1;
+}
+.zc-top .pt-chain,
+.zc-top .pt-me {
+  margin: 0;
+}
+.zc-x,
+.zc-top .fs-btn.pt-fs {
+  position: static;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--text);
+  background: rgba(42, 37, 64, 0.9);
+  clip-path: var(--step4);
+  box-shadow: none;
+  cursor: pointer;
+}
+.zc-x .zc-ic,
+.zc-x svg {
+  width: 18px;
+  height: 18px;
+}
+.zc-top .fs-btn.pt-fs svg {
+  width: 20px;
+  height: 20px;
+}
+.zc-x:hover,
+.zc-x:focus-visible {
+  color: var(--ink);
+  background: var(--flare);
+  outline: none;
+}
+
+/* ---- the big words ------------------------------------------------------------------------------ */
+.zc-mq {
+  align-self: center;
+  padding: 0 max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-left));
+  max-width: min(600px, 48vw);
+}
+.zc-mq.swap .zc-mq-in {
+  animation: zc-in 0.26s ease-out;
+}
+@keyframes zc-in {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+.zc-kick {
+  display: block;
+  font: 400 13px var(--pix);
+  letter-spacing: 0.16em;
+  color: var(--c);
+}
+.zc-title {
+  margin: 10px 0 14px;
+  font: 400 clamp(40px, 5.4vw, 80px) / 0.98 var(--pix);
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 4px 4px 0 color-mix(in srgb, var(--c) 70%, #000), 8px 8px 0 rgba(0, 0, 0, 0.35);
+  overflow-wrap: anywhere;
+}
+.zc-tag {
+  margin: 0 0 16px;
+  max-width: 470px;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #ddd8ec;
+}
+.zc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.zc-chips span {
+  padding: 5px 10px;
+  font: 400 13px var(--pix);
+  letter-spacing: 0.04em;
+  color: var(--c);
+  background: rgba(7, 5, 14, 0.7);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent);
+}
+.zc-stakes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 16px;
+}
+.zc-stakes button {
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  color: var(--text);
+  background: rgba(34, 29, 54, 0.92);
+  clip-path: var(--step4);
+  font: 400 15px var(--pix);
+  cursor: pointer;
+}
+.zc-stakes button.on {
+  color: var(--ink);
+  background: var(--c);
+}
+.zc-stakes button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.zc-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.zc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  padding: 0 20px;
+  border: 0;
+  color: var(--text);
+  background: rgba(34, 29, 54, 0.92);
+  clip-path: var(--step4);
+  font: 400 17px var(--pix);
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  cursor: pointer;
+}
+.zc-btn.go {
+  height: 58px;
+  padding: 0 30px;
+  font-size: 24px;
+  color: var(--ink);
+  background: var(--c);
+}
+.zc-bi {
+  width: 18px;
+  height: 18px;
+}
+.zc-btn:hover,
+.zc-btn:focus-visible {
+  filter: brightness(1.15);
+  outline: none;
+}
+.zc-btn.go:active {
+  transform: translateY(2px);
+}
+.zc-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- the shelves and the dock ------------------------------------------------------------------------ */
+.zc-low {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+.zc-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-left));
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.zc-tabs::-webkit-scrollbar,
+.zc-dock::-webkit-scrollbar {
+  display: none;
+}
+.zc-tabs button {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: center;
+  padding: 6px 14px 7px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  clip-path: var(--step4);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.zc-tabs small {
+  grid-column: 1 / -1;
+  font: 400 10px var(--pix);
+  letter-spacing: 0.12em;
+  color: var(--faint);
+}
+.zc-tabs b {
+  font: 400 17px var(--pix);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.zc-tabs em {
+  font: 400 12px var(--pix);
+  font-style: normal;
+  color: var(--faint);
+}
+.zc-tabs button:hover {
+  color: #fff;
+  background: rgba(42, 37, 64, 0.7);
+}
+.zc-tabs button.on {
+  color: var(--ink);
+  background: var(--flare);
+}
+.zc-tabs button.on small,
+.zc-tabs button.on em {
+  color: #5a2510;
+}
+.zc-dock {
+  display: flex;
+  gap: 12px;
+  padding: 14px max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-right)) 10px max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-left));
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: clamp(16px, 3.4vw, 48px);
+}
+.zc-tile {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 204px;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: var(--panel);
+  clip-path: var(--step);
+  text-align: left;
+  font-family: inherit;
+  scroll-snap-align: start;
+  cursor: pointer;
+  transform-origin: 50% 100%;
+  transition: transform 0.16s ease-out;
+}
+.zc-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+.zc-th {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-bottom: 3px solid var(--c);
+  background: #07060c;
+}
+.zc-cap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 10px;
+  min-width: 0;
+}
+.zc-cap b {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zc-cap small {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zc-tile.on {
+  transform: translateY(-8px) scale(1.06);
+  z-index: 1;
+}
+.zc-tile.on::after {
+  box-shadow: inset 0 0 0 3px var(--c);
+}
+.zc-tile.on .zc-cap b {
+  color: var(--c);
+}
+.zc-tile:focus-visible {
+  outline: none;
+}
+.zc-tile:focus-visible::after {
+  box-shadow: inset 0 0 0 3px #fff;
+}
+/* an event's face: its colour, a big pixel icon, its name */
+.zc-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--ink);
+  background:
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.08) 0 6px, transparent 6px 12px),
+    var(--c);
+}
+.zc-face-ic {
+  width: 40px;
+  height: 40px;
+}
+.zc-face b {
+  font: 400 15px var(--pix);
+  letter-spacing: 0.04em;
+}
+.zc-new {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 1;
+  padding: 3px 7px 4px;
+  font: 400 11px/1 var(--pix);
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  background: #ffd23f;
+}
+.zc-hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 2px max(clamp(16px, 3.4vw, 48px), env(safe-area-inset-left)) 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
+}
+.zc-hints span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.zc-hints kbd {
+  padding: 1px 5px;
+  font: 400 11px var(--pix);
+  color: var(--muted);
+  background: rgba(42, 37, 64, 0.8);
+}
+.zc-money {
+  margin-left: auto;
+}
+
+/* ---- a panel over the hall: online, the missions -------------------------------------------------- */
+.zc-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(5, 4, 10, 0.72);
+  animation: zc-fade 0.2s ease-out;
+}
+@keyframes zc-fade {
+  from {
+    opacity: 0;
+  }
+}
+.zc-pin {
+  width: min(540px, 100%);
+  max-height: 88%;
+  overflow: auto;
+  padding: 18px 20px 20px;
+  background: #15121f;
+  clip-path: var(--step);
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+.zc-ph {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.zc-ph small {
+  font: 400 12px var(--pix);
+  letter-spacing: 0.14em;
+  color: var(--flare);
+}
+.zc-ph h2 {
+  margin: 4px 0 0;
+  font: 400 28px var(--pix);
+}
+.zc-pnote {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.zc-pin .pt-card {
+  margin: 0;
+}
+.zc-pin .pt-m {
+  border-color: var(--line);
+}
+.zc-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.zc-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  background: #0e0b16;
+}
+.zc-stats b {
+  font: 400 26px/1 var(--pix);
+  color: #ffd23f;
+}
+.zc-stats b i {
+  font-style: normal;
+  font-size: 15px;
+  color: var(--faint);
+}
+.zc-stats small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ---- a touch screen: no key hints; a phone upright: the hall on top, the words and the dock under it -- */
+@media (hover: none) {
+  .zc-hints span:not(.zc-money) {
+    display: none;
+  }
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .zc-shade {
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px) 0 0 / 100% 3px,
+      linear-gradient(0deg, rgba(7, 5, 14, 0.98) 0%, rgba(7, 5, 14, 0.9) 44%, rgba(7, 5, 14, 0) 66%),
+      linear-gradient(180deg, rgba(7, 5, 14, 0.8) 0%, rgba(7, 5, 14, 0) 14%);
+  }
+  .zc-top {
+    gap: 8px;
+  }
+  .zc-top .pt-chain,
+  .zc-top .pt-lv,
+  .zc-top .pt-streak,
+  .zc-brand small {
+    display: none;
+  }
+  .zc-brand b {
+    font-size: 22px;
+  }
+  .zc-mq {
+    align-self: end;
+    max-width: none;
+    padding: 0 16px 6px;
+  }
+  .zc-title {
+    margin: 6px 0 8px;
+    font-size: 36px;
+  }
+  .zc-tag {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+  .zc-chips {
+    margin-bottom: 12px;
+  }
+  .zc-chips span {
+    font-size: 11px;
+  }
+  .zc-btn.go {
+    height: 50px;
+    font-size: 20px;
+  }
+  .zc-btn {
+    height: 44px;
+    font-size: 15px;
+  }
+  .zc-tabs b {
+    font-size: 15px;
+  }
+  .zc-tabs small {
+    display: none;
+  }
+  .zc-tile {
+    width: 150px;
+  }
+  .zc-dock {
+    gap: 9px;
+    padding-top: 12px;
+  }
+  .zc-tile.on {
+    transform: translateY(-5px) scale(1.04);
+  }
+  .zc-face-ic {
+    width: 30px;
+    height: 30px;
+  }
+}
+/* a phone on its side: everything a size down */
+@media (max-height: 520px) {
+  .zc-title {
+    margin: 4px 0 6px;
+    font-size: 34px;
+  }
+  .zc-tag {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .zc-chips {
+    margin-bottom: 10px;
+  }
+  .zc-btn.go {
+    height: 44px;
+    font-size: 18px;
+  }
+  .zc-btn {
+    height: 40px;
+  }
+  .zc-tabs small,
+  .zc-hints {
+    display: none;
+  }
+  .zc-tile {
+    width: 140px;
+  }
+  .zc-dock {
+    padding-top: 10px;
+  }
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .zc-top .fs-btn.pt-fs {
+    display: none;
+  }
+  .zc-top .pt-me {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .zc-brand b {
+    font-size: 20px;
+  }
+}
+/* (the old hub put the player's chip on a line of its own on a phone: not here) */
+.zc-top .pt-me {
+  order: 0;
+  width: auto;
+}

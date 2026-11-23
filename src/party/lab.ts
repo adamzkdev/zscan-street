@@ -9,7 +9,7 @@
 import "./party.css";
 import { Stage, playMini } from "./host";
 import { makePlayer, rng, type MiniDef } from "./kit";
-import { GAMES } from "./games";
+import { DUELS, GAMES, ZK_GAMES } from "./games";
 import { SAMPLE } from "./games/sample3d";
 import { Board } from "./board";
 
@@ -26,18 +26,27 @@ const players = ids.map((id, i) => makePlayer(i, id, i === 0 && !auto, sk ? Numb
 const lab = ((window as unknown as { lab: Record<string, unknown> }).lab = { results: [] as unknown[], done: false });
 const which = q.get("g");
 (async () => {
-  let list: MiniDef[] = which ? [...GAMES, SAMPLE].filter((g) => g.key === which) : GAMES;
+  let list: MiniDef[] = which ? [...GAMES, ...DUELS, SAMPLE].filter((g) => g.key === which) : GAMES;
   // (a game not in the rotation yet: its own file, games/<key>.ts, its default export)
   if (which && !list.length) list = [((await import(`./games/${which}.ts`)) as { default: MiniDef }).default];
   if (q.has("catalog")) {
     // (the light catalog the city's GAME HOUSE draws from, src/party/catalog.ts, against the games)
     const { GAME_CARDS } = await import("./catalog");
-    const bad = GAMES.filter((g) => {
+    const bad = ZK_GAMES.filter((g) => {
       const c = GAME_CARDS.find((x) => x.key === g.key);
       return !c || c.title !== g.title || c.tag !== g.tag || c.color !== g.color;
     }).map((g) => g.key);
-    lab.results.push({ catalog: bad.length ? `drifted: ${bad.join(", ")}` : "ok", n: GAMES.length });
+    lab.results.push({ catalog: bad.length ? `drifted: ${bad.join(", ")}` : "ok", n: ZK_GAMES.length });
     lab.done = true;
+    return;
+  }
+  if (q.has("arcade")) {
+    // (?arcade=<key>: one of the flat games, arcade/index.ts, in its cabinet)
+    stage.dispose();
+    const { arcadeOf } = await import("./arcade");
+    const { Cabinet } = await import("./arcade/runner");
+    const def = arcadeOf(q.get("arcade") ?? "");
+    if (def) void new Cabinet(root, def, () => (lab.done = true)).start();
     return;
   }
   if (q.has("snarks")) {
@@ -102,7 +111,9 @@ const which = q.get("g");
   for (const def of list) {
     // (`&track=<key>`: a game's version, a kart track; none: the seed draws one)
     const variant = q.get("track") ?? undefined;
-    const r = await playMini(stage, def, players, rng(seed), { note: "lab", prizes: ["+10", "+5", "+2", ""], variant });
+    // (a duel: the first two seats)
+    const who = def.seats === 2 ? players.slice(0, 2) : players;
+    const r = await playMini(stage, def, who, rng(seed), { note: "lab", prizes: ["+10", "+5", "+2", ""], variant });
     lab.results.push({ game: def.key, order: r, ...(variant ? { track: variant } : {}) });
   }
   lab.done = true;

@@ -20,9 +20,11 @@
  */
 import "./party.css";
 import "./hall.css";
+import "./hub.css";
 import { fullscreenDo, fullscreenHtml } from "../game/fullscreen";
 import { orient } from "../game/orient";
-import { myId, personImage, rivalIds } from "./people";
+import { myId, personImage, personName, rivalIds } from "./people";
+import { Hall3D } from "./hall3d";
 import { T, isZh } from "../i18n/lang";
 import { party as mixer } from "../audio/engine";
 import { profile } from "../game/profile";
@@ -30,7 +32,7 @@ import { bank } from "./bank";
 import { levelOf, progress } from "../game/progress";
 import { Board, TURN_CHOICES } from "./board";
 import { MAPS } from "./board/maps";
-import { GAMES, gameOf } from "./games";
+import { DUELS, GAMES, gameOf } from "./games";
 import { Stage, partyMusic, playMatch, playTour, setArenaBlock, type RoundSeed } from "./host";
 import { TOUR_SPLIT, TourSetup, type TourCfg } from "./tour";
 import { chainSeed, seedFor, watchChain, type ChainSeed } from "./chain";
@@ -43,6 +45,10 @@ import { RoomBoardNet } from "./net/roomboard";
 import type { RoomClient } from "../net/rooms";
 import type { Settings, StartSeat } from "../../server/rooms/protocol";
 import { HOUSE_TABLES } from "../tables/catalog";
+import { ARCADE, arcadeOf, type ArcadeDef } from "./arcade";
+import { Cabinet, bestOf } from "./arcade/runner";
+import { genreName, genreOf, seatsName } from "./genres";
+import { pixIcon } from "./hubicons";
 import { soloUrl } from "../game/solo";
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -113,6 +119,47 @@ function oddsFor(players: Player[]) {
   return Math.max(1.6, Math.round((0.92 / pWin) * 10) / 10);
 }
 
+/** The hub's shelves. */
+type HubTab = "home" | "party" | "arcade" | "board" | "cards" | "duel" | "modes";
+const HUB_TABS: { k: HubTab; en: string; zh: string; jp: string; icon: string }[] = [
+  { k: "home", en: "Featured", zh: "推荐", jp: "おすすめ", icon: "home" },
+  { k: "party", en: "Mini-games", zh: "小游戏", jp: "ミニゲーム", icon: "party" },
+  { k: "arcade", en: "Arcade", zh: "街机", jp: "アーケード", icon: "arcade" },
+  { k: "board", en: "Board games", zh: "棋盘游戏", jp: "ボードゲーム", icon: "board" },
+  { k: "cards", en: "Card games", zh: "纸牌游戏", jp: "カードゲーム", icon: "cards" },
+  { k: "duel", en: "Duels", zh: "对决", jp: "デュエル", icon: "duel" },
+  { k: "modes", en: "Events", zh: "活动", jp: "イベント", icon: "modes" },
+];
+/** What a hub button does: an action (data-a, data-v), or a link to a table's own page. */
+interface Act {
+  a: string;
+  v: string;
+  label: string;
+  href?: string;
+  table?: string;
+}
+/** A game (or an event) in the hub's dock, and what the big words say of it. */
+interface Tile {
+  key: string;
+  title: string;
+  sub: string;
+  color: string;
+  /** Its picture's key (public/party/thumbs/<thumb>.jpg); none for an event (a pixel icon instead). */
+  thumb: string;
+  /** The picture the hall's LED wall shows for it. */
+  led: string;
+  kicker: string;
+  tag: string;
+  chips: string[];
+  play: Act;
+  more?: Act;
+  badge?: string;
+  special?: string;
+  /** The quick match: its stakes under the words. */
+  stakes?: boolean;
+}
+const SPECIAL_ICON: Record<string, string> = { quick: "play", tour: "modes", online: "online", missions: "cards", casino: "board", refill: "home", all: "party" };
+
 export interface PartyHooks {
   /** The hall opened or closed (the city pauses under it). */
   shown(on: boolean): void;
@@ -152,10 +199,13 @@ class Party {
   private tour: TourSetup;
   /** Online: the hub's card, the lobby of a room. */
   private online: Online;
+  /** An arcade game open over the hall (arcade/runner.ts). */
+  private cab: Cabinet | null = null;
   private escKey = (e: KeyboardEvent) => {
     if (e.key !== "Escape" || !this.open) return;
     e.preventDefault();
     e.stopImmediatePropagation();
+    if (this.cab) return this.cab.esc();
     if (this.modal.classList.contains("on")) return this.modalEsc?.();
     if (this.playing) return void this.askQuit();
     if (this.boardDialog?.open) return this.closeBoardSetup();
@@ -268,15 +318,19 @@ class Party {
       window.addEventListener("keydown", this.escKey, true);
       window.addEventListener("keydown", this.swallow, true);
       window.addEventListener("keyup", this.swallow, true);
+      window.addEventListener("keydown", this.hubKeys, true);
       this.hooks.shown(true);
       this.watch(true);
       partyMusic.lobby?.();
     }
     // The hall adapts to either orientation; returning from a round needs no extra rotation.
     if (!this.playing) orient("any");
+    // (the city's doors: its board table, its mini-games)
+    if (tab === "board") this.tab = "board";
+    else if (tab === "practice" || tab === "quick") this.tab = "party";
     this.renderHub();
+    this.hall?.run(true);
     fresh(this.hub);
-    if (tab) this.hub.querySelector<HTMLElement>(`[data-tab="${tab}"]`)?.scrollIntoView({ block: "nearest" });
     sfx.blip(4);
   }
 
@@ -288,6 +342,18 @@ class Party {
   openSelect(key?: string) {
     if (!this.playing) this.sel.show(key);
   }
+  /** One of the flat games (ZK MERGE, ZK JUMP, ZK WHO?) in its cabinet over the hall. */
+  openArcade(key: string) {
+    const def = arcadeOf(key);
+    if (!def || this.playing) return;
+    this.cab?.close();
+    this.cab = new Cabinet(this.root, def, () => {
+      this.cab = null;
+      if (this.open) this.renderHub();
+    });
+    void this.cab.start();
+  }
+
   /** An online room, from its link (party.html?room=CODE). */
   joinRoom(code: string) {
     if (!this.playing) this.online.invite(code);
@@ -296,6 +362,7 @@ class Party {
   close() {
     if (!this.open || this.playing) return;
     this.open = false;
+    this.cab?.close();
     this.boardDialog?.close();
     this.root.classList.add("pt-off");
     this.sel.hide();
@@ -306,6 +373,8 @@ class Party {
     window.removeEventListener("keydown", this.escKey, true);
     window.removeEventListener("keydown", this.swallow, true);
     window.removeEventListener("keyup", this.swallow, true);
+    window.removeEventListener("keydown", this.hubKeys, true);
+    this.hall?.run(false);
     music.stop(0.6);
     // (back to the city: either way again)
     orient("any");
@@ -344,18 +413,6 @@ class Party {
     </div>`;
   }
 
-  /** The hub's shelf: every mini-game as a card (its picture, your medal or NEW); a click opens the mini-game hall on it. */
-  private shelfHtml() {
-    const ps = profile.p.party;
-    return GAMES.map((g, i) => {
-      const best = ps.places[g.key];
-      return `<button class="pt-mg" data-a="pick" data-v="${g.key}" style="--c:${g.color};--i:${i}" title="${esc(T(g.tag, g.tagZh))}">
-        <span class="pt-mg-th">${thumbHtml(g)}${best === undefined ? `<span class="pt-new">${T("NEW!", "新！")}</span>` : medalHtml(best)}</span>
-        <b>${esc(T(g.title, g.titleZh))}</b>
-      </button>`;
-    }).join("");
-  }
-
   /** Table games use their own page so mobile browsers keep only one game renderer alive. */
   private tableUrl(key: string) {
     const ret = new URL(/\/party(?:\.html)?$/.test(location.pathname) ? location.href : soloUrl("party", {}), location.origin);
@@ -366,13 +423,195 @@ class Party {
     return `${import.meta.env.BASE_URL}table.html?${q}`;
   }
 
-  private libraryHtml() {
-    const board = { key: "board", title: "ZK Party", titleZh: "ZK Party", color: "#ff6b35" };
-    return `<button class="pt-mg pt-library-game" data-a="board-setup" style="--c:${board.color}">
-      <span class="pt-mg-th">${thumbHtml(board)}</span><b>ZK Party</b><small>${T("Party board · 4 seats", "派对棋盘 · 4 人")}</small>
-    </button>` + HOUSE_TABLES.map((g) => `<a class="pt-mg pt-library-game" href="${esc(this.tableUrl(g.key))}" data-table="${g.key}" style="--c:${g.color}" title="${esc(T(g.tag, g.tagZh))}">
-      <span class="pt-mg-th">${thumbHtml({ ...g, key: `tables-${g.key}` })}</span><b>${esc(T(g.title, g.titleZh))}</b><small>${g.key === "barons" ? T("Property trading", "地产交易") : g.key === "holdem" ? T("Poker", "扑克") : T("Card game", "纸牌游戏")} <span>· ${g.seats}</span></small>
-    </a>`).join("");
+  /** How many games a shelf holds (none for the featured and the events). */
+  private countOf(k: HubTab) {
+    if (k === "party") return GAMES.length;
+    if (k === "duel") return DUELS.length;
+    if (k === "arcade") return ARCADE.filter((x) => x.shelf === "arcade").length;
+    if (k === "board") return this.boardTiles().length;
+    if (k === "cards") return this.cardTiles().length;
+    return 0;
+  }
+
+  private vsAI = () => T("vs AI", "对战 AI");
+
+  /** A mini-game of the stage (four players or a duel): PLAY is a free match against AI rivals, its options open the mini-game hall. */
+  private miniTile(g: MiniDef): Tile {
+    const best = profile.p.party.places[g.key];
+    const duel = g.seats === 2;
+    return {
+      key: g.key,
+      title: T(g.title, g.titleZh),
+      sub: duel ? seatsName(g) : `${genreName(genreOf(g))} · ${seatsName(g)}`,
+      color: g.color,
+      thumb: g.key,
+      led: g.key,
+      kicker: duel ? `デュエル · ${T("DUEL", "对决")}` : `ミニゲーム · ${T("MINI-GAME", "小游戏")}`,
+      tag: T(g.tag, g.tagZh),
+      chips: [genreName(genreOf(g)), seatsName(g), this.vsAI()],
+      play: { a: "practice", v: g.key, label: T("Play", "开始") },
+      more: { a: "pick", v: g.key, label: T("Options · play for ⓩ", "选项 · 押 ⓩ") },
+      badge: best === undefined ? `<span class="zc-new">${T("NEW", "新")}</span>` : medalHtml(best),
+    };
+  }
+  private arcadeTile(d: ArcadeDef): Tile {
+    const best = bestOf(d.key);
+    const solo = d.kind === "score";
+    return {
+      key: d.key,
+      title: T(d.title, d.titleZh),
+      sub: solo ? `${T("Solo · high score", "单人 · 最高分")}${best ? ` · ${num(best)}` : ""}` : T("1 vs 1 · vs AI", "一对一 · 对战 AI"),
+      color: d.color,
+      thumb: d.key,
+      led: d.key,
+      kicker: d.shelf === "arcade" ? `アーケード · ${T("ARCADE", "街机")}` : `ボードゲーム · ${T("BOARD GAME", "棋盘游戏")}`,
+      tag: T(d.tag, d.tagZh),
+      chips: solo ? [T("Solo", "单人"), best ? T(`Best ${num(best)}`, `最高 ${num(best)}`) : T("No score yet", "暂无分数")] : [T("Deduction", "推理"), T("1 vs 1", "一对一"), this.vsAI()],
+      play: { a: "arcade", v: d.key, label: T("Play", "开始") },
+      badge: `<span class="zc-new">${T("NEW", "新")}</span>`,
+    };
+  }
+  private tableTile(key: string): Tile | null {
+    const g = HOUSE_TABLES.find((x) => x.key === key);
+    if (!g) return null;
+    const kind = key === "barons" ? T("Property trading", "地产交易") : key === "holdem" ? T("Poker", "扑克") : T("Shedding cards", "出牌游戏");
+    const href = this.tableUrl(key);
+    return {
+      key,
+      title: T(g.title, g.titleZh),
+      sub: `${kind} · ${g.seats}`,
+      color: g.color,
+      thumb: `tables-${key}`,
+      led: `tables-${key}`,
+      kicker: key === "barons" ? `ボードゲーム · ${T("BOARD GAME", "棋盘游戏")}` : `カードゲーム · ${T("CARD GAME", "纸牌游戏")}`,
+      tag: T(g.tag, g.tagZh),
+      chips: [kind, T(`${g.seats} seats`, `${g.seats} 人`), this.vsAI()],
+      play: { a: "", v: key, label: T("Sit down", "入座"), href, table: key },
+    };
+  }
+  private boardTile(): Tile {
+    return {
+      key: "board",
+      title: "ZK PARTY",
+      sub: T(`Party board · ${MAPS.length} boards · 4 seats`, `派对棋盘 · ${MAPS.length} 张棋盘 · 4 人`),
+      color: "#ff6b35",
+      thumb: "board",
+      led: "board",
+      kicker: `ボードゲーム · ${T("BOARD GAME", "棋盘游戏")}`,
+      tag: T("The party board: roll, take the junctions, win the mini-game after every turn, buy the most Z-Blocks. The one game you can also play online with friends.", "派对棋盘：掷骰、走岔路、每回合赢小游戏、买下最多 Z 方块。唯一可以和好友在线玩的游戏。"),
+      chips: [T(`${MAPS.length} boards`, `${MAPS.length} 张棋盘`), T("4 seats", "4 人"), T("vs AI · online", "对战 AI · 在线")],
+      play: { a: "board-setup", v: "", label: T("Set up a party", "开一局") },
+      more: { a: "panel", v: "online", label: T("Play online", "在线玩") },
+    };
+  }
+  private boardTiles(): Tile[] {
+    return [this.boardTile(), this.arcadeTile(arcadeOf("zkwho")!), this.tableTile("barons")!];
+  }
+  private cardTiles(): Tile[] {
+    const memo = DUELS.find((g) => g.key === "memo");
+    return [...(memo ? [{ ...this.miniTile(memo), kicker: `カードゲーム · ${T("CARD GAME", "纸牌游戏")}`, sub: T("Memory · 1 vs 1", "记忆 · 一对一") }] : []), this.tableTile("glyph")!, this.tableTile("holdem")!];
+  }
+
+  /** The events: a quick match, the tournament, online, the missions, the casino, the refill. */
+  private special(k: "quick" | "tour" | "online" | "missions" | "casino" | "refill" | "all"): Tile {
+    const st = STAKES[this.stake];
+    const ready = progress.missions().filter((m) => !m.claimed && m.at >= m.n).length;
+    const base = { thumb: "", sub: "", chips: [] as string[], special: k };
+    switch (k) {
+      case "quick":
+        return { ...base, key: "quick", title: T("QUICK MATCH", "快速对战"), sub: T("A random mini-game for ⓩ", "随机小游戏 · 押 ⓩ"), color: "#ff6b35", led: this.featured().led, kicker: `今すぐ · ${T("PLAY NOW", "马上玩")}`, tag: T(`A mini-game drawn from all ${GAMES.length}, you against three AI zkSNARKs. 1st takes three stakes, 2nd gets yours back.`, `从 ${GAMES.length} 个小游戏中随机抽一个，你对战三个 AI zkSNARK。第一赢三倍押注，第二退回押注。`), chips: [this.vsAI(), T(`${GAMES.length} in the draw`, `共 ${GAMES.length} 个`)], play: { a: "quick", v: "", label: `${T("Play", "开始")} · ${bank.money(st.v)}` }, stakes: true };
+      case "tour":
+        return { ...base, key: "tour", title: T("TOURNAMENT", "锦标赛"), sub: T("3 to 10 games · free or ⓩ", "3 到 10 场 · 免费或 ⓩ"), color: "#ff5fa2", led: "kart", kicker: `大会 · ${T("TOURNAMENT", "锦标赛")}`, tag: T("Your lineup of mini-games in a row against the same three AI rivals. Points on every game, the pot to the top three.", "自选一串小游戏，对战同样的三个 AI 对手。每场计分，奖池给前三名。"), chips: [this.vsAI(), T("3 to 10 games", "3 到 10 场")], play: { a: "tour", v: "", label: T("Set up", "设置") } };
+      case "online":
+        return { ...base, key: "online", title: T("ONLINE ROOM", "在线房间"), sub: T("The ZK Party board with friends", "和好友玩 ZK Party 棋盘"), color: "#3ec6ff", led: "board", kicker: `オンライン · ${T("ONLINE", "在线")}`, tag: T("A private room for up to four friends: the ZK Party board, played together. Every other game is against the AI for now.", "最多四位好友的私人房间：一起玩 ZK Party 棋盘。其他游戏目前都是对战 AI。"), chips: [T("Board only", "仅限棋盘"), T("Up to 4", "最多 4 人")], play: { a: "panel", v: "online", label: T("Open a room", "开房间") } };
+      case "missions":
+        return { ...base, key: "missions", title: T("MISSIONS", "任务"), sub: ready ? T(`${ready} to claim`, `${ready} 个可领取`) : T("New ones at midnight UTC", "UTC 零点刷新"), color: "#ffd23f", led: "coins", kicker: `任務 · ${T("TODAY", "今日")}`, tag: T("Three missions a day, ⓩ for each one done.", "每天三个任务，完成即得 ⓩ。"), chips: [ready ? T(`${ready} ready`, `${ready} 个完成`) : T("In progress", "进行中")], play: { a: "panel", v: "missions", label: T("See them", "查看") }, badge: ready ? `<span class="zc-new">${ready}</span>` : "" };
+      case "casino":
+        return { ...base, key: "casino", title: T("BLOCK CASINO", "区块赌场"), sub: T("Bet on the next block", "押注下一个区块"), color: "#8ee35b", led: "sign", kicker: `賭場 · ${T("CASINO", "赌场")}`, tag: T("High or low, a digit, the roulette: settled by the next real Zcash block's hash.", "大小、数字、轮盘：由下一个真实 Zcash 区块的哈希结算。"), chips: [T("Real blocks", "真实区块")], play: { a: "casino", v: "", label: T("Open", "打开") } };
+      case "refill":
+        return { ...base, key: "refill", title: T("OUT OF ⓩ?", "没有 ⓩ 了？"), sub: T("Take a refill on the house", "免费补充"), color: "#ffd23f", led: "coins", kicker: `補充 · ${T("REFILL", "补充")}`, tag: T(`ⓩ ${progress.refill().amount} on the house, to play on.`, `免费领取 ⓩ ${progress.refill().amount}，继续玩。`), chips: [], play: { a: "refill", v: "", label: T("Take it", "领取") } };
+      default:
+        return { ...base, key: "all", title: T(`ALL ${GAMES.length + DUELS.length}`, `全部 ${GAMES.length + DUELS.length}`), sub: T("By kind, with your medals", "按类型 · 你的奖牌"), color: "#a98bff", led: "kart", kicker: `ミニゲーム · ${T("ALL OF THEM", "全部")}`, tag: T("Every mini-game and duel on one wall, sorted by kind: action, race, reflex, brain, sport, teams, duels.", "所有小游戏和对决一览，按类型排列：动作、竞速、反应、益智、体育、团队、对决。"), chips: [T(`${GAMES.length} mini-games`, `${GAMES.length} 个小游戏`), T(`${DUELS.length} duels`, `${DUELS.length} 个对决`)], play: { a: "minis", v: "", label: T("Open the wall", "打开") } };
+    }
+  }
+
+  /** The game of the day: one of them all, the same for everyone on a UTC day. */
+  private featured(): Tile {
+    const pool = [...ARCADE.map((d) => this.arcadeTile(d)), ...[...GAMES, ...DUELS].map((g) => this.miniTile(g))];
+    const day = Math.floor(Date.now() / 86_400_000);
+    const t = pool[(day * 7919 + 13) % pool.length];
+    return { ...t, kicker: `今日のゲーム · ${T("GAME OF THE DAY", "今日游戏")}`, badge: `<span class="zc-new">${T("TODAY", "今日")}</span>` };
+  }
+
+  /** The dock's tiles on a shelf. */
+  private tiles(k: HubTab): Tile[] {
+    switch (k) {
+      case "party":
+        return [this.special("all"), ...GAMES.map((g) => this.miniTile(g))];
+      case "arcade":
+        return ARCADE.filter((d) => d.shelf === "arcade").map((d) => this.arcadeTile(d));
+      case "board":
+        return this.boardTiles();
+      case "cards":
+        return this.cardTiles();
+      case "duel":
+        return DUELS.map((g) => this.miniTile(g));
+      case "modes":
+        return [this.special("quick"), this.special("tour"), this.special("online"), this.special("missions"), ...(this.hooks.casino ? [this.special("casino")] : []), ...(progress.refill().can ? [this.special("refill")] : [])];
+      default:
+        return [this.featured(), this.special("quick"), ...ARCADE.map((d) => this.arcadeTile(d)), this.boardTile(), ...this.cardTiles().slice(0, 1), this.special("tour"), this.special("online"), this.special("missions")];
+    }
+  }
+
+  private tileHtml(t: Tile, i: number, on: boolean) {
+    const face = t.special
+      ? `<span class="zc-face" style="--c:${t.color}">${pixIcon(SPECIAL_ICON[t.special] ?? "party", "zc-face-ic")}<b>${esc(t.title)}</b></span>`
+      : thumbHtml({ key: t.thumb, title: t.title, titleZh: t.title, color: t.color });
+    const inner = `<span class="zc-th">${face}${t.badge ?? ""}</span><span class="zc-cap"><b>${esc(t.title)}</b><small>${esc(t.sub)}</small></span>`;
+    return `<button class="zc-tile${on ? " on" : ""}" data-a="tile" data-v="${i}" style="--c:${t.color}" role="option" aria-selected="${on}">${inner}</button>`;
+  }
+
+  /** The big words over the hall: the tile picked, what it is, its buttons. */
+  private marqueeHtml(t: Tile) {
+    const act = (x: Act, primary: boolean) =>
+      x.href
+        ? `<a class="zc-btn${primary ? " go" : ""}" href="${esc(x.href)}" data-table="${x.table}">${primary ? pixIcon("play", "zc-bi") : ""}${esc(x.label)}</a>`
+        : `<button class="zc-btn${primary ? " go" : ""}" data-a="${x.a}" data-v="${x.v}"${x.a === "quick" ? ` data-need="${STAKES[this.stake].v}" ${bank.bal() < STAKES[this.stake].v ? "disabled" : ""}` : ""}>${primary ? pixIcon("play", "zc-bi") : ""}${esc(x.label)}</button>`;
+    const lvl = levelOf(profile.p.xp).level;
+    return `<div class="zc-mq-in" style="--c:${t.color}">
+      <small class="zc-kick">${t.kicker}</small>
+      <h1 class="zc-title">${esc(t.title)}</h1>
+      <p class="zc-tag">${esc(t.tag)}</p>
+      ${t.chips.length ? `<div class="zc-chips">${t.chips.map((c) => `<span>${esc(c)}</span>`).join("")}</div>` : ""}
+      ${t.stakes ? `<div class="zc-stakes">${STAKES.map((x, i) => `<button data-a="stake" data-v="${i}" class="${i === this.stake ? "on" : ""}" ${bank.bal() < x.v || lvl < x.level ? "disabled" : ""}>ⓩ ${bank.amount(x.v)}</button>`).join("")}</div>` : ""}
+      <div class="zc-acts">${act(t.play, true)}${t.more ? act(t.more, false) : ""}</div>
+    </div>`;
+  }
+
+  /** A panel over the hall: online (its room card) or today's missions. */
+  private panelHtml() {
+    if (!this.panel) return "";
+    const head = (jp: string, title: string) => `<header class="zc-ph"><div><small>${jp}</small><h2>${title}</h2></div><button class="zc-x" data-a="panel" data-v="" aria-label="${T("Close", "关闭")}">${pixIcon("close")}</button></header>`;
+    if (this.panel === "online")
+      return `<div class="zc-panel" data-a="panel" data-v=""><div class="zc-pin">${head("オンライン", T("Online room", "在线房间"))}<p class="zc-pnote">${T("Rooms play the ZK Party board together. Every other game is against the AI for now.", "房间里一起玩 ZK Party 棋盘。其他游戏目前都是对战 AI。")}</p>${this.online.cardHtml()}</div></div>`;
+    const missions = progress.missions();
+    const ps = profile.p.party;
+    return `<div class="zc-panel" data-a="panel" data-v=""><div class="zc-pin">${head("任務", T("Today's missions", "今日任务"))}
+      ${missions
+        .map(
+          (m) => `<div class="pt-m ${m.claimed ? "claimed" : m.at >= m.n ? "ready" : ""}">
+            <div><b>${esc(m.title)}</b><span class="pt-bar"><i style="width:${Math.round((m.at / m.n) * 100)}%"></i></span><small>${m.at} / ${m.n}</small></div>
+            ${m.claimed ? `<em>✓</em>` : m.at >= m.n ? `<button data-a="claim" data-v="${m.id}">+ⓩ ${m.prize}</button>` : `<span class="pt-prize">ⓩ ${m.prize}</span>`}
+          </div>`,
+        )
+        .join("")}
+      <div class="zc-stats">
+        <div><b>${num(ps.wins)}</b><small>${T("parties won", "派对胜场")}</small></div>
+        <div><b>${num(ps.miniWins)}</b><small>${T("mini-games won", "小游戏胜场")}</small></div>
+        <div><b>${num(ps.best)}</b><small>${T("best payout ⓩ", "最高奖金 ⓩ")}</small></div>
+        <div><b>${num(Object.keys(ps.places).length)}<i>/${GAMES.length + DUELS.length}</i></b><small>${T("games played", "已玩游戏")}</small></div>
+      </div>
+    </div></div>`;
   }
 
   private get boardDialog() { return this.hub.querySelector<HTMLDialogElement>(".pt-board-dialog"); }
@@ -382,82 +621,53 @@ class Party {
     this.hub.querySelector<HTMLElement>('[data-a="board-setup"]')?.focus({ preventScroll: true });
   }
 
+  /** The hub's shelf shown, the dock's pick on each shelf, a panel up over the hall. */
+  private tab: HubTab = "home";
+  private picks: Partial<Record<HubTab, number>> = {};
+  private panel: "" | "online" | "missions" = "";
+  /** The 3D hall behind the hub (hall3d.ts), and the rivals on its podiums. */
+  private hall: Hall3D | null = null;
+  private crew: number[] = [];
+  private shelf: Tile[] = [];
+
+  private get pick() {
+    return Math.max(0, Math.min(this.shelf.length - 1, this.picks[this.tab] ?? 0));
+  }
+
   private renderHub() {
-    const lv = levelOf(profile.p.xp).level;
     const tb = TABLES[this.table];
-    const missions = progress.missions();
-    const refill = progress.refill();
-    const ps = profile.p.party;
-    const keepShelf = this.hub.querySelector<HTMLElement>(".pt-shelf")?.scrollLeft ?? 0;
-    const keepY = this.hub.scrollTop;
+    const lv = levelOf(profile.p.xp).level;
     const keepBoardOptions = this.hub.querySelector<HTMLDetailsElement>(".pt-board-options")?.open ?? false;
     const keepBoardOpen = this.boardDialog?.open ?? false;
     const keepBoardScroll = this.hub.querySelector(".pt-setup-scroll")?.scrollTop ?? 0;
-    const focused = this.hub.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
-    const focusAction = focused?.dataset.a;
-    const focusValue = focused?.dataset.v;
+    const keepDock = this.hub.querySelector(".zc-dock")?.scrollLeft ?? 0;
+    const sameTab = this.hub.dataset.tab === this.tab;
     this.boardDialog?.close();
+    this.shelf = this.tiles(this.tab);
+    const i = this.pick;
+    const t = this.shelf[i];
+    this.hub.classList.remove("zp");
+    this.hub.classList.add("zc");
+    this.hub.dataset.tab = this.tab;
     this.hub.innerHTML = `
-      <header class="pt-head">
-        <div class="pt-brand"><span class="pt-logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 7.2h9.6L7.2 16.8h9.6M12 3.6v3.6M12 16.8v3.6"/></svg></span><div><b><span>ZK</span> <span>PARTY</span></b><small>${T("ゲーム館 · you vs. three zkSNARKs", "ゲーム館 · 你对战三个 zkSNARK")}</small></div></div>
+      <div class="zc-shade"></div>
+      <header class="zc-top">
+        <div class="zc-brand"><b>ZK<i>PARTY</i></b><small>ゲーム館</small></div>
         ${this.chainHtml()}
+        <span class="zc-gap"></span>
         ${this.meHtml()}
         ${fullscreenHtml("pt-fs", "fullscreen")}
-        <button class="pt-close" data-a="close" title="${T("Back to the city (Esc)", "回到城市（Esc）")}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        <button class="zc-x" data-a="close" title="${T("Back to the city (Esc)", "回到城市（Esc）")}" aria-label="${T("Back to the city", "回到城市")}">${pixIcon("close")}</button>
       </header>
-      <div class="pt-grid">
-        <section class="pt-card pt-practice" data-tab="practice">
-          <div class="pt-ch">
-            <b>${T("Mini-games", "小游戏")}<em>${GAMES.length}</em></b>
-            <small>${T("free practice · or for ⓩ", "免费练习 · 或押 ⓩ")}</small>
-            <span class="pt-ch-r">
-              <button class="pt-arrow" data-a="shelf" data-v="-1" title="${T("Scroll left", "向左")}"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-              <button class="pt-arrow" data-a="shelf" data-v="1" title="${T("Scroll right", "向右")}"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
-              <button class="pt-all" data-a="minis">${T("All mini-games", "全部小游戏")}<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
-            </span>
-          </div>
-          <div class="pt-shelf">${this.shelfHtml()}</div>
-        </section>
-        <section class="pt-card pt-library" data-tab="board" aria-labelledby="pt-library-title">
-          <div class="pt-ch"><b id="pt-library-title">${T("Board & card games", "棋盘与纸牌")}<em>4</em></b><small>${T("zkSNARK rivals · 2 to 8 seats", "zkSNARK 对手 · 2 到 8 人")}</small></div>
-          <div class="pt-library-grid">${this.libraryHtml()}</div>
-        </section>
-        <div class="pt-modes">
-        <section class="pt-card pt-tourc" data-tab="tour">
-          <div class="pt-body">
-            <span class="pt-badge alt pink">${T("New · 3 to 10 games", "新 · 3 到 10 场")}</span>
-            <h2>${T("Tournament", "锦标赛")}</h2>
-            <p>${T("Your lineup · three rivals · free or ⓩ", "自选阵容 · 三个对手 · 免费或 ⓩ")}</p>
-            <div class="pt-fan">${GAMES.slice(0, 5)
-              .map((g, i) => `<span style="--i:${i};--c:${g.color}">${thumbHtml(g)}</span>`)
-              .join("")}</div>
-            <button class="pt-play pink" data-a="tour"><svg viewBox="0 0 24 24"><path d="M7 3h10v3h3v3a5 5 0 0 1-5 5h-.3A5 5 0 0 1 13 16.9V19h3v2H8v-2h3v-2.1A5 5 0 0 1 9.3 14H9a5 5 0 0 1-5-5V6h3zm-1 5v1a3 3 0 0 0 1 2.2V8zm12 0v3.2A3 3 0 0 0 19 9V8z"/></svg>${T("Set up", "设置")} <span>${T("free or ⓩ", "免费或 ⓩ")}</span></button>
-          </div>
-        </section>
-        ${this.online.cardHtml()}
-        </div>
-        <aside class="pt-side">
-          <div class="pt-card pt-missions">
-            <div class="pt-ch"><b>${T("Today's missions", "今日任务")}</b><small>${T("new ones at midnight UTC", "UTC 零点刷新")}</small></div>
-            ${missions
-              .map(
-                (m) => `<div class="pt-m ${m.claimed ? "claimed" : m.at >= m.n ? "ready" : ""}">
-                  <div><b>${esc(m.title)}</b><span class="pt-bar"><i style="width:${Math.round((m.at / m.n) * 100)}%"></i></span><small>${m.at} / ${m.n}</small></div>
-                  ${m.claimed ? `<em>✓</em>` : m.at >= m.n ? `<button data-a="claim" data-v="${m.id}">+ⓩ ${m.prize}</button>` : `<span class="pt-prize">ⓩ ${m.prize}</span>`}
-                </div>`,
-              )
-              .join("")}
-          </div>
-          ${refill.can ? `<button class="pt-card pt-refill" data-a="refill"><b>${T("Out of chips?", "筹码用完了？")}</b><span>${T(`Take ⓩ ${refill.amount} on the house`, `免费领取 ⓩ ${refill.amount}`)}</span></button>` : ""}
-          ${this.hooks.casino ? `<button class="pt-card pt-casino" data-a="casino"><span class="pt-cz"><i></i><i></i><i></i></span><div><b>${T("Block Casino", "区块赌场")}</b><span>${T("Next block's hash · high/low · digit · roulette", "下一个区块哈希 · 大小 · 数字 · 轮盘")}</span></div><em>›</em></button>` : ""}
-          <div class="pt-card pt-stats">
-            <div><i class="pt-si">🏆</i><b>${num(ps.wins)}</b><small>${T("parties won", "派对胜场")}</small></div>
-            <div><i class="pt-si">⭐</i><b>${num(ps.miniWins)}</b><small>${T("mini-games won", "小游戏胜场")}</small></div>
-            <div><i class="pt-si">ⓩ</i><b>${num(ps.best)}</b><small>${T("best payout", "最高奖金")}</small></div>
-          </div>
-        </aside>
+      <section class="zc-mq" aria-live="polite">${t ? this.marqueeHtml(t) : ""}</section>
+      <div class="zc-low">
+        <nav class="zc-tabs" aria-label="${T("Shelves", "分类")}">${HUB_TABS.map(
+          (x) => `<button data-a="tab" data-v="${x.k}" class="${x.k === this.tab ? "on" : ""}" aria-current="${x.k === this.tab ? "page" : "false"}"><small>${x.jp}</small><b>${T(x.en, x.zh)}</b>${this.countOf(x.k) ? `<em>${this.countOf(x.k)}</em>` : ""}</button>`,
+        ).join("")}</nav>
+        <div class="zc-dock" role="listbox" aria-label="${T("Games", "游戏")}">${this.shelf.map((x, k) => this.tileHtml(x, k, k === i)).join("")}</div>
+        <footer class="zc-hints"><span><kbd>←</kbd><kbd>→</kbd>${T("choose", "选择")}</span><span><kbd>↑</kbd><kbd>↓</kbd>${T("shelf", "分类")}</span><span><kbd>Enter</kbd>${T("play", "开始")}</span><span><kbd>Esc</kbd>${T("city", "城市")}</span><span class="zc-money">${T("ⓩ · play money · never ZEC", "ⓩ · 游戏币 · 绝非 ZEC")}</span></footer>
       </div>
-      <footer class="pt-foot">${T("ⓩ · ZStreet's play money · never ZEC", "ⓩ · ZStreet 的游戏币 · 绝非 ZEC")}</footer>
+      ${this.panelHtml()}
       <dialog class="pt-board-dialog" aria-labelledby="pt-board-title">
         <header class="pt-setup-head"><div><small>${T("BOARD GAME", "棋盘游戏")}</small><h2 id="pt-board-title">ZK Party</h2></div><button class="pt-close" data-a="board-close" aria-label="${T("Close game details", "关闭游戏详情")}" autofocus><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
         <div class="pt-setup-scroll">
@@ -497,21 +707,131 @@ class Party {
       boardDialog.showModal();
       this.hub.querySelector(".pt-setup-scroll")?.scrollTo({ top: keepBoardScroll });
     }
-    const shelf = this.hub.querySelector<HTMLElement>(".pt-shelf");
-    if (shelf) shelf.scrollLeft = keepShelf;
-    this.hub.scrollTop = keepY;
-    if (focusAction) {
-      [...this.hub.querySelectorAll<HTMLElement>("[data-a]")].find((el) => el.dataset.a === focusAction && el.dataset.v === focusValue)?.focus({ preventScroll: true });
-    }
+    const dock = this.hub.querySelector<HTMLElement>(".zc-dock")!;
+    if (sameTab) dock.scrollLeft = keepDock;
+    this.hub.querySelector<HTMLElement>(".zc-tile.on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    // (a hover picks: the words and the LED wall follow the pointer)
+    dock.addEventListener("pointerover", (e) => {
+      if ((e as PointerEvent).pointerType !== "mouse") return;
+      const el = (e.target as HTMLElement).closest<HTMLElement>(".zc-tile");
+      if (el) this.choose(Number(el.dataset.v), false);
+    });
+    this.setupHall();
+    if (t) this.hall?.feature(t.led);
   }
+
+  /** Pick tile k on the shelf shown: the dock's highlight, the words, the LED wall; your zkSNARK hops. */
+  private choose(k: number, cheer = true, scroll = true) {
+    k = Math.max(0, Math.min(this.shelf.length - 1, k));
+    if (k === this.pick && this.hub.querySelector(".zc-tile.on")) return;
+    this.picks[this.tab] = k;
+    this.hub.querySelectorAll<HTMLElement>(".zc-tile").forEach((el, j) => {
+      el.classList.toggle("on", j === k);
+      el.setAttribute("aria-selected", String(j === k));
+    });
+    const t = this.shelf[k];
+    const mq = this.hub.querySelector<HTMLElement>(".zc-mq");
+    if (mq && t) {
+      mq.innerHTML = this.marqueeHtml(t);
+      mq.classList.remove("swap");
+      void mq.offsetWidth;
+      mq.classList.add("swap");
+    }
+    if (scroll) this.hub.querySelector<HTMLElement>(".zc-tile.on")?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    if (t) this.hall?.feature(t.led);
+    if (cheer) this.hall?.cheer();
+    sfx.blip(3);
+  }
+
+  /** Do what tile t's main button does. */
+  private activate(t: Tile) {
+    const x = t.play;
+    if (x.href) {
+      if (this.hooks.table && x.table) {
+        const key = x.table;
+        this.close();
+        return void setTimeout(() => this.hooks.table?.(key), 0);
+      }
+      return void location.assign(x.href);
+    }
+    this.hall?.cheer(true);
+    this.doAct(x.a, x.v);
+  }
+
+  /** The hall in 3D: made the first time the hub shows, drawn while the hub is what's on screen. */
+  private setupHall() {
+    if (this.hall) return;
+    try {
+      this.hall = new Hall3D(this.root, () => this.open && !this.playing && !this.cab && !this.sel.open && !this.tour.open);
+    } catch {
+      // (no WebGL: the hub stands on its dark ground)
+      this.hall = null;
+      return;
+    }
+    const r = rng(Date.now() >>> 0);
+    this.crew = rivalIds(3, r);
+    this.hall.cast([myId(), ...this.crew], [T("You", "你"), ...this.crew.map((id) => personName(id))]);
+    this.hall.pool([...GAMES.map((g) => g.key), ...DUELS.map((g) => g.key)]);
+    this.hall.run(this.open);
+  }
+
+  /** The hub's keys: ←/→ along the dock, ↑/↓ from shelf to shelf, Enter plays. */
+  private hubKeys = (e: KeyboardEvent) => {
+    if (!this.open || this.playing || this.cab || this.sel.open || this.tour.open || this.panel || this.boardDialog?.open || this.modal.classList.contains("on")) return;
+    if ((e.target as HTMLElement).closest?.("input,textarea,dialog")) return;
+    const c = e.code;
+    const tabAt = HUB_TABS.findIndex((x) => x.k === this.tab);
+    if (c === "ArrowRight" || c === "KeyD") return (e.preventDefault(), this.choose(this.pick + 1));
+    if (c === "ArrowLeft" || c === "KeyA" || c === "KeyQ") return (e.preventDefault(), this.choose(this.pick - 1));
+    if (c === "ArrowDown" || c === "ArrowUp" || c === "KeyS" || c === "KeyW" || c === "KeyZ") {
+      e.preventDefault();
+      const d = c === "ArrowDown" || c === "KeyS" ? 1 : -1;
+      this.tab = HUB_TABS[(tabAt + d + HUB_TABS.length) % HUB_TABS.length].k;
+      sfx.blip(2);
+      this.renderHub();
+      this.hall?.cheer();
+      return;
+    }
+    if (c === "Enter" || c === "NumpadEnter" || c === "Space") {
+      const f = document.activeElement as HTMLElement | null;
+      if (f && this.hub.contains(f) && (f.tagName === "BUTTON" || f.tagName === "A") && !f.classList.contains("zc-tile")) return;
+      e.preventDefault();
+      const t = this.shelf[this.pick];
+      if (t) this.activate(t);
+    }
+  };
 
   private click(e: MouseEvent) {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-a]");
     if (!b || (b as HTMLButtonElement).disabled) return;
     const a = b.dataset.a!;
     const v = b.dataset.v ?? "";
+    // (a panel's backdrop closes it; a click inside it is its own)
+    if (a === "panel" && b.classList.contains("zc-panel") && e.target !== b) return;
+    if (a === "tile") {
+      // a pointer that hovers has already picked it: a click plays; a finger picks first, then plays
+      const k = Number(v);
+      const touch = (e as PointerEvent).pointerType === "touch" || !matchMedia("(hover: hover)").matches;
+      if (k !== this.pick || (touch && !b.classList.contains("on"))) return this.choose(k, true, true);
+      const t = this.shelf[k];
+      if (t) this.activate(t);
+      return;
+    }
     sfx.blip(2);
+    this.doAct(a, v);
+  }
+
+  /** A hub action by its name (data-a) and value (data-v). */
+  private doAct(a: string, v: string) {
     if (a === "close") return this.close();
+    if (a === "tab") {
+      this.tab = (HUB_TABS.find((t) => t.k === v)?.k ?? "home") as HubTab;
+      this.renderHub();
+      this.hall?.cheer();
+      return;
+    }
+    if (a === "panel") return ((this.panel = (v as typeof this.panel) || ""), this.renderHub());
+    if (a === "arcade") return this.openArcade(v);
     if (a === "fullscreen") return void (fullscreenDo(), setTimeout(() => this.renderHub(), 400));
     if (a === "board-setup") return this.boardDialog?.showModal();
     if (a === "board-close") return this.closeBoardSetup();
@@ -534,10 +854,7 @@ class Party {
     else if (a === "mrounds") (this.setRounds(Number(v)), this.renderHub());
     else if (a === "minis") this.sel.show();
     else if (a.startsWith("on-")) this.online.hubClick(a);
-    else if (a === "shelf") {
-      const sh = this.hub.querySelector<HTMLElement>(".pt-shelf");
-      sh?.scrollBy({ left: Number(v) * sh.clientWidth * 0.8, behavior: "smooth" });
-    } else if (a === "casino") {
+    else if (a === "casino") {
       // (the casino is the city's panel: the hall steps aside for it)
       this.close();
       this.hooks.casino?.();
@@ -915,19 +1232,22 @@ class Party {
     if (!a || !bank.pay(-st.v, "quick stake")) return;
     if (!pick) this.lastQuick = game.key;
     sfx.chips();
-    const players = [this.you(), ...this.rivals(TABLES[st.table].skill, Date.now())];
+    const duel = game.seats === 2;
+    const players = [this.you(), ...this.rivals(TABLES[st.table].skill, Date.now())].slice(0, game.seats ?? 4);
     this.mode = "quick";
     this.begin();
     const sd = this.seeder(a.block);
     const pair = !!game.teams && n === 1;
-    const stakeNote = pair
-      ? T(`Stake ${bank.money(st.v)} · the winning pair wins ${bank.money(st.v * 2)} each`, `押注 ${bank.money(st.v)} · 获胜的一队每人赢 ${bank.money(st.v * 2)}`)
-      : T(`Stake ${bank.money(st.v)} · 1st wins ${bank.money(st.v * 3)} · 2nd gets the stake back`, `押注 ${bank.money(st.v)} · 第一赢 ${bank.money(st.v * 3)} · 第二退回押注`);
+    const stakeNote = duel
+      ? T(`Stake ${bank.money(st.v)} · the winner takes ${bank.money(st.v * 2)}`, `押注 ${bank.money(st.v)} · 胜者拿走 ${bank.money(st.v * 2)}`)
+      : pair
+        ? T(`Stake ${bank.money(st.v)} · the winning pair wins ${bank.money(st.v * 2)} each`, `押注 ${bank.money(st.v)} · 获胜的一队每人赢 ${bank.money(st.v * 2)}`)
+        : T(`Stake ${bank.money(st.v)} · 1st wins ${bank.money(st.v * 3)} · 2nd gets the stake back`, `押注 ${bank.money(st.v)} · 第一赢 ${bank.money(st.v * 3)} · 第二退回押注`);
     const res = await playMatch(this.stage, game, players, {
       rounds: n,
       seed: (r) => sd(game.key, game.key + r),
       note: n > 1 ? `${T(`Best of ${n}`, `${n} 局赛`)} · ${stakeNote}` : stakeNote,
-      prizes: pair ? [`${bank.money(st.v * 2)}`, `${bank.money(st.v * 2)}`, "", ""] : [`${bank.money(st.v * 3)}`, `${bank.money(st.v)}`, "", ""],
+      prizes: duel ? [`${bank.money(st.v * 2)}`, ""] : pair ? [`${bank.money(st.v * 2)}`, `${bank.money(st.v * 2)}`, "", ""] : [`${bank.money(st.v * 3)}`, `${bank.money(st.v)}`, "", ""],
     });
     this.end();
     if (fromSel) this.sel.show(game.key);
@@ -936,7 +1256,7 @@ class Party {
     this.afterMini(game, order);
     const place = order.indexOf(0);
     // (one round of a team game: the winning pair both get 2×, the losers nothing)
-    const paid = pair ? (place < 2 ? st.v * 2 : 0) : place === 0 ? st.v * 3 : place === 1 ? st.v : 0;
+    const paid = duel ? (place === 0 ? st.v * 2 : 0) : pair ? (place < 2 ? st.v * 2 : 0) : place === 0 ? st.v * 3 : place === 1 ? st.v : 0;
     if (paid) bank.pay(paid, "quick match");
     const run = place === 0 ? profile.p.party.run + 1 : 0;
     profile.update((p) => {
@@ -975,7 +1295,8 @@ class Party {
     const n = this.mRounds;
     const a = await this.arena(def.key);
     if (!a) return;
-    const players = [this.you(), ...this.rivals(tb.skill, Date.now())];
+    // (a duel: you and one rival)
+    const players = [this.you(), ...this.rivals(tb.skill, Date.now())].slice(0, def.seats ?? 4);
     this.mode = "practice";
     this.begin();
     const sd = this.seeder(a.block);
@@ -1222,6 +1543,7 @@ export function openParty(hooks: PartyHooks, tab?: "board" | "quick" | "practice
   const [key, version] = (game ?? "").split("@");
   if (version) variantPick.set(key, version);
   if (tab === "tour") party.openTour();
+  else if (game && arcadeOf(key)) party.openArcade(key);
   else if (game) party.openSelect(key === "*" ? undefined : key);
   else if (room) party.joinRoom(room);
 }

@@ -1,0 +1,136 @@
+/*
+ * The GAMEPARTY mini-games' HTML HUD in ZK PARTY (engine/hud.ts and each game's own pieces), a layer
+ * over the 3D inside the stage (index.ts HudLayer). 1 --u = 1 % of a 16:9 frame's width in the stage,
+ * set by the layer. The games write their HUD with these variables and classes.
+ */
+/* the games' heavy display type, painted on their 3D signs too (engine/gfx.ts FONT_TITLE): Geist
+ * at 800 and 600 under names of their own, so a canvas asks for them by family alone */
+@font-face {
+  font-family: "ZP Title";
+  src: url(/fonts/geist_v5_gyByhwUxId8gMEwcGFWNOITd.woff2) format("woff2");
+  font-weight: 800;
+}
+@font-face {
+  font-family: "ZP UI";
+  src: url(/fonts/geist_v5_gyByhwUxId8gMEwcGFWNOITd.woff2) format("woff2");
+  font-weight: 600;
+}
+.gp-hud {
+  --ink: #1d1630;
+  --gold: #ffc928;
+  --red: #ff4b3e;
+  --blue: #2f8dff;
+  --green: #3fcf5a;
+  --violet: #9b5cff;
+  --font: Geist, Roboto, ui-sans-serif, system-ui, sans-serif;
+  --title: "ZP Title", Geist, Roboto, ui-sans-serif, system-ui, sans-serif;
+  --glass: rgba(255, 255, 255, 0.84);
+  --soft: 0 calc(var(--u) * 0.5) calc(var(--u) * 1.8) rgba(14, 8, 34, 0.28);
+  --tsh: 0 0 calc(var(--u) * 0.25) rgba(14, 8, 34, 0.45), 0 calc(var(--u) * 0.1) 0 rgba(14, 8, 34, 0.3), 0 calc(var(--u) * 0.15) calc(var(--u) * 0.8) rgba(14, 8, 34, 0.65);
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--font);
+  font-weight: 600;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity 0.25s;
+}
+.gp-hud.gp-off {
+  opacity: 0;
+}
+.gp-hud .hud-layer {
+  position: absolute;
+  inset: 0;
+}
+/* the titles: Geist at its heaviest, a touch tighter (the party's own numbers) */
+.gp-hud .hud-timer,
+.gp-hud .hud-banner .t,
+.gp-hud .hud-pop,
+.gp-hud .hud-card .val,
+.gp-hud .hud-label.big {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.gp-hud .ico { width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em; overflow: visible; }
+.gp-hud .key { display: inline-grid; place-items: center; min-width: calc(var(--u) * 2.5); height: calc(var(--u) * 2.5); padding: 0 calc(var(--u) * 0.5); border-radius: 999px; font-weight: 700; font-size: calc(var(--u) * 1.4); color: #fff; vertical-align: middle; background: #6b6585; }
+.gp-hud .key.a { background-color: #2fbf5a; }
+.gp-hud .key.b { background-color: #ff4b3e; }
+/* ⓩ coins in text: a gold disc with its Z */
+.gp-hud .ic-coin { position: relative; display: inline-block; width: 0.86em; height: 0.86em; border-radius: 50%; vertical-align: -0.1em; margin-right: 0.08em; background: radial-gradient(circle at 35% 30%, #fff6b0 0 16%, #ffd23f 32%, #e8a200 100%); box-shadow: inset 0 0 0 0.08em #b87a00, 0 0.06em 0 rgba(0, 0, 0, 0.3); }
+.gp-hud .ic-coin::after { content: "Z"; position: absolute; inset: 0; display: grid; place-items: center; font: 800 0.62em/1 Geist, system-ui, sans-serif; color: #8a5a00; }
+.gp-hud .ic-star { display: inline-block; width: 0.95em; height: 0.95em; vertical-align: -0.12em; background: linear-gradient(#fff3a0, #ffc928 60%, #f0a000); clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); filter: drop-shadow(0 0.05em 0 rgba(0, 0, 0, 0.4)); }
+/* the zkSNARKs' portraits are pixel art: kept crisp */
+.gp-hud .pic, .gp-hud [style*="background-image"] { image-rendering: pixelated; }
+
+/* ---------------------------------------------------------------- HUD: the players in the corners (no boxes: white values, soft shade) */
+.gp-hud .hud-corners { position: absolute; inset: calc(var(--u) * 1.3) calc(var(--u) * 1.6); }
+.gp-hud .hud-card { position: absolute; isolation: isolate; display: flex; align-items: center; gap: calc(var(--u) * 0.9); color: #fff; transition: opacity 0.3s, transform 0.3s, filter 0.3s; }
+.gp-hud .hud-card::before { content: ""; position: absolute; z-index: -1; inset: calc(var(--u) * -2.6) calc(var(--u) * -5) calc(var(--u) * -2.6) calc(var(--u) * -3.4); pointer-events: none; background: radial-gradient(closest-side, rgba(14, 8, 34, 0.46), rgba(14, 8, 34, 0.2) 60%, rgba(14, 8, 34, 0)); }
+.gp-hud .hud-card.tr::before, .gp-hud .hud-card.br::before, .gp-hud .hud-card.tr2::before { inset: calc(var(--u) * -2.6) calc(var(--u) * -3.4) calc(var(--u) * -2.6) calc(var(--u) * -5); }
+.gp-hud .hud-card.tl { left: 0; top: 0; }
+.gp-hud .hud-card.tr { right: 0; top: 0; flex-direction: row-reverse; text-align: right; }
+.gp-hud .hud-card.bl { left: 0; bottom: 0; }
+.gp-hud .hud-card.br { right: 0; bottom: 0; flex-direction: row-reverse; text-align: right; }
+.gp-hud .hud-card.tl2 { left: 0; top: calc(var(--u) * 6.6); }
+.gp-hud .hud-card.tr2 { right: 0; top: calc(var(--u) * 6.6); flex-direction: row-reverse; text-align: right; }
+.gp-hud .hud-card .pic { position: relative; width: calc(var(--u) * 5); height: calc(var(--u) * 5); flex: none; border-radius: 50%; background-color: color-mix(in srgb, var(--pc) 35%, #fff); background-size: 120%; background-position: 50% 30%; background-repeat: no-repeat; border: calc(var(--u) * 0.2) solid #fff; box-shadow: 0 0 0 calc(var(--u) * 0.28) var(--tc, var(--pc)), 0 calc(var(--u) * 0.3) calc(var(--u) * 1) rgba(14, 8, 34, 0.4); transition: box-shadow 0.3s; }
+.gp-hud .hud-card .txt { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--u) * 0.2); min-width: 0; }
+.gp-hud .hud-card.tr .txt, .gp-hud .hud-card.br .txt, .gp-hud .hud-card.tr2 .txt { align-items: flex-end; }
+.gp-hud .hud-card .nm { padding: calc(var(--u) * 0.05) calc(var(--u) * 0.75); font-weight: 700; font-size: calc(var(--u) * 1.15); line-height: 1.3; white-space: nowrap; color: #fff; background: rgba(14, 8, 34, 0.5); border-radius: 999px; }
+.gp-hud .hud-card .nm::before { content: ""; display: inline-block; width: 0.55em; height: 0.55em; margin-right: 0.4em; vertical-align: 0.05em; border-radius: 50%; background: var(--tc, var(--pc)); box-shadow: 0 0 0 0.1em rgba(255, 255, 255, 0.7); }
+.gp-hud .hud-card .cpu-tag { margin-left: 0.35em; font-size: 0.72em; font-weight: 600; letter-spacing: 0.06em; opacity: 0.7; }
+.gp-hud .hud-card .val { font-family: var(--title); font-size: calc(var(--u) * 2.8); line-height: 1.05; color: #fff; white-space: nowrap; text-shadow: var(--tsh); transform-origin: 0 50%; }
+.gp-hud .hud-card.tr .val, .gp-hud .hud-card.br .val, .gp-hud .hud-card.tr2 .val { transform-origin: 100% 50%; }
+.gp-hud .hud-card .val.bump { animation: gp-bump 0.3s ease-out; }
+.gp-hud .hud-card.out { opacity: 0.45; filter: grayscale(1); }
+.gp-hud .hud-card.win .pic { box-shadow: 0 0 0 calc(var(--u) * 0.32) #ffd23f, 0 0 calc(var(--u) * 2) calc(var(--u) * 0.3) rgba(255, 210, 63, 0.75); }
+.gp-hud .hud-card.win .val { color: #ffd23f; }
+.gp-hud .hud-card.hot .pic { animation: gp-hot 0.5s infinite alternate; }
+@keyframes gp-bump { 0% { transform: scale(1.5); } 100% { transform: scale(1); } }
+@keyframes gp-hot { to { box-shadow: 0 0 0 calc(var(--u) * 0.32) #ff4b3e, 0 0 calc(var(--u) * 2) calc(var(--u) * 0.3) rgba(255, 75, 62, 0.8); } }
+
+/* ---------------------------------------------------------------- HUD: timer, banner, tip, labels */
+.gp-hud .hud-timer { position: absolute; left: 50%; top: calc(var(--u) * 1.2); translate: -50% 0; min-width: calc(var(--u) * 8); height: calc(var(--u) * 5.6); display: grid; place-items: center; padding: 0 calc(var(--u) * 1.8); font-family: var(--title); font-size: calc(var(--u) * 3.8); font-variant-numeric: tabular-nums; color: var(--ink); border-radius: 999px; background: linear-gradient(180deg, #ffffff, #f2eff8); box-shadow: var(--soft); }
+.gp-hud .hud-timer.low { color: #fff; background: linear-gradient(160deg, #ff9a3d, #ff4b5c 80%); box-shadow: var(--soft), 0 0 calc(var(--u) * 2.4) rgba(255, 75, 62, 0.7); }
+.gp-hud .hud-timer.tick { animation: gp-bump 0.4s ease-out; }
+.gp-hud .hud-banner { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); text-align: center; animation: gp-pop 0.38s cubic-bezier(0.2, 1.5, 0.4, 1); pointer-events: none; }
+.gp-hud .hud-banner .t { font-family: var(--title); line-height: 1.05; -webkit-text-stroke: 0.15em var(--ink); paint-order: stroke fill; text-shadow: 0 0.06em 0.22em rgba(14, 8, 34, 0.45); white-space: nowrap; }
+.gp-hud .hud-banner .s { display: inline-block; margin-top: calc(var(--u) * 0.7); padding: calc(var(--u) * 0.35) calc(var(--u) * 1.8); font-size: calc(var(--u) * 1.85); font-weight: 700; color: var(--ink); background: rgba(255, 255, 255, 0.86); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-radius: 999px; box-shadow: var(--soft); }
+.gp-hud .hud-banner.out { opacity: 0; transform: translate(-50%, -70%); transition: all 0.35s; }
+@keyframes gp-pop { 0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; } 65% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+.gp-hud .hud-tip { position: absolute; left: 50%; bottom: calc(var(--u) * 1.6); transform: translateX(-50%); padding: calc(var(--u) * 0.6) calc(var(--u) * 2); font-size: calc(var(--u) * 1.6); font-weight: 600; white-space: nowrap; color: #fff; border-radius: 999px; background: rgba(14, 8, 34, 0.66); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: var(--soft); }
+.gp-hud .hud-label { position: absolute; left: 0; top: 0; padding: calc(var(--u) * 0.2) calc(var(--u) * 0.85); border-radius: 999px; background: var(--lc, rgba(14, 8, 34, 0.72)); font-weight: 700; font-size: calc(var(--u) * 1.3); white-space: nowrap; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); box-shadow: 0 0 0 calc(var(--u) * 0.16) rgba(255, 255, 255, 0.85), 0 calc(var(--u) * 0.25) calc(var(--u) * 0.7) rgba(14, 8, 34, 0.35); will-change: transform; }
+.gp-hud .hud-label.hidden { display: none !important; }
+.gp-hud .hud-label.big { font-family: var(--title); font-size: calc(var(--u) * 2.2); }
+.gp-hud .hud-pop { position: absolute; white-space: nowrap; transform: translate(-50%, -50%); font-family: var(--title); font-size: calc(var(--u) * 2.8); -webkit-text-stroke: 0.16em var(--ink); paint-order: stroke fill; text-shadow: 0 0.06em 0.2em rgba(14, 8, 34, 0.45); animation: gp-floatup 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+@keyframes gp-floatup { 0% { transform: translate(-50%, -30%) scale(0.5); opacity: 0; } 20% { transform: translate(-50%, -70%) scale(1.15); opacity: 1; } 100% { transform: translate(-50%, -250%) scale(0.95); opacity: 0; } }
+
+
+/* a touch screen: the stick and A sit in the bottom corners, the pause key at the top right; the
+ * players' cards line up along the top instead, clear of them */
+.gp-hud.gp-touch .hud-card.bl {
+  top: calc(var(--u) * 6.6);
+  bottom: auto;
+}
+.gp-hud.gp-touch .hud-card.br {
+  top: calc(var(--u) * 6.6);
+  bottom: auto;
+}
+.gp-hud.gp-touch .hud-card.br {
+  right: max(58px, calc(var(--u) * 5));
+}
+/* (the stage's pause key sits in the top right corner, on every screen) */
+.gp-hud .hud-card.tr,
+.gp-hud .hud-card.tr2 {
+  right: max(58px, calc(var(--u) * 5));
+}
+.gp-hud.gp-touch .hud-tip {
+  bottom: calc(var(--u) * 2.2);
+  max-width: 54%;
+  white-space: normal;
+  text-align: center;
+}

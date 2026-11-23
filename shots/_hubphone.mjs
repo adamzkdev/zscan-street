@@ -1,0 +1,20 @@
+// The hub on a phone (touch, 3×): node shots/_hubphone.mjs <outdir> [w h]
+import puppeteer from "puppeteer-core";
+const out = process.argv[2];
+const w = Number(process.argv[3] ?? 390), h = Number(process.argv[4] ?? 844);
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: w, height: h, deviceScaleFactor: 2, isMobile: true, hasTouch: true } });
+const p = await b.newPage();
+await p.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1");
+const logs = [];
+p.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
+await p.goto(`http://localhost:3007/party.html`);
+await new Promise((r) => setTimeout(r, 4000));
+await p.screenshot({ path: `${out}/phone-${w}-0.png` });
+await p.evaluate(() => document.querySelector(".pt-hub")?.scrollTo(0, 900));
+await new Promise((r) => setTimeout(r, 500));
+await p.screenshot({ path: `${out}/phone-${w}-1.png` });
+await p.evaluate(() => document.querySelector('[data-a="tab"][data-v="party"]')?.click());
+await new Promise((r) => setTimeout(r, 800));
+await p.screenshot({ path: `${out}/phone-${w}-2.png` });
+console.log(logs.join("\n") || "no errors");
+await b.close();
