@@ -4,6 +4,7 @@ import type { SignSpot } from "../parts";
 import type { LandmarkOpts } from "./index";
 import { lotSize } from "./lot";
 import { lampPost } from "./needle";
+import { PEOPLE_OFF } from "./people";
 
 /**
  * SYDNEY OPERA HOUSE on its granite pier in the bay. A podium of red-brown granite panels carries
@@ -335,6 +336,8 @@ export function opera(seed: number, o: LandmarkOpts): Built {
   const shirts = ["#f4b728", "#2a2a33", "#e8e4dc", "#3a6ea5", "#b03a48", "#3e8a5a", "#7a4a9a", "#c8732a", "#1d1c23", "#d8c8a8"];
   const skins = ["#e8c4a0", "#c89670", "#8a5a3c", "#f0d0b4"];
   const person = (x: number, y: number, z: number, sit = false) => {
+    // (standing stand-ins of three voxels: gone; the seated audience stays)
+    if (PEOPLE_OFF && !sit) return;
     const shirt = C(shirts[Math.floor(r() * shirts.length)]);
     const legs = C(r() < 0.5 ? "#2a2a38" : "#4a4050");
     if (sit) {

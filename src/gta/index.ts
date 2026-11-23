@@ -8,9 +8,11 @@ import { StreetSolid } from "./collide";
 import { DOOR_HALF, Doors, type DoorSpot } from "./doors";
 import { FootPlayer } from "./foot";
 import { Garage } from "./garage";
-import { DEFAULTS, GtaHud, type Settings } from "./hud";
+import { DEFAULTS, GtaHud, type MapData, type Settings } from "./hud";
+import { PLACE_CAT, WAYPOINT, type Cat } from "./mapkit";
+import { NU7_LINE, ZEC_LINE } from "../scene/metro";
 import { GtaInput } from "./input";
-import { Missions } from "./missions";
+import { KIND_COLOR, Missions } from "./missions";
 import { WorldNet } from "./net";
 import { People3D, type Person3 } from "./people3d";
 import { useAtlasCells } from "../scene/snarkbody";
@@ -89,7 +91,7 @@ export interface GtaHost {
   vehicles(): Iterable<{ x: number; z: number; hx: number; hz: number }>;
   people(): Iterable<{ x: number; z: number }>;
   baseMap(): HTMLCanvasElement | null;
-  places(): { x: number; z: number; label: string; icon?: string }[];
+  places(): { x: number; z: number; label: string; icon?: string; key?: string }[];
   hq(): { x: number; z: number } | null;
   audio(): AudioOut | null;
   soundOn(): boolean;
@@ -154,7 +156,7 @@ export class GtaMode {
   /** The bike's seat you sit on, while riding one. */
   private riding: THREE.Group | null = null;
   /** Every building's door the game could put on a facade (found once the solid shape is in), and those drawn now. */
-  private buildingSpots: (DoorSpot & { type: string; seed: number })[] | null = null;
+  private buildingSpots: (DoorSpot & { type: string; seed: number; kind?: string })[] | null = null;
   private placeSpots: DoorSpot[] = [];
   private nearT = 0;
   /** A lift's ride under way, and the steps out of it after. */
@@ -198,6 +200,8 @@ export class GtaMode {
       leave: () => this.stop(),
       garage: () => this.openGarage(),
       teleport: (x, z) => this.teleport(x, z),
+      waypoint: (p) => this.setWaypoint(p),
+      where: (x, z) => this.roads.where(x, z),
       settings: this.settings,
       apply: (s) => this.apply(s),
       progress: () => this.progressRows(),
@@ -217,6 +221,7 @@ export class GtaMode {
       } else if (down) this.input.touch.add(btn);
       else this.input.touch.delete(btn);
     };
+    this.hud.mapData = () => this.mapData();
     this.missions = new Missions({
       scene: host.scene,
       roads: this.roads,
@@ -1085,7 +1090,7 @@ export class GtaMode {
     return out;
   }
 
-  private pedWorldCache: { free(x: number, z: number): boolean; wall(x: number, z: number): boolean; floor(x: number, z: number): number; road(x: number, z: number): boolean } | null = null;
+  private pedWorldCache: { free(x: number, z: number): boolean; wall(x: number, z: number): boolean; floor(x: number, z: number): number; road(x: number, z: number): boolean; stand(x: number, z: number): boolean } | null = null;
   private pedWorld() {
     return (this.pedWorldCache ??= {
       free: (x: number, z: number) => {
@@ -1095,7 +1100,18 @@ export class GtaMode {
       },
       floor: (x: number, z: number) => {
         const t = this.solid.topAt(x, z);
-        return t !== undefined && t === t && t > -0.3 && t < 0.7 ? t : 0.2;
+        return t !== undefined && t === t && t > -0.3 && t < 2.2 ? t : 0.2;
+      },
+      stand: (x: number, z: number) => {
+        if (!this.solid.ready) return false;
+        const t = this.solid.topAt(x, z);
+        if (t === undefined || t !== t || t < -0.3 || t > 2.2 || this.host.footSmall(x, z)) return false;
+        // flat round it (not the edge of a step)
+        for (const [dx, dz] of [[0.45, 0], [-0.45, 0], [0, 0.45], [0, -0.45]]) {
+          const u = this.solid.topAt(x + dx, z + dz);
+          if (u === undefined || u !== u || Math.abs(u - t) > 0.3) return false;
+        }
+        return true;
       },
       wall: (x: number, z: number) => {
         if (!this.solid.ready) return this.host.nav.wall(x, z);
@@ -1496,6 +1512,9 @@ export class GtaMode {
       }
     }
     this.access = set;
+    // the big sights get a line of visitors at the door
+    const QUEUED = new Set(["museum", "colosseum", "stadium", "bigben", "opera", "eiffel", "needle", "mall", "convention", "pyramid", "library", "gardens"]);
+    this.peds.queues = this.placeSpots.filter((d) => QUEUED.has(d.key) && !d.bare).map((d) => ({ key: d.key, x: d.x, z: d.z, fx: d.fx, fz: d.fz }));
     this.ferries = this.findFerries();
     this.doors.set([...this.placeSpots, ...this.ferries]);
   }
@@ -1596,7 +1615,7 @@ export class GtaMode {
     if (!this.solid.ready) return;
     if (!this.buildingSpots) {
       const s = this.solid;
-      const out: (DoorSpot & { type: string; seed: number })[] = [];
+      const out: (DoorSpot & { type: string; seed: number; kind?: string })[] = [];
       const wallAt = (px: number, pz: number) => {
         const t = s.topAt(px, pz);
         return t !== undefined && t === t && t > 2;
@@ -1647,7 +1666,7 @@ export class GtaMode {
         const seed = (Math.abs(Math.round(dx * 13 + dz * 7)) % 997) + i;
         const kind = kindOf(f.type, seed);
         const names = NAMES[kind];
-        out.push({ key: `building:${i}`, x: dx, z: dz, fx, fz, y: s.topAt(dx + fx, dz + fz) ?? 0.2, label: names[seed % names.length], type: f.type, seed, wall: true });
+        out.push({ key: `building:${i}`, x: dx, z: dz, fx, fz, y: s.topAt(dx + fx, dz + fz) ?? 0.2, label: names[seed % names.length], type: f.type, seed, wall: true, kind });
       });
       this.buildingSpots = out;
     }
@@ -1792,7 +1811,82 @@ export class GtaMode {
     }
   }
 
+  /** The waypoint set on the map (the GPS takes you there), the way, its colour. */
+  private waypoint: { x: number; z: number } | null = null;
+  private route: { x: number; z: number }[] | null = null;
+  private routeColor = WAYPOINT;
+  private routeT = 0;
+  private routeKey = "";
+
+  setWaypoint(p: { x: number; z: number } | null) {
+    this.waypoint = p;
+    this.routeT = 0;
+    if (p) this.sound.blip("click");
+  }
+
+  /** The GPS: the way by the streets to the waypoint (purple), else to the objective (its colour); asked again every second or so. */
+  private gps(dt: number, at: THREE.Vector3) {
+    const w = this.waypoint;
+    if (w && Math.hypot(w.x - at.x, w.z - at.z) < 14) {
+      this.waypoint = null;
+      this.hud.toast("You've arrived", this.roads.where(at.x, at.z).street, "teal");
+      this.sound.blip("door");
+    }
+    const goal = this.missions.next(at.x, at.z);
+    const target = this.waypoint ?? (goal?.goal ? goal : null);
+    if (!target) {
+      this.route = null;
+      return;
+    }
+    const key = `${target.x.toFixed(1)},${target.z.toFixed(1)}`;
+    this.routeT -= dt;
+    if (this.routeT > 0 && key === this.routeKey && this.route) {
+      // (only where you are moves: the way from you to its next turn)
+      this.route[0] = { x: at.x, z: at.z };
+      return;
+    }
+    this.routeT = 1.1;
+    this.routeKey = key;
+    this.route = this.roads.gps(at.x, at.z, target.x, target.z);
+    this.routeColor = this.waypoint ? WAYPOINT : goal ? KIND_COLOR[goal.kind] : WAYPOINT;
+  }
+
+  /** The places for the maps, each with its kind. */
+  private placesCache: { x: number; z: number; label: string; icon?: string; cat: Cat }[] | null = null;
+  private mapPlaces() {
+    return (this.placesCache ??= this.host.places().map((p) => ({ ...p, cat: PLACE_CAT[p.key ?? ""] ?? ("sight" as Cat) })));
+  }
+
+  /** What the big map knows for good: the streets' names, the districts, the doors by kind, the metro, the ferries. */
+  private mapCache: MapData | null = null;
+  mapData(): MapData | null {
+    if (this.mapCache) return this.mapCache;
+    if (!this.solid.ready) return null;
+    const lines = [ZEC_LINE(), NU7_LINE()].map((l) => ({
+      name: l.name,
+      color: l.stripe,
+      points: l.points.map((p) => ({ x: p.x, z: p.z })),
+      stations: l.stations.map(([name, , x, z]) => ({ name: name.charAt(0) + name.slice(1).toLowerCase(), x, z })),
+    }));
+    const CATS: Record<string, Cat> = { shop: "shop", cafe: "food", bar: "bar", office: "work" };
+    const buildings = (this.buildingSpots ?? []).flatMap((b) => {
+      const c = CATS[b.kind ?? ""];
+      return c ? [{ x: b.x, z: b.z, label: b.label, cat: c }] : [];
+    });
+    const data: MapData = {
+      streets: this.roads.labels(),
+      districts: this.roads.districts(),
+      buildings,
+      lines,
+      ferries: this.ferries.filter((f) => f.key.endsWith(":go")).map((f) => ({ x: f.x, z: f.z, label: f.label })),
+    };
+    // (kept once the buildings' doors are known)
+    if (this.buildingSpots) this.mapCache = data;
+    return data;
+  }
+
   private hudFrame(dt: number, at: THREE.Vector3, heading: number) {
+    this.gps(dt, at);
     const h = this.host;
     const w = this.roads.where(at.x, at.z, -Math.sin(heading), -Math.cos(heading));
     const people: { x: number; z: number }[] = [];
@@ -1820,7 +1914,14 @@ export class GtaMode {
         street: w.street,
         next: w.next,
         spots: this.missions.spots(),
-        places: h.places(),
+        places: this.mapPlaces(),
+        route: this.route,
+        routeColor: this.routeColor,
+        waypoint: this.waypoint,
+        car: (() => {
+          const gt = this.parked.find((c) => c.kind === "gt");
+          return gt && gt !== this.car ? { x: gt.group.position.x, z: gt.group.position.z } : null;
+        })(),
         people,
         cars,
         goal: this.missions.next(at.x, at.z),

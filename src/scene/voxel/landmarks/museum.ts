@@ -3,6 +3,7 @@ import { C, E, G, hash, rand, shades, type Paint, VoxelModel } from "../model";
 import type { SignSpot } from "../parts";
 import type { LandmarkOpts } from "./index";
 import { lotSize } from "./lot";
+import { PEOPLE_OFF } from "./people";
 
 /**
  * The zkSNARK MUSEUM: the city's Louvre, across the street from Central Park. The Cour Napoléon:
@@ -615,6 +616,8 @@ export function museum(seed: number, o: LandmarkOpts): Built {
 
   // ---- tourists in the courtyard, the queue, under the arch ------------------------------------
   const person = (x: number, z: number) => {
+    // (no stand-in people of three voxels any more: the street's own zkSNARKs come and queue)
+    if (PEOPLE_OFF) return false;
     if (m.get(x, 1, z) || m.get(x, 2, z)) return false;
     const g = m.get(x, 0, z);
     if (g === S.water || g === S.waterLight || g === S.granite) return false;

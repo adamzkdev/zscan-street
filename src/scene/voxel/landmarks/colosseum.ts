@@ -3,6 +3,7 @@ import { C, E, hash, VoxelModel, type Paint } from "../model";
 import type { SignSpot } from "../parts";
 import type { LandmarkOpts } from "./index";
 import { lotSize } from "./lot";
+import { PEOPLE_OFF } from "./people";
 
 /**
  * THE COLOSSEUM: the Flavian amphitheatre, travertine voxels. An elliptical outer wall of four
@@ -542,6 +543,8 @@ export function colosseum(seed: number, o: LandmarkOpts): Built {
   const shirts = ["#d04040", "#3a6ab0", "#f0f0f0", "#3e9a5a", "#f4b728", "#7a4ab0", "#e07a30", "#2a2a34", "#e8a0c0"].map((h) => C(h));
   const legsC = [C("#2a3a5a"), C("#3a3a40"), C("#c8b898"), C("#1e2430")];
   const person = (x: number, z: number, sd: number) => {
+    // (no stand-in people of three voxels any more: the street's own zkSNARKs come and queue)
+    if (PEOPLE_OFF) return;
     const h = (n: number) => hash(x, z, n, sd);
     m.box(x, 1, z, x + 1, 3, z + 1, legsC[Math.floor(h(1) * legsC.length)]);
     m.box(x, 3, z, x + 1, 5, z + 1, shirts[Math.floor(h(2) * shirts.length)]);

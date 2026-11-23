@@ -18,7 +18,7 @@ import type { Roads } from "./roads";
  * cheer. Now and then two of them fall out on their own — words first, then fists.
  */
 
-type Mode = "walk" | "chat" | "phone" | "idle" | "jog" | "flee" | "cheer" | "wave" | "fight" | "angry" | "argue" | "film" | "watch" | "call" | "hands" | "listen";
+type Mode = "walk" | "chat" | "phone" | "idle" | "jog" | "flee" | "cheer" | "wave" | "fight" | "angry" | "argue" | "film" | "watch" | "call" | "hands" | "listen" | "queue";
 type Temper = "coward" | "fighter" | "caller";
 
 interface Line {
@@ -77,6 +77,8 @@ export interface Ped {
   convoT: number;
   /** Last said something to you (ms). */
   barked: number;
+  /** In the queue at this place's door (it faces the door), or null. */
+  queue: { key: string; fx: number; fz: number } | null;
 }
 
 export interface PedWorld {
@@ -87,6 +89,8 @@ export interface PedWorld {
   floor(x: number, z: number): number;
   /** On the asphalt. */
   road(x: number, z: number): boolean;
+  /** Somewhere to stand still (a step or a plinth up included: a queue on a monument's terrace). */
+  stand(x: number, z: number): boolean;
 }
 
 /** What the street tells the game. */
@@ -158,6 +162,7 @@ const LINES_BUMP = ["Hey, watch it!", "Excuse you!", "Rude.", "Look where you're
 const LINES_CALL = ["Police? Someone's beating people up!", "Hello? There's a fight on the street!", "Yes, a zkSNARK just punched me!"];
 const LINES_FILM = ["This is going online.", "I'm filming this.", "Get it on camera!", "Oh, the views."];
 const LINES_CHEER = ["Fight! Fight!", "Hit him!", "Ooooh!", "Get him!"];
+const LINES_QUEUE = ["How long is this line?", "Worth it, they say.", "Is it free entry?", "Been here since block 3,600,000.", "Do they take ZEC at the door?", "My feet hurt.", "Almost there…"];
 const LINES_WIN = ["Stay down!", "That's what I thought.", "Next.", "Shielded and unbeaten."];
 const ARGUE = [
   ["You bumped my parcel!", "Then watch your parcel.", "Say that again.", "You heard me."],
@@ -237,6 +242,9 @@ export class Peds {
   private pool = Array.from({ length: 140 }, () => 1 + Math.floor(Math.random() * 10000));
   private scale: number;
   events: PedEvents = { hitMe: () => {}, report: () => {} };
+  /** The doors people queue at (the big sights'): where, the way out of them. */
+  queues: { key: string; x: number; z: number; fx: number; fz: number }[] = [];
+  private queueT = 0;
   /** Knocked out by you, this game. */
   kos = 0;
 
@@ -355,6 +363,7 @@ export class Peds {
           convoI: 0,
           convoT: 0,
           barked: 0,
+          queue: null,
         };
       };
       if (r < 0.18) {
@@ -382,6 +391,11 @@ export class Peds {
       if (Math.hypot(p.pos.x - me.x, p.pos.z - me.z) > GONE && p.knockT < 0) this.remove(i);
     }
     for (let k = 0; k < 3 && this.peds.length < target; k++) this.spawn(me.x, me.z, world, me.fx, me.fz);
+    this.queueT -= dt;
+    if (this.queueT <= 0) {
+      this.queueT = 1;
+      this.fillQueues(me, world);
+    }
     // a new block: the street cheers it
     if (live.at && live.at !== this.seenBlock) {
       const fresh = this.seenBlock !== 0;
@@ -389,7 +403,7 @@ export class Peds {
       if (fresh) {
         let said = false;
         for (const p of this.peds)
-          if (Math.hypot(p.pos.x - me.x, p.pos.z - me.z) < 35 && this.calm(p)) {
+          if (Math.hypot(p.pos.x - me.x, p.pos.z - me.z) < 35 && this.calm(p) && p.mode !== "queue") {
             this.leave(p);
             p.mode = "cheer";
             p.modeT = 2.2 + Math.random();
@@ -418,6 +432,81 @@ export class Peds {
     for (const b of this.bubbles) b.update(dt);
   }
 
+  /** A line of visitors at a sight's door, beside the way in, when you come near and there is none. */
+  private fillQueues(me: Me, world: PedWorld) {
+    for (const q of this.queues) {
+      const d = Math.hypot(q.x - me.x, q.z - me.z);
+      if (d > 42 || this.peds.some((p) => p.queue?.key === q.key)) continue;
+      if (!this.face()) return;
+      // beside the door's lane (it stays clear), stretching out from the door, on whichever side has room
+      const n = 4 + Math.floor(Math.random() * 4);
+      const spots = (sgn: number, side: number) => {
+        const out: { x: number; z: number }[] = [];
+        for (let i = 0; i < n + 6 && out.length < n; i++) {
+          const along = 1.6 + i * 0.95;
+          const x = q.x + q.fx * along + q.fz * sgn * side,
+            z = q.z + q.fz * along - q.fx * sgn * side;
+          if (world.stand(x, z) && !world.road(x, z)) out.push({ x, z });
+        }
+        return out;
+      };
+      let best: { x: number; z: number }[] = [];
+      for (const side of [2.3, 3.1, 4])
+        for (const sgn of [1, -1]) {
+          const c = spots(sgn, side);
+          if (c.length > best.length) best = c;
+        }
+      let made = 0;
+      for (const sp of best) {
+        const x = sp.x + (Math.random() - 0.5) * 0.25,
+          z = sp.z + (Math.random() - 0.5) * 0.25;
+        const l = this.lines[0];
+        if (!l) return;
+        const p: Ped = {
+          key: `g${++this.n}`,
+          id: this.face(),
+          pos: new THREE.Vector3(x, world.floor(x, z), z),
+          heading: Math.atan2(-q.fx, -q.fz),
+          line: l,
+          s: 0,
+          dir: 1,
+          speed: 1.2,
+          mode: "queue",
+          modeT: 9999,
+          mate: null,
+          face: new THREE.Vector3(-q.fx, 0, -q.fz),
+          knockT: -1,
+          knockV: new THREE.Vector3(),
+          knockSide: 1,
+          downFor: 3.6,
+          floor: world.floor(x, z),
+          greeted: 0,
+          cross: null,
+          side: 0,
+          sideT: 0,
+          hp: 100,
+          temper: Math.random() < 0.25 ? "fighter" : Math.random() < 0.2 ? "caller" : "coward",
+          foe: null,
+          guard: 0,
+          punchT: -1,
+          punchSide: 1,
+          nextPunch: 0,
+          hitT: 9,
+          push: new THREE.Vector3(),
+          watch: null,
+          callT: 0,
+          convo: null,
+          convoI: 0,
+          convoT: 0,
+          barked: 0,
+          queue: { key: q.key, fx: q.fx, fz: q.fz },
+        };
+        this.peds.push(p);
+        made++;
+      }
+    }
+  }
+
   private remove(i: number) {
     const p = this.peds[i];
     if (p.mate) p.mate.mate = null;
@@ -426,7 +515,7 @@ export class Peds {
   }
 
   private calm(p: Ped) {
-    return p.knockT < 0 && (p.mode === "walk" || p.mode === "idle" || p.mode === "phone" || p.mode === "jog" || p.mode === "chat" || p.mode === "wave");
+    return p.knockT < 0 && (p.mode === "walk" || p.mode === "idle" || p.mode === "phone" || p.mode === "jog" || p.mode === "chat" || p.mode === "wave" || p.mode === "queue");
   }
 
   private say(p: Ped, text: string, tone: "talk" | "shout" | "gold") {
@@ -567,6 +656,12 @@ export class Peds {
           this.say(p, pick(LINES_CHEER), "shout");
         }
       }
+    } else if (p.mode === "queue") {
+      facing = Math.atan2(-(p.queue?.fx ?? 0), -(p.queue?.fz ?? 1));
+      if (Math.random() < dt * 0.02 && dMe < 16 && now - p.barked > 8000) {
+        p.barked = now;
+        this.say(p, pick(LINES_QUEUE), "talk");
+      }
     } else if (p.mode === "listen") {
       // talking with you: facing you, still
       facing = Math.atan2(-dx, -dz);
@@ -656,6 +751,11 @@ export class Peds {
   private walkStep(p: Ped, dt: number, world: PedWorld) {
     let vx = 0,
       vz = 0;
+    // (off its pavement: out of a queue, a fight, a run) back to the nearest one first
+    if (!p.cross) {
+      const q = this.at(p.line, Math.max(0, Math.min(p.line.len, p.s)), new THREE.Vector3());
+      if (Math.hypot(q.x - p.pos.x, q.z - p.pos.z) > 4) this.snap(p);
+    }
     if (p.cross) {
       // crossing to the pavement opposite
       const cx = p.cross.x - p.pos.x,
@@ -877,6 +977,7 @@ export class Peds {
   }
 
   private leave(q: Ped) {
+    q.queue = null;
     if (q.mate) q.mate.mate = null;
     q.mate = null;
     q.convo = null;
@@ -1049,7 +1150,7 @@ export class Peds {
           return { k: (1 - (1 - fall) ** 2) * (1 - up * up), side: p.knockSide };
         },
         face: () => p.face ?? (p.mode === "walk" || p.mode === "jog" || p.mode === "flee" ? null : new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading))),
-        heading: () => (["fight", "argue", "angry", "hands", "film", "watch", "listen", "call"].includes(p.mode) || p.hitT < 0.6 ? p.heading : null),
+        heading: () => (["fight", "argue", "angry", "hands", "film", "watch", "listen", "call", "queue"].includes(p.mode) || p.hitT < 0.6 ? p.heading : null),
         pose: () =>
           p.mode === "chat"
             ? p.convo && p.convoI > 0

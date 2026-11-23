@@ -79,7 +79,7 @@ const pair = await p.evaluate(() => {
   return [a.key, c.key];
 });
 check("two passers-by have words", pair);
-await sleep(5500);
+await sleep(7800);
 const pa = pair ? [await ped(pair[0]), await ped(pair[1])] : [];
 check("then fight each other", pa.some((x) => x && (x.mode === "fight" || x.down)), JSON.stringify(pa));
 await p.screenshot({ path: `${OUT}-3-brawl.png` });

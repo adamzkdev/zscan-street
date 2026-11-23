@@ -2,6 +2,7 @@ import type { Built } from "../buildings";
 import { C, E, G, hash, VoxelModel, type Paint } from "../model";
 import type { LandmarkOpts } from "./index";
 import { lotSize } from "./lot";
+import { PEOPLE_OFF } from "./people";
 
 /**
  * WESTMINSTER: the Palace's river front in honey Anston limestone, Perpendicular Gothic. The long
@@ -660,6 +661,8 @@ export function parliament(seed: number, o: LandmarkOpts): Built {
   const skin = [C("#e8c4a0"), C("#c89670"), C("#8a5a3c"), C("#f0d0b4")];
   const shirts = ["#d04040", "#3a6ab0", "#f0f0f0", "#3e9a5a", "#f4b728", "#7a4ab0", "#e07a30", "#2a2a34", "#c8b490"].map((h) => C(h));
   const person = (x: number, z: number, sd: number) => {
+    // (no stand-in people of three voxels any more: the street's own zkSNARKs come and queue)
+    if (PEOPLE_OFF) return;
     const h = (n: number) => hash(x, z, n, sd);
     m.box(x, 1, z, x + 1, 3, z + 1, h(1) < 0.5 ? C("#2a3448") : C("#4a4038"));
     m.box(x, 3, z, x + 1, 5, z + 1, shirts[Math.floor(h(2) * shirts.length)]);

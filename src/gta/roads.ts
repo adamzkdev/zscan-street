@@ -207,7 +207,111 @@ export class Roads {
         if (!nodes[b].to.includes(a)) nodes[b].to.push(a);
       }
     }
+    this.onRect = onRect;
     return (this.nodes = nodes);
+  }
+  private onRect = new Map<Rect, number[]>();
+
+  /** The street (its rect) and the point on its middle line nearest (x, z). */
+  snap(x: number, z: number) {
+    let best: Rect | null = null,
+      bd = Infinity,
+      px = x,
+      pz = z;
+    for (const r of this.rects) {
+      const qx = r.axis === "x" ? Math.min(r.x1, Math.max(r.x0, x)) : r.at;
+      const qz = r.axis === "x" ? r.at : Math.min(r.z1, Math.max(r.z0, z));
+      const d = Math.hypot(qx - x, qz - z);
+      if (d < bd) ((bd = d), (best = r), (px = qx), (pz = qz));
+    }
+    return best ? { r: best, x: px, z: pz, d: bd } : null;
+  }
+
+  /**
+   * The GPS: the way by the streets from A to B, as the games draw it — out onto A's street, along
+   * it to a junction, junction to junction, onto B's street and to the point of it nearest B, then B.
+   */
+  gps(ax: number, az: number, bx: number, bz: number): { x: number; z: number }[] {
+    const nodes = this.graph();
+    const A = this.snap(ax, az),
+      B = this.snap(bx, bz);
+    if (!A || !B) return [{ x: ax, z: az }, { x: bx, z: bz }];
+    const head = [{ x: ax, z: az }, { x: A.x, z: A.z }];
+    const tail = [{ x: B.x, z: B.z }, { x: bx, z: bz }];
+    const along = (r: Rect, x: number, z: number) => (r.axis === "x" ? x : z);
+    // the same street, nothing between: straight along it
+    if (A.r === B.r) return [...head, ...tail];
+    // the junctions either side of a point on its street (or all of them, a short street)
+    const ends = (r: Rect, x: number, z: number) => {
+      const list = this.onRect.get(r) ?? [];
+      const t = along(r, x, z);
+      let lo = -1,
+        hi = -1;
+      for (const i of list) {
+        const u = along(r, nodes[i].x, nodes[i].z);
+        if (u <= t && (lo < 0 || u > along(r, nodes[lo].x, nodes[lo].z))) lo = i;
+        if (u >= t && (hi < 0 || u < along(r, nodes[hi].x, nodes[hi].z))) hi = i;
+      }
+      return [lo, hi].filter((i, k, a) => i >= 0 && a.indexOf(i) === k).map((i) => ({ i, d: Math.hypot(nodes[i].x - x, nodes[i].z - z) }));
+    };
+    const starts = ends(A.r, A.x, A.z),
+      goal = new Map(ends(B.r, B.x, B.z).map((e) => [e.i, e.d]));
+    if (!starts.length || !goal.size) return [...head, ...tail];
+    const g = new Map<number, number>(),
+      from = new Map<number, number>(),
+      open = new Set<number>();
+    for (const e of starts) {
+      g.set(e.i, e.d);
+      from.set(e.i, -1);
+      open.add(e.i);
+    }
+    let best = -1,
+      bestCost = Infinity;
+    while (open.size) {
+      let cur = -1,
+        cf = Infinity;
+      for (const i of open) {
+        const f = g.get(i)! + Math.hypot(nodes[i].x - B.x, nodes[i].z - B.z);
+        if (f < cf) ((cf = f), (cur = i));
+      }
+      if (cf >= bestCost) break;
+      open.delete(cur);
+      const end = goal.get(cur);
+      if (end !== undefined && g.get(cur)! + end < bestCost) ((bestCost = g.get(cur)! + end), (best = cur));
+      for (const n of nodes[cur].to) {
+        const ng = g.get(cur)! + Math.hypot(nodes[n].x - nodes[cur].x, nodes[n].z - nodes[cur].z);
+        if (ng < (g.get(n) ?? Infinity)) {
+          g.set(n, ng);
+          from.set(n, cur);
+          open.add(n);
+        }
+      }
+    }
+    if (best < 0) return [...head, ...tail];
+    const mid: { x: number; z: number }[] = [];
+    for (let i = best; i >= 0; i = from.get(i) ?? -1) mid.unshift({ x: nodes[i].x, z: nodes[i].z });
+    return [...head, ...mid, ...tail];
+  }
+
+  /** Where to write each street's name on a map: its middle line, its length (one per stretch). */
+  labels(): { name: string; x: number; z: number; axis: "x" | "z"; len: number; width: number }[] {
+    return this.rects.map((r) => ({ name: r.name, x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2, axis: r.axis, len: r.axis === "x" ? r.x1 - r.x0 : r.z1 - r.z0, width: r.axis === "x" ? r.z1 - r.z0 : r.x1 - r.x0 }));
+  }
+
+  /** The districts' middles (where to write their names on a map). */
+  districts(): { name: string; x: number; z: number }[] {
+    const acc = new Map<string, { x: number; z: number; n: number }>();
+    for (let x = CITY.minX + 6; x < CITY.maxX; x += 12)
+      for (let z = CITY.minZ + 6; z < CITY.maxZ; z += 12) {
+        const n = this.district(x, z);
+        if (n === "ZStreet") continue;
+        const a = acc.get(n) ?? { x: 0, z: 0, n: 0 };
+        a.x += x;
+        a.z += z;
+        a.n++;
+        acc.set(n, a);
+      }
+    return [...acc].filter(([, a]) => a.n > 6).map(([name, a]) => ({ name, x: a.x / a.n, z: a.z / a.n }));
   }
 
   /**

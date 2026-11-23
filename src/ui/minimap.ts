@@ -102,6 +102,12 @@ void main() {
   gl_FragColor = vec4(cls / 255.0, clamp(vY / 80.0, 0.0, 1.0), 0.0, 1.0);
 }`;
 
+/** The last bake's classes (0 void, 1 water, 2 road, 3 pavement, 4 green, 5 building, 6 sand) and heights (0…255 = 0…80 m), rows from the north: for the game's own map (src/gta/atlas.ts). */
+let baked: { cls: Uint8Array; hgt: Uint8Array; res: number } | null = null;
+export function bakedClasses() {
+  return baked;
+}
+
 /** The city seen straight down once, coloured by height: the radar's background. */
 function bake(renderer: THREE.WebGLRenderer, scene: THREE.Scene): HTMLCanvasElement {
   const mat = new THREE.ShaderMaterial({
@@ -193,6 +199,7 @@ function paint(px: Uint8Array): HTMLCanvasElement {
     }
   // what a removed speck stood on: the pavement, unless it was on the road
   for (let i = 0; i < N; i++) if (isB(i) && !keep[i]) cls[i] = K.Pave;
+  baked = { cls, hgt, res: RES };
   const c = document.createElement("canvas");
   c.width = c.height = RES;
   const g = c.getContext("2d")!;

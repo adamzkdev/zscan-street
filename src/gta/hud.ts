@@ -1,6 +1,17 @@
 import "./gta.css";
 import { MAP_FRAME } from "../ui/minimap";
 import { KIND_COLOR, KIND_LABEL, type Kind, type Spot } from "./missions";
+import { atlas, SEA } from "./atlas";
+import { blip, CAT, label, pin, routeLine, type Cat } from "./mapkit";
+
+/** What the big map knows that does not change (the streets' names, the districts, the doors, the lines). */
+export interface MapData {
+  streets: { name: string; x: number; z: number; axis: "x" | "z"; len: number; width: number }[];
+  districts: { name: string; x: number; z: number }[];
+  buildings: { x: number; z: number; label: string; cat: Cat }[];
+  lines: { name: string; color: string; points: { x: number; z: number }[]; stations: { name: string; x: number; z: number }[] }[];
+  ferries: { x: number; z: number; label: string }[];
+}
 
 /**
  * The game's HUD (src/gta), in the open-world style: a round radar bottom-left that turns with the
@@ -48,7 +59,12 @@ export interface HudState {
   next: string | null;
   spots: Spot[];
   /** The street's own places for the maps. */
-  places: { x: number; z: number; label: string; icon?: string }[];
+  places: { x: number; z: number; label: string; icon?: string; cat?: Cat }[];
+  /** The GPS: the way by the streets (to the waypoint, else the objective), its colour; the waypoint; your parked car. */
+  route: { x: number; z: number }[] | null;
+  routeColor: string;
+  waypoint: { x: number; z: number } | null;
+  car: { x: number; z: number } | null;
   /** Other people about (dots). */
   people: { x: number; z: number }[];
   cars: { x: number; z: number }[];
@@ -66,6 +82,10 @@ export interface MenuHost {
   leave(): void;
   garage(): void;
   teleport(x: number, z: number): void;
+  /** A waypoint set on the map (null: cleared). */
+  waypoint(p: { x: number; z: number } | null): void;
+  /** The street and the district at a point (for the map's pointer). */
+  where(x: number, z: number): { street: string; district: string };
   settings: Settings;
   apply(s: Settings): void;
   progress(): { rows: [string, string][]; balance: number };
@@ -126,6 +146,11 @@ export class GtaHud {
   private mapAt = { x: 0, z: -40 };
   private mapDrag: { x: number; y: number; moved: number } | null = null;
   private shown = new Set<Kind>(["run", "ride", "board", "trap"]);
+  /** The kinds of places shown on the big map. */
+  private cats = new Set<Cat>(["hq", "sight", "fun", "shop", "food", "bar", "work", "metro", "ferry", "car"]);
+  /** The map's fixed knowledge (from the game, once its streets are in). */
+  mapData: () => MapData | null = () => null;
+  private hoverAt: { x: number; z: number } | null = null;
   private last: HudState | null = null;
   paused = false;
   private tab = "camera";
@@ -173,7 +198,7 @@ export class GtaHud {
         <header><h2>Map</h2><span class="gh-msub"></span></header>
         <aside class="gh-legend"></aside>
         <div class="gh-mctl"><button data-act="zin" title="Zoom in">+</button><button data-act="zout" title="Zoom out">−</button><button data-act="me" title="On me">◎</button><button data-act="mclose" title="Close (M)">×</button></div>
-        <footer>Scroll to zoom · drag to move · click a street to go there · <kbd>M</kbd> close</footer>
+        <footer><span class="gh-mhover"></span><span class="gh-mway"></span><span class="gh-mhelp">Scroll to zoom · drag to move · click to set a waypoint · <kbd>M</kbd> close</span></footer>
       </div>
       <div class="gh-pause" role="dialog" aria-modal="true" aria-label="Menu"><div class="gh-pcard">
         <nav><h2>Menu<small>Paused</small></h2><div class="gh-tabs"></div><div class="grow"></div><button class="gta-btn white" data-act="resume">Resume</button></nav>
@@ -206,6 +231,15 @@ export class GtaHud {
       else if (a === "zout") this.zoomMap(1 / 1.4);
       else if (a === "me" && this.last) (this.mapAt = { x: this.last.x, z: this.last.z }), this.drawMap();
       else if (a === "mclose") this.toggleMap(false);
+      else if (a === "travel" && this.last?.waypoint) {
+        const w = this.last.waypoint;
+        this.menu.waypoint(null);
+        this.menu.teleport(w.x, w.z);
+        this.toggleMap(false);
+      } else if (a === "wclear") {
+        this.menu.waypoint(null);
+        setTimeout(() => this.drawMap(), 30);
+      }
     });
     // touch buttons: held like keys
     for (const b of this.root.querySelectorAll<HTMLElement>(".gh-touch [data-t]")) {
@@ -287,7 +321,7 @@ export class GtaHud {
         : "Connecting to the chain…";
       this.$(".gh-where .gh-dist").textContent = s.district;
       this.$(".gh-where .gh-st").textContent = s.street;
-      this.$(".gh-where .gh-nx").textContent = s.next ? `Next · ${s.next}` : "";
+      this.$(".gh-where .gh-nx").textContent = s.waypoint ? `Waypoint · ${fmtDist(Math.hypot(s.waypoint.x - s.x, s.waypoint.z - s.z))}` : s.next ? `Next · ${s.next}` : "";
     }
     // what's next
     const g = s.goal;
@@ -378,16 +412,19 @@ export class GtaHud {
       g.drawImage(base, (s.x - m - x0) * sc, (s.z - m - z0) * sc, 2 * m * sc, 2 * m * sc, s.x - m, s.z - m, 2 * m, 2 * m);
       g.globalAlpha = 1;
     }
-    // the way to the objective: a line
-    if (s.goal?.goal) {
-      g.strokeStyle = KIND_COLOR[s.goal.kind];
-      g.lineWidth = 3 / k;
-      g.setLineDash([6 / k, 5 / k]);
+    // the GPS: the way by the streets
+    if (s.route && s.route.length > 1) {
+      g.lineCap = "round";
+      g.lineJoin = "round";
       g.beginPath();
-      g.moveTo(s.x, s.z);
-      g.lineTo(s.goal.x, s.goal.z);
+      g.moveTo(s.route[0].x, s.route[0].z);
+      for (const q of s.route.slice(1)) g.lineTo(q.x, q.z);
+      g.strokeStyle = "rgba(10,8,18,0.6)";
+      g.lineWidth = (6.5 * dpr) / k;
       g.stroke();
-      g.setLineDash([]);
+      g.strokeStyle = s.routeColor;
+      g.lineWidth = (4 * dpr) / k;
+      g.stroke();
     }
     g.restore();
     const cos = Math.cos(rot),
@@ -397,18 +434,14 @@ export class GtaHud {
         dz = (z - s.z) * k;
       return [dx * cos - dz * sin, dx * sin + dz * cos] as const;
     };
-    // people and cars as small dots
-    g.fillStyle = "rgba(255,255,255,0.55)";
-    for (const p of s.cars) {
-      const [rx, ry] = to(p.x, p.z);
-      if (rx * rx + ry * ry < R * R) g.fillRect(cx + rx - 1.5 * dpr, cy + ry - 1.5 * dpr, 3 * dpr, 3 * dpr);
-    }
-    g.fillStyle = "rgba(95,215,255,0.8)";
-    for (const p of s.people) {
+    // (the crowd and the traffic stay off the radar, as in the games: only who is after you)
+    g.fillStyle = "#ff4d4d";
+    for (const p of s.people as { x: number; z: number; angry?: boolean }[]) {
+      if (!p.angry) continue;
       const [rx, ry] = to(p.x, p.z);
       if (rx * rx + ry * ry < R * R) {
         g.beginPath();
-        g.arc(cx + rx, cy + ry, 1.6 * dpr, 0, Math.PI * 2);
+        g.arc(cx + rx, cy + ry, 3 * dpr, 0, Math.PI * 2);
         g.fill();
       }
     }
@@ -437,7 +470,18 @@ export class GtaHud {
     for (const p of s.places) {
       const [rx, ry] = to(p.x, p.z);
       if (rx * rx + ry * ry > (R - 8 * dpr) ** 2) continue;
-      this.badge(g, cx + rx, cy + ry, "#f4b728", p.icon ?? "•", dpr, 6.5);
+      blip(g, p.cat ?? "sight", cx + rx, cy + ry, 6.5 * dpr, dpr);
+    }
+    if (s.car && !s.inCar) {
+      const [rx, ry] = to(s.car.x, s.car.z);
+      if (rx * rx + ry * ry < (R - 8 * dpr) ** 2) blip(g, "car", cx + rx, cy + ry, 6.5 * dpr, dpr);
+    }
+    if (s.waypoint) {
+      let [rx, ry] = to(s.waypoint.x, s.waypoint.z);
+      const d = Math.hypot(rx, ry),
+        lim = R - 12 * dpr;
+      if (d > lim) ((rx *= lim / d), (ry *= lim / d));
+      pin(g, cx + rx, cy + ry + 6 * dpr, 13 * dpr);
     }
     for (const p of s.spots) {
       if (!this.shown.has(p.kind) && !p.goal) continue;
@@ -463,21 +507,6 @@ export class GtaHud {
     const n = this.$(".gh-n");
     const nr = R / dpr - 2;
     n.style.transform = `translate(${(sin * nr).toFixed(1)}px, ${(-cos * nr).toFixed(1)}px) translate(-50%, -50%)`;
-  }
-
-  private badge(g: CanvasRenderingContext2D, x: number, y: number, c: string, ch: string, dpr: number, r: number) {
-    g.beginPath();
-    g.arc(x, y, r * dpr, 0, Math.PI * 2);
-    g.fillStyle = "rgba(10,11,16,0.92)";
-    g.fill();
-    g.strokeStyle = c;
-    g.lineWidth = 1.3 * dpr;
-    g.stroke();
-    g.fillStyle = c;
-    g.font = `${8.5 * dpr}px DotGothic16, monospace`;
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.fillText(ch, x, y + 0.5 * dpr);
   }
 
   private dot(g: CanvasRenderingContext2D, x: number, y: number, c: string, dpr: number, goal = false, done = false) {
@@ -554,16 +583,30 @@ export class GtaHud {
 
   private mapEvents() {
     const cv = this.bigCv;
+    const toWorld = (e: { clientX: number; clientY: number }) => {
+      const r = cv.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const k = this.mapScale() / dpr;
+      return { x: this.mapAt.x + (e.clientX - r.left - r.width / 2) / k, z: this.mapAt.z + (e.clientY - r.top - r.height / 2) / k };
+    };
     cv.addEventListener("wheel", (e) => {
       e.preventDefault();
-      this.zoomMap(e.deltaY < 0 ? 1.15 : 1 / 1.15);
+      // zoom about the pointer: what is under it stays under it
+      const w = toWorld(e);
+      const before = this.mapZoom;
+      this.mapZoom = Math.max(0.6, Math.min(9, this.mapZoom * (e.deltaY < 0 ? 1.18 : 1 / 1.18)));
+      const f = before / this.mapZoom;
+      this.mapAt.x = w.x + (this.mapAt.x - w.x) * f;
+      this.mapAt.z = w.z + (this.mapAt.z - w.z) * f;
+      this.drawMap();
     });
     cv.addEventListener("pointerdown", (e) => {
       this.mapDrag = { x: e.clientX, y: e.clientY, moved: 0 };
       cv.setPointerCapture(e.pointerId);
     });
     cv.addEventListener("pointermove", (e) => {
-      if (!this.mapDrag) return;
+      this.hoverAt = toWorld(e);
+      if (!this.mapDrag) return this.drawMap();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const k = this.mapScale() / dpr;
       const dx = e.clientX - this.mapDrag.x,
@@ -575,18 +618,22 @@ export class GtaHud {
       this.mapAt.z -= dy / k;
       this.drawMap();
     });
+    cv.addEventListener("pointerleave", () => {
+      this.hoverAt = null;
+      this.drawMap();
+    });
     cv.addEventListener("pointerup", (e) => {
       const d = this.mapDrag;
       this.mapDrag = null;
       if (!d || d.moved > 6) return;
-      // a click: go there
-      const r = cv.getBoundingClientRect();
+      // a click: the waypoint there (on the one already set: taken off)
+      const w = toWorld(e);
+      const s = this.last;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const k = this.mapScale() / dpr;
-      const x = this.mapAt.x + (e.clientX - r.left - r.width / 2) / k;
-      const z = this.mapAt.z + (e.clientY - r.top - r.height / 2) / k;
-      this.menu.teleport(x, z);
-      this.toggleMap(false);
+      if (s?.waypoint && Math.hypot(s.waypoint.x - w.x, s.waypoint.z - w.z) * k < 16) this.menu.waypoint(null);
+      else this.menu.waypoint(w);
+      setTimeout(() => this.drawMap(), 30);
     });
   }
 
@@ -602,7 +649,16 @@ export class GtaHud {
     const total = fixed.reduce((a, k) => a + count(k).of, 0),
       done = fixed.reduce((a, k) => a + count(k).done, 0);
     this.$(".gh-msub").textContent = `${s.district} · ${done} of ${total} challenges`;
+    const md = this.mapData();
+    const have = new Set<Cat>(s.places.map((p) => p.cat ?? "sight"));
+    for (const b of md?.buildings ?? []) have.add(b.cat);
+    if (md?.lines.length) have.add("metro");
+    if (md?.ferries.length) have.add("ferry");
+    if (s.car) have.add("car");
+    const cats = (Object.keys(CAT) as Cat[]).filter((c) => have.has(c));
     this.$(".gh-legend").innerHTML =
+      `<h3>On the map</h3>` +
+      cats.map((c) => `<button class="gh-lg gh-lc ${this.cats.has(c) ? "on" : ""}" data-c="${c}"><canvas width="36" height="36"></canvas><span>${CAT[c].label}</span></button>`).join("") +
       `<h3>Challenges <span>${done} / ${total}</span></h3>` +
       kinds
         .map((k) => {
@@ -610,7 +666,18 @@ export class GtaHud {
           return `<button class="gh-lg ${this.shown.has(k) ? "on" : ""}" data-k="${k}" style="--k:${KIND_COLOR[k]}"><i>${icon(k)}</i><span>${KIND_LABEL[k]}</span><small>${k === "run" || k === "ride" ? "live" : `${c.done}/${c.of}`}</small></button>`;
         })
         .join("");
-    for (const b of this.root.querySelectorAll<HTMLElement>(".gh-lg"))
+    for (const b of this.root.querySelectorAll<HTMLElement>(".gh-lc")) {
+      const cv = b.querySelector("canvas")!;
+      blip(cv.getContext("2d")!, b.dataset.c as Cat, 18, 18, 15, 2);
+      b.addEventListener("click", () => {
+        const c = b.dataset.c as Cat;
+        if (this.cats.has(c)) this.cats.delete(c);
+        else this.cats.add(c);
+        this.legend();
+        this.drawMap();
+      });
+    }
+    for (const b of this.root.querySelectorAll<HTMLElement>(".gh-lg[data-k]"))
       b.addEventListener("click", () => {
         const k = b.dataset.k as Kind;
         if (this.shown.has(k)) this.shown.delete(k);
@@ -620,69 +687,162 @@ export class GtaHud {
       });
   }
 
+  /**
+   * The big map: the city as a road atlas, the metro's lines, the streets' and the districts' names,
+   * the places by kind (the shops, cafés and bars close up), the GPS's way, the waypoint, you.
+   */
   private drawMap() {
     const s = this.last;
-    const base = this.base();
     if (!s) return;
+    const md = this.mapData();
     const cv = this.bigCv;
     const dpr = this.fit(cv);
     const g = cv.getContext("2d")!;
     const W = cv.width,
       H = cv.height;
     const k = this.mapScale();
-    const at = (x: number, z: number) => [W / 2 + (x - this.mapAt.x) * k, H / 2 + (z - this.mapAt.z) * k] as const;
+    const z = this.mapZoom;
+    const at = (x: number, zz: number) => [W / 2 + (x - this.mapAt.x) * k, H / 2 + (zz - this.mapAt.z) * k] as const;
+    const inView = (x: number, y: number, m = 30) => x > -m && y > -m && x < W + m && y < H + m;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    // round the island: the sea (the base map's own water colour)
-    g.fillStyle = "#1e4e76";
+    g.fillStyle = SEA;
     g.fillRect(0, 0, W, H);
-    if (base) {
+    const img = atlas() ?? this.base();
+    if (img) {
       const span = MAP_FRAME.span;
       const [bx, by] = at(MAP_FRAME.cx - span / 2, MAP_FRAME.cz - span / 2);
-      g.imageSmoothingEnabled = true;
-      g.globalAlpha = 0.95;
-      g.drawImage(base, bx, by, span * k, span * k);
-      g.globalAlpha = 1;
+      g.imageSmoothingEnabled = z < 3;
+      g.drawImage(img, bx, by, span * k, span * k);
     }
-    // the street names along the big roads
-    g.font = `${10 * dpr}px 'JetBrains Mono', monospace`;
     g.textAlign = "center";
     g.textBaseline = "middle";
-    const labels: [number, number, string, string][] = [];
-    for (const p of s.places) {
-      const [x, y] = at(p.x, p.z);
-      if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
-      this.badge(g, x, y, "#f4b728", p.icon ?? "•", dpr, 7.5);
-      if (this.mapZoom > 1.6) labels.push([x, y + 14 * dpr, p.label, "#f3e6c0"]);
+    const disp = (w: number, px: number) => `${w} ${px * dpr}px Archivo, "Helvetica Neue", sans-serif`;
+    // the metro: its viaducts, its stations
+    if (md && this.cats.has("metro"))
+      for (const l of md.lines) {
+        const pts = l.points.map((p) => at(p.x, p.z));
+        g.save();
+        g.lineJoin = "round";
+        g.beginPath();
+        pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+        g.strokeStyle = "rgba(255,255,255,0.85)";
+        g.lineWidth = 5 * dpr;
+        g.stroke();
+        g.strokeStyle = l.color;
+        g.lineWidth = 2.6 * dpr;
+        g.setLineDash([7 * dpr, 4 * dpr]);
+        g.stroke();
+        g.restore();
+      }
+    // the districts' names, from afar
+    if (md && z < 2.6) {
+      g.globalAlpha = Math.min(1, (2.6 - z) / 0.8) * 0.72;
+      for (const d of md.districts) {
+        const [x, y] = at(d.x, d.z);
+        if (inView(x, y, 100)) label(g, d.name, x, y, disp(800, 17), "#5d5246", "rgba(250,249,245,0.8)", 4 * dpr);
+      }
+      g.globalAlpha = 1;
     }
-    if (s.goal?.goal) {
-      const [x0, y0] = at(s.x, s.z),
-        [x1, y1] = at(s.goal.x, s.goal.z);
-      g.strokeStyle = KIND_COLOR[s.goal.kind];
-      g.lineWidth = 3 * dpr;
-      g.setLineDash([8 * dpr, 6 * dpr]);
-      g.beginPath();
-      g.moveTo(x0, y0);
-      g.lineTo(x1, y1);
-      g.stroke();
-      g.setLineDash([]);
+    // the streets' names, along them, when they fit
+    if (md && z > 0.8) {
+      const seen = new Map<string, [number, number][]>();
+      for (const st of md.streets) {
+        const big = st.width > 15;
+        if (!big && z < 1.5) continue;
+        const font = disp(big ? 700 : 600, (big ? 12.5 : 11.5) * Math.min(1.25, 0.85 + z * 0.1));
+        g.font = font;
+        const tw = g.measureText(st.name).width;
+        const lenPx = st.len * k;
+        if (lenPx < tw + 30 * dpr) continue;
+        const n = Math.max(1, Math.floor(lenPx / (520 * dpr)));
+        for (let i = 0; i < n; i++) {
+          const f = (i + 0.5) / n - 0.5;
+          const wx = st.axis === "x" ? st.x + f * st.len : st.x,
+            wz = st.axis === "z" ? st.z + f * st.len : st.z;
+          const [x, y] = at(wx, wz);
+          if (!inView(x, y)) continue;
+          // (the same name close by once only: a street cut by junctions)
+          const near = seen.get(st.name) ?? [];
+          if (near.some(([px, py]) => Math.hypot(px - x, py - y) < 260 * dpr)) continue;
+          near.push([x, y]);
+          seen.set(st.name, near);
+          g.save();
+          g.translate(x, y);
+          if (st.axis === "z") g.rotate(-Math.PI / 2);
+          label(g, st.name, 0, 0, font, "#3b3833", "rgba(255,255,255,0.95)", 3.2 * dpr);
+          g.restore();
+        }
+      }
+    }
+    // the GPS
+    if (s.route && s.route.length > 1) routeLine(g, s.route.map((p) => at(p.x, p.z)), s.routeColor, 5 * dpr);
+    // what is close up: the shops, cafés and bars, the offices (their doors)
+    const labels: [number, number, string][] = [];
+    if (md && z > 1.9)
+      for (const b of md.buildings) {
+        if (!this.cats.has(b.cat)) continue;
+        const [x, y] = at(b.x, b.z);
+        if (!inView(x, y)) continue;
+        blip(g, b.cat, x, y, 6.5 * dpr, dpr);
+        if (z > 3.2) labels.push([x, y + 13 * dpr, b.label]);
+      }
+    if (md && this.cats.has("metro"))
+      for (const l of md.lines)
+        for (const st of l.stations) {
+          const [x, y] = at(st.x, st.z);
+          if (!inView(x, y)) continue;
+          blip(g, "metro", x, y, 7.5 * dpr, dpr, l.color);
+          if (z > 1.6) labels.push([x, y + 15 * dpr, st.name]);
+        }
+    if (md && this.cats.has("ferry"))
+      for (const f of md.ferries) {
+        const [x, y] = at(f.x, f.z);
+        if (inView(x, y)) blip(g, "ferry", x, y, 8 * dpr, dpr);
+      }
+    // the places
+    for (const p of s.places) {
+      const c = p.cat ?? "sight";
+      if (!this.cats.has(c)) continue;
+      const [x, y] = at(p.x, p.z);
+      if (!inView(x, y)) continue;
+      blip(g, c, x, y, 9.5 * dpr, dpr);
+      if (z > 1.25) labels.push([x, y + 17 * dpr, p.label]);
+    }
+    if (s.car && this.cats.has("car")) {
+      const [x, y] = at(s.car.x, s.car.z);
+      if (inView(x, y)) blip(g, "car", x, y, 9 * dpr, dpr);
     }
     for (const p of s.spots) {
       if (!this.shown.has(p.kind) && !p.goal) continue;
       const [x, y] = at(p.x, p.z);
-      if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
+      if (!inView(x, y)) continue;
       this.dot(g, x, y, KIND_COLOR[p.kind], dpr * 1.3, p.goal, p.done);
-      if (p.goal || this.mapZoom > 1.15) labels.push([x, y - 14 * dpr, p.label, KIND_COLOR[p.kind]]);
+      if (p.goal || z > 1.6) labels.push([x, y - 15 * dpr, p.label]);
     }
-    for (const [x, y, l, c] of labels) {
-      g.font = `600 ${10.5 * dpr}px 'JetBrains Mono', monospace`;
-      g.lineWidth = 3.5 * dpr;
-      g.strokeStyle = "rgba(7,8,11,0.92)";
-      g.strokeText(l, x, y);
-      g.fillStyle = c;
-      g.fillText(l, x, y);
+    const blink = Math.floor(performance.now() / 250) % 2 === 0;
+    for (const c of s.cops) {
+      const [x, y] = at(c.x, c.z);
+      if (inView(x, y)) this.dot(g, x, y, blink ? "#ff3b3b" : "#3b7bff", dpr * 1.2);
+    }
+    g.textAlign = "center";
+    for (const [x, y, l] of labels) label(g, l, x, y, disp(700, 11.5), "#24221f", "rgba(255,255,255,0.95)", 3.4 * dpr);
+    if (s.waypoint) {
+      const [x, y] = at(s.waypoint.x, s.waypoint.z);
+      pin(g, x, y, 22 * dpr);
     }
     const [px, py] = at(s.x, s.z);
-    this.arrow(g, px, py, -s.heading, dpr * 1.4);
+    this.arrow(g, px, py, -s.heading, dpr * 1.5);
+    // the pointer's street; the waypoint's distance
+    const hv = this.hoverAt ? this.menu.where(this.hoverAt.x, this.hoverAt.z) : null;
+    const ht = hv ? `${hv.street} · ${hv.district}` : "";
+    const he = this.$(".gh-mhover");
+    if (he.textContent !== ht) he.textContent = ht;
+    const way = s.waypoint ? `<i></i><b>Waypoint</b><span>${fmtDist(Math.hypot(s.waypoint.x - s.x, s.waypoint.z - s.z))}</span><button class="gta-btn" data-act="travel">Fast travel</button><button class="gta-btn ghost" data-act="wclear">Clear</button>` : "";
+    const we = this.$(".gh-mway");
+    if (we.dataset.html !== way) {
+      we.dataset.html = way;
+      we.innerHTML = way;
+    }
   }
 
   // ---- toasts, cards, prompts, the coach ---------------------------------------------------------------

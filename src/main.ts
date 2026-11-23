@@ -3112,7 +3112,7 @@ gta = new GtaMode({
     for (const s of director.snarks) if (s.root.visible && s.root.parent === scene) yield { x: s.root.position.x, z: s.root.position.z };
   },
   baseMap: () => minimap.baseMap(),
-  places: () => placeBlips.map((b) => ({ x: b.x, z: b.z, label: b.label ?? "", icon: b.icon })),
+  places: () => doors.filter((d) => d !== buildingDoor).map((d) => ({ x: d.at.x, z: d.at.z, label: PLACES[d.key] ?? d.key, icon: PLACE_ICON[d.key], key: d.key })),
   hq: () => (city.shops[0] ? { x: city.shops[0].door.x, z: city.shops[0].door.z } : null),
   audio: () => sound.output(),
   soundOn: () => sound.on,
