@@ -838,6 +838,7 @@ try {
 
 // ---- walk-in places ----------------------------------------------------------------------------
 const PLACES: Record<Interior["key"], string> = {
+  building: "BUILDING",
   mempool: "MEMPOOL HQ",
   factory: "PROOF FACTORY",
   library: "BINHAI LIBRARY",
@@ -1005,6 +1006,8 @@ const PLACE_CODE: Record<Interior["key"], () => Promise<PlaceBuilder>> = {
   cemetery: () => import("./interior/cemetery").then((m) => m.buildCemetery),
   gamehouse: () => import("./interior/gamehouse").then((m) => m.buildGameHouse),
   nu7tower: () => import("./interior/nu7tower").then((m) => m.buildNu7Tower),
+  // any building of the city, walked into from the game (src/gta): dressed again on every visit
+  building: () => import("./interior/building").then((m) => m.buildBuilding),
 };
 const placeBuilders: Partial<Record<Interior["key"], PlaceBuilder>> = {};
 const placeLoads = new Map<Interior["key"], Promise<void>>();
@@ -1254,6 +1257,9 @@ const doors: { key: Interior["key"]; at: THREE.Vector3; front: THREE.Vector3 }[]
   // the NU7 TOWER's doors on its plaza (the tower is game/nu7quarter.ts's: open once NU7 is live)
   { key: "nu7tower" as const, at: new THREE.Vector3(NU7Q.door.x, CURB, NU7Q.door.z), front: new THREE.Vector3(0, 0, 1) },
 ];
+/** Any building of the city walked into from the game (src/gta): its door is set at each visit. */
+const buildingDoor = { key: "building" as const, at: new THREE.Vector3(), front: new THREE.Vector3(0, 0, 1) };
+doors.push(buildingDoor);
 /** Out of a door: from a point inside the building to the door, flat. */
 function away(door: THREE.Vector3, inside: THREE.Vector3) {
   return door.clone().sub(inside).setY(0).normalize();
@@ -1360,7 +1366,7 @@ function throughDoors(dt: number) {
     fz = -Math.cos(onFoot.heading);
   let best: { d: (typeof doors)[number]; dist: number; facing: number } | null = null;
   for (const d of doors) {
-    if (d === doorLeft) continue;
+    if (d === doorLeft || d === buildingDoor) continue;
     if (d.key === "nu7tower" && !nu7Quarter.done) continue;
     const dx = d.at.x - p.x,
       dz = d.at.z - p.z;
@@ -2279,6 +2285,7 @@ const minimap = new Minimap(document.getElementById("ui")!, renderer, scene);
 let minimapOn = false;
 /** Each place's sign on the map, in the city's kanji. */
 const PLACE_ICON: Record<Interior["key"], string> = {
+  building: "建",
   mempool: "待",
   factory: "工",
   library: "書",
@@ -2313,7 +2320,7 @@ const PLACE_ICON: Record<Interior["key"], string> = {
   gamehouse: "遊",
   nu7tower: "七",
 };
-const placeBlips: Blip[] = doors.map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));
+const placeBlips: Blip[] = doors.filter((d) => d !== buildingDoor).map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));
 function mapBlips(): Blip[] {
   const out = [...placeBlips];
   const g = jobs?.goal;
@@ -2941,6 +2948,7 @@ gta = new GtaMode({
   renderer,
   interior: () => (interiors.active ? { walk: interiors.walk, scene: interiors.active.scene } : null),
   interiorWalker: interiors.walk,
+  riding: () => !!interiors.circ?.ride,
   pickCamera: (cam) => (interiors.viewCam = cam),
   movers: () => [
     ...[...director.snarks].map((s) => s.root),
@@ -2951,15 +2959,32 @@ gta = new GtaMode({
     ...[...metro.trains, ...metro2.trains].map((t) => t.group),
     sky.blimp.group,
   ],
-  footSpecial: (x, z) => (x > PRISON.x0 && x < PRISON.x1 && z > PRISON.z0 && z < PRISON.z1) || goldenGate.onDeck(x, z) || forest.owns(x, z) || groundAt(x, z) !== null,
+  // (raised floors a body walks on: the deck, the woods, platforms and stairs up; a footbridge's gentle hump is the solid shape's)
+  footSpecial: (x, z) => {
+    if ((x > PRISON.x0 && x < PRISON.x1 && z > PRISON.z0 && z < PRISON.z1) || goldenGate.onDeck(x, z) || forest.owns(x, z)) return true;
+    const g = groundAt(x, z);
+    return g !== null && g > CURB + 0.45;
+  },
   footSmall: (x, z) => !city.nav.freeSmall(x, z, 0.28),
   dynamicHit: (x, z) => dynamicHit(x, z),
   doors: () =>
     doors
-      .filter((d) => d.key !== "nu7tower" || nu7Quarter.done)
+      .filter((d) => d !== buildingDoor && (d.key !== "nu7tower" || nu7Quarter.done))
       .map((d) => ({ key: d.key, x: d.at.x, z: d.at.z, fx: d.front.x, fz: d.front.z, label: PLACES[d.key] ?? d.key, y: groundAt(d.at.x, d.at.z) ?? CURB })),
   enter: (key) => {
     if (!jumping && !closeChoice) enterPlace(key);
+  },
+  facades: () => city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out! })),
+  enterBuilding: (v) => {
+    if (jumping || closeChoice || interiors.active) return;
+    buildingDoor.at.set(v.x, CURB, v.z);
+    buildingDoor.front.set(v.fx, 0, v.fz);
+    void import("./interior/building").then((m) => {
+      m.dressBuilding({ kind: m.kindOf(v.type, v.seed), name: v.name, seed: v.seed });
+      // the entry's title card says which building
+      PLACES.building = v.name;
+      enterPlace("building");
+    });
   },
   people3d: (x, z, r) => {
     const out: Person3[] = [];
@@ -3064,6 +3089,14 @@ gta = new GtaMode({
   },
   night: () => theme === "night",
   cycleTheme: () => setThemePref(theme === "day" ? "night" : "day"),
+  // (the game's sky is not the visitor's saved preference: kept for this visit only)
+  setSky: (t) => {
+    if (themePref === t && (t === "auto" || theme === t)) return;
+    hud.cut();
+    themePref = t;
+    setTheme(t === "auto" ? clockTheme() : t);
+  },
+  skyPref: () => themePref,
   height: () => chainClock.height || director.blockHeight || 0,
   lastBlockAt: () => chainClock.at || director.lastBlockTime || 0,
   mempool: () => mempoolCount,

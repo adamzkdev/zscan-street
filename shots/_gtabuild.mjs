@@ -1,0 +1,44 @@
+// node shots/_gtabuild.mjs [URL] [OUT]: any building's door in the game (src/gta) and its ground floor (src/interior/building.ts)
+import puppeteer from "puppeteer-core";
+const [URL = "http://localhost:3061/?debug&gta=1192&theme=day", OUT = "shots/gta/bld"] = process.argv.slice(2);
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1600, height: 900 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push("pageerror " + e.message));
+p.on("console", (m) => m.type() === "error" && errs.push(m.text().slice(0, 300)));
+await p.goto(URL);
+await p.waitForFunction(() => window.__streetUp && window.street?.gta?.solid?.ready, { timeout: 240000, polling: 300 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await p.evaluate(() => street.gta.hud.coach(-1));
+await sleep(1500);
+const spots = await p.evaluate(() => { const g = street.gta; g.nearDoors(0, 0); return g.buildingSpots.map((s) => ({ key: s.key, x: s.x, z: s.z, fx: s.fx, fz: s.fz, label: s.label, type: s.type })); });
+console.log("building doors", spots.length);
+const kinds = {};
+for (const s of spots) kinds[s.type] = (kinds[s.type] ?? 0) + 1;
+console.log(JSON.stringify(kinds));
+const want = (process.env.N ?? "4") | 0;
+const pickTypes = ["streetshop", "office", "apartment", "izakaya", "shophouse"];
+let n = 0;
+for (const t of pickTypes) {
+  const s = spots.find((x) => x.type === t);
+  if (!s || n >= want) continue;
+  n++;
+  await p.evaluate((s) => { const g = street.gta; const h = Math.atan2(s.fx, s.fz); g.player.place(s.x + s.fx * 4.5, 0.2, s.z + s.fz * 4.5, h); g.cam.behind(h, -0.08); g.cam.snap(g.player.pos.clone().setY(1.4)); g.nearT = 0; }, s);
+  await sleep(1500);
+  await p.screenshot({ path: `${OUT}-${n}-door-${t}.png` });
+  await p.evaluate((s) => { const g = street.gta; const h = Math.atan2(s.fx, s.fz); g.player.place(s.x + s.fx * 1.6, 0.2, s.z + s.fz * 1.6, h); }, s);
+  await sleep(500);
+  const at = await p.evaluate(() => street.gta.doors.at?.key ?? null);
+  await p.keyboard.press("KeyE");
+  const ok = await p.waitForFunction(() => street.interiors.active?.key === "building" && !street.interiors.warming, { timeout: 20000, polling: 200 }).then(() => true, () => false);
+  await sleep(1800);
+  await p.screenshot({ path: `${OUT}-${n}-in-${t}.png` });
+  console.log(t, s.label, "at", at, "inside", ok, await p.evaluate(() => street.interiors.active?.title ?? null));
+  await p.keyboard.press("KeyX");
+  await sleep(500);
+  await p.keyboard.press("Escape");
+  await p.waitForFunction(() => !street.interiors.active, { timeout: 20000, polling: 200 }).catch(() => {});
+  await sleep(3500);
+}
+console.log("errors", errs.length, errs.slice(0, 6).join("\n"));
+await b.close();

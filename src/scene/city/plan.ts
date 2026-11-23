@@ -230,6 +230,37 @@ export const LOTS: { kind: LotKind; x0: number; x1: number; z0: number; z1: numb
   { kind: "binhai", x0: -50, x1: 50, z0: 77, z1: 131 },
 ];
 
+/**
+ * Wider streets (the game asked for room to drive): every street of the grid 2 m wider than it was
+ * drawn, except those round the hand-made heart and the river; the blocks, the lots and Central
+ * Park give up a metre on each side to them.
+ */
+(function widen() {
+  const keepX = new Set([ST.heartW, ST.heartE]);
+  const keepZ = new Set([ST.north, ST.south, ST.river]);
+  const oldX = [...GRID.xw],
+    oldZ = [...GRID.zw];
+  GRID.xs.forEach((x, i) => {
+    if (!keepX.has(x)) GRID.xw[i] += 2;
+  });
+  GRID.zs.forEach((z, i) => {
+    if (!keepZ.has(z)) GRID.zw[i] += 2;
+  });
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.05;
+  const trim = (a: { x0: number; x1: number; z0: number; z1: number }) => {
+    GRID.xs.forEach((x, i) => {
+      if (near(a.x0, x + oldX[i] / 2)) a.x0 = x + GRID.xw[i] / 2;
+      if (near(a.x1, x - oldX[i] / 2)) a.x1 = x - GRID.xw[i] / 2;
+    });
+    GRID.zs.forEach((z, i) => {
+      if (near(a.z0, z + oldZ[i] / 2)) a.z0 = z + GRID.zw[i] / 2;
+      if (near(a.z1, z - oldZ[i] / 2)) a.z1 = z - GRID.zw[i] / 2;
+    });
+  };
+  for (const l of LOTS) trim(l);
+  trim(GRID.park);
+})();
+
 /** Central Park: its lake, the fountain terrace, the bandstand, and the paths (polylines, x/z). */
 export const PARK = {
   lake: { x: 12, z: -96, rx: 21, rz: 10.5 },

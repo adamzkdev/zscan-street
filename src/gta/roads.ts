@@ -161,8 +161,9 @@ export class Roads {
       bd = Infinity;
     for (const r of this.rects) {
       // the middle of the road, on the right-hand lane
-      const px = r.axis === "x" ? Math.min(r.x1 - 3, Math.max(r.x0 + 3, x)) : r.at + 1.9;
-      const pz = r.axis === "x" ? r.at + 1.9 : Math.min(r.z1 - 3, Math.max(r.z0 + 3, z));
+      const lane = Math.max(1.9, (r.axis === "x" ? r.z1 - r.z0 : r.x1 - r.x0) / 4 + 0.2);
+      const px = r.axis === "x" ? Math.min(r.x1 - 3, Math.max(r.x0 + 3, x)) : r.at + lane;
+      const pz = r.axis === "x" ? r.at + lane : Math.min(r.z1 - 3, Math.max(r.z0 + 3, z));
       const d = Math.hypot(px - x, pz - z);
       if (d < bd) (bd = d), (best = { x: px, z: pz, axis: r.axis });
     }

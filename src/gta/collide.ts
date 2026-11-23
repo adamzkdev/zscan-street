@@ -126,7 +126,7 @@ export class StreetSolid {
       const t = this.topAt(x + dx * r, z + dz * r)!;
       if (t !== t || t < HOLE) return { ok: false, floor };
       if (t > floor + STEP) return { ok: false, floor };
-      if (dx === 0 && dz === 0) high = t;
+      high = Math.max(high, t);
     }
     return { ok: true, floor: high };
   }

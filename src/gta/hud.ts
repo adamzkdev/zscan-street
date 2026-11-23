@@ -76,6 +76,8 @@ export interface MenuHost {
 }
 
 export interface Settings {
+  /** The sky in the game: a day-night cycle of its own, the visitor's clock, or fixed. */
+  sky: "cycle" | "clock" | "day" | "night";
   /** On foot: the camera follows behind by itself (W ahead, A/D turn), or the mouse turns it. */
   follow: boolean;
   carView: 0 | 1 | 2;
@@ -88,7 +90,7 @@ export interface Settings {
   units: "kmh" | "mph";
   volume: number;
 }
-export const DEFAULTS: Settings = { follow: true, carView: 0, footFar: false, fovAdd: 0, sens: 1, vibe: true, blur: "subtle", hud: "full", units: "kmh", volume: 1 };
+export const DEFAULTS: Settings = { sky: "cycle", follow: true, carView: 0, footFar: false, fovAdd: 0, sens: 1, vibe: true, blur: "subtle", hud: "full", units: "kmh", volume: 1 };
 
 const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 const COACH = TOUCH
@@ -757,7 +759,7 @@ export class GtaHud {
       body = `<h3>Motion blur</h3>${seg("blur", [["off", "Off"], ["subtle", "Subtle", "crisp in town"], ["strong", "Strong", "edges streak at speed"]], S.blur)}
         <h3>HUD</h3>${seg("hud", [["full", "Full", "radar, speed, what's next"], ["min", "Minimal", "radar and speed"]], S.hud)}
         <h3>Speed</h3>${seg("units", [["kmh", "km/h"], ["mph", "mph"]], S.units)}
-        <h3>Day and night <span>T</span></h3><p class="gh-note">T switches between day, night and your own clock.</p>`;
+        <h3>Day and night <span>T</span></h3>${seg("sky", [["cycle", "Cycle", "a day every 14 min"], ["clock", "My clock", "night 19:00–7:00"], ["day", "Day"], ["night", "Night"]], S.sky)}`;
     else if (this.tab === "graphics") {
       const q = this.menu.quality();
       const names = ["Ultra", "High", "Balanced", "Light", "Battery saver"];

@@ -68,3 +68,42 @@ export function gtModel(paint = "#e8a91c", accent = "#15151b", glow = "#f4b728")
   }
   return m;
 }
+
+/** Where the bike's wheels sit (voxels from the back) and its size (voxels). */
+export const MOTO_SPEC = { w: 14, d: 4, h: 7, wheels: [2.5, 11.5] };
+
+/**
+ * The ZK-R: a sport bike in gold and black, a fairing over the front, a tank, the seat, a tail
+ * light; the wheels are their own meshes (they turn). The rider sits on it at `MOTO_SEAT`.
+ */
+export function motoModel(paint = "#e8a91c", accent = "#15151b") {
+  const { w, d } = MOTO_SPEC;
+  const m = new VoxelModel(w, 8, d);
+  const body = CM(paint, MAT.paint),
+    dark = CM(accent, MAT.paint),
+    metal = C("#7a7c86"),
+    glass = G("#2c3d5c");
+  // the frame and the engine between the wheels
+  m.box(4, 1, 1, 10, 3, 3, dark);
+  m.box(5, 1, 1, 9, 2, 3, metal);
+  // the exhaust under the tail
+  m.box(1, 2, 3, 5, 3, 4, metal);
+  // the tank and the seat
+  m.box(7, 3, 1, 11, 5, 3, body);
+  m.box(3, 3, 1, 7, 4, 3, dark);
+  // the tail, with its light
+  m.box(1, 4, 1, 4, 5, 3, body);
+  m.box(0, 4, 1, 1, 5, 3, E("#ff2a1a", 2.6));
+  // the fairing and the screen, the headlight
+  m.box(11, 2, 0, 13, 5, 4, body);
+  m.box(12, 5, 1, 13, 6, 3, glass);
+  m.box(13, 3, 1, 14, 4, 3, E("#eaf6ff", 3.2));
+  // the forks down to the front wheel, the bars
+  m.box(11, 1, 1, 12, 2, 3, metal);
+  m.box(10, 5, 0, 11, 6, 4, dark);
+  // the swingarm to the back wheel
+  m.box(2, 1, 1, 5, 2, 3, metal);
+  return m;
+}
+/** The rider's seat over the ground (m) and along the bike (m from its middle, + forward). */
+export const MOTO_SEAT = { y: 0.62, x: -0.12 };

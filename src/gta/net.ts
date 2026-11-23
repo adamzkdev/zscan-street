@@ -3,7 +3,7 @@ import { makeSnarkBody, type SnarkBody } from "../scene/snarkbody";
 import { sharedObject } from "../scene/voxel/mesher";
 import { policeModel, sedanModel, taxiModel, truckModel } from "../scene/voxel/vehicles";
 import { BODY_SCALE } from "./foot";
-import { gtModel } from "./models";
+import { gtModel, motoModel } from "./models";
 
 /**
  * The shared city (src/gta): everyone playing ZStreet at once, in one world (worker/world.ts).
@@ -78,6 +78,7 @@ function tagSprite(text: string) {
 
 function carOf(kind: string) {
   if (kind === "gt") return sharedObject("gta:gt", () => gtModel());
+  if (kind === "moto") return sharedObject("gta:moto", () => motoModel());
   if (kind === "taxi") return sharedObject("traffic:taxi", () => taxiModel());
   if (kind === "police") return sharedObject("traffic:police", () => policeModel());
   if (kind === "truck") return sharedObject("traffic:truck:0:proof", () => truckModel("#e8e4dc", "proof"));

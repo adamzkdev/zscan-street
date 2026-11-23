@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { freeObject, sharedObject } from "../scene/voxel/mesher";
 import { VOX } from "../scene/voxel/model";
-import { GT_SPEC, gtModel } from "./models";
+import { GT_SPEC, MOTO_SPEC, gtModel, motoModel } from "./models";
 
 /**
  * A car you drive (src/gta): an arcade model, tuned for feel rather than truth, as the open-world
@@ -11,7 +11,7 @@ import { GT_SPEC, gtModel } from "./models";
  * (scene/nav.ts) with three circles along its length, and bounce it off.
  */
 
-export type VehicleKind = "gt" | "sedan" | "taxi" | "police" | "truck";
+export type VehicleKind = "gt" | "moto" | "sedan" | "taxi" | "police" | "truck";
 
 interface Spec {
   name: string;
@@ -30,10 +30,13 @@ interface Spec {
   /** Track (voxels): the wheels' z from the middle. */
   track: number;
   gears: number;
+  /** Two wheels: one per axle, and it leans into the turns. */
+  bike?: boolean;
 }
 
 export const SPECS: Record<VehicleKind, Spec> = {
   gt: { name: "ZK-GT", accel: 11.5, vmax: 58, grip: 8.5, turn: 1, len: GT_SPEC.w * VOX, wid: GT_SPEC.d * VOX, wheelR: 0.32, wheels: [6, 21], vox: 27, track: 5.1, gears: 7 },
+  moto: { name: "ZK-R motorbike", accel: 13.5, vmax: 64, grip: 9.5, turn: 1.25, len: MOTO_SPEC.w * VOX, wid: 0.85, wheelR: 0.33, wheels: [2.5, 11.5], vox: MOTO_SPEC.w, track: 0, gears: 6, bike: true },
   sedan: { name: "Sedan", accel: 7, vmax: 40, grip: 7.5, turn: 0.9, len: 4, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 18], vox: 24, track: 4.6, gears: 5 },
   taxi: { name: "Taxi", accel: 6.5, vmax: 38, grip: 7.5, turn: 0.9, len: 4.5, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 21], vox: 27, track: 4.6, gears: 5 },
   police: { name: "Police cruiser", accel: 8.5, vmax: 47, grip: 8, turn: 0.95, len: 26 * VOX, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 20], vox: 26, track: 4.6, gears: 6 },
@@ -149,24 +152,24 @@ export class DriveCar {
     } else {
       this.group = new THREE.Group();
       this.body = new THREE.Group();
-      this.body.add(sharedObject(`gta:gt`, () => gtModel()));
+      this.body.add(kind === "moto" ? sharedObject(`gta:moto`, () => motoModel()) : sharedObject(`gta:gt`, () => gtModel()));
       this.group.add(this.body);
     }
     const s = this.spec;
     for (const wx of s.wheels)
-      for (const side of [-1, 1]) {
+      for (const side of s.bike ? [0] : [-1, 1]) {
         const pivot = new THREE.Group();
         pivot.position.set((wx + 0.5 - s.vox / 2) * VOX, s.wheelR, side * s.track * VOX);
         const tyre = new THREE.Mesh(WHEEL_GEO, TYRE);
-        tyre.scale.set(s.wheelR, 0.26, s.wheelR);
+        tyre.scale.set(s.wheelR, s.bike ? 0.16 : 0.26, s.wheelR);
         tyre.rotation.x = Math.PI / 2;
         tyre.castShadow = true;
-        const rim = new THREE.Mesh(RIM_GEO, kind === "gt" ? RIM : TYRE);
+        const rim = new THREE.Mesh(RIM_GEO, kind === "gt" || kind === "moto" ? RIM : TYRE);
         tyre.add(rim);
         const spin = new THREE.Group();
         spin.add(tyre);
         pivot.add(spin);
-        this.group.add(pivot);
+        (s.bike ? this.body : this.group).add(pivot);
         this.wheels.push({ m: pivot, front: wx > s.vox / 2 });
       }
     // the headlamps' pool on the road ahead
@@ -365,8 +368,13 @@ export class DriveCar {
     this.group.rotation.set(0, this.yaw, 0);
     // pitch under braking and throttle, roll in the turns
     const accel = inp.throttle * (this.vF >= 0 ? 1 : 0) - inp.brake * (this.vF > 0.5 ? 1.6 : 0);
-    this.pitch += (accel * 0.022 + (yF - yB) * 0.25 - this.pitch) * Math.min(1, dt * 6);
-    this.roll += (THREE.MathUtils.clamp(this.yawRate * this.vF * 0.0035, -0.06, 0.06) - this.roll) * Math.min(1, dt * 6);
+    const wheelie = s.bike && inp.throttle > 0.9 && this.vF > 3 && this.vF < 14 && inp.nitro ? 0.35 : 0;
+    this.pitch += (accel * (s.bike ? 0.04 : 0.022) + wheelie + (yF - yB) * 0.25 - this.pitch) * Math.min(1, dt * 6);
+    if (s.bike) {
+      // a bike leans into the turn, more the faster it goes
+      const lean = THREE.MathUtils.clamp(-this.yawRate * Math.abs(this.vF) * 0.045, -0.75, 0.75);
+      this.roll += (lean - this.roll) * Math.min(1, dt * 7);
+    } else this.roll += (THREE.MathUtils.clamp(this.yawRate * this.vF * 0.0035, -0.06, 0.06) - this.roll) * Math.min(1, dt * 6);
     this.body.rotation.set(this.roll, 0, this.pitch);
     for (const w of this.wheels) {
       const spin = w.m.children[0];

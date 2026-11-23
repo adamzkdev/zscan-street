@@ -138,6 +138,7 @@ type Section = "block" | "mempool" | "market" | "supply" | "network";
 
 /** Walk-in places: icon and colour of their header and elevator. */
 export const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string }> = {
+  building: { icon: "tower", color: "#f4b728" },
   mempool: { icon: "parcel", color: "#ff9f2e" },
   factory: { icon: "bolt", color: "#ffd23f" },
   library: { icon: "book", color: "#ffd28a" },

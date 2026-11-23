@@ -1384,3 +1384,226 @@
 .gta-hud.inside .gh-live {
   display: none;
 }
+
+/* ---- the 10,000 (the garage's mosaic) ---- */
+.gg-all {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-color: var(--g-gold) !important;
+}
+.gg-all .gg-grid {
+  width: 64px;
+  height: 64px;
+  background-image: linear-gradient(rgba(244, 183, 40, 0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(244, 183, 40, 0.5) 1px, transparent 1px);
+  background-size: 8px 8px;
+  border: 1px solid var(--g-gold);
+}
+.gg-all b {
+  font-size: 13px;
+}
+.gg-all small {
+  font: 500 10px var(--g-disp);
+  color: var(--g-ink3);
+}
+.gg-mosaic {
+  position: absolute;
+  inset: 0;
+  display: none;
+  grid-template-columns: 270px 1fr;
+  grid-template-rows: 64px 1fr;
+  background: #08090c;
+  z-index: 5;
+  cursor: default;
+}
+.gg-mosaic.on {
+  display: grid;
+}
+.gg-mosaic header {
+  grid-column: 1 / 3;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--g-line);
+}
+.gg-mosaic h2 {
+  margin: 0;
+  font-size: 24px;
+}
+.gm-count {
+  font: 600 12px var(--g-mono);
+  color: var(--g-gold);
+  letter-spacing: 0.06em;
+}
+.gm-find input {
+  width: 180px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--g-line2);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--g-ink);
+  font: 600 13px var(--g-mono);
+  padding: 0 12px;
+}
+.gm-sort {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.gm-sort button {
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 12px;
+  background: none;
+  color: var(--g-ink2);
+  font: 600 12px var(--g-disp);
+  cursor: pointer;
+}
+.gm-sort button.on {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--g-ink);
+}
+.gm-x {
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--g-line2);
+  background: none;
+  color: var(--g-ink);
+  font-size: 20px;
+  cursor: pointer;
+}
+.gm-side {
+  overflow-y: auto;
+  padding: 14px 16px 30px;
+  border-right: 1px solid var(--g-line);
+}
+.gm-side h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 8px;
+  font: 700 10px var(--g-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--g-ink3);
+}
+.gm-clear {
+  border: 0;
+  background: none;
+  color: var(--g-gold);
+  font: 600 10px var(--g-mono);
+  cursor: pointer;
+}
+.gm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.gm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--g-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--g-ink2);
+  font: 600 11.5px var(--g-disp);
+  cursor: pointer;
+}
+.gm-chip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--c);
+}
+.gm-chip small {
+  font: 500 10px var(--g-mono);
+  color: var(--g-ink3);
+}
+.gm-chip.on {
+  background: var(--g-gold);
+  border-color: var(--g-gold);
+  color: #17120a;
+}
+.gm-chip.on small {
+  color: rgba(23, 18, 10, 0.7);
+}
+.gm-main {
+  position: relative;
+  padding: 12px;
+}
+.gm-main canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+.gm-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 600 14px var(--g-disp);
+  color: var(--g-ink3);
+}
+.gm-tip {
+  position: absolute;
+  display: none;
+  width: 220px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(9, 11, 15, 0.94);
+  border: 1px solid var(--g-line2);
+  pointer-events: none;
+  font: 500 12px var(--g-disp);
+  color: var(--g-ink2);
+}
+.gm-tip b {
+  display: block;
+  font-size: 18px;
+  color: var(--g-ink);
+}
+.gm-tip i {
+  display: block;
+  margin: 4px 0 6px;
+  font: 700 10px var(--g-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-style: normal;
+  color: var(--c);
+}
+.gm-tip span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+.gm-tip span em {
+  font-style: normal;
+  color: var(--g-ink3);
+}
+.gm-tip small {
+  display: block;
+  margin-top: 6px;
+  color: var(--g-gold);
+  font: 600 10px var(--g-mono);
+}
+@media (max-width: 760px), (max-height: 520px) {
+  .gg-mosaic {
+    grid-template-columns: 180px 1fr;
+    grid-template-rows: 52px 1fr;
+  }
+  .gm-sort,
+  .gg-mosaic h2 {
+    display: none;
+  }
+}

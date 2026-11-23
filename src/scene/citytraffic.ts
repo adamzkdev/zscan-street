@@ -117,8 +117,8 @@ class Mover {
     this.line = line;
     this.dir = dir;
     this.s = s;
-    // right-hand traffic: +x keeps to +z, +z keeps to −x
-    const off = 1.9;
+    // right-hand traffic: +x keeps to +z, +z keeps to −x (in the middle of its half of the street)
+    const off = Math.max(1.9, (line.axis === "x" ? zWidth(line.at) : xWidth(line.at)) / 4 + 0.2);
     if (line.axis === "x") {
       this.group.position.z = line.at + (dir > 0 ? off : -off);
       this.group.rotation.y = dir > 0 ? 0 : Math.PI;

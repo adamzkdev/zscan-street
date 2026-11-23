@@ -17,10 +17,10 @@ const JUMP = 5.6;
 export const BODY_SCALE = 0.86;
 
 export interface FootWorld {
-  /** A body at (x, z) would be inside something. */
-  blocked(x: number, z: number): boolean;
-  /** The floor under (x, z). */
-  floor(x: number, z: number): number;
+  /** A body at (x, z) with its feet at `feet` would be inside something (a jump clears a hedge). */
+  blocked(x: number, z: number, feet: number): boolean;
+  /** The floor under (x, z) for feet at `feet` (a jump can land on top of a hedge, a bench). */
+  floor(x: number, z: number, feet: number): number;
 }
 
 export class FootPlayer {
@@ -124,17 +124,17 @@ export class FootPlayer {
     const sx = this.vel.x * dt,
       sz = this.vel.z * dt;
     p.x += sx;
-    if (world.blocked(p.x, p.z)) {
+    if (world.blocked(p.x, p.z, p.y)) {
       p.x -= sx;
       this.vel.x *= 0.2;
     }
     p.z += sz;
-    if (world.blocked(p.x, p.z)) {
+    if (world.blocked(p.x, p.z, p.y)) {
       p.z -= sz;
       this.vel.z *= 0.2;
     }
     // the floor, the jump
-    const floor = world.floor(p.x, p.z);
+    const floor = world.floor(p.x, p.z, p.y);
     if (this.grounded && jump) {
       this.vy = JUMP;
       this.grounded = false;
@@ -143,6 +143,11 @@ export class FootPlayer {
     if (!this.grounded || this.hop > 0) {
       this.vy -= GRAVITY * dt;
       this.hop += this.vy * dt;
+      // coming down onto something higher than where the jump began: it is the floor now
+      if (this.vy < 0 && floor > this.floorY && this.floorY + this.hop <= floor) {
+        this.hop = Math.max(0, this.floorY + this.hop - floor);
+        this.floorY = floor;
+      }
       if (this.hop <= 0) {
         if (this.vy < -2) this.body?.land(-this.vy);
         this.hop = 0;
@@ -151,7 +156,10 @@ export class FootPlayer {
       }
     }
     // off a ledge: a fall (the height kept as the jump's, gravity takes it)
-    if (this.grounded && floor < this.floorY - 0.42) {
+    if (!this.grounded && floor < this.floorY - 0.42 && this.hop <= 0.01) {
+      this.hop = this.floorY - floor;
+      this.floorY = floor;
+    } else if (this.grounded && floor < this.floorY - 0.42) {
       this.grounded = false;
       this.hop = this.floorY - floor;
       this.vy = 0;

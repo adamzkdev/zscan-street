@@ -3,6 +3,7 @@ import { ZScan } from "../data/zscan";
 import { profile } from "../game/profile";
 import { makeSnarkBody, preloadSnarks, type SnarkBody } from "../scene/snarkbody";
 import { BODY_SCALE } from "./foot";
+import { Mosaic } from "./mosaic";
 
 /**
  * The garage (src/gta): before you play, you pick who you are. Your zkSNARK stands on a turntable
@@ -34,6 +35,7 @@ export class Garage {
   private picks: number[] = [];
   private tubes: THREE.Mesh[] = [];
   private t = 0;
+  private mosaic: Mosaic;
 
   constructor(ui: HTMLElement) {
     this.id = Garage.chosen();
@@ -45,8 +47,9 @@ export class Garage {
     this.el.setAttribute("role", "dialog");
     this.el.setAttribute("aria-label", "Choose your zkSNARK");
     ui.append(this.el);
+    this.mosaic = new Mosaic(this.el, (id) => this.pick(id));
     this.el.addEventListener("pointerdown", (e) => {
-      if ((e.target as HTMLElement).closest("button,input,.gg-cards")) return;
+      if ((e.target as HTMLElement).closest("button,input,.gg-cards,.gg-mosaic")) return;
       this.dragX = e.clientX;
     });
     window.addEventListener("pointermove", (e) => {
@@ -58,6 +61,7 @@ export class Garage {
     window.addEventListener("pointerup", () => (this.dragX = null));
     window.addEventListener("keydown", (e) => {
       if (!this.open || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (this.mosaic.isOpen) return;
       if (e.key === "Enter") this.play();
       else if (e.key === "Escape") this.close();
       else if (e.key === "ArrowRight" || e.key === "ArrowLeft") this.step(e.key === "ArrowRight" ? 1 : -1);
@@ -211,6 +215,7 @@ export class Garage {
   }
 
   private render() {
+    const keep = this.mosaic?.el;
     const all = this.list();
     const rank = this.rare.find((r) => r.id === this.id)?.rank;
     const mine = this.id === profile.p.avatar;
@@ -241,7 +246,9 @@ export class Garage {
           <button class="gta-btn" type="submit">Wear</button>
           <button class="gg-dice" type="button" title="Another seven">Draw again</button>
         </form>
+        <button class="gg-card gg-all" type="button"><span class="gg-grid"></span><b class="gta-disp">All 10,000</b><small>filter by rarity and traits</small></button>
       </div>`;
+    if (keep) this.el.append(keep);
     this.el.querySelector(".gg-x")!.addEventListener("click", () => this.close());
     this.el.querySelector(".gg-play")!.addEventListener("click", () => this.play());
     for (const b of this.el.querySelectorAll<HTMLElement>(".gg-card[data-id]")) b.addEventListener("click", () => this.pick(Number(b.dataset.id)));
@@ -251,6 +258,7 @@ export class Garage {
       const v = Math.round(Number(form.querySelector("input")!.value));
       if (v >= 1 && v <= 10000) this.pick(v);
     });
+    this.el.querySelector(".gg-all")!.addEventListener("click", () => this.mosaic.show(true));
     form.querySelector(".gg-dice")!.addEventListener("click", () => {
       this.draw();
       this.render();
