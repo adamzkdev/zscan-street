@@ -1009,6 +1009,7 @@ export class Circulation {
         const car = new Car(n, shaft, at, this.floorY(n, at), st, d.name ?? "LIFT", order.map((k) => F[k].label), f.label, !!d.windows, d);
         car.setOpen(0);
         i.scene.add(car.group);
+        car.group.userData.noBreak = true;
         this.cars.push(car);
         // a bank of two: the twin works too (same shaft, its own doors, its own ride)
         if (d.bank) {
@@ -1020,6 +1021,7 @@ export class Circulation {
           twin.slot = 1;
           twin.setOpen(0);
           i.scene.add(twin.group);
+          twin.group.userData.noBreak = true;
           this.cars.push(twin);
         }
       }
@@ -1029,6 +1031,8 @@ export class Circulation {
       const st = s.style ? STYLES[s.style] : style;
       const fl = new Flight(s, F[s.from].y, s.link ? F[s.from].y + s.link.rise : F[s.to].y, st);
       if (fl.group.children.length) i.scene.add(fl.group);
+      // (the game's smashing leaves the lifts and stairs alone, src/gta/breakables.ts)
+      fl.group.userData.noBreak = true;
       this.flights.push(fl);
     }
     this.keyHandler = (e) => {

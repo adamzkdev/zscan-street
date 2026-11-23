@@ -2939,6 +2939,9 @@ const GTA_SHOUTS = ["HEY!", "WATCH IT!", "Slow down!", "Shielded driving, please
 gta = new GtaMode({
   scene,
   renderer,
+  interior: () => (interiors.active ? { walk: interiors.walk, scene: interiors.active.scene } : null),
+  interiorWalker: interiors.walk,
+  pickCamera: (cam) => (interiors.viewCam = cam),
   movers: () => [
     ...[...director.snarks].map((s) => s.root),
     ...[...director.traffic.vehicles].map((v) => v.mover.group),
@@ -3283,7 +3286,7 @@ function frameBody(stepDt?: number) {
     gta?.update(dt);
     // the street's little map has nothing to say inside
     if (minimapOn) minimap.show((minimapOn = false));
-    load.view(interiors.walk.camera);
+    load.view(gta?.active ? gta.camera : interiors.walk.camera);
     interiors.update(dt, t);
     if (!interiors.active) return again();
     updateMemes(dt, interiors.walk.camera, interiors.active.scene);
@@ -3302,14 +3305,14 @@ function frameBody(stepDt?: number) {
     joystick.sync(interiors.walk);
     renderPass.scene = interiors.active.scene;
     // (the entry film's camera while it plays, then the walker's own)
-    const eye = cine.update(interiors.warming ? 0 : Math.min(real, 0.1), interiors.walk.camera) ?? interiors.walk.camera;
+    const eye = cine.update(interiors.warming ? 0 : Math.min(real, 0.1), interiors.walk.camera) ?? (gta?.active ? gta.camera : interiors.walk.camera);
     renderPass.camera = finish.camera = eye;
     tilt.set(0);
     // indoors only real light sources bloom (screens, neon, bulbs: HDR), never a white floor or
     // wall under the lamps, which glared
     bloom.threshold = Math.max(bloomThreshold, 1.35);
     // speech bubbles: only for speakers in sight, a steady size, kept apart and on screen
-    bubbles.update(dt, interiors.walk.camera, window.innerWidth, window.innerHeight);
+    bubbles.update(dt, gta?.active ? gta.camera : interiors.walk.camera, window.innerWidth, window.innerHeight);
     // its shaders are still compiling: hold the last frame behind the entry fade, no stall
     if (!interiors.warming) {
       composer.render();

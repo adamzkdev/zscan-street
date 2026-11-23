@@ -191,6 +191,16 @@ export class WalkControls {
   }
   // ---- (end of the mover) ----
 
+  /** Would a body stand inside a wall at (x, z)? (The game's own mover asks, src/gta.) */
+  blockedAt(x: number, z: number) {
+    return this.blocked(x, z);
+  }
+
+  /** The floor when no special ground is under the walker. */
+  get base() {
+    return this.baseFloor;
+  }
+
   /** Stand on this floor now (the game's third-person body moves the walker itself, src/gta). */
   setFloor(y: number) {
     this.floorY = y;

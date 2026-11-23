@@ -13,6 +13,9 @@ import { GtaInput } from "./input";
 import { Missions } from "./missions";
 import { WorldNet } from "./net";
 import { People3D, type Person3 } from "./people3d";
+import { Debris } from "./debris";
+import { Breakables } from "./breakables";
+import { StreetProps } from "./streetprops";
 import { Heat } from "./police";
 import { Roads } from "./roads";
 import { GtaSound, type AudioOut } from "./sound";
@@ -44,6 +47,11 @@ export interface GtaHost {
   /** The walk-in places' doors, and going in. */
   doors(): DoorSpot[];
   enter(key: string): void;
+  /** Inside a place: its walker (the source of truth there), its scene. */
+  interior(): { walk: WalkControls; scene: THREE.Scene } | null;
+  /** The places' walker (its own movement steps aside for the game's), and the camera their clicks pick through. */
+  interiorWalker: WalkControls;
+  pickCamera(cam: THREE.Camera | null): void;
   /** The street's people within `r` of (x, z), to be drawn in 3D. */
   people3d(x: number, z: number, r: number): Person3[];
   /** Knock over whoever stands within `r` of (x, z), flung along (fx, fz): how many went down. */
@@ -107,7 +115,12 @@ export class GtaMode {
   readonly doors: Doors;
   readonly net: WorldNet;
   readonly people: People3D;
+  readonly debris = new Debris();
+  readonly breakables: Breakables;
+  readonly props: StreetProps;
   car: DriveCar | null = null;
+  /** Where the game last put the walker (a move it did not make is the street's: a lift, a stair, a cut). */
+  private lastWalk = new THREE.Vector3();
   /** Cars you left (and your own ZK-GT), parked where you got out. */
   parked: DriveCar[] = [];
   private settings: Settings;
@@ -146,7 +159,7 @@ export class GtaMode {
       if (open && document.pointerLockElement) document.exitPointerLock();
     };
     this.hud.onTouch = (btn, down) => {
-      if (btn === "car" || btn === "jump" || btn === "door") {
+      if (btn === "car" || btn === "jump" || btn === "door" || btn === "hit") {
         if (down) this.input.tap(`touch:${btn}`);
       } else if (down) this.input.touch.add(btn);
       else this.input.touch.delete(btn);
@@ -181,11 +194,14 @@ export class GtaMode {
     this.doors = new Doors(host.scene);
     this.net = new WorldNet(host.scene);
     this.people = new People3D(host.scene, (x, z, r) => host.people3d(x, z, r));
+    this.breakables = new Breakables(this.debris);
+    this.props = new StreetProps(host.scene, this.debris);
+    host.interiorWalker.mover = () => this.active;
     this.solid = new StreetSolid({
       renderer: host.renderer,
       scene: host.scene,
       area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
-      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
+      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
       surface: (x, z) => this.roads.surface(x, z),
     });
     host.scene.add(this.player.group);
@@ -206,7 +222,7 @@ export class GtaMode {
       "keydown",
       (e) => {
         if (!this.active || this.garage.open || /input|textarea|select/i.test((e.target as HTMLElement)?.tagName ?? "")) return;
-        const own = ["Tab", "KeyF", "KeyC", "KeyT", "KeyB", "KeyP", "KeyM", "KeyR"].includes(e.code) || (this.car && ["KeyE", "Space", "KeyQ"].includes(e.code)) || (!this.car && e.code === "KeyE" && !!this.doors.at);
+        const own = ["Tab", "KeyF", "KeyC", "KeyT", "KeyB", "KeyP", "KeyM", "KeyR", "KeyX"].includes(e.code) || (this.car && ["KeyE", "Space", "KeyQ"].includes(e.code)) || (!this.car && e.code === "KeyE" && !!this.doors.at);
         if (own) {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -319,14 +335,16 @@ export class GtaMode {
     this.cam.behind(h.walker.heading, -0.22);
     this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.55));
     this.missions.setVisible(true);
-    this.doors.set(this.host.doors());
+    this.doors.set(this.host.doors().flatMap((d) => this.snapDoor(d) ?? []));
     this.doors.show(true);
     this.net.join(true);
     this.people.show(true);
+    this.props.show(true);
+    this.debris.into(this.host.scene);
     this.hud.show(true);
     // the street's solid shape (once, and again when the far city has streamed in)
     if (!this.solid.ready) {
-      void this.solid.build();
+      void this.solid.build().then(() => this.active && this.doors.set(this.host.doors().flatMap((d) => this.snapDoor(d) ?? [])));
       setTimeout(() => this.active && void this.solid.build(), 40_000);
     }
     // your own car, parked on the nearest street
@@ -354,6 +372,11 @@ export class GtaMode {
     this.doors.show(false);
     this.net.join(false);
     this.people.show(false);
+    this.props.show(false);
+    this.props.reset();
+    this.breakables.restore();
+    this.host.pickCamera(null);
+    if (this.player.group.parent !== this.host.scene) this.host.scene.add(this.player.group);
     this.heat.clear();
     this.sound.siren(0);
     this.player.group.visible = false;
@@ -536,19 +559,18 @@ export class GtaMode {
     const h = this.host;
     // the street left on-foot mode on its own (an event, a cut to the map): the game ends quietly
     if (!h.walking() && !h.indoors()) return this.stop();
-    // through a door into a place: the game waits outside
-    if (h.indoors()) {
-      if (!this.wasIndoors) {
-        this.wasIndoors = true;
-        this.hud.show(false);
-        this.player.group.visible = false;
-        this.sound.drive(null);
-      }
-      return;
-    }
+    // through a door into a place: the game goes in with you (third person, its walls, things to smash)
+    const inside = h.interior();
+    if (inside) return this.inside(dt, inside);
     if (this.wasIndoors) {
       this.wasIndoors = false;
-      this.hud.show(true);
+      this.hud.inside(false);
+      this.breakables.restore();
+      this.people.source = null;
+      this.people.into(h.scene);
+      h.pickCamera(null);
+      h.scene.add(this.player.group);
+      this.debris.into(h.scene);
       const w = h.walker.camera.position;
       this.player.place(w.x, h.walker.floor, w.z, h.walker.heading);
       this.player.group.visible = true;
@@ -591,6 +613,7 @@ export class GtaMode {
     const near = this.heat.update(dt, { x: at.x, z: at.z, ...vel, speed: this.car?.speed ?? this.player.speed, inCar: !!this.car }, (self) => this.carWorld(self));
     this.sound.siren(this.heat.chasers.length ? Math.max(0.15, 1 - near / 140) : 0);
     this.people.update(dt, at.x, at.z, this.car ? null : this.player.pos, this.cam.camera.position);
+    this.streetThings(dt);
     this.net.update(dt, { x: at.x, y: this.car ? 0 : this.player.pos.y, z: at.z, h: heading, c: this.car?.kind ?? "", v: this.car?.speed ?? this.player.speed, s: this.player.id });
     this.hudFrame(dt, at, heading);
   }
@@ -615,6 +638,7 @@ export class GtaMode {
       }
     }
     if (i.hit("KeyR", "pad:down") && this.car) this.reset();
+    if (!this.car && i.hit("KeyX", "pad:x", "touch:hit")) this.player.punch();
     // at a door: in
     if (!this.car && this.doors.at && i.hit("KeyE", "pad:x", "touch:door")) {
       this.sound.blip("door");
@@ -659,6 +683,7 @@ export class GtaMode {
     // behind you again a moment after a look round (always, with the follow camera)
     if (follow && i.idleLook > 0.6) this.cam.follow(dt, pl.facing, pl.speed);
     this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z)) || h.nav.wall(x, z) });
+    pl.group.visible = this.cam.armLength > 1.15;
     // sprinting into people: they go down
     if (pl.speed > 6 && !this.paused) {
       this.reactT -= dt;
@@ -684,6 +709,166 @@ export class GtaMode {
     this.host.blur(0);
   }
 
+  /** The street's knock-about things and the pieces flying: placed once the solid shape is in, pushed by you. */
+  private streetThings(dt: number) {
+    const h = this.host;
+    const world = {
+      blocked: (x: number, z: number) => (this.solid.ready ? !this.solid.foot(x, z, this.roads.surface(x, z), 0.12).ok : h.nav.wall(x, z)),
+      floor: (x: number, z: number) => {
+        const t = this.solid.topAt(x, z);
+        return t !== undefined && t === t && t > -0.3 && t < 0.6 ? t : this.roads.surface(x, z);
+      },
+    };
+    if (this.solid.ready) this.props.place(this.roads, { blocked: (x, z) => !this.solid.foot(x, z, this.roads.surface(x, z), 0.5).ok, floor: world.floor });
+    const car = this.car;
+    if (car && car.speed > 1) {
+      const f = car.fwd();
+      const p = car.group.position;
+      const n = this.props.push(p.x + f.x * car.spec.len * 0.3, p.z + f.y * car.spec.len * 0.3, car.spec.wid * 0.65, car.vel.x, car.vel.y);
+      if (n) this.sound.crash(Math.min(0.4, car.speed / 50));
+    } else if (!car && this.player.speed > 2.5) this.props.push(this.player.pos.x, this.player.pos.z, 0.35, this.player.vel.x * 0.7, this.player.vel.z * 0.7, 0.5);
+    this.props.update(dt, world);
+    this.debris.update(dt);
+    if (this.player.landed) this.punchLanded(null);
+  }
+
+  /** The fist lands: a thing in reach breaks (inside), a street thing flies, a person goes down. */
+  private punchLanded(inside: { walk: WalkControls; scene: THREE.Scene } | null) {
+    const pl = this.player;
+    const dir = new THREE.Vector3(-Math.sin(pl.facing), 0, -Math.cos(pl.facing));
+    const at = pl.pos.clone().addScaledVector(dir, 0.75).setY(pl.pos.y + 1);
+    let hit = false;
+    if (inside) hit = this.breakables.hit(inside.scene, at, dir, pl.floor, [inside.walk.colliders, inside.walk.extra]);
+    else {
+      hit = this.props.push(at.x, at.z, 0.45, dir.x * 7, dir.z * 7, 1.6) > 0;
+      if (this.host.knock(at.x, at.z, dir.x * 6, dir.z * 6, 0.8)) hit = true;
+    }
+    if (hit) {
+      this.sound.crash(0.35);
+      this.cam.shake(0.18);
+    } else this.sound.blip("click");
+  }
+
+  /** Inside a place, in the third person: its walker moved by your body, its walls, its things. */
+  private inside(dt: number, inn: { walk: WalkControls; scene: THREE.Scene }) {
+    const h = this.host;
+    const w = inn.walk;
+    const pl = this.player;
+    if (!this.wasIndoors) {
+      this.wasIndoors = true;
+      this.hud.inside(true);
+      this.sound.drive(null);
+      this.sound.siren(0);
+      inn.scene.add(pl.group);
+      this.debris.into(inn.scene);
+      // the place's people in 3D too: the zkSNARKs standing in its scene
+      this.people.into(inn.scene);
+      let found: THREE.Object3D[] = [];
+      let foundAt = 0;
+      const keys = new WeakMap<object, string>();
+      let n = 0;
+      this.people.source = (x, z, r) => {
+        const now = performance.now();
+        if (now - foundAt > 2000) {
+          foundAt = now;
+          found = [];
+          inn.scene.traverse((o) => {
+            if (o.userData.snarkRef && o.visible) found.push(o);
+          });
+        }
+        const out: Person3[] = [];
+        const at = new THREE.Vector3();
+        for (const root of found) {
+          const sn = root.userData.snarkRef as { root: THREE.Object3D; id: number; faceDir: THREE.Vector3 | null; seatHeight: number; down: { k: number; side: number }; set3D(on: boolean): void };
+          root.getWorldPosition(at);
+          if ((at.x - x) ** 2 + (at.z - z) ** 2 > r * r || Math.abs(at.y - pl.pos.y) > 2.5) continue;
+          let k = keys.get(sn);
+          if (!k) keys.set(sn, (k = `in${++n}`));
+          out.push({ key: k, id: sn.id, pos: (o) => root.getWorldPosition(o), down: () => sn.down, face: () => sn.faceDir, seat: () => sn.seatHeight, hide: (on) => sn.set3D(on), alive: () => root.visible && !!root.parent });
+        }
+        return out;
+      };
+      pl.group.visible = true;
+      pl.place(w.camera.position.x, w.floor, w.camera.position.z, w.heading);
+      this.lastWalk.copy(w.camera.position);
+      this.cam.behind(w.heading, -0.15);
+      this.cam.snap(pl.pos.clone().setY(pl.pos.y + 1.35));
+      h.pickCamera(this.cam.camera);
+    }
+    // the place moved the walker itself (a lift's ride, a stair's landing, a floor picked): the body follows
+    if (w.camera.position.distanceTo(this.lastWalk) > 0.05) {
+      pl.place(w.camera.position.x, w.floor, w.camera.position.z, pl.facing);
+      this.cam.snap(pl.pos.clone().setY(pl.pos.y + 1.35));
+    }
+    const i = this.input;
+    i.poll(dt);
+    if (!w.enabled) i.release();
+    if (!this.paused) {
+      this.cam.turn(i.look.x, i.look.y);
+      if (i.hit("KeyP", "pad:start")) this.pause(true);
+      if (i.hit("KeyX", "pad:x", "touch:hit")) pl.punch();
+    }
+    const m = this.paused ? { x: 0, y: 0, mag: 0 } : i.move();
+    const follow = this.settings.follow;
+    let mx = m.x,
+      my = m.y,
+      ref = this.cam.yaw;
+    if (follow) {
+      pl.facing += -m.x * 2.6 * dt;
+      ref = pl.facing;
+      mx = 0;
+      my = m.y < 0 ? m.y * 0.4 : m.y;
+    }
+    pl.update(dt, mx, my, follow ? Math.abs(my) : m.mag, !this.paused && i.sprint && my > 0, false, ref, {
+      blocked: (x, z) => w.blockedAt(x, z),
+      floor: (x, z) => w.ground?.(x, z) ?? w.base,
+    }, !follow || my >= 0);
+    if (follow && i.idleLook > 0.6) this.cam.follow(dt, pl.facing, pl.speed);
+    // a room's camera: closer, stopped by the walls (checked finely: they are thin)
+    const keep = this.cam.footFar;
+    this.cam.footFar = false;
+    this.cam.foot(dt, pl.pos, { wall: (x, z) => w.blockedAt(x, z) });
+    this.cam.footFar = keep;
+    pl.group.visible = this.cam.armLength > 1.15;
+    if (pl.landed) this.punchLanded(inn);
+    this.debris.update(dt);
+    this.people.update(dt, pl.pos.x, pl.pos.z, pl.pos, this.cam.camera.position);
+    // the walker where you are
+    w.camera.position.set(pl.pos.x, pl.pos.y + 1.6, pl.pos.z);
+    w.setFloor(pl.floor);
+    w.aim(pl.facing, -0.08);
+    this.lastWalk.copy(w.camera.position);
+    // the way out: E, or walking into it
+    const ex = w.exitAhead();
+    const near = !!ex && ex.dist < 2.4 && ex.facing;
+    const touch = matchMedia("(pointer: coarse)").matches;
+    this.hud.prompt(near ? `<kbd>${touch ? "Tap" : "E"}</kbd> Exit to the street` : null);
+    this.hud.doorButton(near);
+    if (near && !this.paused && (i.hit("KeyE", "pad:y", "touch:door") || (ex!.dist < 0.9 && pl.speed > 0.5))) w.onExit?.();
+    this.hud.indoor(dt, { speed: pl.speed });
+  }
+
+  /**
+   * A door against its building: from the place's door point, back to the first wall the street's
+   * solid shape has (a facade a few metres behind a forecourt), or out of one it stands in.
+   */
+  private snapDoor(d: DoorSpot): DoorSpot | null {
+    // (the MEMPOOL HQ and the GAME HOUSE have grand entrances of their own)
+    if (d.key === "mempool" || d.key === "gamehouse") return { ...d, bare: true };
+    const s = this.solid;
+    if (!s.ready) return d;
+    const wall = (k: number) => {
+      const t = s.topAt(d.x - d.fx * k, d.z - d.fz * k);
+      return t !== undefined && t === t && t > d.y + 2;
+    };
+    if (wall(0)) {
+      for (let k = -0.1; k > -3; k -= 0.1) if (!wall(k)) return { ...d, x: d.x - d.fx * (k - 0.05), z: d.z - d.fz * (k - 0.05) };
+      return d;
+    }
+    for (let k = 0.1; k < 7; k += 0.1) if (wall(k)) return { ...d, x: d.x - d.fx * (k - 0.06), z: d.z - d.fz * (k - 0.06) };
+    return d;
+  }
+
   /** Inside one of the parked cars' boxes (you walk round them). */
   private parkedAt(x: number, z: number) {
     for (const c of this.parked) {
@@ -705,12 +890,14 @@ export class GtaMode {
     const i = this.input;
     const d = this.paused ? { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false } : i.drive();
     car.lamps = h.night();
+    this.doors.night(h.night());
     car.update(dt, d, this.carWorld(car));
     if (car.hit && car.hit.what === "car" && car.hit.speed > 7) {
       if (this.heat.near(car.hit.x, car.hit.z, 4.5)) this.heat.raise(0.9, "you rammed a police cruiser");
       else this.heat.raise(0.45, `you hit a car at ${Math.round(car.hit.speed * 3.6)} km/h`);
     }
     this.doors.update(dt, null);
+    this.player.group.visible = false;
     this.hud.doorButton(false);
     // people in the way: hit, they go down (stunned a moment); further ahead, a shout
     this.reactT -= dt;

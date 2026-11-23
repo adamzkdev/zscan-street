@@ -71,6 +71,9 @@ export class People3D {
   private tmp2 = new THREE.Vector3();
   enabled = true;
 
+  /** Where the people come from instead (inside a place), or null: the street's. */
+  source: ((x: number, z: number, r: number) => Person3[]) | null = null;
+
   constructor(
     scene: THREE.Scene,
     private find: (x: number, z: number, r: number) => Person3[],
@@ -102,7 +105,19 @@ export class People3D {
 
   show(on: boolean) {
     this.group.visible = on;
-    if (!on) for (const s of [...this.slots.values()]) this.drop(s);
+    if (!on) this.clear();
+  }
+
+  /** Everyone back to their flat figures (a change of scene). */
+  clear() {
+    for (const s of [...this.slots.values()]) this.drop(s);
+  }
+
+  /** Into the scene being drawn (the street, a place). */
+  into(scene: THREE.Object3D) {
+    if (this.group.parent === scene) return;
+    this.clear();
+    scene.add(this.group);
   }
 
   /** Each frame, round (x, z). */
@@ -122,7 +137,7 @@ export class People3D {
 
   /** Who is near now: the nearest come in, those gone or far go back to their flat figures. */
   private scan(x: number, z: number) {
-    const list = this.find(x, z, this.radius + 4);
+    const list = (this.source ?? this.find)(x, z, this.radius + 4);
     const d = (p: Person3) => {
       p.pos(this.tmp);
       return (this.tmp.x - x) ** 2 + (this.tmp.z - z) ** 2;

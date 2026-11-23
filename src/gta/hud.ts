@@ -100,7 +100,7 @@ const COACH = TOUCH
     ]
   : [
       { eye: "Welcome to ZStreet · 1 / 4", title: "Move", text: `${kbd("W")} or ${kbd("Z")} to run, ${kbd("A")}${kbd("D")} or ${kbd("Q")}${kbd("D")} to turn, ${kbd("S")} back · ${kbd("Shift")} sprint · ${kbd("Space")} jump. The camera follows you (Menu › Camera for a free one).` },
-      { eye: "Get a ride · 2 / 4", title: "Take a car", text: `Walk up to any car and press ${kbd("F")}. ${kbd("Space")} handbrake to drift · ${kbd("Shift")} nitrous · ${kbd("C")} camera · ${kbd("E")} horn · ${kbd("R")} back on the road.` },
+      { eye: "Get a ride · 2 / 4", title: "Take a car", text: `${kbd("X")} punches and smashes things. Walk up to any car and press ${kbd("F")}. ${kbd("Space")} handbrake to drift · ${kbd("Shift")} nitrous · ${kbd("C")} camera · ${kbd("E")} horn · ${kbd("R")} back on the road.` },
       { eye: "The chain is the clock · 3 / 4", title: "Beat the block", text: `Blocks are real. The gold beam is the MEMPOOL HQ: take a parcel there and deliver it before the next block is mined.` },
       { eye: "Find your way · 4 / 4", title: "The map", text: `${kbd("M")} opens the map: click a street to go there. Walk up to a lit door and press ${kbd("E")} to go in. ${kbd("Esc")} for the menu, ${kbd("T")} day or night.` },
     ];
@@ -159,7 +159,7 @@ export class GtaHud {
         <div class="gh-sc"><b class="gh-sv gta-disp">000</b><small class="gh-su">KM/H</small><span class="gh-gear">1</span></div>
       </div>
       <div class="gh-touch">
-        <button data-t="drift">Drift</button><button data-t="nos">NOS</button><button data-t="jump">Jump</button><button data-t="car">Car</button><button data-t="door">Enter</button>
+        <button data-t="drift">Drift</button><button data-t="nos">NOS</button><button data-t="jump">Jump</button><button data-t="car">Car</button><button data-t="door">Enter</button><button data-t="hit">Hit</button>
       </div>
       <div class="gh-map">
         <canvas></canvas>
@@ -218,6 +218,16 @@ export class GtaHud {
     }
     this.mapEvents();
   }
+
+  /** Inside a place: no street radar, no street objective. */
+  inside(on: boolean) {
+    this.root.classList.toggle("inside", on);
+    this.root.classList.remove("car");
+    if (on) this.toggleMap(false);
+  }
+
+  /** Inside a place, each frame (the toasts and the prompt carry on; the street's parts are hidden). */
+  indoor(_dt: number, _s: { speed: number }) {}
 
   /** The touch "Enter" button, shown at a door. */
   doorButton(on: boolean) {
@@ -766,6 +776,7 @@ export class GtaHud {
         <div><dt>${kbd("Shift")}</dt><dd>sprint · nitrous</dd></div>
         <div><dt>${kbd("Space")}</dt><dd>jump · handbrake (drift)</dd></div>
         <div><dt>${kbd("F")}</dt><dd>get in / out of a car</dd></div>
+        <div><dt>${kbd("X")}</dt><dd>punch · smash things, inside and out</dd></div>
         <div><dt>${kbd("E")}</dt><dd>enter a door · talk · horn</dd></div>
         <div><dt>${kbd("C")} ${kbd("B")}</dt><dd>camera · look back</dd></div>
         <div><dt>${kbd("R")}</dt><dd>back on the road</dd></div>

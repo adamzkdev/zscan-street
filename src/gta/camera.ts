@@ -47,6 +47,11 @@ export class GtaCamera {
     this.camera.updateProjectionMatrix();
   }
 
+  /** How long the arm is now (m): the body is hidden when the camera is right on it. */
+  get armLength() {
+    return this.arm;
+  }
+
   /** A jolt (a crash, a landing): 0…1. */
   shake(k: number) {
     this.shakeK = Math.max(this.shakeK, Math.min(1, k));

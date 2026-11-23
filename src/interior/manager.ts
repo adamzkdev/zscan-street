@@ -27,6 +27,8 @@ export interface InteriorEvents {
  */
 export class InteriorManager {
   readonly walk: WalkControls;
+  /** The camera the place is drawn with when it is not the walker's own (the game's third person, src/gta): clicks pick through it. */
+  viewCam: THREE.Camera | null = null;
   active: Interior | null = null;
   floor = 0;
   private cache = new Map<Key, Interior>();
@@ -303,7 +305,7 @@ export class InteriorManager {
     const i = this.active;
     if (!i) return null;
     this.ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-    this.ray.setFromCamera(this.ndc, this.walk.camera);
+    this.ray.setFromCamera(this.ndc, this.viewCam ?? this.walk.camera);
     return this.ray.intersectObjects(i.pickables(), true)[0] ?? null;
   }
 
@@ -318,7 +320,7 @@ export class InteriorManager {
     });
     if (!people.length) return null;
     this.ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-    this.ray.setFromCamera(this.ndc, this.walk.camera);
+    this.ray.setFromCamera(this.ndc, this.viewCam ?? this.walk.camera);
     const hit = this.ray.intersectObjects(people, true)[0];
     for (let o: THREE.Object3D | null = hit?.object ?? null; o; o = o.parent) if (o.userData.snarkRef) return o.userData.snarkRef as Snark;
     return null;

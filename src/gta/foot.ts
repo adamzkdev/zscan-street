@@ -38,6 +38,21 @@ export class FootPlayer {
   private floorY = 0;
   /** Running speed now (m/s), for the body's stride. */
   speed = 0;
+  /** A punch under way (seconds into it), or −1. */
+  private punchT = -1;
+  private punchSide = 1;
+
+  /** Throw a punch (true if it started: not one already). */
+  punch() {
+    if (this.punchT >= 0 || !this.body) return false;
+    this.punchT = 0;
+    this.punchSide = -this.punchSide;
+    this.body.holdArms(true);
+    return true;
+  }
+
+  /** The fist has landed this frame (once per punch). */
+  landed = false;
 
   constructor() {
     this.group.name = "gta:player";
@@ -152,6 +167,24 @@ export class FootPlayer {
     if (!this.body) return;
     this.body.root.rotation.y = this.facing + Math.PI;
     this.body.update(dt, { speed: this.speed / BODY_SCALE, grounded: this.grounded, vy: this.vy, heading: this.facing });
+    this.landed = false;
+    if (this.punchT >= 0) {
+      const was = this.punchT;
+      this.punchT += dt;
+      const t = this.punchT;
+      // wind up, out, back: the punching arm straight ahead, the other one back
+      const out = t < 0.08 ? -t / 0.08 * 0.6 : t < 0.18 ? -0.6 - ((t - 0.08) / 0.1) * 1.1 : -1.7 + Math.min(1, (t - 0.18) / 0.18) * 1.7;
+      const [hit, other] = this.punchSide > 0 ? [this.body.armR, this.body.armL] : [this.body.armL, this.body.armR];
+      hit.rotation.set(out, 0, this.punchSide * 0.15);
+      other.rotation.set(0.4, 0, -this.punchSide * 0.12);
+      this.body.foreArmR.rotation.set(0, 0, 0);
+      this.body.foreArmL.rotation.set(-0.6, 0, 0);
+      if (was < 0.16 && t >= 0.16) this.landed = true;
+      if (t > 0.38) {
+        this.punchT = -1;
+        this.body.holdArms(false);
+      }
+    }
   }
 
   dispose() {

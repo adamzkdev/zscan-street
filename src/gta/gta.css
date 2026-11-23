@@ -679,6 +679,7 @@
     background: var(--g-gold);
     color: #17120a;
   }
+  .gta-hud.car .gh-touch [data-t="hit"],
   .gta-hud:not(.car) .gh-touch [data-t="nos"],
   .gta-hud:not(.car) .gh-touch [data-t="drift"],
   .gta-hud.car .gh-touch [data-t="jump"] {
@@ -1364,5 +1365,22 @@
 /* jailed (the street's arrest): its banner, not the game's objective */
 #ui:has(> .jail.on) .gh-next,
 #ui:has(> .jail.on) .gh-card {
+  display: none;
+}
+
+/* inside a place: the street's radar, where you are and what's next step aside */
+.gta-hud.inside .gh-mini,
+.gta-hud.inside .gh-where,
+.gta-hud.inside .gh-next,
+.gta-hud.inside .gh-top [data-act="map"],
+.gta-hud.inside .gh-heat,
+.gta-hud.inside::before {
+  display: none;
+}
+/* inside a place, in the game: its first-person hint steps aside (the game's prompt says what to do) */
+#ui.gta-on .ihint {
+  display: none !important;
+}
+.gta-hud.inside .gh-live {
   display: none;
 }
