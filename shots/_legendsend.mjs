@@ -1,0 +1,26 @@
+// node shots/_legendsend.mjs: hub → duel → concede: the end panel with the duel's rewards
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal"], defaultViewport: { width: 1600, height: 900 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push("pageerror " + e.message));
+await p.evaluateOnNewDocument(() => { window.WebSocket = class { constructor() {} send() {} close() {} addEventListener() {} }; });
+await p.goto("http://localhost:3071/table.html?t=legends");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await sleep(2500);
+await p.evaluate(() => document.querySelector('[data-a="play"]')?.click());
+await sleep(2500);
+await p.screenshot({ path: "shots/legends/end-0-hub.png" });
+await p.evaluate(() => document.querySelector('[data-go="play"]')?.click());
+await sleep(1000);
+await p.evaluate(() => document.querySelector("[data-duel]")?.click());
+await sleep(3500);
+await p.evaluate(() => document.querySelector("[data-keep]")?.click());
+await sleep(5000);
+await p.evaluate(() => [...document.querySelectorAll(".zkl-chip")].find((c) => /Menu/.test(c.textContent))?.click());
+await sleep(500);
+await p.evaluate(() => document.querySelector("[data-concede]")?.click());
+await sleep(4500);
+await p.screenshot({ path: "shots/legends/end-1-panel.png" });
+console.log("errors:", errs.length ? errs.join("\n") : "none");
+await b.close();

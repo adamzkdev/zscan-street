@@ -114,6 +114,8 @@ export interface GtaHost {
   talk(id: number, done: () => void): boolean;
   talking(): boolean;
   closeTalk(): void;
+  /** Challenge zkSNARK #id to a ZK LEGENDS card duel (the Game House's launcher, that rival seated). */
+  duel?(id: number): void;
   /** Inside a place: use what is at (x, y) on the screen (talk, a panel, a game); false if nothing. */
   useAt(x: number, y: number): boolean;
   useLabel(x: number, y: number): string | null;
@@ -798,6 +800,12 @@ export class GtaMode {
     if (!this.car && this.wastedT < 0 && i.hit("KeyX", "Mouse0", "pad:x", "touch:hit")) this.player.punch();
     // someone to talk to (no door in reach): E, and the street's talk opens with them
     if (!this.car && !this.doors.at && this.talkable && !this.talkWith && i.hit("KeyE", "touch:door")) this.startTalk(this.talkable);
+    // G: a card duel with them (ZK LEGENDS), the way you'd challenge someone in a tavern
+    if (!this.car && !this.doors.at && this.talkable && !this.talkWith && this.host.duel && i.hit("KeyG")) {
+      this.input.release();
+      if (document.pointerLockElement) document.exitPointerLock();
+      this.host.duel(this.talkable.id);
+    }
     // at a door: in
     if (!this.car && this.doors.at && i.hit("KeyE", "pad:x", "touch:door")) {
       this.sound.blip("door");
@@ -914,7 +922,7 @@ export class GtaMode {
           : r
             ? `<kbd>F</kbd> ${r.car ? (r.kind === "gt" ? "Get in your ZK-GT" : `Get in the ${r.name.toLowerCase()}`) : `Take the ${r.name.toLowerCase()}`}`
             : this.talkable
-              ? `<kbd>${touch ? "Tap" : "E"}</kbd> Talk · zkSNARK #${this.talkable.id}`
+              ? `<kbd>${touch ? "Tap" : "E"}</kbd> Talk${touch ? "" : " · <kbd>G</kbd> Duel"} · zkSNARK #${this.talkable.id}`
               : null,
     );
     this.hud.doorButton(!!door || !!this.talkable);

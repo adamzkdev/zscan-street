@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Snark, loadArt } from "../../scene/snark";
 import { hash } from "../../scene/voxel/model";
 import type { VoxelModel } from "../../scene/voxel/model";
@@ -9,15 +10,94 @@ import type { Theme } from "../../scene/theme";
 import { T } from "../../i18n/lang";
 
 /**
- * THE GAME HOUSE's kit: one hall (a single floor), its colliders, people, ticks, clicks and the
- * helpers the zones share: voxel furniture with automatic colliders, signs, live screens, zkSNARKs who
- * sit at the tables and now and then say something, and the house's few lamps (always the same
- * number: changing nothing never recompiles a shader).
+ * THE GAME HOUSE's kit: one great hall on two levels (the ground floor and the gallery round the
+ * atrium), each with its own colliders, people, ticks, clicks, and the helpers the zones share: voxel
+ * furniture with automatic colliders, signs and neon, live screens, zkSNARKs who sit at the tables
+ * and now and then say something, the house's few lamps (always the same number: changing nothing
+ * never recompiles a shader), and a bake that merges the hall's still meshes by material.
  */
 
-/** The hall: x across (−15 west … 15 east), z from the back wall (−24) to the street doors (0). */
-export const ROOM = { x0: -15, x1: 15, z0: -24, z1: 0, h: 7.2 };
-export const LIGHTS = 4;
+/** The hall: x across (−26 west … 26 east), z from the back wall (−46) to the street doors (0). */
+export const ROOM = { x0: -26, x1: 26, z0: -46, z1: 0, h: 12.8 };
+/**
+ * The gallery (level 1) round the atrium: its floor at `y`, its underside at `under`; the atrium is
+ * the open well |x| < `edge`, z < `bridge` (the bridge over the doors joins the two side galleries).
+ */
+export const MEZZ = { y: 5.4, under: 4.95, edge: 14, bridge: -8 };
+export const LIGHTS = 6;
+
+/** Pixel signage (DotGothic16, the city's neon) and the mono of the boards. */
+export const PX = (px: number) => `400 ${Math.round(px)}px "DotGothic16", "JetBrains Mono", monospace`;
+export const MONO = (px: number, w = 700) => `${w} ${Math.round(px)}px "JetBrains Mono", Menlo, monospace`;
+
+/** Redraws once the pixel font's glyphs are in (its subsets load on demand). */
+const fontWaiters: (() => void)[] = [];
+let fontsIn = false;
+export function onFonts(fn: () => void) {
+  if (fontsIn) return;
+  fontWaiters.push(fn);
+}
+if (typeof document !== "undefined" && document.fonts) {
+  const sample = "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz #,.:·%→▲▼▶+−-/ⓩ 游戏屋零知传奇決闘遊戯札盤果園酒場区块大亨最后一证屏蔽对战二階派对小游戏街机观众席光环休息室";
+  void Promise.all([document.fonts.load(PX(40), sample), document.fonts.load(MONO(40), "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ")])
+    .catch(() => {})
+    .then(() => {
+      fontsIn = true;
+      for (const fn of fontWaiters.splice(0)) fn();
+    });
+}
+
+/** Two colours mixed. */
+export function mix(a: string, b: string, k: number) {
+  return `#${new THREE.Color(a).lerp(new THREE.Color(b), k).getHexString()}`;
+}
+
+/**
+ * A neon sign: the text in its colour with a white-hot core, on a transparent plane `h` metres tall
+ * (its width follows the text); redrawn when the pixel font arrives.
+ */
+export function neon(text: string, h: number, color: string, o: { font?: (px: number) => string; k?: number; vertical?: boolean } = {}) {
+  const font = o.font ?? PX;
+  const c = document.createElement("canvas");
+  const g = c.getContext("2d")!;
+  const px = 120;
+  g.font = font(px);
+  const chars = [...text];
+  if (o.vertical) {
+    c.width = Math.round(px * 1.5);
+    c.height = Math.round(px * (chars.length + 0.5));
+  } else {
+    c.width = Math.ceil(g.measureText(text).width) + px;
+    c.height = Math.round(px * 1.5);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  const draw = () => {
+    g.clearRect(0, 0, c.width, c.height);
+    g.font = font(px);
+    g.textBaseline = "middle";
+    g.textAlign = "center";
+    const put = (fill: string, blur: number) => {
+      g.shadowColor = color;
+      g.shadowBlur = blur;
+      g.fillStyle = fill;
+      if (o.vertical) chars.forEach((ch, i) => g.fillText(ch, c.width / 2, px * (i + 0.75)));
+      else g.fillText(text, c.width / 2, c.height / 2 + px * 0.04);
+    };
+    put(color, px * 0.3);
+    put(mix(color, "#ffffff", 0.55), px * 0.08);
+    tex.needsUpdate = true;
+  };
+  draw();
+  onFonts(draw);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false, color: new THREE.Color(1, 1, 1).multiplyScalar(o.k ?? 1.5) });
+  // (a vertical sign: `h` is each character's height)
+  const w = o.vertical ? h * 1.5 : (h * c.width) / c.height;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, o.vertical ? (h * c.height) / px : h), mat);
+  m.raycast = () => {};
+  return Object.assign(m, { width: w });
+}
 
 export type Tick = (dt: number, t: number) => void;
 export type PickFn = (hit?: THREE.Intersection) => PickInfo | null;
@@ -90,6 +170,30 @@ const CHAT: Record<string, [string, string][]> = {
     ["Tournament at the desk, ten games!", "柜台那边有锦标赛，十场！"],
     ["Seeded by the last Zcash block. Fair and square.", "上一个 Zcash 区块洗的牌。公平公正。"],
   ],
+  legends: [
+    ["Guard up. Come through it.", "守卫就位。有本事来破。"],
+    ["Shielded: you can't touch it.", "屏蔽了：你碰不到它。"],
+    ["Halo pops. Next hit counts.", "光环碎了。下一击才算数。"],
+    ["Nullifier: draw two.", "作废符：抽两张。"],
+    ["Double-spend! Twice to the face.", "双花！连打两下脸。"],
+    ["Mint: three damage.", "铸造：三点伤害。"],
+    ["Timelocked. Your turn's slower.", "时间锁住了。你这回合慢了。"],
+    ["Lethal. GG.", "斩杀。GG。"],
+    ["Top-decked the Apparition…", "顶抽到了幽灵……"],
+  ],
+  deck: [
+    ["You can see the whole duel from up here.", "从这儿能看清整场对决。"],
+    ["Jumbotron's on the mini-game of the hour.", "大屏幕在放本时段小游戏。"],
+    ["Mini-games wall's on the deck, west side.", "小游戏墙在平台西侧。"],
+    ["Best seat in the house.", "全场最佳位置。"],
+  ],
+  stands: [
+    ["GO GO GO!", "冲冲冲！"],
+    ["Hit the hero!", "打英雄！"],
+    ["What a top-deck!", "这顶抽绝了！"],
+    ["Clear the Guard first!", "先清守卫！"],
+    ["LEGENDS! LEGENDS!", "传奇！传奇！"],
+  ],
   bar: [
     ["One Zero-Knowledge Sour.", "来杯零知识酸酒。"],
     ["On the house when a block lands.", "区块落地时本店请客。"],
@@ -103,8 +207,34 @@ export const chatLine = (kind: string, i: number) => {
 };
 
 export class GKit {
-  readonly root = new THREE.Group();
-  readonly rects: Rect[] = [];
+  /** The ground floor's things (the scene's own frame). */
+  readonly base = new THREE.Group();
+  /** The gallery's things: a group lifted to its floor (MEZZ.y), so they are built at y = 0. */
+  readonly upper = new THREE.Group();
+  /** Which level the helpers build on now (0: ground, 1: the gallery). */
+  level = 0;
+  /** Colliders per level. */
+  readonly rectsOf: Rect[][] = [[], []];
+  /** The level's group. */
+  get root(): THREE.Group {
+    return this.level ? this.upper : this.base;
+  }
+  /** The level's colliders. */
+  get rects(): Rect[] {
+    return this.rectsOf[this.level];
+  }
+  /** Builds `fn` on level `n` (its helpers' y and colliders are that level's). */
+  on<R>(n: number, fn: () => R): R {
+    const was = this.level;
+    this.level = n;
+    try {
+      return fn();
+    } finally {
+      this.level = was;
+    }
+  }
+  /** Meshes that never move and are never clicked: merged by material at the end (`bake`). */
+  private still: THREE.Mesh[] = [];
   readonly people: { s: Snark; chat: string }[] = [];
   readonly ticks: Tick[] = [];
   readonly pickables: THREE.Object3D[] = [];
@@ -133,7 +263,9 @@ export class GKit {
     readonly ctx: InteriorContext,
     readonly scene: THREE.Scene,
   ) {
-    scene.add(this.root);
+    scene.add(this.base);
+    this.upper.position.y = MEZZ.y;
+    this.base.add(this.upper);
     ctx.onBlock((h) => (this.lastHeight = h));
   }
 
@@ -149,11 +281,11 @@ export class GKit {
   }
 
   /** An invisible box that answers clicks (a group of things, a table and its chairs). */
-  hit(w: number, h: number, d: number, x: number, y: number, z: number, hover: HoverFn, info: PickFn, rot = 0) {
+  hit(w: number, h: number, d: number, x: number, y: number, z: number, hover: HoverFn, info: PickFn, rot = 0, parent: THREE.Object3D = this.root) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), this.hidden);
     m.position.set(x, y + h / 2, z);
     m.rotation.y = rot;
-    this.root.add(m);
+    parent.add(m);
     this.pick(m, hover, info);
     return m;
   }
@@ -163,7 +295,7 @@ export class GKit {
     this.lightCount++;
     const l = new THREE.PointLight(color, intensity, dist, 1.4);
     l.position.set(x, y, z);
-    this.root.add(l);
+    this.base.add(l);
   }
 
   /** Always exactly LIGHTS lamps (the shaders never change). */
@@ -175,35 +307,85 @@ export class GKit {
    * A piece of voxel furniture at (x, z), turned `rot`; by default it also blocks the walker (its
    * footprint, slightly shrunk).
    */
-  put(key: string, build: () => VoxelModel, x: number, z: number, rot = 0, o: { dy?: number; solid?: boolean; parent?: THREE.Object3D } = {}) {
+  put(key: string, build: () => VoxelModel, x: number, z: number, rot = 0, o: { dy?: number; solid?: boolean; parent?: THREE.Object3D; scale?: number } = {}) {
     const obj = place(o.parent ?? this.root, key, build, x, o.dy ?? 0, z, rot);
+    if (o.scale) obj.scale.setScalar(o.scale);
     if (o.solid !== false) {
+      this.base.updateMatrixWorld(true);
       obj.updateMatrixWorld(true);
       const b = new THREE.Box3().setFromObject(obj);
-      if (b.max.y > 0.25) this.rects.push([b.min.x + 0.05, b.min.z + 0.05, b.max.x - 0.05, b.max.z - 0.05]);
+      if (b.max.y - (this.level ? MEZZ.y : 0) > 0.25) this.rects.push([b.min.x + 0.05, b.min.z + 0.05, b.max.x - 0.05, b.max.z - 0.05]);
     }
     return obj;
   }
 
-  /** A box mesh (bottom at y) in the hall. */
-  box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = this.root) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y + h / 2, z);
-    parent.add(m);
+  /** A mesh that never moves nor answers a click: merged with its likes at the end. */
+  keep<M extends THREE.Mesh>(m: M): M {
+    this.still.push(m);
     return m;
   }
 
-  label(text: string, x: number, y: number, z: number, o: { h?: number; color?: string; bg?: string; rot?: number; glow?: boolean; font?: string } = {}) {
+  /**
+   * The still meshes merged by material (and by their attributes), in the scene's own frame: a few
+   * dozen draw calls for the hall's thousands of cards, chips, rails, panels and beams.
+   */
+  bake() {
+    this.base.updateMatrixWorld(true);
+    const groups = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[] }>();
+    for (const m of this.still) {
+      if (!m.parent || Array.isArray(m.material)) continue;
+      const g0 = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+      g0.applyMatrix4(m.matrixWorld);
+      for (const key of Object.keys(g0.attributes)) if (!["position", "normal", "uv", "color"].includes(key)) g0.deleteAttribute(key);
+      g0.morphAttributes = {};
+      const sig = `${matKey(m.material)}|${Object.keys(g0.attributes).sort().join(",")}`;
+      let e = groups.get(sig);
+      if (!e) groups.set(sig, (e = { mat: m.material, geos: [] }));
+      e.geos.push(g0);
+      m.parent.remove(m);
+    }
+    for (const { mat, geos } of groups.values()) {
+      const g = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+      if (geos.length > 1) for (const x of geos) x.dispose();
+      if (!g) continue;
+      g.computeBoundingSphere();
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.raycast = () => {};
+      mesh.userData.noBreak = true;
+      this.base.add(mesh);
+    }
+    this.still = [];
+  }
+
+  /** A box mesh (bottom at y) in the hall; still ones (`live` false, the default) are baked. */
+  box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = this.root, live = false) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y + h / 2, z);
+    parent.add(m);
+    if (!live) this.keep(m);
+    return m;
+  }
+
+  label(text: string, x: number, y: number, z: number, o: { h?: number; color?: string; bg?: string; rot?: number; glow?: boolean; font?: string; parent?: THREE.Object3D } = {}) {
     const p = textPlane(text, { h: o.h ?? 0.24, color: o.color ?? "#ffd28a", bg: o.bg, glow: o.glow ?? !o.bg, font: o.font });
     p.position.set(x, y, z);
     p.rotation.y = o.rot ?? 0;
     p.raycast = () => {};
-    this.root.add(p);
+    (o.parent ?? this.root).add(p);
     return p;
   }
 
+  /** A neon sign at (x, y, z), turned `rot` (see `neon`). */
+  sign(text: string, h: number, color: string, x: number, y: number, z: number, rot = 0, o: { font?: (px: number) => string; k?: number; vertical?: boolean; parent?: THREE.Object3D } = {}) {
+    const m = neon(text, h, color, o);
+    m.position.set(x, y, z);
+    m.rotation.y = rot;
+    (o.parent ?? this.root).add(m);
+    return m;
+  }
+
   /** A screen redrawn every `every` seconds (and when `dirty()` is called). */
-  screen(w: number, h: number, draw: (g: CanvasRenderingContext2D, W: number, H: number) => void, every = 3, px = 768) {
+  screen(w: number, h: number, draw: (g: CanvasRenderingContext2D, W: number, H: number) => void, every = 3, px = 768, parent: THREE.Object3D = this.root) {
     const W = px,
       H = Math.round((px * h) / w);
     const s = makeCanvas(W, H);
@@ -220,7 +402,8 @@ export class GKit {
       redraw();
     });
     redraw();
-    this.root.add(mesh);
+    onFonts(redraw);
+    parent.add(mesh);
     return Object.assign(mesh, { redraw });
   }
 
@@ -241,7 +424,7 @@ export class GKit {
     m.position.set(x, dy, z);
     m.raycast = () => {};
     this.root.add(m);
-    return m;
+    return this.keep(m);
   }
 
   /**
@@ -249,6 +432,8 @@ export class GKit {
    * spots; `chat`: what kind of lines it says now and then (see CHAT), and its role for a talk.
    */
   async person(id: number, at: [number, number], role: string, o: { face?: THREE.Vector3; wander?: [number, number][]; dy?: number; sit?: boolean; chat?: string } = {}) {
+    // (the level is the one asked for now: the art arrives later)
+    const root = this.root;
     try {
       const s = new Snark(id, await loadArt(id));
       s.noClip = true;
@@ -261,7 +446,7 @@ export class GKit {
         if (o.dy) s.sit(true, o.dy);
         else s.perchNear();
       }
-      this.root.add(s.root);
+      root.add(s.root);
       this.people.push({ s, chat: o.chat ?? "" });
       if (o.wander) {
         const w = o.wander;
@@ -285,6 +470,20 @@ export class GKit {
   rnd(i: number, j = 0) {
     return hash(i, j, 77, 1);
   }
+}
+
+/**
+ * Materials that draw the same (the zones each make their own `std("#141220")`) share one key, so
+ * the bake merges them; anything with a picture keeps its own.
+ */
+function matKey(m: THREE.Material): string {
+  const s = m as THREE.MeshStandardMaterial;
+  const b = m as THREE.MeshBasicMaterial;
+  if (s.map || s.emissiveMap || (m as THREE.MeshStandardMaterial).alphaMap) return m.uuid;
+  const common = `${m.type}:${m.transparent}:${m.opacity}:${m.side}:${m.depthWrite}:${m.blending}:${m.toneMapped}:${b.color?.getHexString?.()}`;
+  if (s.isMeshStandardMaterial) return `${common}:${s.roughness}:${s.metalness}:${s.emissive.getHexString()}:${s.emissiveIntensity}:${s.vertexColors}`;
+  if (b.isMeshBasicMaterial) return `${common}:${b.color.r.toFixed(4)},${b.color.g.toFixed(4)},${b.color.b.toFixed(4)}`;
+  return m.uuid;
 }
 
 /** The house's signs are drawn in this font (one language: the font as it is). */

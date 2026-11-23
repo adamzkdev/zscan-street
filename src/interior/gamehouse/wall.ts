@@ -4,17 +4,17 @@ import { fitText } from "../../scene/fit";
 import { T } from "../../i18n/lang";
 import { std } from "../kit";
 import { cup, tournamentDesk } from "./props";
-import { GKit, ROOM, makeCanvas, rrect, zfont } from "./kit";
+import { GKit, ROOM, makeCanvas, neon, rrect, zfont } from "./kit";
 
 /**
- * The back of the hall: the MINI-GAMES WALL, a board of screens with every ZK PARTY mini-game
+ * Up on the ZK PARTY DECK (the gallery's west side): the MINI-GAMES WALL, a board of screens with every ZK PARTY mini-game
  * (src/party/games, its thumbnail, its colour, its name) and two more for the TOURNAMENT and the
  * QUICK MATCH; a click opens the party hall's selection on that game. A screen pops out when it is
  * looked at (or hovered), one of them is featured in turn, an LED ticker runs under the board. In
  * front of it the TOURNAMENT desk, its cup turning on the shelf.
  */
 
-const WALL = { x: 0, w: 16.4, y0: 1.55, h: 4.6, gap: 0.18 };
+const WALL = { x: 0, w: 19.2, y0: 1.4, h: 4.8, gap: 0.2 };
 const SW = 512;
 
 interface Screen {
@@ -31,7 +31,13 @@ interface Screen {
 /** What a screen opens: a mini-game, the tournament, a quick match. */
 type Cell = { kind: "game"; key: string; title: string; tag: string; color: string } | { kind: "tour" | "quick" | "board" | "all"; title: string; tag: string; color: string };
 
-export function miniWall(k: GKit) {
+export function miniWall(k: GKit, at: { x: number; z: number; rot: number } = { x: 0, z: ROOM.z0, rot: 0 }) {
+  // built in the wall's own frame (x along it, facing +z, its foot at z = 0), then set in place
+  const G = new THREE.Group();
+  G.position.set(at.x, 0, at.z);
+  G.rotation.y = at.rot;
+  k.root.add(G);
+  G.updateMatrixWorld(true);
   const cells: Cell[] = GAME_CARDS.map((g) => ({ kind: "game", key: g.key, title: T(g.title, g.titleZh), tag: T(g.tag, g.tagZh), color: g.color }));
   cells.push({ kind: "tour", title: T("TOURNAMENT", "锦标赛"), tag: T("3 to 10 games in a row", "连续 3 到 10 场"), color: "#ff5c8a" });
   // three rows, as many columns as it takes; the grid's gaps filled with the board game and the whole list
@@ -45,14 +51,23 @@ export function miniWall(k: GKit) {
   const cw = (WALL.w - WALL.gap * (cols - 1)) / cols;
   const ch = (WALL.h - WALL.gap * (rows - 1)) / rows;
   const SH = Math.round((SW * ch) / cw);
-  const zWall = ROOM.z0 + 0.1;
+  const zWall = 0.1;
 
   // the board behind the screens, its neon frame, the header
-  k.box(WALL.w + 0.6, WALL.h + 0.6, 0.3, k.dark, WALL.x, WALL.y0 - 0.3, zWall + 0.15);
-  k.box(WALL.w + 0.7, 0.07, 0.08, k.lilac, WALL.x, WALL.y0 + WALL.h + 0.3, zWall + 0.32);
-  k.box(WALL.w + 0.7, 0.07, 0.08, k.flare, WALL.x, WALL.y0 - 0.37, zWall + 0.32);
-  for (const s of [-1, 1]) k.box(0.07, WALL.h + 0.7, 0.08, s < 0 ? k.flare : k.lilac, WALL.x + (s * (WALL.w + 0.7)) / 2, WALL.y0 - 0.35, zWall + 0.32);
-  k.label(T("ZK PARTY · MINI-GAMES", "ZK PARTY · 派对小游戏"), WALL.x, WALL.y0 + WALL.h + 0.66, zWall + 0.2, { h: 0.5, color: "#ff6b35" });
+  k.box(WALL.w + 0.6, WALL.h + 0.6, 0.3, k.dark, WALL.x, WALL.y0 - 0.3, zWall + 0.15, G);
+  k.box(WALL.w + 0.7, 0.07, 0.08, k.lilac, WALL.x, WALL.y0 + WALL.h + 0.3, zWall + 0.32, G);
+  k.box(WALL.w + 0.7, 0.07, 0.08, k.flare, WALL.x, WALL.y0 - 0.37, zWall + 0.32, G);
+  for (const s of [-1, 1]) k.box(0.07, WALL.h + 0.7, 0.08, s < 0 ? k.flare : k.lilac, WALL.x + (s * (WALL.w + 0.7)) / 2, WALL.y0 - 0.35, zWall + 0.32, G);
+  // stepped voxel corners on the frame, the house's own
+  for (const sx of [-1, 1])
+    for (const sy of [0, 1]) {
+      const cx = WALL.x + sx * (WALL.w / 2 + 0.3),
+        cy = sy ? WALL.y0 + WALL.h + 0.3 : WALL.y0 - 0.3;
+      for (let i = 0; i < 3; i++) k.box(0.16, 0.16, 0.1, i % 2 ? k.lilac : k.flare, cx - sx * i * 0.16, cy - (sy ? 1 : -1) * (2 - i) * 0.16 - 0.08, zWall + 0.34, G);
+    }
+  const head = neon(T("ZK PARTY · MINI-GAMES", "ZK PARTY · 派对小游戏"), 0.62, "#ff6b35");
+  head.position.set(WALL.x, WALL.y0 + WALL.h + 0.74, zWall + 0.22);
+  G.add(head);
 
   // the screens
   const geo = new THREE.PlaneGeometry(cw, ch);
@@ -66,7 +81,7 @@ export function miniWall(k: GKit) {
     const mat = new THREE.MeshBasicMaterial({ map: canvas.t, toneMapped: false });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, zWall + 0.32);
-    k.root.add(mesh);
+    G.add(mesh);
     const draw = (img: HTMLImageElement | null) => {
       drawScreen(canvas.g, SW, SH, cell, img);
       canvas.t.needsUpdate = true;
@@ -113,8 +128,8 @@ export function miniWall(k: GKit) {
     const strip = new THREE.Mesh(new THREE.PlaneGeometry(WALL.w, 0.32), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
     strip.position.set(WALL.x, WALL.y0 - 0.62, zWall + 0.33);
     strip.raycast = () => {};
-    k.root.add(strip);
-    k.box(WALL.w + 0.2, 0.42, 0.12, k.dark, WALL.x, WALL.y0 - 0.83, zWall + 0.25);
+    G.add(strip);
+    k.box(WALL.w + 0.2, 0.42, 0.12, k.dark, WALL.x, WALL.y0 - 0.83, zWall + 0.25, G);
     k.ticks.push((dt) => (t.offset.x = (t.offset.x + dt * 0.035) % 1));
   }
 
@@ -128,10 +143,17 @@ export function miniWall(k: GKit) {
   const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -(zWall + 0.32));
   const fwd = new THREE.Vector3();
   let clock = 0;
+  const inv = new THREE.Matrix4();
+  const camAt = new THREE.Vector3();
   const gaze = (camera: THREE.Camera) => {
+    // (in the wall's own frame)
+    inv.copy(G.matrixWorld).invert();
     camera.getWorldDirection(fwd);
-    ray.set(camera.position, fwd);
-    if (!ray.intersectPlane(plane, hitP) || camera.position.distanceTo(hitP) > 20) return -1;
+    camera.getWorldPosition(camAt);
+    fwd.transformDirection(inv);
+    camAt.applyMatrix4(inv);
+    ray.set(camAt, fwd);
+    if (!ray.intersectPlane(plane, hitP) || camAt.distanceTo(hitP) > 22) return -1;
     return screens.findIndex((s) => hitP.x > s.x0 && hitP.x < s.x1 && hitP.y > s.y0 && hitP.y < s.y1);
   };
   const look = { camera: null as THREE.Camera | null };
@@ -155,16 +177,16 @@ export function miniWall(k: GKit) {
   });
 
   // ---- the TOURNAMENT desk, its screen and its cup ----
-  const dz = ROOM.z0 + 2.9;
-  k.put("gh-tourDesk", tournamentDesk, 0, dz);
+  const dz = 2.9;
+  k.put("gh-tourDesk", tournamentDesk, 0, dz, 0, { parent: G });
   const tour = () => ({ eyebrow: "ZK PARTY", title: T("TOURNAMENT", "锦标赛"), party: "tour" as const });
   const tourHover = `<b>${T("Tournament", "锦标赛")}</b><span>${T("3 to 10 mini-games in a row, the same rivals", "同样的对手，连续 3 到 10 场小游戏")}</span>`;
-  k.hit(4.3, 1.2, 0.95, 0, 0, dz, tourHover, tour);
+  k.hit(4.3, 1.2, 0.95, 0, 0, dz, tourHover, tour, 0, G);
   // the cups on show: the champion's turning on its shelf, two smaller ones either side of the desk
   const trophy = cup(k.chrome, k.flare);
   trophy.scale.setScalar(1.25);
   trophy.position.set(1.45, 1.17, dz);
-  k.root.add(trophy);
+  G.add(trophy);
   k.pickAll(trophy, tourHover, tour);
   k.ticks.push((dt) => (trophy.rotation.y += dt * 0.6));
   for (const [x, sc, mat] of [
@@ -175,11 +197,11 @@ export function miniWall(k: GKit) {
     c.scale.setScalar(sc);
     c.position.set(x, 1.09, dz);
     c.rotation.y = x;
-    k.root.add(c);
+    G.add(c);
     k.pickAll(c, tourHover, tour);
   }
-  k.box(2.0, 0.32, 0.02, k.dark, 0, 0.46, dz + 0.425);
-  k.label(T("TOURNAMENT · 锦标赛", "锦标赛 · TOURNAMENT"), 0, 0.62, dz + 0.44, { h: 0.2, color: "#ff5c8a" });
+  k.box(2.0, 0.32, 0.02, k.dark, 0, 0.46, dz + 0.425, G);
+  k.label(T("TOURNAMENT · 锦标赛", "锦标赛 · TOURNAMENT"), 0, 0.62, dz + 0.44, { h: 0.2, color: "#ff5c8a", parent: G });
 
   return {
     /** The camera, for the gaze (set by the place's update). */

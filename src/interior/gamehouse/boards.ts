@@ -93,7 +93,7 @@ export function zoneCard(key: string) {
   return makeCanvas(W, H, (g) => {
     g.fillStyle = "#0e0d12";
     g.fillRect(0, 0, W, H);
-    g.drawImage(tableArt(key, k.color, W, 300), 0, 0);
+    g.drawImage(key === "legends" ? legendsArt(W, 300) : tableArt(key, k.color, W, 300), 0, 0);
     const grd = g.createLinearGradient(0, 220, 0, 320);
     grd.addColorStop(0, "rgba(14,13,18,0)");
     grd.addColorStop(1, "#0e0d12");
@@ -296,4 +296,60 @@ export function barMenu() {
       g.fillRect(36, y + 16, W - 72, 2);
     });
   });
+}
+
+/** ZK LEGENDS' picture for its standing card: two cards crossed over a stepped gold ring, sparks. */
+function legendsArt(w: number, h: number) {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#0d0b14";
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = "rgba(244,183,40,0.07)";
+  for (let y = 10; y < h; y += 20) for (let x = (y / 20) % 2 ? 10 : 20; x < w; x += 20) g.fillRect(x, y, 3, 3);
+  // the stepped ring
+  g.strokeStyle = "#f4b728";
+  g.lineWidth = 8;
+  g.beginPath();
+  for (let i = 0; i <= 48; i++) {
+    const a = (i / 48) * Math.PI * 2;
+    const x = w / 2 + Math.round((Math.cos(a) * 112) / 12) * 12,
+      y = h / 2 + Math.round((Math.sin(a) * 112) / 12) * 12;
+    if (i) g.lineTo(x, y);
+    else g.moveTo(x, y);
+  }
+  g.stroke();
+  // two cards, crossed
+  const cardAt = (rot: number, col: string, eye: string) => {
+    g.save();
+    g.translate(w / 2, h / 2);
+    g.rotate(rot);
+    g.fillStyle = "#16141c";
+    g.fillRect(-58, -84, 116, 168);
+    g.strokeStyle = col;
+    g.lineWidth = 6;
+    g.strokeRect(-58, -84, 116, 168);
+    g.fillStyle = col;
+    g.fillRect(-48, -74, 96, 86);
+    // a hooded zkSNARK in pixels
+    g.fillStyle = "#1c1a24";
+    g.fillRect(-26, -66, 52, 78);
+    g.fillRect(-32, -54, 64, 66);
+    g.fillStyle = "#e9c9a8";
+    g.fillRect(-18, -46, 36, 30);
+    g.fillStyle = eye;
+    g.fillRect(-12, -36, 8, 7);
+    g.fillRect(6, -36, 8, 7);
+    g.fillStyle = "#ff9a3c";
+    g.fillRect(-52, 50, 28, 28);
+    g.fillStyle = "#ff4d5e";
+    g.fillRect(24, 50, 28, 28);
+    g.fillStyle = "#f4b728";
+    g.fillRect(-56, -82, 26, 26);
+    g.restore();
+  };
+  cardAt(-0.32, "#c4b1fc", "#5cc8ff");
+  cardAt(0.3, "#f4b728", "#ff3b3b");
+  return c;
 }

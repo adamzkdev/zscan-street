@@ -1,11 +1,13 @@
-// node shots/_sheet.mjs OUT.png COLS W img1 img2 …: a contact sheet of screenshots (labelled), drawn in a browser page
-import { readFileSync } from "node:fs";
+// node shots/_sheet.mjs <glob-prefix> <from> <to> <out.png> [cols]: a contact sheet of numbered frames (fx-001.jpg...)
 import puppeteer from "puppeteer-core";
-const [OUT, COLS = "4", W = "400", ...imgs] = process.argv.slice(2);
-const cols = +COLS, w = +W, h = Math.round((w * 10) / 16);
-const html = `<body style="margin:0;background:#111;display:grid;grid-template-columns:repeat(${cols},${w}px);gap:4px;font:12px monospace;color:#fff">${imgs.map((f) => `<div style="position:relative"><img src="data:image/png;base64,${readFileSync(f).toString("base64")}" style="width:${w}px;height:${h}px;object-fit:cover;display:block"><span style="position:absolute;left:4px;top:4px;background:#000a;padding:1px 4px">${f.split("/").pop()}</span></div>`).join("")}</body>`;
-const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", defaultViewport: { width: cols * (w + 4), height: Math.ceil(imgs.length / cols) * (h + 4) } });
+import { readFileSync, writeFileSync } from "node:fs";
+const [pre, a, z, out, cols = "4"] = process.argv.slice(2);
+const imgs = [];
+for (let i = +a; i <= +z; i++) imgs.push(`${pre}${String(i).padStart(3, "0")}.jpg`);
+const html = `<html><body style="margin:0;background:#000;display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px">${imgs.map((f) => `<div style="position:relative"><img style="width:100%;display:block" src="data:image/jpeg;base64,${readFileSync(f).toString("base64")}"><b style="position:absolute;left:4px;top:2px;color:#ff0;font:14px monospace">${f.slice(-7, -4)}</b></div>`).join("")}</body></html>`;
+writeFileSync("/tmp/sheet.html", html);
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", defaultViewport: { width: 1600, height: 900 } });
 const p = await b.newPage();
-await p.setContent(html);
-await p.screenshot({ path: OUT });
+await p.goto("file:///tmp/sheet.html");
+await p.screenshot({ path: out, fullPage: true });
 await b.close();

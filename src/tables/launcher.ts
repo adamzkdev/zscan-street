@@ -28,6 +28,8 @@ export interface LauncherHooks {
   game(on: boolean): void;
   /** A line in the city's toast (HTML, in the page's language already). */
   say(html: string): void;
+  /** A zkSNARK who challenged you (the street's duels): it takes the first rival's seat. */
+  rival?: number;
 }
 
 import { HOUSE_TABLES } from "./catalog";
@@ -204,6 +206,7 @@ class Launcher {
       this.stake = p && d.stakes.includes(p.stake) && p.stake <= profile.p.z ? p.stake : (ok.find((s) => s > 0) ?? ok[0] ?? d.stakes[0] ?? 0);
     }
     this.rivals = drawRivals((Math.random() * 2 ** 32) >>> 0);
+    if (hooks.rival) this.rivals = [{ id: hooks.rival, name: personName(hooks.rival), jitter: 0 }, ...this.rivals.filter((r) => r.id !== hooks.rival)];
     window.addEventListener("keydown", this.keys, true);
     window.addEventListener("keyup", this.keys, true);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -273,7 +276,7 @@ class Launcher {
     const head = `
       <div class="tl-art" style="--c:${k.color}">${art}<canvas width="640" height="360"></canvas>
         <span class="tl-house">${T("THE GAME HOUSE", "游戏屋")}</span>
-        ${k.ready && d ? `<span class="tl-time">⏱ ~${d.minutes} ${T("min", "分钟")} · ${d.minSeats}–${d.maxSeats} ${T("players", "人")}</span>` : ""}
+        ${k.ready && d ? `<span class="tl-time">⏱ ~${d.minutes} ${T("min", "分钟")} · ${d.minSeats === d.maxSeats ? d.minSeats : `${d.minSeats}–${d.maxSeats}`} ${T("players", "人")}</span>` : ""}
       </div>
       <div class="tl-title" style="--c:${k.color}"><h2>${esc(k.title)}</h2><p>${esc(k.tag)}</p></div>`;
     if (!d) {

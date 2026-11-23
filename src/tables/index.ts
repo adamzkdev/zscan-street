@@ -3,6 +3,7 @@ import type { TableDef } from "./types";
 import barons from "./barons";
 import glyph from "./glyph";
 import holdem from "./holdem";
+import legends from "./legends";
 
-export const TABLES: TableDef[] = [barons, glyph, holdem];
+export const TABLES: TableDef[] = [barons, glyph, holdem, legends];
 export const tableOf = (key: string) => TABLES.find((t) => t.key === key) ?? null;

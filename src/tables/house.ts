@@ -10,7 +10,7 @@ import { drawMark } from "../party/theme";
 export { HOUSE_TABLES };
 
 /** About how long a table plays (the games' own, src/tables/<key>/index.ts). */
-const MINUTES: Record<string, number> = { barons: 20, glyph: 7, holdem: 20 };
+const MINUTES: Record<string, number> = { barons: 20, glyph: 7, holdem: 20, legends: 12 };
 
 /** A table's name, colour and line for the room (the house's card). */
 export function tableCard(key: string) {

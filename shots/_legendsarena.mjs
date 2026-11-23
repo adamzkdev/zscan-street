@@ -1,0 +1,31 @@
+// node shots/_legendsarena.mjs: the Arena: start, pick a pool, draft 30, the run screen, a duel, the result counted
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 1600, height: 900 } });
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", (e) => errs.push(e.message));
+p.on("console", (m) => /error/.test(m.type()) && errs.push(m.text().slice(0, 200)));
+await p.evaluateOnNewDocument(() => { window.WebSocket = class { constructor() {} send() {} close() {} addEventListener() {} }; });
+await p.goto("http://localhost:3071/tablelab.html?t=legends&seed=12&stake=0");
+await p.evaluate(() => { localStorage.removeItem("street.legends.arena"); localStorage.removeItem("street.legends.arena.runs"); });
+await p.reload();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+await sleep(3500);
+await p.evaluate(() => document.querySelector('.zkf-item[data-k="arena"]')?.click());
+await sleep(900);
+await p.screenshot({ path: "shots/legends/ar-1-door.png" });
+await p.evaluate(() => document.querySelector(".zkf-arena-go")?.click());
+await sleep(900);
+await p.screenshot({ path: "shots/legends/ar-2-pools.png" });
+await p.keyboard.press("2");
+await sleep(900);
+await p.screenshot({ path: "shots/legends/ar-3-pick.png" });
+for (let i = 0; i < 30; i++) { await p.keyboard.press(String(1 + (i % 3))); await sleep(140); }
+await sleep(600);
+await p.screenshot({ path: "shots/legends/ar-4-run.png" });
+await p.keyboard.press("Enter");
+await sleep(4500);
+const ok = await p.evaluate(() => { const z = window.zkl; return z && z.state ? { deck: z.state.s[0].deck.length + z.state.s[0].hand.length, name: z.deckName } : null; });
+console.log("duel:", JSON.stringify(ok));
+console.log("errors:", errs.length ? [...new Set(errs)].join("\n") : "none");
+await b.close();

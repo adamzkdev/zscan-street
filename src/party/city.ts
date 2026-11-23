@@ -88,7 +88,7 @@ export function openPartyHall(tab?: PartyTab, game?: string) {
 }
 
 /** A GAME HOUSE table (its key in src/tables): the launcher, then the game over the sleeping city. */
-export function openTableGame(key: string) {
+export function openTableGame(key: string, rival?: number) {
   const h = hooks;
   if (!h || partyUp || tableUp || h.busy?.()) return;
   if (SOLO) return void location.assign(soloUrl("table", { t: key }, h.place() ?? undefined, h.where?.()));
@@ -111,6 +111,7 @@ export function openTableGame(key: string) {
           } else if (wasSound) h.soundStart();
         },
         say: (html) => h.say(html),
+        rival,
       }),
     () => {
       tableUp = false;

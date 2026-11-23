@@ -158,6 +158,68 @@ export function signStand() {
   return v;
 }
 
+/**
+ * A ZK LEGENDS duel table, 2.0 × 1.2 m (long side along x, the two players at ±z): a void top in a
+ * gold-edged frame (the playmat is a picture laid on it), a lit rail down each player's side, two
+ * columns on a plinth with a lilac light strip.
+ */
+export function duelTable() {
+  const W = 24,
+    D = 14,
+    v = m(W, 10, D);
+  const gold = C("#d8a838");
+  v.box(0, 8, 0, W, 9, D, black);
+  for (let x = 0; x < W; x++) {
+    v.set(x, 9, 0, x % 3 ? C("#2a2632") : gold);
+    v.set(x, 9, D - 1, x % 3 ? C("#2a2632") : gold);
+  }
+  for (let z = 0; z < D; z++) {
+    v.set(0, 9, z, gold);
+    v.set(W - 1, 9, z, gold);
+  }
+  // under the top: a skirt with a light strip along each player's side
+  v.box(1, 7, 1, W - 1, 8, D - 1, C("#121016"));
+  for (let x = 2; x < W - 2; x++) {
+    v.set(x, 7, 0, E(x % 2 ? "#f4b728" : "#c4b1fc", 1.5));
+    v.set(x, 7, D - 1, E(x % 2 ? "#f4b728" : "#c4b1fc", 1.5));
+  }
+  for (const x of [4, W - 6]) v.box(x, 1, D / 2 - 1, x + 2, 7, D / 2 + 1, black);
+  v.box(2, 0, D / 2 - 3, W - 2, 1, D / 2 + 3, black);
+  for (let x = 3; x < W - 3; x++) v.set(x, 1, D / 2 + 2, E("#c4b1fc", 1.3));
+  return v;
+}
+
+/** Spectator tiers: `rows` stepped benches `w` m wide, rising away from +z (they face +z), a rail at the top. */
+export function bleachers(w: number, rows = 3) {
+  const W = Math.round(w * 12),
+    D = rows * 9 + 2,
+    v = m(W, rows * 5 + 12, D);
+  const seat = (i: number) => C(i % 2 ? "#2a2440" : "#34285c");
+  for (let r = 0; r < rows; r++) {
+    const z0 = D - 2 - (r + 1) * 9,
+      top = 5 + r * 5;
+    v.box(0, 0, z0, W, top - 1, z0 + 9, C("#16141c"));
+    v.box(0, top - 1, z0 + 1, W, top, z0 + 8, seat(r));
+    // the riser's edge in light
+    for (let x = 0; x < W; x += 2) v.set(x, top - 2, z0 + 8, E(r % 2 ? "#c4b1fc" : "#f4b728", 1.4));
+  }
+  // the top rail
+  for (let x = 0; x < W; x += 6) v.box(x, rows * 5 + 4, 0, x + 1, rows * 5 + 11, 1, C("#5a5662"));
+  v.box(0, rows * 5 + 11, 0, W, rows * 5 + 12, 1, C("#a9bcc4"));
+  return v;
+}
+
+/** A high bar table, 0.7 m across, 1.1 m tall: a disc top on a column. */
+export function highTable(top = "#2a2440") {
+  const v = m(9, 14, 9);
+  for (let z = 0; z < 9; z++)
+    for (let x = 0; x < 9; x++) if (Math.hypot(x - 4, z - 4) <= 4.4) v.set(x, 13, z, C(top));
+  v.box(4, 1, 4, 5, 13, 5, black);
+  v.box(2, 0, 2, 7, 1, 7, black);
+  for (let x = 2; x < 7; x++) v.set(x, 12, 4, E("#f4b728", 1.3));
+  return v;
+}
+
 // ---- moving props (plain meshes) -------------------------------------------------------------------
 
 const PIPS: number[][][] = [[], [[0, 0]], [[-1, -1], [1, 1]], [[-1, -1], [0, 0], [1, 1]], [[-1, -1], [1, -1], [-1, 1], [1, 1]], [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]]];
@@ -309,6 +371,41 @@ export function card(face: string) {
         rrect(g, 5, 5, 80, 120, 7);
         g.fill();
         drawMark(g, 45, 65, 56, "#c4b1fc", "#ff6b35");
+      } else if (face.startsWith("lg:")) {
+        // a ZK LEGENDS card: the faction's frame, a cost gem, a hooded zkSNARK, attack and health
+        const [, col, n] = face.split(":");
+        const k = Number(n) || 0;
+        g.fillStyle = "#16141c";
+        rrect(g, 3, 3, 84, 124, 8);
+        g.fill();
+        g.fillStyle = col;
+        g.fillRect(8, 8, 74, 64);
+        // the zkSNARK: a stepped hood, a face, two eyes
+        const hood = ["#1c1a24", "#3a3442", "#e8e6e0", "#2a2440"][k % 4];
+        g.fillStyle = hood;
+        g.fillRect(27, 18, 36, 54);
+        g.fillRect(23, 26, 44, 46);
+        g.fillStyle = ["#e9c9a8", "#c4b1fc", "#6dbf8a", "#a8d8e8"][(k >> 1) % 4];
+        g.fillRect(33, 30, 24, 22);
+        g.fillStyle = ["#ff3b3b", "#16141c", "#f4b728", "#5cc8ff"][k % 4];
+        g.fillRect(36, 37, 6, 5);
+        g.fillRect(48, 37, 6, 5);
+        g.fillStyle = "#e8e6e0";
+        g.fillRect(10, 80, 70, 4);
+        g.fillRect(10, 90, 52, 4);
+        // the gems: cost top-left (Zcash gold), attack bottom-left, health bottom-right
+        const gem = (x: number, y: number, c: string, v: number) => {
+          g.fillStyle = c;
+          g.fillRect(x - 11, y - 11, 22, 22);
+          g.fillStyle = "#16141c";
+          g.font = "800 17px Geist, sans-serif";
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.fillText(String(v), x, y + 1);
+        };
+        gem(15, 15, "#f4b728", 1 + (k % 7));
+        gem(15, 114, "#ff9a3c", 1 + ((k * 3) % 6));
+        gem(75, 114, "#ff4d5e", 2 + ((k * 5) % 6));
       } else if (face.startsWith("glyph:")) {
         const c = face.slice(6);
         g.fillStyle = c;

@@ -6,69 +6,115 @@ import { tableCard, tableStats } from "../../tables/house";
 import * as F from "../furniture";
 import { glowMat, makeScene, std, wall } from "../kit";
 import { ART, marquee } from "../tower/arcade";
-import type { Interior, InteriorContext, PickInfo } from "../types";
+import type { StairDecl } from "../lift";
+import type { Interior, InteriorContext, PickInfo, Rect } from "../types";
+import { arena, DUELS } from "./arena";
+import { jumbotron } from "./atrium";
 import { baronsBoard, barMenu, drawLeaderboard, zoneCard } from "./boards";
-import { GKit, ROOM, chatLine, makeCanvas, tex, withDayNight, type HoverFn } from "./kit";
-import { boardTable, cage, card, cardTable, chips, dais, die, dieUp, pokerTable, qBlock, roomChair, signStand } from "./props";
+import { GKit, MEZZ, PX, ROOM, chatLine, makeCanvas, tex, withDayNight, type HoverFn } from "./kit";
+import { bleachers, boardTable, cage, card, cardTable, chips, dais, die, dieUp, highTable, pokerTable, qBlock, roomChair, signStand } from "./props";
 import { miniWall } from "./wall";
 import { drawMark } from "../../party/theme";
 
 /**
- * THE GAME HOUSE (游戏屋), the city's games café on the avenue: one tall hall under string lights.
+ * THE GAME HOUSE (游戏屋), the city's games palace on the avenue: one great hall on two levels.
  *
- * - At the back, the MINI-GAMES WALL (wall.ts): a screen for every ZK PARTY mini-game; a click opens
- *   the party hall on it. Before it the TOURNAMENT desk and its cup.
- * - In the middle, ZK PARTY's board game on a lit dais: the ring of spaces round a little NU7 Quarter
- *   block, four tokens hopping, the Z-Block bobbing, the die turning; a click opens the board.
- * - The table games (src/tables, through the launcher): BLOCK BARONS on two board tables (east, at the
- *   back), LAST SNARK at three card tables (east, at the front), ORCHARD HOLD'EM in THE ORCHARD ROOM,
- *   the poker room behind its arch in the west corner. zkSNARKs play at them all; a table whose game is
- *   not in the house yet says COMING SOON.
- * - The bar (THE LUCKY NONCE) by the doors, a lounge, two ZK PARTY cabinets, and the house
- *   leaderboard on the east wall with your record.
+ * - The ATRIUM, two storeys high: ZK PARTY's board game on its lit dais in the middle, under the
+ *   JUMBOTRON (atrium.ts), a four-sided LED cube hung on cables; two grand stairs with lit risers up
+ *   to the gallery. At its back the ZK LEGENDS ARENA (arena.ts): a stage under a lighting truss, the
+ *   great LED DUEL BOARD on the back wall, six duel tables on the floor, its gate.
+ * - Under the west gallery: THE LUCKY NONCE (the bar) by the doors, a lounge, and THE ORCHARD ROOM,
+ *   the poker room behind its arches (six tables for eight).
+ * - Under the east gallery: the cashier's cage and a row of ZK PARTY cabinets by the doors, LAST SNARK
+ *   at four card tables, BLOCK BARONS at six board tables, the house leaderboard.
+ * - Up on the GALLERY (level 1, round the atrium, the bridge over the doors joining its two sides):
+ *   the ZK PARTY DECK on the west side (the MINI-GAMES WALL, a screen for every mini-game, the
+ *   TOURNAMENT desk, more cabinets), the HALO LOUNGE on the east side (three more LAST SNARK tables,
+ *   stands looking down on the arena, a bar).
+ * zkSNARKs play at every table, watch the duels, cheer in the stands; a table whose game is not in the
+ * house yet says COMING SOON.
  */
 
-const LATTICE = { x0: ROOM.x0, x1: -8.6, z0: ROOM.z0, z1: -11.4, h: 3.6, arch: [-12.9, -10.5] as [number, number] };
+const E = MEZZ.edge;
+/** The grand stairs: in the atrium along each gallery's edge, up from the doors' end (z −12) to a landing at z −24 … −27. */
+const STAIR = { inner: 11.3, outer: E - 0.3, foot: -12, head: -24, land: -27 };
+const STAIRS: StairDecl[] = [-1, 1].map((s) => {
+  const x0 = s < 0 ? -STAIR.outer : STAIR.inner,
+    x1 = s < 0 ? -STAIR.inner : STAIR.outer;
+  return {
+    from: 0,
+    to: 1,
+    zone: [x0, STAIR.head, x1, STAIR.foot] as Rect,
+    up: "-z" as const,
+    // nobody walks into the flight's head from under it (the landing is overhead)
+    walls: [[0, [x0, STAIR.head - 0.5, x1, STAIR.head - 0.38] as Rect]] as [number, Rect][],
+  };
+});
+/** The columns along both gallery edges. */
+const COLS_Z = [-8, -16, -24, -32, -40];
+const ORCHARD = { x0: ROOM.x0, x1: -E - 0.1, z0: ROOM.z0, z1: -24, h: MEZZ.under, archN: [-21.2, -18.8] as [number, number], archE: [-36.2, -33.8] as [number, number] };
+const POKER: [number, number][] = [
+  [-22.6, -29],
+  [-17.4, -29],
+  [-22.6, -35.5],
+  [-17.4, -35.5],
+  [-22.6, -42],
+  [-17.4, -42],
+];
 const BARONS: [number, number][] = [
-  [11.9, -20.4],
-  [11.9, -15.6],
+  [17.8, -29],
+  [22.6, -29],
+  [17.8, -35.5],
+  [22.6, -35.5],
+  [17.8, -42],
+  [22.6, -42],
 ];
 const GLYPH: [number, number][] = [
-  [9.3, -8.0],
-  [13.0, -8.0],
-  [11.15, -4.1],
+  [17.6, -13.2],
+  [22.6, -13.2],
+  [17.6, -19.4],
+  [22.6, -19.4],
 ];
-const POKER: [number, number][] = [
-  [-11.8, -20.5],
-  [-11.8, -15.3],
+/** LAST SNARK upstairs, in the Halo Lounge. */
+const GLYPH_UP: [number, number][] = [
+  [18.6, -12.6],
+  [23.2, -17.0],
+  [18.6, -21.2],
 ];
-const DAIS = { x: 0, z: -10.0 };
+const DAIS = { x: 0, z: -16 };
+const BLEACH = { x: 17.6, z: -37.5, w: 12 };
 
 export function buildGameHouse(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#08070c");
   const k = new GKit(ctx, scene);
 
   shell(k);
-  const wall = miniWall(k);
+  gallery(k);
   boardCorner(k);
-  latticeRoom(k);
+  jumbotron(k, DAIS.x, DAIS.z);
+  arena(k);
+  orchardRoom(k);
   baronsZone(k);
   glyphZone(k);
   bar(k);
   lounge(k);
   cashier(k);
   leaderboard(k);
+  const wall = k.on(1, () => partyDeck(k));
+  k.on(1, () => haloLounge(k));
   decor(k);
   life(k);
 
-  k.light(0, 5.8, -17.5, "#e4d8ff", 16, 24);
-  k.light(0, 5.0, -8.0, "#ffd8b0", 15, 20);
-  k.light(-11.8, 3.15, -17.9, "#d8c8ff", 10, 12);
-  k.light(11.6, 4.6, -12.5, "#ffe2c4", 18, 20);
-  k.light(-10.0, 4.4, -5, "#ffc890", 12, 14);
+  k.light(0, 10.6, -16, "#ffe2c4", 40, 34);
+  k.light(0, 9.4, -34, "#e8dcff", 42, 30);
+  k.light(-20, 4.4, -12, "#ffc890", 16, 18);
+  k.light(-20, 4.3, -35, "#d8c8ff", 15, 17);
+  k.light(20, 4.4, -24, "#ffe2c4", 22, 26);
+  k.light(0, 12.2, -26, "#fff1e0", 30, 44);
   k.padLights();
   // a warmer, fuller fill than the default hall's
-  scene.traverse((o) => o instanceof THREE.HemisphereLight && ((o.intensity = 1.25), o.groundColor.set("#3a2a40")));
+  scene.traverse((o) => o instanceof THREE.HemisphereLight && ((o.intensity = 1.35), o.groundColor.set("#3a2a40")));
+  k.bake();
 
   // the avenue through the front windows (the panorama taken from the doors)
   const view = ctx.cityView("gamehouse", 1.6, 3);
@@ -85,8 +131,13 @@ export function buildGameHouse(ctx: InteriorContext): Interior {
       key: "gamehouse",
       title: "GAME HOUSE",
       scene,
-      floors: [{ label: "G", name: "Game hall · mini-games, tables, The Orchard Room", y: 0, spawn: new THREE.Vector3(0, 0, -1.6), yaw: 0 }],
-      colliders: () => k.rects,
+      floors: [
+        { label: "G", name: "Great hall · ZK LEGENDS arena, the tables, The Orchard Room", y: 0, spawn: new THREE.Vector3(0, 0, -1.6), yaw: 0 },
+        { label: "2F", name: "Gallery · ZK PARTY deck, Halo Lounge", y: MEZZ.y, spawn: new THREE.Vector3(-19.4, MEZZ.y, -24), yaw: Math.PI / 2 },
+      ],
+      colliders: (f) => k.rectsOf[f] ?? k.rectsOf[0],
+      stairs: STAIRS,
+      lifts: () => [],
       pickables: () => k.pickables,
       pick: (hit) => {
         const o = find(hit.object);
@@ -116,11 +167,10 @@ export function buildGameHouse(ctx: InteriorContext): Interior {
 
 // ---- the hall ------------------------------------------------------------------------------------
 
-function shell(k: GKit) {
-  const { x0, x1, z0, z1, h } = ROOM;
-  // the carpet: void, a scatter of ⓩ marks, squares and pips in the house's colours
-  const carpet = tex(256, 14, 11, (g, S) => {
-    g.fillStyle = "#17121d";
+/** The house's carpet: void, a scatter of ⓩ marks, squares and pips in the house's colours. */
+function carpet(k: GKit, rx: number, ry: number, base = "#17121d", seed = 0) {
+  return tex(256, rx, ry, (g, S) => {
+    g.fillStyle = base;
     g.fillRect(0, 0, S, S);
     // a faint diamond grid under the motifs
     g.strokeStyle = "rgba(196,177,252,0.10)";
@@ -135,9 +185,9 @@ function shell(k: GKit) {
     }
     const cols = ["rgba(255,107,53,0.55)", "rgba(196,177,252,0.5)", "rgba(168,216,232,0.45)", "rgba(109,191,138,0.4)"];
     for (let i = 0; i < 14; i++) {
-      const x = k.rnd(i, 1) * S,
-        y = k.rnd(i, 2) * S,
-        s = 5 + k.rnd(i, 3) * 5;
+      const x = k.rnd(i + seed, 1) * S,
+        y = k.rnd(i + seed, 2) * S,
+        s = 5 + k.rnd(i + seed, 3) * 5;
       g.strokeStyle = cols[i % 4];
       g.fillStyle = cols[i % 4];
       g.lineWidth = 2;
@@ -157,35 +207,74 @@ function shell(k: GKit) {
       }
     }
   });
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshStandardMaterial({ map: carpet, emissive: "#ffffff", emissiveMap: carpet, emissiveIntensity: 0.05, roughness: 0.95 }));
+}
+
+function shell(k: GKit) {
+  const { x0, x1, z0, z1, h } = ROOM;
+  const W = x1 - x0,
+    D = z1 - z0;
+  const floorTex = carpet(k, W / 2.15, D / 2.15);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: floorTex, emissive: "#ffffff", emissiveMap: floorTex, emissiveIntensity: 0.05, roughness: 0.95 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2);
   floor.raycast = () => {};
   k.root.add(floor);
-  // the ceiling, dark, with beams
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), std("#0c0b10", 0.9));
+  // the atrium's floor round the board: polished void, stepped rings of light round the dais
+  const ring = makeCanvas(1024, 1024, (g) => {
+    g.fillStyle = "#121019";
+    g.fillRect(0, 0, 1024, 1024);
+    g.fillStyle = "rgba(255,255,255,0.025)";
+    for (let y = 0; y < 1024; y += 64) for (let x = (y / 64) % 2 ? 0 : 64; x < 1024; x += 128) g.fillRect(x, y, 64, 64);
+    for (const [r, c, w] of [
+      [470, "rgba(255,107,53,0.55)", 8],
+      [440, "rgba(196,177,252,0.30)", 4],
+      [300, "rgba(244,183,40,0.22)", 4],
+    ] as [number, string, number][]) {
+      g.strokeStyle = c;
+      g.lineWidth = w;
+      g.beginPath();
+      // a stepped circle (pixel ring)
+      const n = 72;
+      for (let i = 0; i <= n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const px = 512 + Math.round((Math.cos(a) * r) / 16) * 16,
+          py = 512 + Math.round((Math.sin(a) * r) / 16) * 16;
+        if (i) g.lineTo(px, py);
+        else g.moveTo(px, py);
+      }
+      g.stroke();
+    }
+  }).t;
+  k.flat(15, 15, new THREE.MeshStandardMaterial({ map: ring, roughness: 0.35, metalness: 0.2, emissive: "#ffffff", emissiveMap: ring, emissiveIntensity: 0.12 }), DAIS.x, DAIS.z, 0.006);
+  // the ceiling, dark, with beams over the atrium
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), std("#0c0b10", 0.9));
   ceil.rotation.x = Math.PI / 2;
   ceil.position.set((x0 + x1) / 2, h, (z0 + z1) / 2);
   k.root.add(ceil);
-  for (const x of [-13, -8.5, -4, 4, 8.5, 13]) k.box(0.3, 0.4, z1 - z0, k.trim, x, h - 0.4, (z0 + z1) / 2);
-  // the walls: plum panels over a walnut wainscot, a neon line round the room
+  for (const x of [-E, -9, -4.5, 0, 4.5, 9, E]) k.box(0.32, 0.5, MEZZ.bridge - z0 + 0.4, k.trim, x, h - 0.5, (MEZZ.bridge + z0) / 2);
+  for (const z of [-12, -20, -28, -36, -44]) k.box(2 * E, 0.3, 0.22, k.trim, 0, h - 0.4, z);
+
+  // ---- the walls: plum panels over a walnut wainscot, a neon line round each level
   const panel = std("#231d2c", 0.85);
   k.rects.push(wall(k.root, x0, z0, x1, z0, h, panel), wall(k.root, x0, z0, x0, z1, h, panel), wall(k.root, x1, z0, x1, z1, h, panel));
-  for (const [w, d, x, z] of [
-    [x1 - x0, 0.06, 0, z0 + 0.12],
-    [0.06, z1 - z0, x0 + 0.12, (z0 + z1) / 2],
-    [0.06, z1 - z0, x1 - 0.12, (z0 + z1) / 2],
+  for (const [ww, d, x, z] of [
+    [W, 0.06, (x0 + x1) / 2, z0 + 0.12],
+    [0.06, D, x0 + 0.12, (z0 + z1) / 2],
+    [0.06, D, x1 - 0.12, (z0 + z1) / 2],
   ] as const) {
-    k.box(w, 1.1, d, k.walnut, x, 0, z);
-    k.box(w + (d > 1 ? 0 : 0), 0.05, d + 0.02, d > 1 ? k.glacier : k.lilac, x, 3.4, z);
+    k.box(ww, 1.1, d, k.walnut, x, 0, z);
+    k.box(ww, 0.05, d + 0.02, d > 1 ? k.glacier : k.lilac, x, 3.5, z);
+    k.box(ww, 0.9, d, k.walnut, x, MEZZ.y, z);
+    k.box(ww, 0.05, d + 0.02, d > 1 ? k.lilac : k.flare, x, MEZZ.y + 3.1, z);
   }
-  // the street side: glass either side of the doors (the avenue in it), void above and below
+
+  // ---- the street side: glass either side of the doors (the avenue in it), the gallery's tall windows above
   const glass = new THREE.MeshStandardMaterial({ color: "#9cc3df", transparent: true, opacity: 0.1, roughness: 0.05, metalness: 0.3, depthWrite: false });
   const front = (a: number, b: number) => {
     const w = b - a,
       cx = (a + b) / 2;
     k.box(w, 0.5, 0.2, panel, cx, 0, z1);
-    k.box(w, h - 3.6, 0.2, panel, cx, 3.6, z1);
+    k.box(w, MEZZ.y + 0.5 - 3.6, 0.2, panel, cx, 3.6, z1);
     const p = new THREE.Mesh(new THREE.PlaneGeometry(w, 3.1), glass);
     p.position.set(cx, 2.05, z1);
     p.raycast = () => {};
@@ -195,11 +284,250 @@ function shell(k: GKit) {
   };
   front(x0, -1.6);
   front(1.6, x1);
+  // upstairs: one tall window from wall to wall, mullions every few metres, a void band at the top
+  {
+    const top = MEZZ.y + 0.5;
+    const gh = h - 0.7 - top;
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(W, gh), glass);
+    p.position.set(0, top + gh / 2, z1);
+    p.raycast = () => {};
+    k.root.add(p);
+    k.box(W, 0.7, 0.2, panel, 0, h - 0.7, z1);
+    for (let i = 0; i <= 16; i++) k.box(0.1, gh, 0.14, k.trim, x0 + (i * W) / 16, top, z1);
+    k.box(W, 0.06, 0.16, k.trim, 0, top + gh * 0.5, z1);
+  }
   // over the doors, inside: the house's name in neon
-  k.box(3.2, h - 2.9, 0.2, panel, 0, 2.9, z1);
-  k.label(T("GAME HOUSE · 游戏屋", "游戏屋 · GAME HOUSE"), 0, 3.5, z1 - 0.12, { h: 0.4, color: "#ff6b35", rot: Math.PI });
+  k.box(3.2, MEZZ.under - 2.9, 0.2, panel, 0, 2.9, z1);
+  k.sign(T("GAME HOUSE", "游戏屋"), 0.42, "#ff6b35", 0, 3.6, z1 - 0.13, Math.PI);
   // (the doorway itself: the way out, see manager.ts)
   k.rects.push([-1.6, z1 - 0.1, 1.6, z1 + 0.1]);
+
+  // ---- the gallery's slab: both sides, the bridge over the doors, the stairs' landings
+  const slab = std("#14121a", 0.7, 0.2);
+  const under = MEZZ.under,
+    th = MEZZ.y - MEZZ.under;
+  const slabs: [number, number, number, number][] = [
+    [x0, z0, -E, z1],
+    [E, z0, x1, z1],
+    [-E, MEZZ.bridge, E, z1],
+    [-E, STAIR.land, -STAIR.inner, STAIR.head],
+    [STAIR.inner, STAIR.land, E, STAIR.head],
+  ];
+  for (const [a, b, c, d] of slabs) k.box(c - a, th, d - b, slab, (a + c) / 2, under, (b + d) / 2);
+  // its underside: light strips down the middle of each side bay, under the bridge
+  for (const sx of [-1, 1]) for (const dx of [-3.2, 3.2]) k.box(0.12, 0.03, D - 1.4, glowMat(sx < 0 ? "#ffd8b0" : "#ffe2c4", 1.2), sx * 20 + dx, under - 0.03, (z0 + z1) / 2);
+  for (const dz of [-2.4, -5.6]) k.box(2 * E - 1, 0.03, 0.12, glowMat("#ffd8b0", 1.2), 0, under - 0.03, dz);
+  // ---- the fascias round the well: LED ribbon boards with the house's line running
+  const ribbon = makeCanvas(2048, 64);
+  const drawRibbon = () => {
+    const g = ribbon.g;
+    g.fillStyle = "#07060c";
+    g.fillRect(0, 0, 2048, 64);
+    g.font = PX(40);
+    g.textBaseline = "middle";
+    const parts: [string, string][] = [
+      [T("ZK LEGENDS ARENA ▸", "零知传奇竞技场 ▸"), "#f4b728"],
+      [T("ZK PARTY DECK · 2F ▴", "ZK PARTY 平台 · 二楼 ▴"), "#ff6b35"],
+      [T("THE ORCHARD ROOM ◂", "果园厅 ◂"), "#c4b1fc"],
+      [T("BLOCK BARONS · LAST SNARK ▸", "区块大亨 · 最后一证 ▸"), "#a8d8e8"],
+      [T("ⓩ PLAY CHIPS · NEVER REAL ZEC", "ⓩ 游戏筹码 · 绝非真实 ZEC"), "#6dbf8a"],
+    ];
+    let x = 10;
+    for (const [s, c] of parts) {
+      g.fillStyle = c;
+      g.fillText(s, x, 34);
+      x += g.measureText(s).width + 70;
+    }
+    g.fillStyle = "rgba(0,0,0,0.42)";
+    for (let i = 0; i < 2048; i += 4) g.fillRect(i, 0, 1, 64);
+    for (let j = 0; j < 64; j += 4) g.fillRect(0, j, 2048, 1);
+    ribbon.t.needsUpdate = true;
+  };
+  drawRibbon();
+  ribbon.t.wrapS = THREE.RepeatWrapping;
+  const ribMat = new THREE.MeshBasicMaterial({ map: ribbon.t, toneMapped: false });
+  const fascia = (len: number, x: number, z: number, rot: number) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, th - 0.08), ribMat);
+    m.position.set(x, under + th / 2, z);
+    m.rotation.y = rot;
+    m.raycast = () => {};
+    k.root.add(m);
+    // (the repeat per metre is the same everywhere: one texture, uvs stretched to the length)
+    const uv = m.geometry.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * (len / 18));
+  };
+  for (const sx of [-1, 1]) {
+    const rot = -sx * (Math.PI / 2);
+    // the side galleries' edges (behind the landings, and over the stairwells)
+    fascia(STAIR.land - z0, sx * (E - 0.012), (STAIR.land + z0) / 2, rot);
+    fascia(MEZZ.bridge - STAIR.head, sx * (E - 0.012), (STAIR.head + MEZZ.bridge) / 2, rot);
+    // the landings' inner and back edges
+    fascia(STAIR.head - STAIR.land, sx * (STAIR.inner - 0.012), (STAIR.head + STAIR.land) / 2, rot);
+    fascia(E - STAIR.inner, (sx * (E + STAIR.inner)) / 2, STAIR.land - 0.012, Math.PI);
+  }
+  // the bridge's edge over the well
+  fascia(2 * E, 0, MEZZ.bridge - 0.012, Math.PI);
+  k.ticks.push((dt) => (ribbon.t.offset.x = (ribbon.t.offset.x + dt * 0.05) % 1));
+
+  // ---- the columns: void, a neon strip on their atrium face, through both levels to the roof
+  const colMat = std("#16141c", 0.5, 0.35);
+  for (const s of [-1, 1])
+    for (const [i, z] of COLS_Z.entries()) {
+      const x = s * E;
+      k.box(0.5, h, 0.5, colMat, x, 0, z);
+      const neonMat = i % 2 ? k.lilac : k.flare;
+      k.box(0.06, MEZZ.under - 0.6, 0.06, neonMat, x - s * 0.27, 0.3, z);
+      k.box(0.06, h - MEZZ.y - 1.0, 0.06, neonMat, x - s * 0.27, MEZZ.y + 1.3, z);
+      const r: Rect = [x - 0.26, z - 0.26, x + 0.26, z + 0.26];
+      k.rectsOf[0].push(r);
+      k.rectsOf[1].push(r);
+    }
+  // kanji banners hung on two columns a side, over the gallery (seen from both levels)
+  for (const [x, z, text, col] of [
+    [-E + 0.3, -16, "游戏", "#ff6b35"],
+    [-E + 0.3, -32, "果园", "#c4b1fc"],
+    [E - 0.3, -16, "派对", "#6dbf8a"],
+    [E - 0.3, -32, "传奇", "#f4b728"],
+  ] as [number, number, string, string][]) {
+    const s = Math.sign(x);
+    k.box(0.06, 3.4, 0.9, std("#0a0910", 0.6), x - s * 0.02, MEZZ.y + 2.3, z);
+    k.sign(text, 1.2, col, x - s * 0.08, MEZZ.y + 4.0, z, -s * (Math.PI / 2), { vertical: true });
+  }
+
+  // ---- the grand stairs: lit risers, glass balustrades, a brass rail
+  const n = 30;
+  const rise = MEZZ.y / n,
+    run = (STAIR.foot - STAIR.head) / n;
+  const stepMat = std("#1a1622", 0.55, 0.25);
+  const riserCols = ["#ff6b35", "#c4b1fc", "#f4b728", "#a8d8e8", "#6dbf8a"].map((c) => glowMat(c, 1.25));
+  const balGlass = new THREE.MeshStandardMaterial({ color: "#c4b1fc", transparent: true, opacity: 0.14, roughness: 0.05, metalness: 0.3, depthWrite: false, side: THREE.DoubleSide });
+  const sideTex = tex(256, 1, 1, (g, S) => {
+    g.fillStyle = "#1f1828";
+    g.fillRect(0, 0, S, S);
+    // stepped stripes in faint lilac, a gold pip where they turn
+    g.fillStyle = "rgba(196,177,252,0.10)";
+    for (let i = 0; i < 8; i++) {
+      g.fillRect(i * 32, S - (i + 1) * 32, 32, 6);
+      g.fillRect(i * 32 + 26, S - (i + 1) * 32, 6, 32);
+    }
+    g.fillStyle = "rgba(244,183,40,0.35)";
+    for (let i = 0; i < 8; i++) g.fillRect(i * 32 + 24, S - (i + 1) * 32 - 2, 8, 8);
+  });
+  const sidePanel = new THREE.MeshStandardMaterial({ map: sideTex, emissive: "#ffffff", emissiveMap: sideTex, emissiveIntensity: 0.12, roughness: 0.7, side: THREE.DoubleSide });
+  for (const s of [-1, 1]) {
+    const xa = s < 0 ? -STAIR.outer : STAIR.inner,
+      xb = s < 0 ? -STAIR.inner : STAIR.outer;
+    const wid = xb - xa,
+      cx = (xa + xb) / 2;
+    for (let i = 0; i < n; i++) {
+      const zt = STAIR.foot - i * run;
+      k.box(wid, (i + 1) * rise, run, stepMat, cx, 0, zt - run / 2);
+      // the riser's light, set into its face
+      k.box(wid - 0.2, 0.035, 0.02, riserCols[i % riserCols.length], cx, i * rise + rise * 0.45, zt + 0.006);
+    }
+    // its sides: a plum panel cut to the steps, a stepped neon line along the treads, a lit plinth
+    const prof: [number, number][] = [[STAIR.foot, 0]];
+    for (let i = 0; i < n; i++) prof.push([STAIR.foot - i * run, (i + 1) * rise], [STAIR.foot - (i + 1) * run, (i + 1) * rise]);
+    prof.push([STAIR.head, 0]);
+    const shape = new THREE.Shape(prof.map(([zz, yy]) => new THREE.Vector2(zz, yy)));
+    const sideGeo = new THREE.ShapeGeometry(shape);
+    // (uvs: metres, the texture repeats)
+    const pos = sideGeo.attributes.position as THREE.BufferAttribute;
+    const uvs = sideGeo.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) uvs.setXY(i, pos.getX(i) / 2, pos.getY(i) / 2);
+    for (const [bx, face] of [
+      [xa - 0.012, -1],
+      [xb + 0.012, 1],
+    ] as const) {
+      const m = new THREE.Mesh(sideGeo, sidePanel);
+      // the shape's x is z, its y is y: turned into the plane x = bx (two-sided)
+      m.rotation.y = -Math.PI / 2;
+      m.position.set(bx, 0, 0);
+      k.root.add(m);
+      k.keep(m);
+      const lineX = bx + face * 0.012;
+      const lm = riserCols[(s + 1) % riserCols.length];
+      for (let i = 0; i < n; i++) {
+        const zt = STAIR.foot - i * run;
+        k.box(0.03, 0.03, run, lm, lineX, (i + 1) * rise - 0.04, zt - run / 2);
+        k.box(0.03, rise, 0.03, lm, lineX, i * rise - 0.01, zt - 0.015);
+      }
+      k.box(0.04, 0.05, STAIR.foot - STAIR.head, k.flare, lineX, 0.02, (STAIR.foot + STAIR.head) / 2);
+    }
+    // the balustrades: glass along the pitch, a rail on top, on both sides
+    const len = Math.hypot(STAIR.foot - STAIR.head, MEZZ.y);
+    const pitch = Math.atan2(MEZZ.y, STAIR.foot - STAIR.head);
+    for (const bx of [xa - 0.03, xb + 0.03]) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.95), balGlass);
+      p.rotation.set(0, Math.PI / 2, 0);
+      p.rotateZ(pitch);
+      p.position.set(bx, MEZZ.y / 2 + 0.55, (STAIR.foot + STAIR.head) / 2);
+      p.raycast = () => {};
+      k.root.add(p);
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 8), k.brass);
+      rail.rotation.x = Math.PI / 2 - pitch;
+      rail.position.set(bx, MEZZ.y / 2 + 1.02, (STAIR.foot + STAIR.head) / 2);
+      k.root.add(rail);
+      k.keep(rail);
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, len), riserCols[1]);
+      led.rotation.x = -pitch;
+      led.position.set(bx, MEZZ.y / 2 + 0.07, (STAIR.foot + STAIR.head) / 2);
+      k.root.add(led);
+      k.keep(led);
+    }
+    // a lit sign hung over the foot
+    k.sign(s < 0 ? T("▲ ZK PARTY DECK · 2F", "▲ ZK PARTY 平台 · 二楼") : T("▲ HALO LOUNGE · 2F", "▲ 光环休息室 · 二楼"), 0.3, s < 0 ? "#ff6b35" : "#6dbf8a", cx, 3.1, STAIR.foot + 0.2, 0);
+    for (const dx of [-0.9, 0.9]) k.box(0.01, ROOM.h - 3.25, 0.01, k.trim, cx + dx, 3.25, STAIR.foot + 0.2);
+  }
+}
+
+/** The gallery (level 1): its floor, the railings round the well, its colliders over the void. */
+function gallery(k: GKit) {
+  const { x0, x1, z0, z1 } = ROOM;
+  k.on(1, () => {
+    // the floor: a deeper carpet than the hall's
+    const gc = carpet(k, 12 / 2.15, 46 / 2.15, "#1a1222", 40);
+    const gm = new THREE.MeshStandardMaterial({ map: gc, emissive: "#ffffff", emissiveMap: gc, emissiveIntensity: 0.05, roughness: 0.95 });
+    for (const s of [-1, 1]) k.flat(12, 46, gm, s * 20, (z0 + z1) / 2, 0.004);
+    const bc = carpet(k, 28 / 2.15, 8 / 2.15, "#1a1222", 40);
+    k.flat(2 * E, -MEZZ.bridge, new THREE.MeshStandardMaterial({ map: bc, emissive: "#ffffff", emissiveMap: bc, emissiveIntensity: 0.05, roughness: 0.95 }), 0, MEZZ.bridge / 2, 0.004);
+    for (const s of [-1, 1]) k.flat(E - STAIR.inner, STAIR.head - STAIR.land, gm, s * (E + STAIR.inner) / 2, (STAIR.head + STAIR.land) / 2, 0.004);
+    // the walls' colliders up here (the walls themselves rise from the ground)
+    k.rects.push([x0 - 0.1, z0 - 0.1, x1 + 0.1, z0 + 0.1], [x0 - 0.1, z0, x0 + 0.1, z1], [x1 - 0.1, z0, x1 + 0.1, z1], [x0, z1 - 0.1, x1, z1 + 0.1]);
+    // the void: the well and the stairwells (the flights are cut out of it by the stairs themselves)
+    k.rects.push(
+      [-STAIR.inner, z0, STAIR.inner, MEZZ.bridge],
+      [-E, z0, -STAIR.inner, STAIR.land],
+      [STAIR.inner, z0, E, STAIR.land],
+      [-E, STAIR.head, -STAIR.inner, MEZZ.bridge],
+      [STAIR.inner, STAIR.head, E, MEZZ.bridge],
+    );
+    // the railings: glass, a neon top rail, posts
+    const glass = new THREE.MeshStandardMaterial({ color: "#c4b1fc", transparent: true, opacity: 0.13, roughness: 0.05, metalness: 0.3, depthWrite: false, side: THREE.DoubleSide });
+    const rail = (ax: number, az: number, bx: number, bz: number, col: THREE.Material) => {
+      const len = Math.hypot(bx - ax, bz - az);
+      const rot = Math.atan2(bx - ax, bz - az) - Math.PI / 2;
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.95), glass);
+      p.position.set((ax + bx) / 2, 0.55, (az + bz) / 2);
+      p.rotation.y = rot;
+      p.raycast = () => {};
+      k.root.add(p);
+      const top = k.box(len, 0.06, 0.08, k.brass, (ax + bx) / 2, 1.02, (az + bz) / 2);
+      top.rotation.y = rot;
+      const lit = k.box(len, 0.03, 0.03, col, (ax + bx) / 2, 0.06, (az + bz) / 2);
+      lit.rotation.y = rot;
+      const np = Math.max(1, Math.round(len / 1.6));
+      for (let i = 0; i <= np; i++) k.box(0.05, 1.02, 0.05, k.trim, ax + ((bx - ax) * i) / np, 0, az + ((bz - az) * i) / np);
+    };
+    for (const s of [-1, 1]) {
+      const col = s < 0 ? k.flare : k.glacier;
+      rail(s * E, MEZZ.bridge, s * E, STAIR.head, col);
+      rail(s * STAIR.inner, STAIR.head, s * STAIR.inner, STAIR.land, col);
+      rail(s * E, STAIR.land, s * STAIR.inner, STAIR.land, col);
+      rail(s * E, STAIR.land, s * E, z0 + 0.2, col);
+    }
+    rail(-E, MEZZ.bridge, E, MEZZ.bridge, k.lilac);
+  });
 }
 
 /** The ZK PARTY board on its dais: the ring of spaces, the NU7 Quarter block, tokens, the Z-Block, the die. */
@@ -322,16 +650,17 @@ function boardCorner(k: GKit) {
   k.label(T("ZK PARTY · THE BOARD GAME", "ZK PARTY · 派对棋盘"), x, 0.27, z + 1.935, { h: 0.2, color: "#ff6b35" });
   const open = (): PickInfo => ({ eyebrow: "ZK PARTY", title: T("The board game", "派对棋盘"), party: "board" });
   k.hit(5.3, 1.7, 3.9, x, 0, z, `<b>${T("ZK PARTY · board game", "ZK PARTY · 棋盘游戏")}</b><span>${T("roll, hop, buy Z-Blocks · you vs three snarks", "掷骰、前进、买 Z 方块 · 你对三个 zkSNARK")}</span>`, open);
-  // two armchairs to watch from
+  // armchairs to watch from, all round
   for (const s of [-1, 1]) k.put("gh-armchair", () => F.armchair("#3a2a6a"), x + s * 1.5, z + 2.95, Math.PI, { solid: false });
+  for (const s of [-1, 1]) k.put("gh-armchair", () => F.armchair("#3a2a6a"), x + s * 3.9, z, s < 0 ? Math.PI / 2 : -Math.PI / 2, { solid: false });
 }
 
-/** THE ORCHARD ROOM: the poker room in the west corner, behind its arch: two tables for eight, lilac lamps. */
-function latticeRoom(k: GKit) {
-  const L = LATTICE;
+/** THE ORCHARD ROOM: the poker room at the back of the west bay, behind its arches: six tables for eight, lilac lamps. */
+function orchardRoom(k: GKit) {
+  const L = ORCHARD;
   const wallMat = std("#17121f", 0.8);
   // an orchard trellis on its walls: lilac lines on void, gold fruit where they cross
-  const lattice = tex(256, 3, 1, (g, S) => {
+  const lattice = tex(256, 6, 1, (g, S) => {
     g.fillStyle = "#17121f";
     g.fillRect(0, 0, S, S);
     g.strokeStyle = "rgba(196,177,252,0.55)";
@@ -356,39 +685,55 @@ function latticeRoom(k: GKit) {
   back.position.set((L.x0 + L.x1) / 2, 1.2 + (L.h - 1.2) / 2, L.z0 + 0.13);
   back.raycast = () => {};
   k.root.add(back);
-  // the partitions: east with a long window onto the hall, south with the arch
-  const y = 0;
-  k.rects.push(wall(k.root, L.x1, L.z0, L.x1, L.z1, 1.0, wallMat, y, 0.16));
-  k.box(0.16, L.h - 2.8, L.z1 - L.z0, wallMat, L.x1, 2.8, (L.z0 + L.z1) / 2);
+  k.keep(back);
   const glass = new THREE.MeshStandardMaterial({ color: "#c4b1fc", transparent: true, opacity: 0.12, roughness: 0.05, metalness: 0.3, depthWrite: false });
-  const win = new THREE.Mesh(new THREE.PlaneGeometry(L.z1 - L.z0, 1.8), glass);
-  win.rotation.y = Math.PI / 2;
-  win.position.set(L.x1, 1.9, (L.z0 + L.z1) / 2);
-  win.raycast = () => {};
-  k.root.add(win);
-  for (let z = L.z0; z <= L.z1 + 0.01; z += (L.z1 - L.z0) / 6) k.box(0.1, 1.8, 0.1, k.trim, L.x1, 1.0, z);
-  k.rects.push(wall(k.root, L.x0, L.z1, L.arch[0], L.z1, L.h, wallMat, y, 0.16), wall(k.root, L.arch[1], L.z1, L.x1, L.z1, L.h, wallMat, y, 0.16));
-  k.box(L.arch[1] - L.arch[0], L.h - 2.9, 0.16, wallMat, (L.arch[0] + L.arch[1]) / 2, 2.9, L.z1);
-  // the arch's neon and its name
-  const ax = (L.arch[0] + L.arch[1]) / 2;
-  for (const s of [L.arch[0], L.arch[1]]) k.box(0.06, 2.9, 0.06, k.lilac, s, 0, L.z1 + 0.1);
-  k.box(L.arch[1] - L.arch[0], 0.06, 0.06, k.lilac, ax, 2.9, L.z1 + 0.1);
-  k.label(T("THE ORCHARD ROOM", "果园厅"), ax, 3.25, L.z1 + 0.1, { h: 0.34, color: "#c4b1fc" });
-  // its ceiling, lower than the hall's, and a lilac cove
-  k.box(L.x1 - L.x0, 0.15, L.z1 - L.z0, std("#0e0b14", 0.9), (L.x0 + L.x1) / 2, L.h, (L.z0 + L.z1) / 2);
-  k.box(L.x1 - L.x0 - 0.4, 0.04, 0.04, k.lilac, (L.x0 + L.x1) / 2, L.h - 0.1, L.z0 + 0.3);
+  // the east partition onto the atrium: low wall, a long window above it, an arch in the middle
+  const ex = L.x1;
+  const eastSegs: [number, number][] = [
+    [L.z0, L.archE[0]],
+    [L.archE[1], L.z1],
+  ];
+  for (const [za, zb] of eastSegs) {
+    k.rects.push(wall(k.root, ex, za, ex, zb, 1.0, wallMat, 0, 0.16));
+    k.box(0.16, L.h - 2.8, zb - za, wallMat, ex, 2.8, (za + zb) / 2);
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(zb - za, 1.8), glass);
+    win.rotation.y = Math.PI / 2;
+    win.position.set(ex, 1.9, (za + zb) / 2);
+    win.raycast = () => {};
+    k.root.add(win);
+    for (let z = za; z <= zb + 0.01; z += (zb - za) / Math.max(1, Math.round((zb - za) / 1.6))) k.box(0.1, 1.8, 0.1, k.trim, ex, 1.0, z);
+  }
+  // the north partition with its arch (the way in from the lounge)
+  k.rects.push(wall(k.root, L.x0, L.z1, L.archN[0], L.z1, L.h, wallMat, 0, 0.16), wall(k.root, L.archN[1], L.z1, L.x1, L.z1, L.h, wallMat, 0, 0.16));
+  k.box(L.archN[1] - L.archN[0], L.h - 2.9, 0.16, wallMat, (L.archN[0] + L.archN[1]) / 2, 2.9, L.z1);
+  // the arches' neon and their names
+  const archs: [number, number, number, number][] = [
+    [(L.archN[0] + L.archN[1]) / 2, L.z1 + 0.1, L.archN[1] - L.archN[0], 0],
+    [ex + 0.1, (L.archE[0] + L.archE[1]) / 2, L.archE[1] - L.archE[0], -Math.PI / 2],
+  ];
+  k.box(0.16, L.h - 2.9, L.archE[1] - L.archE[0], wallMat, ex, 2.9, (L.archE[0] + L.archE[1]) / 2);
+  for (const [ax, az, w, rot] of archs) {
+    const along = rot === 0;
+    for (const s of [-w / 2, w / 2]) k.box(0.06, 2.9, 0.06, k.lilac, ax + (along ? s : 0), 0, az + (along ? 0 : s));
+    k.box(along ? w : 0.06, 0.06, along ? 0.06 : w, k.lilac, ax, 2.9, az);
+    k.sign(T("THE ORCHARD ROOM", "果园厅"), 0.34, "#c4b1fc", ax, 3.35, az + (along ? 0.02 : 0), rot === 0 ? 0 : Math.PI / 2);
+  }
+  // its lilac cove under the gallery
+  k.box(L.x1 - L.x0 - 0.4, 0.04, 0.04, k.lilac, (L.x0 + L.x1) / 2, L.h - 0.12, L.z0 + 0.3);
+  k.box(0.04, 0.04, L.z1 - L.z0 - 0.4, k.lilac, L.x0 + 0.3, L.h - 0.12, (L.z0 + L.z1) / 2);
   // a dark rug
   k.flat(L.x1 - L.x0 - 0.6, L.z1 - L.z0 - 0.6, std("#1d1530", 0.95), (L.x0 + L.x1) / 2, (L.z0 + L.z1) / 2);
-  // the two tables: felt, eight velvet chairs, a lamp bar over each, cards and chips on the felt
+  // the tables: felt, eight velvet chairs, a lamp bar over each, cards and chips on the felt
   POKER.forEach(([tx, tz], n) => {
     k.put("gh-poker", () => pokerTable("#103844", "#4a8a98"), tx, tz);
     // the lamp: a void shade, its light underneath
-    k.box(2.1, 0.14, 0.42, k.dark, tx, L.h - 1.05, tz).raycast = () => {};
+    k.box(2.1, 0.14, 0.42, k.dark, tx, L.h - 1.05, tz);
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 0.3), glowMat("#e6dcff", 0.95));
     glow.rotation.x = Math.PI / 2;
     glow.position.set(tx, L.h - 1.055, tz);
     glow.raycast = () => {};
     k.root.add(glow);
+    k.keep(glow);
     for (const s of [-1, 1]) k.box(0.02, 0.9, 0.02, k.trim, tx + s * 0.8, L.h - 0.91, tz);
     const seats = pokerSeats(tx, tz);
     seats.forEach((p) => k.put("gh-roomChairL", () => roomChair("#35285c"), p.x, p.z, p.rot, { solid: false }));
@@ -422,6 +767,7 @@ function felt(k: GKit, tx: number, tz: number, n: number) {
     const c = card(f);
     c.position.set(tx - 0.24 + i * 0.12, y, tz);
     k.root.add(c);
+    if (i < 3) k.keep(c);
     return c;
   });
   for (const p of pokerSeats(tx, tz).filter((_, i) => (i + n) % 2 === 0)) {
@@ -432,6 +778,7 @@ function felt(k: GKit, tx: number, tz: number, n: number) {
       c.position.set(ix, y + 0.001, iz);
       c.rotation.y = Math.atan2(p.x - tx, p.z - tz) + s * 0.12;
       k.root.add(c);
+      k.keep(c);
     }
     const st = chips(["#ff6b35", "#c4b1fc", "#a8d8e8", "#e8e6e0"][(p.x * 7) & 3], 6 + Math.floor(k.rnd(p.x, p.z) * 10));
     st.position.set(tx + (p.x - tx) * 0.72, y, tz + (p.z - tz) * 0.72);
@@ -467,7 +814,7 @@ function felt(k: GKit, tx: number, tz: number, n: number) {
   });
 }
 
-/** BLOCK BARONS: two board tables at the back on the east side, eight chairs each, the board, dice that tumble. */
+/** BLOCK BARONS: six board tables at the back of the east bay, eight chairs each, the board, dice that tumble. */
 function baronsZone(k: GKit) {
   const boardTex = baronsBoard().t;
   const boardMat = new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.7 });
@@ -479,6 +826,7 @@ function baronsZone(k: GKit) {
     b.rotation.z = (n * Math.PI) / 2;
     b.position.set(tx, 0.756, tz);
     k.root.add(b);
+    k.keep(b);
     // little blocks built on the board (houses), and the tokens
     const hm: THREE.Matrix4[] = [];
     const hc: string[] = [];
@@ -534,8 +882,8 @@ function baronsZone(k: GKit) {
     const def = tableCard("barons");
     k.hit(2.5, 1.2, 2.5, tx, 0, tz, tableHover("barons"), (): PickInfo => ({ eyebrow: T("Table game", "牌桌游戏"), title: def.title, table: "barons" }));
   });
-  k.label(T("BLOCK BARONS", "区块大亨"), 11.9, 4.2, ROOM.z0 + 0.14, { h: 0.6, color: "#ff6b35" });
-  k.label(T("区块大亨 · property board game", "BLOCK BARONS · 地产棋盘游戏"), 11.9, 3.7, ROOM.z0 + 0.14, { h: 0.24, color: "#ffb08a" });
+  k.sign(T("BLOCK BARONS", "区块大亨"), 0.5, "#ff6b35", ROOM.x1 - 0.14, 4.05, -35.5, -Math.PI / 2);
+  k.label(T("区块大亨 · property board game", "BLOCK BARONS · 地产棋盘游戏"), ROOM.x1 - 0.14, 3.6, -35.5, { h: 0.22, color: "#ffb08a", rot: -Math.PI / 2 });
 }
 const baronsSeats = (): [number, number][] => [
   [-0.5, 1.45],
@@ -548,36 +896,38 @@ const baronsSeats = (): [number, number][] => [
   [-1.45, 0.5],
 ];
 
-/** LAST SNARK: three round card tables at the front on the east side; a card is played onto the pile now and then. */
-function glyphZone(k: GKit) {
+/** LAST SNARK: round card tables; a card is played onto the pile now and then. */
+function glyphTables(k: GKit, spots: [number, number][], first: number) {
   const colors = ["#ff6b35", "#c4b1fc", "#a8d8e8", "#6dbf8a"];
-  GLYPH.forEach(([tx, tz], n) => {
+  spots.forEach(([tx, tz], i) => {
+    const n = first + i;
     k.put("gh-cardTable", () => cardTable("#3a2c66"), tx, tz);
     for (const [dx, dz] of glyphSeats()) k.put("gh-roomChairG", () => roomChair("#3e3070"), tx + dx, tz + dz, Math.atan2(-dx, -dz), { solid: false });
     const y = 0.755;
     // the pile in the middle, the draw stack, hands at the seats
     const pile: THREE.Mesh[] = [];
-    for (let i = 0; i < 3; i++) {
-      const c = card(`glyph:${colors[(i + n) % 4]}`);
-      c.position.set(tx + (k.rnd(i, n) - 0.5) * 0.06, y + i * 0.002, tz + (k.rnd(i + 3, n) - 0.5) * 0.06);
-      c.rotation.y = k.rnd(i, n + 5) * 3;
+    for (let j = 0; j < 3; j++) {
+      const c = card(`glyph:${colors[(j + n) % 4]}`);
+      c.position.set(tx + (k.rnd(j, n) - 0.5) * 0.06, y + j * 0.002, tz + (k.rnd(j + 3, n) - 0.5) * 0.06);
+      c.rotation.y = k.rnd(j, n + 5) * 3;
       k.root.add(c);
       pile.push(c);
     }
-    const stack = k.box(0.09, 0.04, 0.13, k.dark, tx + 0.22, y, tz - 0.12);
-    stack.raycast = () => {};
+    k.box(0.09, 0.04, 0.13, k.dark, tx + 0.22, y, tz - 0.12);
     const deck = card("back");
     deck.position.set(tx + 0.22, y + 0.045, tz - 0.12);
     k.root.add(deck);
+    k.keep(deck);
     for (const [dx, dz] of glyphSeats())
-      for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
         const c = card("back");
-        c.position.set(tx + dx * 0.5 + (i - 1) * 0.035 * Math.cos(Math.atan2(dx, dz)), y + 0.001 * i, tz + dz * 0.5 - (i - 1) * 0.035 * Math.sin(Math.atan2(dx, dz)));
-        c.rotation.y = Math.atan2(dx, dz) + (i - 1) * 0.2;
+        c.position.set(tx + dx * 0.5 + (j - 1) * 0.035 * Math.cos(Math.atan2(dx, dz)), y + 0.001 * j, tz + dz * 0.5 - (j - 1) * 0.035 * Math.sin(Math.atan2(dx, dz)));
+        c.rotation.y = Math.atan2(dx, dz) + (j - 1) * 0.2;
         k.root.add(c);
+        k.keep(c);
       }
     // a card flies from a seat onto the pile
-    const fly = card(`glyph:${colors[n]}`);
+    const fly = card(`glyph:${colors[n % 4]}`);
     fly.visible = false;
     k.root.add(fly);
     let tt = n * 1.3,
@@ -606,17 +956,21 @@ function glyphZone(k: GKit) {
         top.position.copy(to);
         top.rotation.set(0, fly.rotation.y, 0);
         pile.push(top);
-        pile.forEach((c, i) => (c.position.y = y + i * 0.002));
+        pile.forEach((c, j) => (c.position.y = y + j * 0.002));
         fly.visible = false;
       }
     });
     const def = tableCard("glyph");
     k.hit(2.0, 1.2, 2.0, tx, 0, tz, tableHover("glyph"), (): PickInfo => ({ eyebrow: T("Table game", "牌桌游戏"), title: def.title, table: "glyph" }));
   });
-  k.label(T("LAST SNARK", "最后一证"), ROOM.x1 - 0.14, 4.1, -6.1, { h: 0.6, color: "#c4b1fc", rot: -Math.PI / 2 });
-  k.label(T("最后一证 · the shedding card game", "LAST SNARK · 出牌游戏"), ROOM.x1 - 0.14, 3.6, -6.1, { h: 0.24, color: "#d8ccff", rot: -Math.PI / 2 });
 }
 const glyphSeats = (): [number, number][] => [0, 1, 2, 3, 4].map((i) => [Math.sin((i / 5) * Math.PI * 2 + 0.3) * 1.25, Math.cos((i / 5) * Math.PI * 2 + 0.3) * 1.25]);
+
+function glyphZone(k: GKit) {
+  glyphTables(k, GLYPH, 0);
+  k.sign(T("LAST SNARK", "最后一证"), 0.5, "#c4b1fc", ROOM.x1 - 0.14, 4.05, -16.3, -Math.PI / 2);
+  k.label(T("最后一证 · the shedding card game", "LAST SNARK · 出牌游戏"), ROOM.x1 - 0.14, 3.6, -16.3, { h: 0.22, color: "#d8ccff", rot: -Math.PI / 2 });
+}
 
 /** A table's hover line: its game's name, and whether it is open. */
 function tableHover(key: string): HoverFn {
@@ -627,9 +981,11 @@ function tableHover(key: string): HoverFn {
 /** The zones' standing cards, turned to the doors: the game's picture, PLAY or COMING SOON. */
 function zoneCards(k: GKit) {
   const spots: [string, number, number][] = [
-    ["holdem", -9.4, -10.4],
-    ["barons", 8.4, -12.9],
-    ["glyph", 7.0, -4.2],
+    ["holdem", -16.6, -22.6],
+    ["barons", 16.0, -25.6],
+    ["glyph", 16.0, -9.8],
+    ["legends", -4.4, -23.2],
+    ["legends", 4.4, -23.2],
   ];
   for (const [key, x, z] of spots) {
     const rot = Math.atan2(0 - x, -1.6 - z);
@@ -647,22 +1003,25 @@ function zoneCards(k: GKit) {
   }
 }
 
-/** THE LUCKY NONCE: the bar by the doors, its stools, its menu. */
+/** THE LUCKY NONCE: the bar along the west wall by the doors, its stools, its menu. */
 function bar(k: GKit) {
-  k.put("gh-bar", () => F.barCounter(6.2, "#c4b1fc"), -12.0, -6.5, Math.PI / 2);
-  k.put("gh-backBar", () => F.backBar(6.2), -14.72, -6.5, Math.PI / 2);
-  for (let z = -9.0; z <= -4.0; z += 1.0) k.put("gh-stool", () => F.stool("#ff6b35"), -11.15, z, 0, { solid: false });
+  const z = -7.6;
+  k.put("gh-bar9", () => F.barCounter(9, "#c4b1fc"), -22.0, z, Math.PI / 2);
+  k.put("gh-backBar9", () => F.backBar(9), -25.72, z, Math.PI / 2);
+  for (let s = z - 4; s <= z + 4.01; s += 1.0) k.put("gh-stool", () => F.stool("#ff6b35"), -21.15, s, 0, { solid: false });
   const menu = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.875), new THREE.MeshBasicMaterial({ map: barMenu().t, toneMapped: false }));
-  menu.position.set(ROOM.x0 + 0.2, 3.35, -6.5);
+  menu.position.set(ROOM.x0 + 0.2, 3.25, z);
   menu.rotation.y = Math.PI / 2;
   k.root.add(menu);
-  k.label(T("THE LUCKY NONCE · 酒吧", "幸运随机数 · BAR"), ROOM.x0 + 0.14, 4.75, -6.5, { h: 0.42, color: "#ff6b35", rot: Math.PI / 2 });
+  k.sign(T("THE LUCKY NONCE", "幸运随机数"), 0.36, "#ff6b35", ROOM.x0 + 0.16, 4.5, z, Math.PI / 2);
+  k.sign("酒場", 0.62, "#c4b1fc", ROOM.x0 + 0.16, 2.9, z - 5.5, Math.PI / 2, { vertical: true });
   const drinks: [string, string, string, string][] = [
     ["Zero-Knowledge Sour", "零知识酸酒", "Nobody can tell what's in it, yet it's provably sour.", "没人知道里面是什么，但可以证明它是酸的。"],
     ["Orchard Spritz", "果园气泡酒", "Apple, elderflower and bubbles, fully shielded. The Tracker can't trace a drop.", "苹果、接骨木花和气泡，全程屏蔽。追踪者一滴也查不到。"],
     ["Sprout Old Fashioned", "萌芽古典", "From the first shielded pool: retired, still poured.", "来自第一个屏蔽池：已退役，照样倒酒。"],
     ["Equihash Mule", "Equihash 骡子", "Ginger, lime, and a memory-hard round on the ice.", "姜、青柠，冰块上再加一轮内存困难计算。"],
     ["Lucky Nonce", "幸运随机数", "Alcohol-free. The house swears it finds blocks.", "无酒精。店家发誓它能帮你出块。"],
+    ["Halo Highball", "光环高球", "Recursive: every sip proves the last one.", "递归的：每一口都证明上一口。"],
   ];
   let poured = 0;
   const hover = `<b>${T("The Lucky Nonce", "幸运随机数酒吧")}</b><span>${T("order a drink", "点一杯")}</span>`;
@@ -670,48 +1029,52 @@ function bar(k: GKit) {
     const [en, zh, den, dzh] = drinks[poured++ % drinks.length];
     return { eyebrow: T("The Lucky Nonce · bar", "幸运随机数 · 酒吧"), title: T(`${en} 🍸`, `${zh} 🍸`), body: `<p>${T(den, dzh)}</p><p>${T("On the house: the chips stay yours.", "本店请客：筹码还是你的。")}</p>` };
   };
-  k.hit(0.8, 1.2, 6.3, -12.0, 0, -6.5, hover, order);
+  k.hit(0.8, 1.2, 9.1, -22.0, 0, z, hover, order);
   k.pick(menu, hover, order);
 }
 
-/** A lounge between the bar and the board: two sofas, a low table, plants; two ZK PARTY cabinets by the east wall. */
+/** A lounge in the west bay before The Orchard Room: two sofas, a low table, plants; the ZK PARTY cabinets by the doors in the east bay. */
 function lounge(k: GKit) {
-  k.put("gh-sofaA", () => F.sofa("#2a2440", 3, "#ff6b35"), -6.0, -4.0, Math.PI);
-  k.put("gh-sofaA", () => F.sofa("#2a2440", 3, "#ff6b35"), -6.0, -7.6, 0);
-  k.put("gh-coffee", F.coffeeTable, -6.0, -5.8);
+  k.put("gh-sofaA", () => F.sofa("#2a2440", 3, "#ff6b35"), -19.6, -15.0, Math.PI);
+  k.put("gh-sofaA", () => F.sofa("#2a2440", 3, "#ff6b35"), -19.6, -18.6, 0);
+  k.put("gh-coffee", F.coffeeTable, -19.6, -16.8);
   const d = die(0.16);
-  d.position.set(-5.7, 0.5, -5.8);
+  d.position.set(-19.3, 0.5, -16.8);
   d.rotation.set(0.2, 0.6, 0);
   k.root.add(d);
   for (const [x, z, s] of [
-    [-14.3, -0.8, 1],
-    [14.3, -0.8, 2],
-    [-8.1, -10.6, 3],
-    [8.1, -23.3, 4],
-    [-3.6, -23.4, 5],
-    [3.6, -23.4, 6],
+    [-25.3, -0.8, 1],
+    [25.3, -0.8, 2],
+    [-15.0, -21.5, 3],
+    [-25.2, -21.6, 4],
+    [-15.0, -1.2, 5],
+    [15.0, -1.2, 6],
+    [-3.6, -11.0, 7],
+    [3.6, -11.0, 8],
   ] as const)
     k.put(`gh-plant${s % 2}`, () => F.plant(s % 2 ? "monstera" : "ficus", s), x, z);
-  // two ZK PARTY cabinets (the arcade's), their attract screens on
+  // the ZK PARTY cabinets (the arcade's), their attract screens on, in a row along the east wall
   const gm = ART.party;
-  for (const [i, z] of [-1.6, -2.6].entries()) {
+  for (const [i, z] of [-2.8, -3.9, -5.0, -6.1, -7.2, -8.3].entries()) {
     const cab = k.put("gh-cab", () => F.arcadeCabinet(gm.color, gm.side), ROOM.x1 - 0.55, z, -Math.PI / 2);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.56), new THREE.MeshBasicMaterial({ map: marquee("party"), toneMapped: false }));
     scr.position.set(0, 1.38 * 2, 0.03);
     scr.scale.setScalar(2);
     cab.add(scr);
-    const info = (): PickInfo => ({ eyebrow: T("ZK Arcade", "ZK 街机厅"), title: "ZK PARTY", party: i ? "practice" : "board" });
+    const info = (): PickInfo => ({ eyebrow: T("ZK Arcade", "ZK 街机厅"), title: "ZK PARTY", party: i % 2 ? "practice" : "board" });
     k.pickAll(cab, `<b>ZK PARTY</b><span>${T("play for ⓩ against three snarks", "与三个 zkSNARK 对战赢 ⓩ")}</span>`, info);
   }
+  k.sign(T("ZK ARCADE", "ZK 街机"), 0.42, "#ff6b35", ROOM.x1 - 0.14, 4.1, -5.5, -Math.PI / 2);
 }
 
 /** The house leaderboard on the east wall: your record, the regulars. */
 function leaderboard(k: GKit) {
+  const z = -24.4;
   const s = k.screen(3.9, 2.2, drawLeaderboard, 4, 1024);
-  s.position.set(ROOM.x1 - 0.2, 2.65, -11.8);
+  s.position.set(ROOM.x1 - 0.2, 2.45, z);
   s.rotation.y = -Math.PI / 2;
-  k.box(0.08, 2.4, 4.1, k.dark, ROOM.x1 - 0.14, 1.45, -11.8);
-  k.box(0.06, 0.05, 4.1, k.lilac, ROOM.x1 - 0.2, 3.85, -11.8);
+  k.box(0.08, 2.4, 4.1, k.dark, ROOM.x1 - 0.14, 1.25, z);
+  k.box(0.06, 0.05, 4.1, k.lilac, ROOM.x1 - 0.2, 3.65, z);
   k.pick(s, `<b>${T("House leaderboard", "游戏屋排行榜")}</b><span>${T("your record", "你的战绩")}</span>`, () => {
     const p = profile.p;
     const lv = levelOf(p.xp);
@@ -734,25 +1097,101 @@ function leaderboard(k: GKit) {
   profile.subscribe(() => s.redraw());
 }
 
-/** The air: string lights under the ceiling, hanging Z-Blocks and dice, the zones' cards. */
+// ---- the gallery ---------------------------------------------------------------------------------------
+
+/** THE ZK PARTY DECK (level 1, west): the MINI-GAMES WALL and its TOURNAMENT desk, cabinets, sofas at the rail. */
+function partyDeck(k: GKit) {
+  const w = miniWall(k, { x: ROOM.x0, z: -24, rot: Math.PI / 2 });
+  // cabinets in a row at the back
+  const gm = ART.party;
+  for (const [i, z] of [-37.4, -38.5, -39.6, -40.7, -41.8].entries()) {
+    const cab = k.put("gh-cab", () => F.arcadeCabinet(gm.color, gm.side), ROOM.x0 + 0.55, z, Math.PI / 2);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.56), new THREE.MeshBasicMaterial({ map: marquee("party"), toneMapped: false }));
+    scr.position.set(0, 1.38 * 2, 0.03);
+    scr.scale.setScalar(2);
+    cab.add(scr);
+    const info = (): PickInfo => ({ eyebrow: T("ZK Arcade", "ZK 街机厅"), title: "ZK PARTY", party: i % 2 ? "board" : "practice" });
+    k.pickAll(cab, `<b>ZK PARTY</b><span>${T("play for ⓩ against three snarks", "与三个 zkSNARK 对战赢 ⓩ")}</span>`, info);
+  }
+  // sofas at the rail looking down on the atrium, at the front of the deck
+  for (const z of [-4.0, -10.6]) k.put("gh-sofaD", () => F.sofa("#3a1a14", 3, "#c4b1fc"), -E - 1.4, z, -Math.PI / 2);
+  for (const z of [-5.4, -9.2]) k.put("gh-highT", () => highTable("#2a2440"), -20.5, z);
+  k.sign(T("ZK PARTY DECK", "ZK PARTY 平台"), 0.6, "#ff6b35", -20, 3.6, ROOM.z0 + 0.16, 0);
+  k.sign("二階", 0.5, "#c4b1fc", -24.6, 2.8, ROOM.z0 + 0.16, 0, { vertical: true });
+  for (const [x, z, s] of [
+    [-25.3, -1.0, 11],
+    [-15.0, -44.8, 12],
+  ] as const)
+    k.put(`gh-plant${s % 2}`, () => F.plant(s % 2 ? "monstera" : "ficus", s), x, z);
+  return w;
+}
+
+/** THE HALO LOUNGE (level 1, east): three LAST SNARK tables, the stands over the arena, a bar. */
+function haloLounge(k: GKit) {
+  glyphTables(k, GLYPH_UP, 10);
+  k.put("gh-bleach", () => bleachers(BLEACH.w, 3), BLEACH.x, BLEACH.z, -Math.PI / 2);
+  // its collider: the tiers are a solid block (the rail behind them too)
+  k.sign(T("HALO LOUNGE", "光环休息室"), 0.6, "#6dbf8a", 20, 3.6, ROOM.z0 + 0.16, 0);
+  k.sign(T("THE STANDS ▸ ZK LEGENDS", "看台 ▸ 零知传奇"), 0.34, "#f4b728", ROOM.x1 - 0.14, 3.3, BLEACH.z, -Math.PI / 2);
+  // the bar: a counter along the east wall at the front
+  k.put("gh-bar5", () => F.barCounter(5, "#6dbf8a"), 22.2, -5.0, -Math.PI / 2);
+  k.put("gh-backBar5", () => F.backBar(5), 25.72, -5.0, -Math.PI / 2);
+  for (let z = -7; z <= -3; z += 1) k.put("gh-stool", () => F.stool("#6dbf8a"), 21.35, z, 0, { solid: false });
+  const hover = `<b>${T("The Halo bar", "光环吧台")}</b><span>${T("order a drink", "点一杯")}</span>`;
+  k.hit(0.8, 1.2, 5.1, 22.2, 0, -5.0, hover, (): PickInfo => ({ eyebrow: T("Halo Lounge · bar", "光环休息室 · 吧台"), title: T("Recursive Spritz 🍸", "递归气泡酒 🍸"), body: `<p>${T("Each glass verifies the one before it. On the house.", "每一杯都验证上一杯。本店请客。")}</p>` }));
+  k.sign("光环", 0.6, "#6dbf8a", ROOM.x1 - 0.16, 2.3, -9.2, -Math.PI / 2, { vertical: true });
+  for (const z of [-4.2, -10.4]) k.put("gh-sofaH", () => F.sofa("#16302a", 3, "#f4b728"), E + 1.4, z, Math.PI / 2);
+  for (const [x, z, s] of [
+    [25.3, -1.0, 13],
+    [15.0, -44.8, 14],
+    [25.2, -27.0, 15],
+  ] as const)
+    k.put(`gh-plant${s % 2}`, () => F.plant(s % 2 ? "monstera" : "ficus", s), x, z);
+}
+
+// ---- the air -------------------------------------------------------------------------------------------
+
+/** Pendant lamps over tables (one draw call for the shades, one for the light, one for the cords). */
+function pendants(k: GKit, spots: [number, number][], y: number, ceil: number, color = "#ffe6c4") {
+  const q = new THREE.Quaternion();
+  const one = new THREE.Vector3(1, 1, 1);
+  k.instances(new THREE.CylinderGeometry(0.22, 0.42, 0.3, 18, 1, true), new THREE.MeshStandardMaterial({ color: "#16141c", roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide }), spots.map(([x, z]) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, one)));
+  k.instances(new THREE.CircleGeometry(0.38, 18).rotateX(Math.PI / 2), glowMat(color, 1.25), spots.map(([x, z]) => new THREE.Matrix4().makeTranslation(x, y - 0.12, z)));
+  k.instances(new THREE.CylinderGeometry(0.01, 0.01, 1, 4), k.trim, spots.map(([x, z]) => new THREE.Matrix4().compose(new THREE.Vector3(x, (y + 0.15 + ceil) / 2, z), q, new THREE.Vector3(1, ceil - y - 0.15, 1))));
+}
+
+/** The air: string lights over the atrium, hanging Z-Blocks and dice, lamps over the tables, the zones' cards, neon. */
 function decor(k: GKit) {
   zoneCards(k);
-  // string lights: five runs across the hall, drooping between the beams
+  // string lights: runs across the atrium under its roof, drooping between the beams
   const bulbs: THREE.Matrix4[] = [];
-  for (const z of [-3.5, -7.5, -11.5, -15.5, -19.5])
+  for (let z = -10; z >= -44; z -= 4)
     for (let i = 0; i <= 40; i++) {
-      const x = ROOM.x0 + 0.5 + (i / 40) * (ROOM.x1 - ROOM.x0 - 1);
-      const sag = Math.abs(Math.sin(((x - ROOM.x0) / 6) * Math.PI)) * 0.45;
-      if (x < LATTICE.x1 + 0.3 && z < LATTICE.z1) continue;
-      bulbs.push(new THREE.Matrix4().makeTranslation(x, ROOM.h - 0.55 - sag, z));
+      const x = -E + 0.4 + (i / 40) * (2 * E - 0.8);
+      const sag = Math.abs(Math.sin(((x + E) / 7) * Math.PI)) * 0.5;
+      bulbs.push(new THREE.Matrix4().makeTranslation(x, ROOM.h - 0.7 - sag, z));
+    }
+  // over the galleries, from the well's edge to the walls
+  for (const sx of [-1, 1])
+    for (let z = -2.5; z >= -44; z -= 4.2)
+      for (let i = 0; i <= 16; i++) {
+        const x = sx * (E + 0.4 + (i / 16) * (ROOM.x1 - E - 0.8));
+        bulbs.push(new THREE.Matrix4().makeTranslation(x, ROOM.h - 0.75 - Math.abs(Math.sin((i / 16) * Math.PI)) * 0.55, z));
+      }
+  // and under the gallery, along the bays
+  for (const sx of [-1, 1])
+    for (let z = -1.5; z >= -44; z -= 0.75) {
+      if (sx < 0 && z < ORCHARD.z1) continue;
+      bulbs.push(new THREE.Matrix4().makeTranslation(sx * (E + 0.6), MEZZ.under - 0.25 - Math.abs(Math.sin(z * 0.8)) * 0.12, z));
     }
   k.instances(new THREE.SphereGeometry(0.05, 8, 6), glowMat("#ffe2b8", 1.7), bulbs);
-  // hanging Z-Blocks and dice, turning slowly
+  // hanging Z-Blocks and dice over the atrium, turning slowly
   const hang: { o: THREE.Object3D; y: number; s: number }[] = [];
   for (const [x, y, z, s] of [
-    [-5.5, 5.5, -16.5, 0.9],
-    [5.6, 5.7, -7.0, 0.8],
-    [-2.8, 5.9, -4.2, 0.7],
+    [-8.5, 9.6, -12.5, 1.1],
+    [8.2, 10.1, -20.5, 1.0],
+    [-6.8, 10.4, -27.5, 0.9],
+    [7.4, 9.2, -10.8, 0.8],
   ]) {
     const q = qBlock(s);
     q.position.set(x, y, z);
@@ -762,8 +1201,9 @@ function decor(k: GKit) {
     hang.push({ o: q, y, s: 0.5 + x * 0.05 });
   }
   for (const [x, y, z, s] of [
-    [6.6, 5.4, -16.8, 0.75],
-    [-7.4, 5.6, -9.2, 0.65],
+    [-9.0, 9.0, -20.0, 0.9],
+    [9.2, 10.4, -29.0, 0.8],
+    [4.6, 10.8, -24.8, 0.7],
   ]) {
     const d = die(s);
     d.position.set(x, y, z);
@@ -782,15 +1222,11 @@ function decor(k: GKit) {
     }
   });
   // rugs under the table zones
-  k.flat(7.0, 10.6, std("#241a16", 0.95), 11.9, -18.0);
-  k.flat(7.6, 7.4, std("#1c1530", 0.95), 11.2, -6.0);
-  // pendant lamps over the BLOCK BARONS and LAST SNARK tables (one draw call for the shades, one for the light, one for the cords)
-  const over: [number, number, number][] = [...BARONS.map(([x, z]) => [x, z, 2.6] as [number, number, number]), ...GLYPH.map(([x, z]) => [x, z, 2.3] as [number, number, number])];
-  const q = new THREE.Quaternion();
-  const one = new THREE.Vector3(1, 1, 1);
-  k.instances(new THREE.CylinderGeometry(0.22, 0.42, 0.3, 18, 1, true), new THREE.MeshStandardMaterial({ color: "#16141c", roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide }), over.map(([x, z, y]) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, one)));
-  k.instances(new THREE.CircleGeometry(0.38, 18).rotateX(Math.PI / 2), glowMat("#ffe6c4", 1.25), over.map(([x, z, y]) => new THREE.Matrix4().makeTranslation(x, y - 0.12, z)));
-  k.instances(new THREE.CylinderGeometry(0.01, 0.01, 1, 4), k.trim, over.map(([x, z, y]) => new THREE.Matrix4().compose(new THREE.Vector3(x, (y + 0.15 + ROOM.h) / 2, z), q, new THREE.Vector3(1, ROOM.h - y - 0.15, 1))));
+  k.flat(10.6, 19.6, std("#241a16", 0.95), 20.2, -35.6);
+  k.flat(10.6, 11.6, std("#1c1530", 0.95), 20.1, -16.3);
+  // lamps over the tables: the bays (under the gallery), the arena (from the roof)
+  pendants(k, [...BARONS, ...GLYPH], 2.5, MEZZ.under);
+  k.on(1, () => pendants(k, GLYPH_UP, 2.4, ROOM.h - MEZZ.y));
   // the runner from the doors to the board: dark, edged in flare, a ⓩ every metre
   const run = makeCanvas(64, 512, (g) => {
     g.fillStyle = "#1a1018";
@@ -810,16 +1246,17 @@ function decor(k: GKit) {
       g.restore();
     }
   }).t;
-  k.flat(2.6, 5.2, new THREE.MeshStandardMaterial({ map: run, roughness: 0.95 }), 0, -4.4, 0.012);
-  // neon line art on the upper walls: dice, cards, chips, Z-Blocks, a joystick, a cup
-  for (const side of [-1, 1]) {
-    const art = makeCanvas(2048, 220, (g) => drawNeonArt(g, 2048, 220, side));
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(22, 22 * (220 / 2048)), new THREE.MeshBasicMaterial({ map: art.t, transparent: true, toneMapped: false, depthWrite: false }));
-    p.position.set(side * (ROOM.x1 - 0.16), 5.25, -12.2);
-    p.rotation.y = -side * (Math.PI / 2);
-    p.raycast = () => {};
-    k.root.add(p);
-  }
+  k.flat(2.6, 8.2, new THREE.MeshStandardMaterial({ map: run, roughness: 0.95 }), 0, -4.4, 0.012);
+  // neon line art on the upper east wall over the Halo Lounge: dice, cards, chips, Z-Blocks, a joystick, a cup
+  const art = makeCanvas(2048, 220, (g) => drawNeonArt(g, 2048, 220, 1));
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(30, 30 * (220 / 2048)), new THREE.MeshBasicMaterial({ map: art.t, transparent: true, toneMapped: false, depthWrite: false }));
+  p.position.set(ROOM.x1 - 0.16, MEZZ.y + 5.2, -22.5);
+  p.rotation.y = -Math.PI / 2;
+  p.raycast = () => {};
+  k.root.add(p);
+  // and over the doors inside, facing the hall from the bridge's front: the house's name, big
+  k.sign(T("GAME HOUSE", "游戏屋"), 1.1, "#ff6b35", -2.6, MEZZ.y + 4.2, ROOM.z1 - 0.18, Math.PI);
+  k.sign("游戏屋", 0.9, "#c4b1fc", 5.6, MEZZ.y + 4.2, ROOM.z1 - 0.18, Math.PI);
 }
 
 /** The pictograms of the upper walls, in neon: a run of the house's toys. */
@@ -921,7 +1358,7 @@ function rr(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: num
 
 /** THE CAGE, by the doors on the east side: the house's cashier, your chips. */
 function cashier(k: GKit) {
-  const x = 6.2,
+  const x = 19.6,
     z = -1.15;
   k.put("gh-cage", cage, x, z, Math.PI);
   void k.person(9150, [x - 0.4, z + 0.55], T("Cashier", "收银员"), { face: new THREE.Vector3(0, 0, -1), chat: "bar" });
@@ -943,41 +1380,89 @@ function cashier(k: GKit) {
 }
 
 /**
- * The house's zkSNARKs: at the tables (dealing, playing), watching the board, at the bar, in front of
- * the wall; every few seconds one of them says something or reacts.
+ * The house's zkSNARKs: at the tables (dealing, playing, duelling), watching the board and the arena,
+ * at the bars, in the stands, before the wall; every few seconds one of them says something or reacts.
  */
 function life(k: GKit) {
   const pid = 9100;
-  // the wall and the desk
-  void k.person(pid + 1, [-3.4, -19.6], T("Gamer", "玩家"), { face: new THREE.Vector3(0, 0, -1), chat: "wall" });
-  void k.person(pid + 2, [4.4, -18.8], T("Gamer", "玩家"), { face: new THREE.Vector3(-0.2, 0, -1), chat: "wall", wander: [[4.4, -18.8], [-1.8, -18.4], [6.2, -17.2]] });
-  void k.person(pid + 3, [-0.4, -22.3], T("Tournament host", "锦标赛主持"), { face: new THREE.Vector3(0, 0, 1), chat: "wall" });
+  const face = (dx: number, dz: number) => new THREE.Vector3(dx, 0, dz).normalize();
   // the board's watchers
-  for (const s of [-1, 1]) void k.person(pid + 5 + s, [DAIS.x + s * 1.5, DAIS.z + 2.85], T("Party player", "派对玩家"), { face: new THREE.Vector3(0, 0, -1), sit: true, dy: 0.42, chat: "party" });
-  void k.person(pid + 7, [DAIS.x + 3.1, DAIS.z - 0.6], T("Party player", "派对玩家"), { face: new THREE.Vector3(-1, 0, 0), chat: "party" });
-  // The Orchard Room: a dealer and three at the first table, one at the second
-  const [p1, p2] = POKER;
-  void k.person(pid + 10, [p1[0], p1[1] - 1.2], T("Dealer", "荷官"), { face: new THREE.Vector3(0, 0, 1), chat: "poker" });
-  pokerSeats(p1[0], p1[1])
-    .filter((_, i) => i === 0 || i === 2 || i === 4)
-    .forEach((p, i) => void k.person(pid + 11 + i, [p.x, p.z], T("Poker player", "扑克玩家"), { face: p.face, sit: true, dy: 0.52, chat: "poker" }));
-  const q = pokerSeats(p2[0], p2[1])[3];
-  void k.person(pid + 15, [q.x, q.z], T("Poker player", "扑克玩家"), { face: q.face, sit: true, dy: 0.52, chat: "poker" });
-  // BLOCK BARONS: three at the first table
-  const [b1] = BARONS;
-  baronsSeats()
-    .filter((_, i) => i === 1 || i === 3 || i === 6)
-    .forEach(([dx, dz], i) => void k.person(pid + 20 + i, [b1[0] + dx, b1[1] + dz], T("Baron", "大亨"), { face: new THREE.Vector3(-dx, 0, -dz).normalize(), sit: true, dy: 0.52, chat: "barons" }));
-  // LAST SNARK: three at the first table, one at the second
-  const [g1, g2] = GLYPH;
-  glyphSeats()
-    .filter((_, i) => i !== 1 && i !== 4)
-    .forEach(([dx, dz], i) => void k.person(pid + 30 + i, [g1[0] + dx, g1[1] + dz], T("Card player", "牌手"), { face: new THREE.Vector3(-dx, 0, -dz).normalize(), sit: true, dy: 0.52, chat: "glyph" }));
-  const [gx, gz] = glyphSeats()[2];
-  void k.person(pid + 34, [g2[0] + gx, g2[1] + gz], T("Card player", "牌手"), { face: new THREE.Vector3(-gx, 0, -gz).normalize(), sit: true, dy: 0.52, chat: "glyph" });
+  for (const s of [-1, 1]) void k.person(pid + 5 + s, [DAIS.x + s * 1.5, DAIS.z + 2.85], T("Party player", "派对玩家"), { face: face(0, -1), sit: true, dy: 0.42, chat: "party" });
+  void k.person(pid + 7, [DAIS.x + 3.0, DAIS.z - 2.2], T("Party player", "派对玩家"), { face: face(-1, 0.4), chat: "party" });
+  void k.person(pid + 8, [DAIS.x - 2.8, DAIS.z - 2.4], T("Party player", "派对玩家"), { face: face(1, 0.5), chat: "party", wander: [[-2.8, -18.4], [-4.5, -12.5], [2.5, -12.2]] });
+  // The Orchard Room: dealers and players at four tables
+  POKER.forEach((p, n) => {
+    if (n > 3) return;
+    if (n < 2) void k.person(pid + 10 + n, [p[0], p[1] - 1.2], T("Dealer", "荷官"), { face: face(0, 1), chat: "poker" });
+    pokerSeats(p[0], p[1])
+      .filter((_, i) => (n % 2 ? i === 1 || i === 4 : n ? i === 2 || i === 5 : i === 0 || i === 2 || i === 4))
+      .forEach((q, i) => void k.person(pid + 14 + n * 4 + i, [q.x, q.z], T("Poker player", "扑克玩家"), { face: q.face, sit: true, dy: 0.52, chat: "poker" }));
+  });
+  // BLOCK BARONS: players at three tables
+  BARONS.forEach(([bx, bz], n) => {
+    if (n % 2) return;
+    baronsSeats()
+      .filter((_, i) => (n === 0 ? i === 1 || i === 3 || i === 6 : i === 2 || i === 5))
+      .forEach(([dx, dz], i) => void k.person(pid + 32 + n * 3 + i, [bx + dx, bz + dz], T("Baron", "大亨"), { face: face(-dx, -dz), sit: true, dy: 0.52, chat: "barons" }));
+  });
+  // LAST SNARK: three at the first table, one at the second, two at the fourth
+  const seats = glyphSeats();
+  const atGlyph = (t: [number, number], pick: number[], base: number) =>
+    pick.forEach((si, i) => {
+      const [dx, dz] = seats[si];
+      void k.person(base + i, [t[0] + dx, t[1] + dz], T("Card player", "牌手"), { face: face(-dx, -dz), sit: true, dy: 0.52, chat: "glyph" });
+    });
+  atGlyph(GLYPH[0], [0, 2, 3], pid + 46);
+  atGlyph(GLYPH[1], [2], pid + 49);
+  atGlyph(GLYPH[3], [1, 4], pid + 92);
+  // ZK LEGENDS: two at four of the duel tables, the finalists on the stage, their host, the crowd
+  [0, 1, 3, 4].forEach((ti, n) => {
+    const [x, z] = DUELS[ti];
+    for (const s of [1, -1]) void k.person(pid + 52 + n * 2 + (s > 0 ? 0 : 1), [x + s * 1.18, z], T("Duellist", "对决者"), { face: face(-s, 0), sit: true, dy: 0.52, chat: "legends" });
+  });
+  for (const s of [1, -1]) void k.person(pid + 60 + (s > 0 ? 0 : 1), [s * 1.18, -43.0], T("Finalist", "决赛选手"), { face: face(-s, 0), sit: true, dy: 0.7 + 0.52, chat: "legends" });
+  void k.person(pid + 62, [-5.5, -41.8], T("Arena host", "竞技场主持"), { face: face(0.6, 1), dy: 0.7, chat: "legends" });
+  for (const [i, [x, z]] of (
+    [
+      [-3.6, -31.2],
+      [3.8, -27.0],
+      [10.2, -36.8],
+      [-2.2, -38.0],
+    ] as [number, number][]
+  ).entries())
+    void k.person(pid + 63 + i, [x, z], T("Spectator", "观众"), { face: face(-x * 0.1, -1), chat: "legends" });
   // the bar
-  void k.person(pid + 40, [-13.5, -6.0], T("Bartender", "调酒师"), { face: new THREE.Vector3(1, 0, 0), chat: "bar" });
-  void k.person(pid + 41, [-11.15, -5.0], T("Regular", "常客"), { face: new THREE.Vector3(-1, 0, 0), sit: true, dy: 0.72, chat: "bar" });
+  void k.person(pid + 70, [-23.6, -7.0], T("Bartender", "调酒师"), { face: face(1, 0), chat: "bar" });
+  void k.person(pid + 71, [-21.15, -6.6], T("Regular", "常客"), { face: face(-1, 0), sit: true, dy: 0.72, chat: "bar" });
+  void k.person(pid + 72, [-21.15, -9.6], T("Regular", "常客"), { face: face(-1, 0), sit: true, dy: 0.72, chat: "bar" });
+  // the lounge
+  void k.person(pid + 73, [-20.4, -15.0], T("Regular", "常客"), { face: face(0, -1), sit: true, dy: 0.42, chat: "party" });
+  // up on the ZK PARTY deck: gamers before the wall, the tournament host, someone at the cabinets
+  k.on(1, () => {
+    void k.person(pid + 1, [-19.8, -20.5], T("Gamer", "玩家"), { face: face(-1, 0), chat: "wall" });
+    void k.person(pid + 2, [-20.6, -28.6], T("Gamer", "玩家"), { face: face(-1, 0.1), chat: "wall", wander: [[-20.6, -28.6], [-19.2, -18.0], [-21.0, -31.5]] });
+    void k.person(pid + 3, [-24.4, -24.0], T("Tournament host", "锦标赛主持"), { face: face(1, 0), chat: "wall" });
+    void k.person(pid + 4, [-24.2, -39.0], T("Gamer", "玩家"), { face: face(-1, 0), chat: "wall" });
+    void k.person(pid + 9, [-E - 1.6, -10.6], T("Gamer", "玩家"), { face: face(1, 0), sit: true, dy: 0.42, chat: "deck" });
+    // the bridge: two at the rail
+    void k.person(pid + 74, [-3.2, -8.6], T("Visitor", "访客"), { face: face(0, -1), chat: "deck" });
+    void k.person(pid + 75, [5.0, -8.6], T("Visitor", "访客"), { face: face(0, -1), chat: "deck" });
+    // the Halo Lounge: the stands, the tables, the bar
+    const rowsAt = [0.67, -0.08, -0.83];
+    const heights = [0.42, 0.83, 1.25];
+    [
+      [0, -2.6],
+      [0, 1.2],
+      [1, -4.4],
+      [1, 0.2],
+      [1, 3.6],
+      [2, -1.0],
+      [2, 2.6],
+    ].forEach(([r, along], i) => void k.person(pid + 76 + i, [BLEACH.x - rowsAt[r], BLEACH.z + along], T("Fan", "观众"), { face: face(-1, -0.25), sit: true, dy: heights[r] + 0.05, chat: "stands" }));
+    atGlyph(GLYPH_UP[0], [0, 3], pid + 84);
+    atGlyph(GLYPH_UP[1], [1, 2, 4], pid + 86);
+    void k.person(pid + 89, [24.0, -5.0], T("Bartender", "调酒师"), { face: face(-1, 0), chat: "bar" });
+  });
   // now and then someone speaks up, or reacts
   const emotes = ["zec", "star", "!", "note", "heart", "up"] as const;
   let next = 2,
@@ -985,7 +1470,7 @@ function life(k: GKit) {
   k.ticks.push((dt) => {
     next -= dt;
     if (next > 0 || !k.people.length) return;
-    next = 2.2 + Math.random() * 2.5;
+    next = 1.4 + Math.random() * 1.8;
     const p = k.people[Math.floor(Math.random() * k.people.length)];
     if (!p.chat) return;
     if (Math.random() < 0.6) p.s.say(chatLine(p.chat, n++ + Math.floor(Math.random() * 7)), 2.8);
