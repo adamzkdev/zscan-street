@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { ZScan } from "../data/zscan";
 import { profile } from "../game/profile";
 import { faces } from "./faces";
-import { Human } from "./human";
+import { SnarkFigure } from "./figure";
 import { Mosaic } from "./mosaic";
 
 /**
@@ -22,7 +22,7 @@ export class Garage {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(34, 1, 0.1, 80);
   private el: HTMLElement;
-  private body: Human | null = null;
+  private body: SnarkFigure | null = null;
   private stand = new THREE.Group();
   private turn = 0;
   private dragX: number | null = null;
@@ -166,7 +166,7 @@ export class Garage {
     this.id = id;
     const old = this.body;
     faces.want([id], true);
-    const b = new Human(id);
+    const b = new SnarkFigure(id);
     this.stand.add(b.root);
     this.body = b;
     old?.dispose();

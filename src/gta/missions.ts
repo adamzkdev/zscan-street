@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { profile } from "../game/profile";
 import { faces } from "./faces";
-import { Human } from "./human";
+import { SnarkFigure } from "./figure";
 import { ST } from "../scene/city/plan";
 import type { Roads } from "./roads";
 
@@ -210,7 +210,7 @@ export class Missions {
   private hqBeacon: Beacon | null = null;
   private goalBeacon: Beacon | null = null;
   /** A passenger waiting, riding. */
-  private ride: { id: number; at: { x: number; z: number }; body: Human | null; to: { x: number; z: number; label: string } | null; hits0: number; line: string; t: number } | null = null;
+  private ride: { id: number; at: { x: number; z: number }; body: SnarkFigure | null; to: { x: number; z: number; label: string } | null; hits0: number; line: string; t: number } | null = null;
   private rideBeacon: Beacon | null = null;
   private rideCool = 6;
   private lastBlock = 0;
@@ -457,7 +457,7 @@ export class Missions {
       const at = p.axis === "x" ? { x: p.x, z: p.z + w + 1.1 } : { x: p.x + w + 1.1, z: p.z };
       const id = 1 + Math.floor(Math.random() * 10000);
       faces.want([id], true);
-      const body = new Human(id);
+      const body = new SnarkFigure(id);
       body.root.position.set(at.x, 0.2, at.z);
       body.root.rotation.y = p.axis === "x" ? Math.PI : -Math.PI / 2;
       this.group.add(body.root);

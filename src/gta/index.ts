@@ -168,6 +168,7 @@ export class GtaMode {
   parked: DriveCar[] = [];
   private settings: Settings;
   readonly focus = new THREE.Vector3();
+  private viewDir = new THREE.Vector3();
   private hits = 0;
   private horn = false;
   private lastHitAt = 0;
@@ -767,7 +768,7 @@ export class GtaMode {
     const vel = this.car ? { vx: this.car.vel.x, vz: this.car.vel.y } : { vx: this.player.vel.x, vz: this.player.vel.z };
     const near = this.heat.update(dt, { x: at.x, z: at.z, ...vel, speed: this.car?.speed ?? this.player.speed, inCar: !!this.car }, (self) => this.carWorld(self));
     this.sound.siren(this.heat.chasers.length ? Math.max(0.15, 1 - near / 140) : 0);
-    this.people.update(dt, at.x, at.z, this.car ? null : this.player.pos, this.cam.camera.position);
+    this.people.update(dt, at.x, at.z, this.car ? null : this.player.pos, this.cam.camera.position, this.cam.camera.getWorldDirection(this.viewDir));
     this.streetThings(dt);
     this.net.update(dt, { x: at.x, y: this.car ? 0 : this.player.pos.y, z: at.z, h: heading, c: this.car?.kind ?? "", v: this.car?.speed ?? this.player.speed, s: this.player.id });
     this.hudFrame(dt, at, heading);
@@ -1347,7 +1348,7 @@ export class GtaMode {
     pl.group.visible = this.cam.armLength > 1.15;
     if (pl.landed) this.punchLanded(inn);
     this.debris.update(dt);
-    this.people.update(dt, pl.pos.x, pl.pos.z, pl.pos, this.cam.camera.position);
+    this.people.update(dt, pl.pos.x, pl.pos.z, pl.pos, this.cam.camera.position, this.cam.camera.getWorldDirection(this.viewDir));
     // the walker where you are
     w.camera.position.set(pl.pos.x, pl.pos.y + 1.6, pl.pos.z);
     w.setFloor(pl.floor);

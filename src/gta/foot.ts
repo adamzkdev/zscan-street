@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { faces } from "./faces";
-import { Human } from "./human";
+import { SnarkFigure } from "./figure";
 
 /**
  * Your zkSNARK on foot (src/gta): a person (human.ts) with your zkSNARK's head, moving the way the
@@ -27,7 +27,7 @@ export interface FootWorld {
 
 export class FootPlayer {
   readonly group = new THREE.Group();
-  body: Human | null = null;
+  body: SnarkFigure | null = null;
   id = 0;
   /** Feet. */
   readonly pos = new THREE.Vector3();
@@ -83,7 +83,7 @@ export class FootPlayer {
     this.id = id;
     faces.want([id], true);
     const old = this.body;
-    const b = new Human(id);
+    const b = new SnarkFigure(id);
     this.group.add(b.root);
     this.body = b;
     old?.dispose();

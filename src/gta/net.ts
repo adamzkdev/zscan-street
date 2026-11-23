@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { faces } from "./faces";
-import { Human } from "./human";
+import { SnarkFigure } from "./figure";
 import { sharedObject } from "../scene/voxel/mesher";
 import { policeModel, sedanModel, taxiModel, truckModel } from "../scene/voxel/vehicles";
 import { gtModel, motoModel } from "./models";
@@ -40,7 +40,7 @@ interface Peer {
   s: number;
   c: string;
   root: THREE.Group;
-  body: Human | null;
+  body: SnarkFigure | null;
   car: THREE.Object3D | null;
   tag: THREE.Sprite;
   snaps: Snap[];
@@ -198,7 +198,7 @@ export class WorldNet {
     } else {
       if (!p.body) {
         faces.want([p.s]);
-        const b = new Human(p.s);
+        const b = new SnarkFigure(p.s);
         p.body = b;
         p.root.add(b.root);
       }

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { faces } from "./faces";
-import type { Act } from "./human";
+import type { Act } from "./figure";
 import type { Person3 } from "./people3d";
 import type { Roads } from "./roads";
 
@@ -117,11 +117,11 @@ export interface Me {
 
 export type Crowd = "few" | "normal" | "busy";
 
-const TARGET: Record<Crowd, number> = { few: 24, normal: 60, busy: 88 };
+const TARGET: Record<Crowd, number> = { few: 30, normal: 80, busy: 120 };
 /** Born between NEAR and FAR from you (behind you if it can), gone past GONE: all within the 3D bodies' reach. */
 const NEAR = 14;
-const FAR = 38;
-const GONE = 46;
+const FAR = 60;
+const GONE = 75;
 const PUNCH = 0.36;
 
 const pick = <T,>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];

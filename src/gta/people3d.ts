@@ -1,14 +1,14 @@
 import * as THREE from "three";
-import { faces } from "./faces";
-import { headMatrix, humanMaterials, JOINTS, newAct, NPARTS, partBox, partColor, partMatrix, pose, stride, type Act } from "./human";
+import { faces, type Look } from "./faces";
+import { bodyMatrix, figureMaterials, headMatrix, JOINTS, newAct, NPARTS, partBox, partColor, partMatrix, pose, stride, type Act } from "./figure";
 
 /**
- * The street's people in 3D (src/gta): round you, every zkSNARK on the pavements (the game's own
- * passers-by first, then the street's residents and its crowd's walkers) is drawn as a person
- * (human.ts) — its head in voxels from its own picture, a body of human build that walks, runs,
- * fights, falls and gets up — and its flat figure is hidden. All of them in two draws: the heads in
- * one BatchedMesh (one geometry per zkSNARK, kept while it is about), every body part of everyone
- * in one InstancedMesh. Farther off, the flat figures carry on as they were.
+ * The street's zkSNARKs in 3D (src/gta): round you, every zkSNARK — the game's own passers-by first,
+ * then the street's residents and its crowd's walkers, out along the avenues — is drawn as itself in
+ * 3D (figure.ts: its bust from its picture in volume, on its legs, with its arms), and its flat
+ * figure is hidden; within a wider ring, the flat figures of those not drawn yet are hidden too, so
+ * nothing in sight is 2D. All of them in two draws: the busts in one BatchedMesh (a head and a pair
+ * of shoulders per zkSNARK, kept while it is about), every limb of everyone in one InstancedMesh.
  */
 
 export interface Person3 {
@@ -40,8 +40,9 @@ export interface Person3 {
 
 interface Slot {
   p: Person3;
-  /** Its parts' first instance (NPARTS from there). */
+  /** Its limbs' first instance (NPARTS from there). */
   inst: number;
+  body: number;
   head: number;
   id: number;
   heading: number;
@@ -49,19 +50,25 @@ interface Slot {
   act: Act;
   /** Stepping round you (drawn aside, the walk itself unchanged). */
   aside: THREE.Vector3;
+  /** Far off: posed every few frames. */
+  skip: number;
+  look: Look;
 }
 
 export class People3D {
   readonly group = new THREE.Group();
-  private heads: THREE.BatchedMesh;
+  private busts: THREE.BatchedMesh;
   private parts: THREE.InstancedMesh;
   private slots = new Map<string, Slot>();
-  /** Head geometries in the batch, by zkSNARK: its id there, how many wear it, when last used. */
-  private geos = new Map<number, { geo: number; users: number; used: number }>();
+  /** Busts in the batch, by zkSNARK: their geometries there, how many wear them, when last used. */
+  private geos = new Map<number, { body: number; head: number; users: number; used: number }>();
+  /** Flat figures hidden (in the ring round you), by key. */
+  private flat = new Map<string, Person3>();
   private free: number[] = [];
   private scanT = 0;
   private readonly max: number;
   private readonly radius: number;
+  private readonly hideR: number;
   private joints = Array.from({ length: JOINTS }, () => new THREE.Matrix4());
   private root = new THREE.Matrix4();
   private m = new THREE.Matrix4();
@@ -73,11 +80,14 @@ export class People3D {
   private tmp2 = new THREE.Vector3();
   private up = new THREE.Vector3(0, 1, 0);
   private zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  private frame = 0;
   enabled = true;
   /** How many are drawn in 3D now: the most, or fewer while the frame rate suffers (it climbs back). */
   limit: number;
   private frameAvg = 1 / 60;
   private judgeT = 0;
+  /** Seconds since it was shown (or moved somewhere new). */
+  private warm = 0;
 
   /** Where the people come from instead (inside a place), or null: the street's. */
   source: ((x: number, z: number, r: number) => Person3[]) | null = null;
@@ -87,20 +97,21 @@ export class People3D {
     private find: (x: number, z: number, r: number) => Person3[],
   ) {
     const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-    this.max = coarse ? 44 : 112;
-    this.radius = coarse ? 32 : 46;
+    this.max = coarse ? 70 : 400;
+    this.radius = coarse ? 55 : 125;
+    this.hideR = coarse ? 90 : 220;
     this.limit = this.max;
-    const mats = humanMaterials();
-    this.heads = new THREE.BatchedMesh(this.max, 300_000, 0, mats.head);
-    this.heads.castShadow = true;
-    this.heads.frustumCulled = false;
-    this.heads.perObjectFrustumCulled = false;
+    const mats = figureMaterials();
+    this.busts = new THREE.BatchedMesh(this.max * 2, 400_000, 0, mats.bust);
+    this.busts.castShadow = true;
+    this.busts.frustumCulled = false;
+    this.busts.perObjectFrustumCulled = true;
     this.parts = new THREE.InstancedMesh(partBox(), mats.part, this.max * NPARTS);
     this.parts.castShadow = true;
     this.parts.frustumCulled = false;
     this.parts.count = 0;
     this.parts.setColorAt(0, this.c.set(0xffffff));
-    this.group.add(this.heads, this.parts);
+    this.group.add(this.busts, this.parts);
     this.group.name = "gta:people3d";
     this.group.visible = false;
     scene.add(this.group);
@@ -109,36 +120,43 @@ export class People3D {
 
   show(on: boolean) {
     this.group.visible = on;
+    this.warm = 0;
     if (!on) this.clear();
   }
 
   /** Everyone back to their flat figures (a change of scene). */
   clear() {
     for (const s of [...this.slots.values()]) this.drop(s);
+    for (const p of this.flat.values()) p.hide(false);
+    this.flat.clear();
   }
 
   /** Into the scene being drawn (the street, a place). */
   into(scene: THREE.Object3D) {
     if (this.group.parent === scene) return;
+    this.warm = 0;
     this.clear();
     scene.add(this.group);
   }
 
   /** Each frame, round (x, z). */
-  update(dt: number, x: number, z: number, me: THREE.Vector3 | null = null, eye: THREE.Vector3 | null = null) {
+  update(dt: number, x: number, z: number, me: THREE.Vector3 | null = null, eye: THREE.Vector3 | null = null, view: THREE.Vector3 | null = null) {
     this.eye = eye;
+    if (view) this.view.set(view.x, 0, view.z).normalize();
     if (!this.group.visible || !this.enabled) return;
-    // the frame rate decides how many: under ~45 fps a few go back to flat, over ~57 a few come in
-    this.frameAvg += (dt - this.frameAvg) * 0.05;
+    // the frame rate decides how many: under ~45 fps a few go back, over ~57 a few come in
+    // (not while it is still building the busts it just met: those frames are the building's, not the drawing's)
+    this.frameAvg += (Math.min(dt, 0.1) - this.frameAvg) * 0.05;
     this.judgeT += dt;
-    if (this.judgeT > 3) {
+    this.warm += dt;
+    if (this.judgeT > 2.5) {
       this.judgeT = 0;
-      if (this.frameAvg > 1 / 45) this.limit = Math.max(Math.round(this.max * 0.4), this.limit - 12);
-      else if (this.frameAvg < 1 / 57) this.limit = Math.min(this.max, this.limit + 6);
+      if (this.frameAvg > 1 / 42 && this.warm > 8) this.limit = Math.max(Math.round(this.max * 0.35), this.limit - 30);
+      else if (this.frameAvg < 1 / 55) this.limit = Math.min(this.max, this.limit + 30);
     }
     this.scanT -= dt;
     if (this.scanT <= 0) {
-      this.scanT = 0.25;
+      this.scanT = 0.2;
       this.scan(x, z);
     }
     this.me = me;
@@ -146,39 +164,56 @@ export class People3D {
   }
   private me: THREE.Vector3 | null = null;
   private eye: THREE.Vector3 | null = null;
+  /** Which way the camera looks (flat): those in sight come first, and from farther. */
+  private view = new THREE.Vector3(0, 0, -1);
 
-  /** Who is near now: the nearest come in, those gone or far go back to their flat figures. */
+  /** Who is near now: the nearest come in 3D, those gone or far go; the flat figures round about are hidden. */
   private scan(x: number, z: number) {
-    const list = (this.source ?? this.find)(x, z, this.radius + 4);
+    const list = (this.source ?? this.find)(x, z, this.source ? this.radius + 4 : this.hideR);
     const d = (p: Person3) => {
       p.pos(this.tmp);
       return (this.tmp.x - x) ** 2 + (this.tmp.z - z) ** 2;
     };
-    const ranked = list.map((p) => ({ p, d: d(p) - (p.own ? 1e6 : 0) })).sort((a, b) => a.d - b.d);
+    // in sight (in front of the camera, within ~70° of where it looks): first, and out to the ring's edge
+    const ex = this.eye?.x ?? x,
+      ez = this.eye?.z ?? z;
+    const ranked = list
+      .map((p) => {
+        const dd = d(p);
+        const ox = this.tmp.x - ex,
+          oz = this.tmp.z - ez;
+        const sight = dd < 64 || (ox * this.view.x + oz * this.view.z) / Math.max(0.01, Math.hypot(ox, oz)) > 0.34;
+        return { p, d: dd, sight, score: p.own ? -1e9 + dd : dd * (sight ? 1 : 7) };
+      })
+      .sort((a, b) => a.score - b.score);
     const keep = new Set<string>();
-    for (const { p, d: dd } of ranked) {
+    for (const { p, d: dd, sight } of ranked) {
       if (keep.size >= this.limit) break;
       const held = this.slots.has(p.key);
       // (a little farther for those already in: no flicker at the edge)
-      if (!p.own && dd > (this.radius + (held ? 4 : 0)) ** 2) continue;
+      if (!p.own && dd > ((sight ? this.hideR - 4 : this.radius) + (held ? 5 : 0)) ** 2) continue;
       keep.add(p.key);
     }
     for (const s of [...this.slots.values()]) if (!keep.has(s.p.key) || !s.p.alive()) this.drop(s);
     const asked: number[] = [],
       quick: number[] = [];
+    // (building busts takes a moment: a few milliseconds of it per scan)
+    const t0 = performance.now();
     for (const { p } of ranked) {
       if (!keep.has(p.key) || this.slots.has(p.key) || !p.alive()) continue;
       let g = this.geos.get(p.id);
       if (!g) {
+        if (performance.now() - t0 > 7) continue;
+        const tb = performance.now();
         const look = faces.look(p.id);
+        this.buildMs += performance.now() - tb;
+        this.builds++;
         if (!look) {
-          (p.own ? asked : quick).push(p.id);
+          (p.own || d(p) < 25 * 25 ? asked : quick).push(p.id);
           continue;
         }
-        // (its picture could not be read: it stays flat, unless it has no flat figure)
-        if (!look.real && !p.own) continue;
         try {
-          g = { geo: this.add(look.head), users: 0, used: 0 };
+          g = { body: this.add(look.body), head: this.add(look.head), users: 0, used: 0 };
           this.geos.set(p.id, g);
         } catch (e) {
           console.warn("gta: people3d is full", e);
@@ -187,58 +222,87 @@ export class People3D {
       }
       const inst = this.free.pop();
       if (inst === undefined) break;
-      const head = this.heads.addInstance(g.geo);
+      const body = this.busts.addInstance(g.body);
+      const head = this.busts.addInstance(g.head);
       g.users++;
       g.used = performance.now();
       p.hide(true);
       const at = p.pos(new THREE.Vector3());
       const look = faces.lookNow(p.id);
-      const sl: Slot = { p, inst, head, id: p.id, heading: p.heading?.() ?? Math.random() * Math.PI * 2, last: at, act: newAct(), aside: new THREE.Vector3() };
+      const sl: Slot = { p, inst, body, head, id: p.id, heading: p.heading?.() ?? Math.random() * Math.PI * 2, last: at, act: newAct(), aside: new THREE.Vector3(), skip: 0, look };
       this.slots.set(p.key, sl);
       for (let k = 0; k < NPARTS; k++) this.parts.setColorAt(inst * NPARTS + k, this.c.setHex(partColor(look, k), THREE.SRGBColorSpace));
       if (this.parts.instanceColor) this.parts.instanceColor.needsUpdate = true;
     }
     if (asked.length) faces.want(asked);
     if (quick.length) faces.quick(quick);
+    // the flat figures in the ring: hidden — those in 3D, and those it will not draw (too many);
+    // one waiting for its bust keeps its flat figure a moment rather than vanish. Out of the ring: shown again.
+    if (!this.source) {
+      const seen = new Set<string>();
+      for (const { p } of ranked) {
+        if (p.own) continue;
+        seen.add(p.key);
+        const hidden = this.slots.has(p.key) || !keep.has(p.key);
+        if (hidden && !this.flat.has(p.key)) {
+          p.hide(true);
+          this.flat.set(p.key, p);
+        } else if (!hidden && this.flat.has(p.key)) {
+          p.hide(false);
+          this.flat.delete(p.key);
+        }
+      }
+      for (const [k, p] of this.flat)
+        if (!seen.has(k)) {
+          p.hide(false);
+          this.flat.delete(k);
+        }
+    }
     this.trim();
   }
+  private builds = 0;
+  private buildMs = 0;
 
   private add(geo: THREE.BufferGeometry) {
     const n = geo.getAttribute("position").count;
     try {
-      return this.heads.addGeometry(geo);
+      return this.busts.addGeometry(geo);
     } catch {
       // more room (half as much again)
-      const b = this.heads as unknown as { _maxVertexCount: number };
-      this.heads.setGeometrySize(Math.ceil(b._maxVertexCount * 1.5) + n, 0);
-      return this.heads.addGeometry(geo);
+      const b = this.busts as unknown as { _maxVertexCount: number };
+      this.busts.setGeometrySize(Math.ceil(b._maxVertexCount * 1.5) + n, 0);
+      return this.busts.addGeometry(geo);
     }
   }
 
-  /** The heads nobody wears, beyond a few dozen, out of the batch. */
+  /** The busts nobody wears, beyond a few dozen, out of the batch. */
   private trim() {
-    if (this.geos.size <= this.max + 16) return;
+    if (this.geos.size <= this.max + 24) return;
     const idle = [...this.geos.entries()].filter(([, g]) => g.users === 0).sort((a, b) => a[1].used - b[1].used);
     for (const [id, g] of idle) {
-      if (this.geos.size <= this.max + 8) break;
-      this.heads.deleteGeometry(g.geo);
+      if (this.geos.size <= this.max + 12) break;
+      this.busts.deleteGeometry(g.body);
+      this.busts.deleteGeometry(g.head);
       this.geos.delete(id);
     }
   }
 
   private drop(s: Slot) {
     this.slots.delete(s.p.key);
-    this.heads.deleteInstance(s.head);
+    this.busts.deleteInstance(s.body);
+    this.busts.deleteInstance(s.head);
     for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(s.inst * NPARTS + k, this.zero);
     this.free.push(s.inst);
     const g = this.geos.get(s.id);
     if (g) g.users--;
-    s.p.hide(false);
+    // (its flat figure stays hidden while it is in the ring: the scan shows it again past it)
+    if (!this.flat.has(s.p.key)) s.p.hide(false);
   }
 
   /** Every body a step on: its place, its heading (from where it went, or its own), its pose. */
   private pose(dt: number) {
     let top = 0;
+    this.frame++;
     for (const sl of this.slots.values()) {
       const at = sl.p.pos(this.tmp);
       const dx = at.x - sl.last.x,
@@ -265,6 +329,10 @@ export class People3D {
         }
       }
       sl.last.copy(at);
+      top = Math.max(top, sl.inst + 1);
+      // far off: posed one frame in three (the walk carries on between)
+      const camD = this.eye ? Math.hypot(at.x - this.eye.x, at.z - this.eye.z) : 9;
+      if (camD > 55 && (this.frame + sl.inst) % 3 !== 0) continue;
       // you are in the way: it steps round you (drawn aside; the crowd's own loop carries on)
       const want = this.tmp2.set(0, 0, 0);
       let look = 0;
@@ -295,22 +363,20 @@ export class People3D {
       a.gesture = sl.p.pose?.() ?? null;
       sl.p.act?.(a);
       // right by the camera: not drawn (it would fill the picture), as the games fade them
-      const camD = this.eye ? Math.hypot(at.x - this.eye.x, at.z - this.eye.z) : 9;
       const close = camD < 0.9;
-      const lk = faces.lookNow(sl.id);
+      const lk = sl.look;
       this.q.setFromAxisAngle(this.up, sl.heading);
       this.root.compose(this.v.set(at.x, at.y, at.z), this.q, this.s.setScalar(lk.bh));
-      if (close) {
-        this.heads.setVisibleAt(sl.head, false);
-        for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(sl.inst * NPARTS + k, this.zero);
-      } else {
-        this.heads.setVisibleAt(sl.head, true);
+      this.busts.setVisibleAt(sl.body, !close);
+      this.busts.setVisibleAt(sl.head, !close);
+      if (close) for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(sl.inst * NPARTS + k, this.zero);
+      else {
         pose(a, lk, this.joints);
         for (let k = 0; k < JOINTS; k++) this.joints[k].premultiply(this.root);
         for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(sl.inst * NPARTS + k, partMatrix(k, this.joints, lk, this.m));
-        this.heads.setMatrixAt(sl.head, headMatrix(this.joints, this.m));
+        this.busts.setMatrixAt(sl.body, bodyMatrix(this.joints, this.m));
+        this.busts.setMatrixAt(sl.head, headMatrix(this.joints, this.m));
       }
-      top = Math.max(top, sl.inst + 1);
     }
     // the unused slots out of sight
     for (const i of this.free) if (i < top) for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(i * NPARTS + k, this.zero);
@@ -318,14 +384,8 @@ export class People3D {
     this.parts.instanceMatrix.needsUpdate = true;
   }
 
-  /** The zkSNARK drawn nearest (x, z) within `r`, for the fist and the talk (its key, where). */
-  nearest(x: number, z: number, r: number) {
-    let best: { key: string; d: number } | null = null;
-    for (const sl of this.slots.values()) {
-      sl.p.pos(this.tmp);
-      const d = Math.hypot(this.tmp.x - x, this.tmp.z - z);
-      if (d < r && (!best || d < best.d)) best = { key: sl.p.key, d };
-    }
-    return best;
+  /** How many are drawn in 3D now, and how many flat figures are hidden round about. */
+  get counts() {
+    return { in3d: this.slots.size, hidden: this.flat.size, builds: this.builds, msPerBuild: +(this.buildMs / Math.max(1, this.builds)).toFixed(2) };
   }
 }
