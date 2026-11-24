@@ -434,9 +434,11 @@ export class Metro {
 
   /** The deck, its parapets, neon edges, the pillars, and the portal at the east edge. */
   private viaduct(nav: Nav) {
-    const concrete = new THREE.MeshStandardMaterial({ color: "#8c8896", roughness: 0.85 });
+    // (the guideway's soffit faces only the street: the bounce off the asphalt, a little light of its own,
+    // or it read as a black wedge hanging over every ring road)
+    const concrete = new THREE.MeshStandardMaterial({ color: "#8c8896", roughness: 0.85, emissive: "#1e1c24" });
     concrete.userData.dayColor = "#c9c5cf";
-    const under = new THREE.MeshStandardMaterial({ color: "#4a4652", roughness: 0.9 });
+    const under = new THREE.MeshStandardMaterial({ color: "#7a7684", roughness: 0.9, emissive: "#2a2832" });
     const rail = new THREE.MeshStandardMaterial({ color: "#3a3a44", roughness: 0.4, metalness: 0.7 });
     const neon = new THREE.MeshBasicMaterial({ color: this.line.neon, toneMapped: false });
     neon.userData.night = true;

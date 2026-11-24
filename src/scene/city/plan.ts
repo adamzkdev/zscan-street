@@ -66,6 +66,13 @@ export const ST = {
 /** The river across the south of the city: its banks (z), water level, and the bridges' x. */
 export const RIVER = { z0: 59, z1: 77, water: -1.1, bed: -2.2, bridges: [-226, -194, -122, -54, 54, 122, 194, 226], foot: [0, -24, 24] };
 
+/**
+ * How far south across the water the headland (Shielded Woods) and Orchard Keys lie from where they
+ * were first drawn (their own files keep their old figures plus this): the strait the Golden Gate
+ * spans — four hundred metres and more of bridge, a 170 m main span (src/scene/real/bridge.ts).
+ */
+export const ACROSS = 380;
+
 /** The bay south of the ring road: open water, two islands, the headland across it and its bridge. */
 export const BAY = {
   z0: 146,
@@ -76,7 +83,7 @@ export const BAY = {
   /** The prison island. */
   rock: { x0: -150, x1: -92, z0: 178, z1: 208 },
   /** The headland on the far shore, east of x0, and the suspension bridge over to it at x. */
-  headland: { x0: 96, z0: 222 },
+  headland: { x0: 96, z0: 222 + ACROSS },
   bridge: { x: 158, towers: [164, 204] },
   /** Bennelong point: the Opera House's pier, joined to the quay by a walkway. */
   opera: { x0: -66, x1: -22, z0: 162, z1: 200 },
@@ -382,7 +389,7 @@ export const AREAS = [
   { key: "shibuya", name: "Shibuya", blurb: "The scramble crossing", color: "#ff3e8a", x: -60, z: -162, zoom: 0.8 },
   { key: "palm", name: "The Palm", blurb: "Villas on the palm, the sail hotel", color: "#1baf7a", x: -195, z: 190, zoom: 0.45 },
   { key: "bay", name: "The Bay", blurb: "Liberty island, the rock, the bridge", color: "#3987e5", x: 20, z: 190, zoom: 0.35 },
-  { key: "woods", name: "Shielded Woods", blurb: "Redwoods, Sprout Falls, the campfire", color: "#3f9a4a", x: 192, z: 212, zoom: 0.6 },
+  { key: "woods", name: "Shielded Woods", blurb: "Redwoods, Sprout Falls, the campfire", color: "#3f9a4a", x: 192, z: 212 + ACROSS, zoom: 0.6 },
 ];
 
 export type Archetype =
@@ -1001,7 +1008,9 @@ export function planCity() {
     const L = BAY.liberty;
     landmarkJob("statue", L.x - 9, L.x + 9, L.z - 9, L.z + 9, "s", "statue");
     const B = BAY.bridge;
-    landmarkJob("bridge", B.x - 7, B.x + 7, ST.ringS + 5, BAY.headland.z0 + 4, "n");
+    // (the bridge is drawn on the main thread, src/scene/real/bridge.ts: this lot is its layout
+    // only, kept at the old short length so the worker's voxel builder stays small)
+    landmarkJob("bridge", B.x - 7, B.x + 7, ST.ringS + 5, BAY.headland.z0 + 4 - ACROSS, "n");
     // the Opera House on its own pier in the bay, facing the city (the headland is a forest: scene/forest)
     const O = BAY.opera;
     landmarkJob("opera", O.x0, O.x1, O.z0, O.z1, "n", "opera");

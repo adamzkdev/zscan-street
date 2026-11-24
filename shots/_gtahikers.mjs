@@ -9,7 +9,7 @@ await p.goto("http://localhost:3061/?debug&gta=1192&theme=day");
 await p.waitForFunction(() => window.__streetUp && window.street?.gta?.solid?.ready, { timeout: 300000, polling: 300 });
 await p.evaluate(() => street.gta.hud.coach(-1));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-for (const [name, x, z, h] of [["camp", 192, 210, -2.3], ["flyer", -70, 99, 0]]) {
+for (const [name, x, z, h] of [["camp", 192, 210 + 380, -2.3], ["flyer", -70, 99, 0]]) {
   await p.evaluate((x, z, h) => { const g = street.gta; g.player.place(x, g.host.ground(x, z) ?? 0.2, z, h); g.cam.behind(h, -0.1); g.cam.snap(g.player.pos.clone().setY(g.player.pos.y + 1.55)); }, x, z, h);
   await sleep(6000);
   await p.screenshot({ path: `shots/gta/hikers-${name}.png` });

@@ -19,6 +19,10 @@ import { build2, KINDS2, LIGHT2, RADIUS2, SOLID2, type Kit } from "./props2";
 /** The kinds this module draws (the rest of the plan's props stay with the voxel props worker). */
 export const REAL_PROPS = new Set(["lamp", "bench", "bollard", "trashBin", "hydrant", "mailbox", "planter", "vending", "streetSign", "stopPole", "taxiSign", "shelter", ...KINDS2]);
 
+/** The kinds the game never knocks over (src/gta FURN): baked still into tiles, not instanced. */
+const STILL = new Set(["stall", "crates", "trashBags", "gate", "rail", "bamboo", "bridge", "stones", "tieredFountain", "greenhouse", "pole"]);
+const BAKE_TILE = 96;
+
 /** Radius for the walker's collisions (as the voxel props had them). */
 const RADIUS: Record<string, number> = { lamp: 0.18, bench: 0.5, bollard: 0.18, trashBin: 0.35, hydrant: 0.2, mailbox: 0.35, planter: 0.75, vending: 0.6, streetSign: 0.15, stopPole: 0.2, taxiSign: 0.2 };
 
@@ -294,6 +298,7 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
     else byKey.set(k, [p]);
   }
   const lights: [number, number, number, string][] = [];
+  const baked = new Map<string, Map<string, { mat: THREE.Material; gs: THREE.BufferGeometry[] }>>();
   const circles: [number, number, number][] = [];
   const rects: [number, number, number, number][] = [];
   const shrubs: TreeSpot[] = [];
@@ -323,6 +328,25 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
     for (const [mat, geos] of parts) {
       const geo = mergeGeometries(geos, false);
       if (!geo) continue;
+      // what the game never knocks down (stalls, crates, gates, rails…): baked into one still mesh per
+      // material and tile (below), not an instanced draw per variant and material city-wide — the
+      // market's stalls alone were seventy draws a frame
+      if (STILL.has(type)) {
+        for (const p of ps) {
+          q.setFromAxisAngle(Y, p.rot);
+          m.compose(pos.set(p.x, p.y ?? 0.2, p.z), q, one);
+          const k = `${Math.floor(p.x / BAKE_TILE)},${Math.floor(p.z / BAKE_TILE)}`;
+          let byMat = baked.get(k);
+          if (!byMat) baked.set(k, (byMat = new Map()));
+          // (by material and by attributes: only alike geometries merge)
+          const sig = `${mat.uuid}|${Object.keys(geo.attributes).sort().join()}|${!!geo.index}`;
+          const l = byMat.get(sig);
+          const g = geo.clone().applyMatrix4(m);
+          if (l) l.gs.push(g);
+          else byMat.set(sig, { mat, gs: [g] });
+        }
+        continue;
+      }
       const im = new THREE.InstancedMesh(geo, mat, ps.length);
       ps.forEach((p, i) => {
         q.setFromAxisAngle(Y, p.rot);
@@ -360,6 +384,27 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
     }
   }
   if (shrubs.length) plantTrees(parent, shrubs);
+  // the baked still props: a mesh per tile and material, placed at its tile's centre (a mesh built
+  // in world coordinates sits at the origin, and the draw-saver measured it from there)
+  for (const [k, byMat] of baked) {
+    const [tx, tz] = k.split(",").map(Number);
+    const cx = (tx + 0.5) * BAKE_TILE,
+      cz = (tz + 0.5) * BAKE_TILE;
+    for (const { mat, gs } of byMat.values()) {
+      const g = mergeGeometries(gs, false);
+      if (!g) continue;
+      g.translate(-cx, 0, -cz);
+      g.computeBoundingSphere();
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.position.set(cx, 0, cz);
+      mesh.castShadow = !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial;
+      mesh.receiveShadow = true;
+      mesh.name = "real:props:still";
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      parent.add(mesh);
+    }
+  }
   // the plan's own bus shelter (the heart's): the realistic one, its light, its footprint
   for (const p of shelters) {
     const sh = realShelter();

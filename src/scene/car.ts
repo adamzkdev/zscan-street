@@ -214,6 +214,8 @@ export class Scooter {
     const [paint, box] = LIVERIES[l];
     const bike = bikeObject("scooter", { paint, accent: box });
     for (const c of [...bike.children]) this.group.add(c);
+    // (the game draws its courier riding it, in 3D)
+    this.group.userData.bike = true;
   }
 
   spin(distance: number) {

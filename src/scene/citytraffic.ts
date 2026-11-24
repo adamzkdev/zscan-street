@@ -3,7 +3,9 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { CITY, CURB, GRID, RIVER, ST, streetSegments } from "./city/plan";
 import type { Traffic } from "./traffic";
 import { freeObject } from "./voxel/mesher";
-import { carObject, POLICE_BAR, spinWheels } from "./real/cars";
+import { bikeObject, carObject, POLICE_BAR, spinWheels } from "./real/cars";
+import { SnarkFigure } from "../gta/figure";
+import { MOTO_SEAT } from "../gta/models";
 import { busSign, canvasTexture } from "./textures";
 
 /**
@@ -53,9 +55,20 @@ const PAINTS: [string, string][] = [
   ["#3a6a4a", "#38ff9c"],
 ];
 
-type MoverKind = "sedan" | "taxi" | "police" | "truck" | "sports" | "suv" | "pickup" | "van" | "convertible";
+type MoverKind = "sedan" | "taxi" | "police" | "truck" | "sports" | "suv" | "pickup" | "van" | "convertible" | "moto";
 /** Bumper to bumper (m), by kind. */
-const LEN: Record<MoverKind, number> = { sedan: 4.3, taxi: 4.6, police: 4.4, truck: 7, sports: 4.4, suv: 4.6, pickup: 5.1, van: 5.3, convertible: 4.3 };
+const LEN: Record<MoverKind, number> = { sedan: 4.3, taxi: 4.6, police: 4.4, truck: 7, sports: 4.4, suv: 4.6, pickup: 5.1, van: 5.3, convertible: 4.3, moto: 2.6 };
+/** The bikes' paints. */
+const BIKE_PAINTS: [string, string][] = [
+  ["#d62f2f", "#141418"],
+  ["#141418", "#f4b728"],
+  ["#2a62c8", "#f2f2ee"],
+  ["#f2f2ee", "#d62f2f"],
+  ["#2f6b3e", "#141418"],
+  ["#ff8a3d", "#141418"],
+];
+/** Where a biker sits on the bike (the riding pose's hips 0.1 m over its feet). */
+const BIKER = new THREE.Vector3(MOTO_SEAT.x - 0.08, MOTO_SEAT.y - 0.1, 0);
 /** The street's paints (bright, sunny: the bay's side of things) and the neon under the sports cars. */
 const VICE = ["#f2f2ee", "#16161c", "#d62f2f", "#ff7eb6", "#2ec4b6", "#4aa8ff", "#f4c430", "#8a5cff", "#ff8a3d", "#9aa0a8", "#1f3f7a", "#2f6b3e"];
 const GLOW = ["#3ef0ff", "#ff3e8a", "#b07bff", "#f4b728"];
@@ -73,6 +86,9 @@ class Mover {
   readonly len: number;
   /** The light bar's lamps (police only). */
   bar: THREE.Mesh[] = [];
+  /** Who drives it (a zkSNARK's number), and on a bike its rider in 3D (src/gta/figure.ts). */
+  readonly driver = 1 + Math.floor(Math.random() * 10000);
+  rider: SnarkFigure | null = null;
   constructor(
     public line: Line,
     public dir: 1 | -1,
@@ -83,7 +99,17 @@ class Mover {
     // (a realistic body per kind and paint, built once and shared by every car that wears it; its
     // wheels in the group too, they roll as it drives)
     let body: THREE.Group;
-    if (kind === "truck") {
+    if (kind === "moto") {
+      // a motorbike and its rider, in the riding pose, leaning on with it
+      const [paint, accent] = BIKE_PAINTS[Math.floor(Math.random() * BIKE_PAINTS.length)];
+      body = bikeObject("moto", { paint, accent });
+      const r = new SnarkFigure(this.driver);
+      r.root.position.copy(BIKER);
+      r.root.rotation.y = Math.PI / 2;
+      r.act.ride = true;
+      r.update(0, { speed: 0 });
+      this.rider = r;
+    } else if (kind === "truck") {
       const l = Math.floor(Math.random() * LIVERIES.length);
       body = carObject("truck", { livery: LIVERIES[l], label: Math.random() < 0.5 ? "proof" : "depot" });
     } else if (kind === "taxi") body = carObject("taxi", { paint: "#f2c230" });
@@ -104,6 +130,7 @@ class Mover {
                 : carObject(kind, { paint });
     }
     for (const c of [...body.children]) this.group.add(c);
+    if (this.rider) this.group.add(this.rider.root);
     if (kind === "police") {
       // the light bar: red on the left, blue on the right, flashing in turn
       for (const [z, c] of [
@@ -125,7 +152,7 @@ class Mover {
         this.group.add(plate);
       }
     }
-    this.vmax = kind === "police" ? 11 : kind === "truck" || kind === "van" ? 7 + Math.random() * 1.5 : kind === "sports" ? 10 + Math.random() * 3 : 8 + Math.random() * 3;
+    this.vmax = kind === "police" ? 11 : kind === "truck" || kind === "van" ? 7 + Math.random() * 1.5 : kind === "sports" || kind === "moto" ? 10 + Math.random() * 3 : 8 + Math.random() * 3;
     this.s = dir > 0 ? line.from : line.to;
     this.setLine(line, dir, this.s);
   }
@@ -207,6 +234,11 @@ export class CityTraffic {
 
   /** The player takes this car (src/gta): it leaves the traffic, its group (body, light bar) handed over. */
   take(m: Mover): THREE.Group {
+    // (a bike's rider is the game's to pull off: out of the group first)
+    if (m.rider) {
+      m.rider.dispose();
+      m.rider = null;
+    }
     this.cars.delete(m);
     this.group.remove(m.group);
     if (m === this.police) this.police = null;
@@ -301,7 +333,8 @@ export class CityTraffic {
     const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
     // (the mix: sedans and SUVs most, taxis, a sports car or a convertible now and then, vans, pickups, trucks)
     const r = Math.random();
-    const kind: MoverKind = !this.police ? "police" : r < 0.13 ? "taxi" : r < 0.2 ? "truck" : r < 0.3 ? "sports" : r < 0.36 ? "convertible" : r < 0.5 ? "suv" : r < 0.58 ? "pickup" : r < 0.65 ? "van" : "sedan";
+    // (and bikers: a motorbike in ten)
+    const kind: MoverKind = !this.police ? "police" : r < 0.1 ? "moto" : r < 0.22 ? "taxi" : r < 0.28 ? "truck" : r < 0.37 ? "sports" : r < 0.42 ? "convertible" : r < 0.55 ? "suv" : r < 0.62 ? "pickup" : r < 0.68 ? "van" : "sedan";
     const car = new Mover(line, dir, kind);
     // in the middle of a street, where there's room (not at the ends, in plain view)
     car.s = line.from + (anywhere ? 0.05 + Math.random() * 0.9 : 0.15 + Math.random() * 0.7) * (line.to - line.from);
@@ -379,6 +412,11 @@ export class CityTraffic {
         c.s += c.dir * c.v * dt;
         c.place();
         spinWheels(c.group, c.v * dt);
+        // the biker rides on (posed while it is near enough to be seen)
+        if (c.rider) {
+          c.rider.act.ride = true;
+          c.rider.update(dt, { speed: 0 });
+        }
       });
     }
     // the police light bar: red and blue in turn
@@ -390,6 +428,11 @@ export class CityTraffic {
       if (c.done && !this.turn(c)) {
         this.cars.delete(c);
         this.group.remove(c.group);
+        // (its rider let go first: the figure frees its own)
+        if (c.rider) {
+          c.rider.dispose();
+          c.rider = null;
+        }
         // (gone for good: what is its own, the police car's light bar and door plates, freed)
         freeObject(c.group);
         if (c === this.police) this.police = null;

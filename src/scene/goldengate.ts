@@ -144,7 +144,8 @@ export class GoldenGate {
       [[X, start], [X, zN], [xV, zN], [xV, zA], [X, zA], [X, start]],
     ] as [number, number][][])
       this.paths.push(new Path(loop));
-    for (let i = 0; i < 16; i++) this.spawn(true);
+    // (a long bridge: a good many cars on it at once)
+    for (let i = 0; i < 30; i++) this.spawn(true);
   }
 
   /** The road's height on the deck at z (Bay Road's asphalt at its city end, CURB off its length). */
@@ -247,7 +248,13 @@ export class GoldenGate {
       obj = carObject(kind, { paint: PAINTS[p][0], glow: kind === "sports" ? PAINTS[p][1] : undefined });
       obj.userData.kind = kind;
     }
-    const s = anywhere ? Math.random() * path.length : 0;
+    let s = anywhere ? Math.random() * path.length : 0;
+    // (half the newcomers come the other way: out of the tunnel's dark, heading north for the city —
+    // unseen coming in, so not while you are near its mouth)
+    if (!anywhere && Math.random() < 0.5) {
+      const z = KTUNNEL.z1 - 5;
+      if (!this.blockers().some((b) => Math.hypot(b.x - KX, b.z - z) < 70)) s = path.length - (z - this.z0);
+    }
     const p = path.at(s);
     // a four-lane road (the bridge, the boulevard, the drive): kerb lane or fast lane; else the one lane
     const wide = Math.abs(p.x - KX) < 8 || Math.abs(p.z - KGRID.zs[3]) < 8 || p.z < KTUNNEL.z1;
@@ -279,8 +286,8 @@ export class GoldenGate {
     // the deck's lamps, the cables' necklace, the aviation lights: by the evening's light
     bridgeNight(GLASS_NIGHT.value);
     this.spawnIn -= dt;
-    if (this.spawnIn <= 0 && this.cars.length < 26) {
-      this.spawnIn = 1.1 + Math.random() * 1.8;
+    if (this.spawnIn <= 0 && this.cars.length < 42) {
+      this.spawnIn = 0.7 + Math.random() * 1.2;
       this.spawn();
     }
     const others = this.blockers();

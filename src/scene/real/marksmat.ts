@@ -84,5 +84,7 @@ function make(slot: string): THREE.Material {
     envMapIntensity: flavour === "gloss" ? 1 : flavour === "metal" ? 0.9 : 0.75,
   });
   if (flavour === "gloss") m.normalScale.setScalar(0.4);
+  // (a monument's big blocks: their joints deeper)
+  if (flavour === "blocks") m.normalScale.setScalar(1.8);
   return m;
 }

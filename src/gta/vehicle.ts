@@ -3,6 +3,7 @@ import { freeObject } from "../scene/voxel/mesher";
 import { VOX } from "../scene/voxel/model";
 import { GT_SPEC, MOTO_SPEC } from "./models";
 import { bikeObject, carObject, type CarKind } from "../scene/real/cars";
+import { bikeStyle, gtStyle, tintRims } from "./store";
 
 /**
  * A car you drive (src/gta): an arcade model, tuned for feel rather than truth, as the open-world
@@ -12,7 +13,7 @@ import { bikeObject, carObject, type CarKind } from "../scene/real/cars";
  * (scene/nav.ts) with three circles along its length, and bounce it off.
  */
 
-export type VehicleKind = "gt" | "moto" | "sedan" | "taxi" | "police" | "truck" | "sports" | "suv" | "pickup" | "van" | "convertible";
+export type VehicleKind = "gt" | "moto" | "scooter" | "sedan" | "taxi" | "police" | "truck" | "sports" | "suv" | "pickup" | "van" | "convertible" | "limo" | "ambulance";
 
 interface Spec {
   name: string;
@@ -50,6 +51,10 @@ export const SPECS: Record<VehicleKind, Spec> = {
   pickup: { name: "Pickup", accel: 6.5, vmax: 38, grip: 6.8, turn: 0.8, len: 30 * VOX, wid: 12 * VOX, wheelR: 0.36, wheels: [5, 24], vox: 30, track: 5.1, gears: 5, mass: 2.2 },
   van: { name: "Van", accel: 5, vmax: 32, grip: 6.3, turn: 0.75, len: 31 * VOX, wid: 12 * VOX, wheelR: 0.34, wheels: [5, 25], vox: 31, track: 5.1, gears: 5, mass: 2.6 },
   convertible: { name: "Convertible", accel: 8, vmax: 44, grip: 8, turn: 0.95, len: 25 * VOX, wid: 11 * VOX, wheelR: 0.3, wheels: [5, 19], vox: 25, track: 4.6, gears: 6, mass: 1.3 },
+  // the avenue's limousine, the ambulance, the couriers' scooters: yours too when you take one
+  limo: { name: "Limousine", accel: 6, vmax: 38, grip: 7, turn: 0.7, len: 7.6, wid: 1.95, wheelR: 0.33, wheels: [5, 41], vox: 46, track: 4.8, gears: 5, mass: 2.6 },
+  ambulance: { name: "Ambulance", accel: 6.5, vmax: 40, grip: 6.8, turn: 0.8, len: 5.6, wid: 2.1, wheelR: 0.36, wheels: [5, 28], vox: 34, track: 5.1, gears: 5, mass: 2.8 },
+  scooter: { name: "Delivery scooter", accel: 7.5, vmax: 24, grip: 8.5, turn: 1.1, len: 2.0, wid: 0.7, wheelR: 0.21, wheels: [2, 10], vox: 12, track: 0, gears: 1, bike: true, mass: 0.22 },
 };
 
 const TYRE = new THREE.MeshStandardMaterial({ color: "#121216", roughness: 0.85 });
@@ -175,32 +180,42 @@ export class DriveCar {
   /** Lit lamps at night. */
   lamps = false;
 
-  constructor(kind: VehicleKind, from?: THREE.Group) {
+  /** `bike`: a bike's own paint (a stranger's ZK-R about town); without it, yours from the store. */
+  constructor(kind: VehicleKind, from?: THREE.Group, bike?: { paint: string; accent: string }) {
     this.kind = kind;
     this.spec = SPECS[kind];
     this.own = !from;
+    const bikeArg = bike;
     if (from) {
       // a car taken from the traffic: its group (the body, a police light bar) carries on
       this.group = from;
       this.body = from;
       this.yaw = from.rotation.y;
-      // its body goes in a pivot of its own so it can lean (its wheels stay on the road, they steer)
+      // its body goes in a pivot of its own so it can lean (its wheels stay on the road, they steer;
+      // a bike's lean with it)
       const pivot = new THREE.Group();
-      for (const c of [...from.children]) if (c.name !== "wheel") pivot.add(c);
+      pivot.name = "gta:pivot";
+      for (const c of [...from.children]) if (c.name !== "wheel" || SPECS[kind].bike) pivot.add(c);
       from.add(pivot);
       this.body = pivot;
-    } else if (kind === "moto") {
-      // the ZK-R: body and wheels lean together
+    } else if (kind === "moto" || kind === "scooter") {
+      // the ZK-R (or a scooter): body and wheels lean together
       this.group = new THREE.Group();
       this.body = new THREE.Group();
-      const bike = bikeObject("moto", { paint: "#e8a91c", accent: "#141418" });
+      this.body.name = "gta:pivot";
+      // (the ZK-R in the paint bought at the store: store.ts)
+      const bike = kind === "moto" ? bikeObject("moto", bikeArg ?? bikeStyle()) : bikeObject("scooter", { paint: "#2e5ab8", accent: "#ffffff" });
       for (const c of [...bike.children]) this.body.add(c);
       this.group.add(this.body);
     } else {
       // your own car: the realistic model, its body in the leaning pivot, its wheels on the road
       this.group = new THREE.Group();
       this.body = new THREE.Group();
-      const car = carObject(kind === "gt" ? "gt" : (kind as CarKind), kind === "gt" ? { paint: "#e8a91c", accent: "#141418", glow: "#f4b728" } : {});
+      this.body.name = "gta:pivot";
+      // (the ZK-GT as you have it at the store: paint, neon, rims — store.ts)
+      const st = kind === "gt" ? gtStyle() : null;
+      const car = carObject(kind === "gt" ? "gt" : (kind as CarKind), st ? { paint: st.paint, accent: st.accent, ...(st.glow ? { glow: st.glow } : {}), ...(st.finish ? { finish: st.finish } : {}) } : {});
+      if (st) tintRims(car, st.rims);
       for (const c of [...car.children]) (c.name === "wheel" ? this.group : this.body).add(c);
       this.group.add(this.body);
     }
@@ -243,6 +258,11 @@ export class DriveCar {
 
   get speed() {
     return Math.abs(this.vF);
+  }
+
+  /** The pivot its body leans in (a rider sits in it). */
+  get pivot() {
+    return this.body;
   }
 
   /** Forward and right (world, flat). */

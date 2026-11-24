@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import * as THREE from "three";
-import { CURB } from "../city/plan";
+import { ACROSS, CURB } from "../city/plan";
 import { VOX } from "../voxel/model";
 // (the trees are drawn realistic on the main thread; the voxel builders give the lots' layouts only: signs, doors, lights)
 import { buildLot } from "./models";
@@ -318,8 +318,8 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
     }
   }
   // the west and east beaches' huts, facing their seas
-  put(() => kLifeguard(77), KGRID.west - 14, sandAt(KGRID.west - 14, 330), 330, -Math.PI / 2, "guardW");
-  put(() => kLifeguard(91), KGRID.east + 14, sandAt(KGRID.east + 14, 330), 330, Math.PI / 2, "guardE");
+  put(() => kLifeguard(77), KGRID.west - 14, sandAt(KGRID.west - 14, 330 + ACROSS), 330 + ACROSS, -Math.PI / 2, "guardW");
+  put(() => kLifeguard(91), KGRID.east + 14, sandAt(KGRID.east + 14, 330 + ACROSS), 330 + ACROSS, Math.PI / 2, "guardE");
   // the pier
   {
     const P = KPIER;
@@ -334,7 +334,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
     const px = 5,
       pitch = 5 * px * VOX + 1.3;
     const x0 = 214 - (text.length * pitch) / 2;
-    const z = 246;
+    const z = 246 + ACROSS;
     for (let i = 0; i < text.length; i++) {
       const ch = text[i];
       if (ch === " ") continue;
@@ -351,7 +351,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
         const jx = x + (R() - 0.5) * 2,
           jz = z + (R() - 0.5) * 2;
         const g = ground(jx, jz);
-        if (g < 0.5 || Math.abs(jx - KX) < 25 || (jx > 176 && jx < 252 && jz > 241 && jz < 250)) continue;
+        if (g < 0.5 || Math.abs(jx - KX) < 25 || (jx > 176 && jx < 252 && jz > 241 + ACROSS && jz < 250 + ACROSS)) continue;
         const slope = Math.abs(ground(jx, jz + 1) - ground(jx, jz - 1)) / 2 + Math.abs(ground(jx + 1, jz) - ground(jx - 1, jz)) / 2;
         if (slope > 1.4 || R() > 0.42) continue;
         const k = R();
@@ -376,7 +376,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
     // a few palms on the beaches either side of the town
     for (let z = KGRID.north + 10; z < KGRID.south; z += 13)
       for (const x of [KGRID.west - 4.5, KGRID.east + 4.5]) {
-        if (R() < 0.35 || Math.abs(z - 330) < 6) continue;
+        if (R() < 0.35 || Math.abs(z - 330 - ACROSS) < 6) continue;
         const px = x + (R() - 0.5) * 2,
           pz = z + (R() - 0.5) * 4;
         trees.push([px, sandAt(px, pz) - 0.1, pz, "palm", seed]);

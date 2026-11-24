@@ -11,6 +11,12 @@ import { MAIN_LANDMARKS, mainLandmarkMeta } from "../real/mainmarks";
 import { REAL_HEART, REAL_LANDMARKS, realLandmark } from "../real/landmarks";
 import { REAL_MARKS, realMark } from "../real/marks";
 import { PALM_MARKS, realPalmMark } from "../real/palmmarks";
+import { keepInLot } from "../real/lotguard";
+
+/** A landmark that spilt over its lot by more than a little (its builder should be fixed at the source). */
+function spilt(kind: string, worst: number) {
+  if (worst > 0.3 && import.meta.env?.DEV) console.warn(`city worker: landmark "${kind}" spills ${worst.toFixed(1)} m over its lot (clipped)`);
+}
 import type { BuildingJob, PropJob } from "./plan";
 
 /**
@@ -144,15 +150,19 @@ self.onmessage = async (e: MessageEvent) => {
       if (realOn && marksOn && j.type === "landmark" && REAL_MARKS.has((j.opts as { kind: string }).kind)) {
         // a landmark of the north or the centre rebuilt realistically (src/scene/real/marks.ts): metres, its layout from its voxels
         const kind = (j.opts as { kind: string }).kind;
+        const farM = realMark(kind, b, j, 1);
         const k = b.scale ?? 1;
         const v = (n: number) => n * k;
         const near = realMark(kind, b, j, lite ? 1 : 0);
+        // (nothing of it in the streets round its lot)
+        spilt(kind, keepInLot(kind, j, b, near.geos, near));
+        keepInLot(kind, j, b, farM.geos);
         return {
           id: j.id,
           real: true,
           full: packReal(near.geos, transfer),
           cut: {},
-          lod: packReal(realMark(kind, b, j, 1).geos, transfer),
+          lod: packReal(farM.geos, transfer),
           meta: {
             w: m.w * k,
             h: m.h * k,
@@ -196,15 +206,19 @@ self.onmessage = async (e: MessageEvent) => {
       if (realOn && marksOn && j.type === "landmark" && REAL_LANDMARKS.has((j.opts as { kind: string }).kind)) {
         // a landmark rebuilt realistically (src/scene/real/landmarks.ts): metres; the layout from its voxels
         const kind = (j.opts as { kind: string }).kind;
+        const farL = realLandmark(kind, b, { lod: 1 });
         const k = b.scale ?? 1;
         const v = (n: number) => n * k;
         const near = realLandmark(kind, b, { lod: lite ? 1 : 0 });
+        // (nothing of it in the streets round its lot)
+        spilt(kind, keepInLot(kind, j, b, near.geos, near.extras));
+        keepInLot(kind, j, b, farL.geos);
         return {
           id: j.id,
           real: true,
           full: packReal(near.geos, transfer),
           cut: {},
-          lod: packReal(realLandmark(kind, b, { lod: 1 }).geos, transfer),
+          lod: packReal(farL.geos, transfer),
           meta: {
             w: m.w * k,
             h: m.h * k,

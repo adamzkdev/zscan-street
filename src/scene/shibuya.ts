@@ -729,6 +729,7 @@ export class Shibuya {
       const id = 1 + Math.floor(r() * 10000);
       if (!seen.has(id)) seen.add(id), ids.push(id);
     }
+    this.slotIds = ids;
     const rows = Math.ceil(UNIQUE / ACOLS);
     const [c, g] = canvas(ACOLS * 32, rows * 32);
     const colours: THREE.Color[] = [];
@@ -805,12 +806,40 @@ export class Shibuya {
     this.crowd!.visible = true;
   }
 
+  /** The crowd's zkSNARK ids by slot (the atlas's order), once the faces are in. */
+  slotIds: number[] = [];
+  /** Walkers drawn in 3D by the game (src/gta/people3d.ts): their flat figure hidden. */
+  readonly in3D = new Set<number>();
+
+  /** The walkers within `r` of (x, z): index, position, its zkSNARK, which way it faces (the game's 3D people). */
+  people(x: number, z: number, r: number) {
+    const out: { i: number; id: number }[] = [];
+    if (!this.slotIds.length) return out;
+    this.walkers.forEach((w, i) => {
+      if ((w.x - x) ** 2 + (w.z - z) ** 2 < r * r) out.push({ i, id: this.slotIds[w.slot % this.slotIds.length] });
+    });
+    return out;
+  }
+  walkerAt(i: number, o: THREE.Vector3) {
+    const w = this.walkers[i];
+    return o.set(w.x, w.y, w.z);
+  }
+  walkerFace(i: number) {
+    const w = this.walkers[i];
+    return w.dx || w.dz ? new THREE.Vector3(w.dx, 0, w.dz) : null;
+  }
+  hide3D(i: number, on: boolean) {
+    if (on) this.in3D.add(i);
+    else this.in3D.delete(i);
+  }
+
   private writeInstances() {
     const P = this.pos.array as Float32Array,
       M = this.mov.array as Float32Array;
     this.walkers.forEach((w, i) => {
       P[i * 4] = w.x;
-      P[i * 4 + 1] = w.y;
+      // (one drawn in 3D by the game: its cut-out far below the street)
+      P[i * 4 + 1] = this.in3D.has(i) ? -1e4 : w.y;
       P[i * 4 + 2] = w.z;
       P[i * 4 + 3] = w.phase;
       M[i * 4] = w.dx;

@@ -1,4 +1,5 @@
 // node shots/_keysdoors.mjs: Orchard Keys' doors in the game (src/scene/keys → src/gta nearDoors): which lots got one, and a look at a few
+// (positions south of the bay moved with the Golden Gate: ACROSS = 380 m, src/scene/city/plan.ts)
 import puppeteer from "puppeteer-core";
 const [URL = "http://localhost:3061/?debug&gta=1192&theme=day&solo", OUT = "shots/gta/keys/door"] = process.argv.slice(2);
 const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1280, height: 720 } });
@@ -15,7 +16,7 @@ await sleep(1500);
 const r = await p.evaluate(() => {
   const g = street.gta;
   const facades = street.keys.facades;
-  const spots = (g.buildingSpots ?? []).filter((s) => s.z > 236);
+  const spots = (g.buildingSpots ?? []).filter((s) => s.z > 236 + 380);
   const got = new Set(spots.map((s) => s.label));
   return { facades: facades.length, spots: spots.length, missing: facades.filter((f) => !got.has(f.name)).map((f) => f.name + " @" + f.door.x.toFixed(0) + "," + f.door.z.toFixed(0)), labels: [...got] };
 });

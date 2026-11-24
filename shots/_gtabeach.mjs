@@ -26,7 +26,8 @@ const shot = async (name) => {
   await p.screenshot({ path: `${OUT}-${String(++n).padStart(2, "0")}-${name}.png` });
   console.log("shot", n, name);
 };
-/** Put the player at (x, z) facing h (0 = north), the camera behind at pitch. */
+/** Put the player at (x, z) facing h (0 = north), the camera behind at pitch. (Orchard Keys' spots are given in its
+ * old figures: the town lies ACROSS = 380 m further south since the Golden Gate grew — added here.) */
 const at = (x, z, h, pitch = -0.1) =>
   p.evaluate(
     (x, z, h, pitch) => {
@@ -37,7 +38,7 @@ const at = (x, z, h, pitch = -0.1) =>
       g.cam.snap(g.player.pos.clone().setY(y + 1.55));
     },
     x,
-    z,
+    z > 236 ? z + 380 : z,
     h,
     pitch,
   );

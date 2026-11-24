@@ -102,7 +102,7 @@ void main() {
   float cls;
   // the Golden Gate's deck (high over the bay, it would read as a building): its road and its walkways
   // (uGG: centre x, the deck's two ends z, where it narrows into the headland's cut)
-  if (vXZ.y > uGG.y && vXZ.y < uGG.z && vY > -0.45 && vY < 9.0) {
+  if (vXZ.y > uGG.y && vXZ.y < uGG.z && vY > -0.45 && vY < ${(GG.yMid + 4).toFixed(1)}) {
     float hw = mix(${GG.road.toFixed(2)}, ${GG.roadEnd.toFixed(2)}, smoothstep(uGG.w, uGG.w + 9.0, vXZ.y));
     float d = abs(vXZ.x - uGG.x);
     if (d < hw + 0.5) { gl_FragColor = vec4(2.0 / 255.0, clamp(vY / 80.0, 0.0, 1.0), 0.0, 1.0); return; }

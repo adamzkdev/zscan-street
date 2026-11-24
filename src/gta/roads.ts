@@ -176,6 +176,8 @@ export class Roads {
       if (z > KGRID.south || x < KGRID.west || x > KGRID.east) return "Orchard Beach";
       if (z < KGRID.north) return "Headland Bluff";
     }
+    // the woods: their trails and spots, not "the Bay" (their own subtitle under the district)
+    if (x > F.x0 && x < F.x1 && z > F.z0 && z < F.z1 && z > BAY.headland.z0 - 30) return "Redwood trails";
     const P = GRID.park;
     if (x > P.x0 && x < P.x1 && z > P.z0 && z < P.z1) return "Central Park";
     if (z > RIVER.z0 && z < RIVER.z1) return "The River";

@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { treeObject } from "../../scene/real/trees";
 import { C, E, G, hash, shades, VoxelModel } from "../../scene/voxel/model";
 import { FINE } from "../furniture";
+import { withReal } from "../realfurn";
+import { cabanaReal, cardTableReal, clubChairReal, frontDeskReal, kingBedReal, sideTableReal, teakLoungerReal, velvetChairReal } from "../realfurn2";
 
 /**
  * The hotel's own voxel furniture (12 voxels a metre, facing +z, standing on y = 0, centred on x and
@@ -42,7 +44,7 @@ export function slotMachine(color: string) {
 }
 
 /** A card table: a half-moon (blackjack, baccarat) or an oval (poker), felt, padded rail, chips. */
-export function cardTable(felt: string, oval = false) {
+function cardTableVox(felt: string, oval = false) {
   const W = 28,
     D = oval ? 18 : 16,
     v = m(W, 11, D);
@@ -121,7 +123,7 @@ export function chandelier(r = 1.2, tiers = 4, color = "#fff2d0") {
 // ---- the atrium ------------------------------------------------------------------------------------
 
 /** A long front desk in marble with a gold band and a lit plinth, monitors and a bell. */
-export function frontDesk(len: number) {
+function frontDeskVox(len: number) {
   const W = Math.round(len * FINE),
     v = m(W, 14, 10);
   v.box(0, 0, 1, W, 1, 10, black);
@@ -162,7 +164,7 @@ export function trolley(seed = 1) {
 }
 
 /** A plush lounge chair, deep and curved. */
-export function clubChair(color: string) {
+function clubChairVox(color: string) {
   const v = m(12, 11, 12);
   const f = fabric(color, 5);
   v.box(1, 0, 1, 11, 1, 11, black);
@@ -178,7 +180,7 @@ export function clubChair(color: string) {
 }
 
 /** A round side table with a lamp. */
-export function sideTable(lamp = true) {
+function sideTableVox(lamp = true) {
   const v = m(6, lamp ? 15 : 7, 6);
   v.box(0, 6, 0, 6, 7, 6, gold);
   v.box(2, 0, 2, 4, 6, 4, C("#2a2630"));
@@ -194,7 +196,7 @@ export function sideTable(lamp = true) {
 // ---- rooms ---------------------------------------------------------------------------------------------
 
 /** A king bed: a tall upholstered headboard with a gold frame, white linen, four pillows, a runner. */
-export function kingBed(head: string, runner: string) {
+function kingBedVox(head: string, runner: string) {
   const v = m(24, 18, 27);
   v.box(0, 0, 1, 24, 4, 27, darkWood(8));
   v.box(0, 0, 0, 24, 18, 2, gold);
@@ -371,7 +373,7 @@ export function roundTable(seats = 4) {
 }
 
 /** A dining chair in velvet. */
-export function velvetChair(color: string) {
+function velvetChairVox(color: string) {
   const v = m(6, 13, 6);
   for (const [x, z] of [[0, 0], [5, 0], [0, 5], [5, 5]]) v.box(x, 0, z, x + 1, 5, z + 1, gold);
   v.box(0, 5, 0, 6, 6, 6, fabric(color));
@@ -463,7 +465,7 @@ export function palm(seed = 1, planter = true) {
 }
 
 /** A cabana: four posts, a canvas roof, curtains tied back, a daybed with cushions. */
-export function cabana(color: string) {
+function cabanaVox(color: string) {
   const v = m(30, 32, 30);
   const post = C("#e8e2d4");
   for (const [x, z] of [[0, 0], [29, 0], [0, 29], [29, 29]]) v.box(x, 0, z, x + 1, 30, z + 1, post);
@@ -484,7 +486,7 @@ export function cabana(color: string) {
 }
 
 /** A sun lounger on teak, with a rolled towel. */
-export function teakLounger(towel: string) {
+function teakLoungerVox(towel: string) {
   const v = m(8, 9, 24);
   const teak = shades(["#9a6a40", "#8a5e38"], 1, 3);
   for (const z of [1, 21]) for (const x of [0, 7]) v.box(x, 0, z, x + 1, 3, z + 1, teak);
@@ -507,4 +509,30 @@ export function binoculars() {
   v.box(2, 13, 0, 6, 15, 1, G("#9cc3df"));
   v.set(4, 16, 4, E("#f4b728", 1.6));
   return v;
+}
+
+// ---- the realistic twins (src/interior/realfurn2.ts) ----
+export function clubChair(color: string) {
+  return withReal(clubChairVox(color), () => clubChairReal(color));
+}
+export function velvetChair(color: string) {
+  return withReal(velvetChairVox(color), () => velvetChairReal(color));
+}
+export function frontDesk(len: number) {
+  return withReal(frontDeskVox(len), () => frontDeskReal(len));
+}
+export function cardTable(felt: string, oval = false) {
+  return withReal(cardTableVox(felt, oval), () => cardTableReal(felt, oval));
+}
+export function teakLounger(towel: string) {
+  return withReal(teakLoungerVox(towel), () => teakLoungerReal(towel));
+}
+export function cabana(color: string) {
+  return withReal(cabanaVox(color), () => cabanaReal(color));
+}
+export function sideTable(lamp = true) {
+  return withReal(sideTableVox(lamp), () => sideTableReal(lamp));
+}
+export function kingBed(head: string, runner: string) {
+  return withReal(kingBedVox(head, runner), () => kingBedReal(head, runner));
 }

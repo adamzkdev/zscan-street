@@ -8,7 +8,7 @@
  * hour). Each district's weight comes from how close the ear is to it; a district's scene is built
  * when you get near, torn down after you have been away a while.
  */
-import { BAY, GRID, LOTS, PARK, RIVER } from "../scene/city/plan";
+import { ACROSS, BAY, GRID, LOTS, PARK, RIVER } from "../scene/city/plan";
 import { bell, drum, type Room, Scene, tone, type Bufs } from "./lib";
 import { load, loop, preload, shot } from "./samples";
 import { pyramidMusic } from "./egypt";
@@ -355,14 +355,14 @@ const DISTRICTS: Record<string, District> = {
     },
     update(s, e) {
       // the surf louder the nearer the water's edge
-      s.knobs.surf?.setTargetAtTime(0.55 + 0.6 * Math.max(0, 1 - Math.abs(e.z - 492) / 40), s.now, 0.6);
+      s.knobs.surf?.setTargetAtTime(0.55 + 0.6 * Math.max(0, 1 - Math.abs(e.z - 492 - ACROSS) / 40), s.now, 0.6);
     },
   },
 };
 /** Orchard Keys (src/scene/keys): the town, its beaches and the bluff behind it. */
-const KEYS_R = { x0: 70, x1: 352, z0: 238, z1: 492 };
+const KEYS_R = { x0: 70, x1: 352, z0: 238 + ACROSS, z1: 492 + ACROSS };
 /** Orchard Beach: the big sand south of the promenade, to the water's edge and the swimmers off it. */
-const BEACH_R = { x0: 96, x1: 324, z0: 418, z1: 520 };
+const BEACH_R = { x0: 96, x1: 324, z0: 418 + ACROSS, z1: 520 + ACROSS };
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 
 /** The fountain's distance in Central Park, for its own level. */

@@ -37,6 +37,11 @@ export class Vehicle {
   blocked = 0;
   /** Held where it is (its driver got out). */
   held = false;
+  /**
+   * Taken by the game (src/gta): what you drive is a copy; this one goes on unseen to wherever the
+   * director sent it (its errand finishes, nothing waits for ever), out of everyone's way.
+   */
+  stolen = false;
 
   constructor(
     readonly mover: Mover,
@@ -104,8 +109,8 @@ export class Vehicle {
     if (this.target !== null && (this.target - this.x - dx) * dir < 0) dx = this.target - this.x;
     this.x += dx;
     this.mover.group.position.x = this.x;
-    // deep enough in a tunnel: gone from sight
-    this.mover.group.visible = Math.abs(this.x) < TUNNEL.hideBeyond;
+    // deep enough in a tunnel: gone from sight (and a stolen one never again)
+    this.mover.group.visible = !this.stolen && Math.abs(this.x) < TUNNEL.hideBeyond;
     this.mover.spin(Math.abs(dx));
     // a little nose dip under braking
     this.mover.group.rotation.z = -dir * THREE.MathUtils.clamp((want - this.v) * 0.004, -0.012, 0.012);
@@ -204,7 +209,10 @@ export class Traffic {
       // front of the queue first
       const list = [...this.vehicles].filter((v) => v.lane === lane).sort((a, b) => (b.x - a.x) * dir);
       list.forEach((v, i) => {
-        const leader = i > 0 ? list[i - 1] : null;
+        // (a stolen one is nobody's leader: the traffic drives through where it is, unseen)
+        let k = i - 1;
+        while (k >= 0 && list[k].stolen) k--;
+        const leader = k >= 0 ? list[k] : null;
         const line = this.stopLine(v, leader);
         let obstacle: { rear: number; v: number } | null = leader;
         if (line && (!obstacle || (line.rear - obstacle.rear) * dir < 0)) obstacle = line;

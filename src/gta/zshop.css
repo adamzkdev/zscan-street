@@ -1,0 +1,377 @@
+/* The STORE's market tabs: Zilk Road's zkSNARKs (zilk.ts) and GET ⓩ (zecshop.ts), in the hub's
+ * plates and gold (front.css's --zg, --zink, --zb-* and .gf-tile / .gf-btn / .gf-plate / .gf-tag). */
+.zs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--zink, #f3efe6);
+  font-family: var(--g-disp, "Archivo", system-ui, sans-serif);
+}
+.zs-msg {
+  margin: 30px auto;
+  font: 500 15px/1.5 var(--g-disp);
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+  text-align: center;
+}
+/* ---- Zilk Road ---- */
+.zs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.zs-stats {
+  display: flex;
+  gap: 18px;
+  margin-right: auto;
+}
+.zs-stats span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zs-stats small,
+.zz-head small,
+.zz-orders > small,
+.zz-info > small {
+  font: 800 11px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--zg, #f4b728);
+}
+.zs-stats b {
+  font: 800 20px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.02em;
+}
+.zs-stats i {
+  font: 500 12px var(--g-disp);
+  font-style: normal;
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+}
+.zs-seg {
+  display: flex;
+  padding: 3px;
+  border-radius: 5px;
+  background: #15110d;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.zs-seg button {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+  font: 800 13px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.zs-seg button.on {
+  color: #1d1405;
+  background: linear-gradient(180deg, #ffd45e 0%, #f4b728 48%, #dc9c10 100%);
+}
+.zs-find {
+  display: flex;
+  gap: 6px;
+}
+.zs-find input {
+  width: 110px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: #15110d;
+  color: var(--zink, #f3efe6);
+  font: 700 14px var(--g-disp);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.zs-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  min-height: 0;
+}
+.zs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  align-content: start;
+  max-height: min(58vh, 560px);
+  overflow: auto;
+  padding: 4px 4px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #3a3026 transparent;
+}
+.zs-grid .gf-tile {
+  width: auto;
+  padding: 10px 8px 9px;
+  gap: 6px;
+  cursor: pointer;
+}
+.zs-grid .gf-tile b {
+  min-height: 0;
+  font-size: 14px;
+}
+.zs-pic canvas,
+.zs-dpic canvas,
+.zs-dpic img {
+  display: block;
+  image-rendering: pixelated;
+  border-radius: 3px;
+}
+.zs-pic canvas {
+  width: 72px;
+  height: 72px;
+}
+.zs-detail {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-self: start;
+  max-height: min(58vh, 560px);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #3a3026 transparent;
+}
+.zs-dpic {
+  width: min(100%, 172px);
+  align-self: center;
+}
+.zs-dpic canvas,
+.zs-dpic img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.zs-dbody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zs-dname {
+  font: 800 24px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.zs-dtags {
+  display: flex;
+  gap: 6px;
+}
+.zs-dprice {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.zs-dprice .gf-price {
+  font-size: 22px;
+}
+.zs-dprice small,
+.zs-dline {
+  margin: 0;
+  font: 500 13px/1.4 var(--g-disp);
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+}
+.zs-traits {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+}
+.zs-traits dt {
+  font: 800 10px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+}
+.zs-traits dd {
+  margin: 2px 0 0;
+  font: 600 13px var(--g-disp);
+}
+.zs-dact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zs-dact .gf-btn {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  text-decoration: none;
+  justify-content: center;
+}
+.zs-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font: 700 13px var(--g-disp);
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+}
+/* ---- GET ⓩ ---- */
+.zz {
+  align-items: center;
+}
+.zz-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+.zz-bal {
+  font: 800 30px/1 var(--g-disp);
+  font-stretch: 75%;
+}
+.zz-bundles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+.zz-bundle {
+  width: 190px;
+  padding: 14px 14px 14px;
+  gap: 10px;
+  cursor: pointer;
+}
+.zz-sp {
+  height: 20px;
+}
+.zz-coins {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font: 800 42px/1 var(--g-disp);
+  font-stretch: 75%;
+  color: #fff;
+}
+.zz-coins small {
+  font-size: 22px;
+  color: var(--zg, #f4b728);
+}
+.zz-bundle .gf-price {
+  font-size: 18px;
+}
+.zz-usd {
+  min-height: 14px;
+  font: 500 12px var(--g-disp);
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+}
+.zz-bundle .gf-btn {
+  width: 100%;
+  justify-content: center;
+}
+.zz-orders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(560px, 100%);
+}
+.zz-orders button {
+  display: grid;
+  grid-template-columns: 110px 110px 1fr;
+  align-items: center;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: #1a1611;
+  color: var(--zink, #f3efe6);
+  font: 600 13px var(--g-disp);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--zb-hi, rgba(222, 170, 60, 0.3)), 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+.zz-orders i {
+  font-style: normal;
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+  text-align: right;
+}
+.zz-pay {
+  display: flex;
+  gap: 22px;
+  padding: 20px;
+  width: min(860px, 100%);
+}
+.zz-qr canvas {
+  display: block;
+  width: 220px;
+  height: 220px;
+  border-radius: 6px;
+}
+.zz-info {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+.zz-info > b {
+  font: 800 34px/1 var(--g-disp);
+  font-stretch: 75%;
+}
+.zz-info label {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font: 800 11px var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+}
+.zz-info code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 8px;
+  border-radius: 3px;
+  background: #15110d;
+  color: var(--zink, #f3efe6);
+  font: 500 12px/1.2 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.zz-act {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.zz-act a.gf-btn {
+  text-decoration: none;
+}
+.zz-state {
+  margin: 2px 0 0;
+  font: 700 14px var(--g-disp);
+  color: var(--zink2, rgba(243, 239, 230, 0.62));
+}
+.zz-state.seen {
+  color: var(--zg, #f4b728);
+}
+.zz-state.ok {
+  color: #5cff9a;
+}
+.zz-state.short,
+.zz-state.expired {
+  color: #e5533f;
+}
+@media (max-width: 760px) {
+  .zs-body {
+    grid-template-columns: 1fr;
+  }
+  .zs-grid {
+    max-height: 36vh;
+  }
+  .zz-pay {
+    flex-direction: column;
+    align-items: center;
+  }
+  .zz-bundle {
+    width: 150px;
+  }
+}

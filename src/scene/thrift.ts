@@ -18,6 +18,11 @@ import { load } from "./load";
  *
  * Both hide an object by its layer, not by `visible`, which stays the property of whoever owns it.
  */
+/** A function's identity, as a number (two materials with the same hook share it). */
+const fnIds = new WeakMap<object, number>();
+let fnN = 0;
+const fnId = (f: object) => fnIds.get(f) ?? (fnIds.set(f, ++fnN), fnN);
+
 const MERGED = 30;
 const TINY = 29;
 const TILE = 96;
@@ -112,14 +117,22 @@ export class Thrift {
   /** A material that a copy can stand in for: no textures, nothing clipped, opaque. */
   private twinnable(mat: Plain) {
     if (mat.type !== "MeshStandardMaterial" && mat.type !== "MeshBasicMaterial") return false;
+    if (mat.clippingPlanes?.length || mat.transparent) return false;
+    // the realistic city's own clones (a building's, a landmark's: walls down clips them on the map;
+    // real/mats.ts realMat, marksmat.ts): their maps and hooks read UVs, vertex colours and the world
+    // position from the view, never the model's own coordinates — a copy merged per tile draws them the
+    // same, a few draws a tile instead of one per slot per building (a third of the frame's draws)
+    const u = mat.userData as Record<string, unknown>;
+    if (u.realSlot || u.real || u.realGround || /^lm\./.test(mat.name ?? "") || /^(real:|lm\.)/.test(mat.customProgramCacheKey())) return true;
     for (const k of MAPS) if ((mat as unknown as Record<string, unknown>)[k]) return false;
     // (no shader hook either: a hook may read the model's own coordinates, which merging changes)
-    return !mat.clippingPlanes?.length && !mat.transparent && mat.onBeforeCompile === THREE.Material.prototype.onBeforeCompile;
+    return mat.onBeforeCompile === THREE.Material.prototype.onBeforeCompile;
   }
   /** Everything about a material's look, for telling two own copies apart. */
   private look(mat: Plain) {
     const m = mat as THREE.MeshStandardMaterial;
-    return [m.type, m.color.getHex(), m.emissive?.getHex(), m.emissiveIntensity, m.roughness, m.metalness, m.vertexColors, m.side, m.shadowSide, m.flatShading, m.toneMapped, m.fog, m.depthWrite, m.depthTest, m.colorWrite, m.polygonOffset, m.polygonOffsetFactor, m.polygonOffsetUnits, m.opacity, m.envMapIntensity, m.alphaTest, m.blending, m.dithering, m.wireframe, m.clipShadows, m.customProgramCacheKey(), JSON.stringify(m.userData)].join();
+    const maps = MAPS.map((k) => ((m as unknown as Record<string, THREE.Texture | null>)[k]?.uuid ?? "")).join("/");
+    return [maps, fnId(m.onBeforeCompile), m.name, m.normalScale?.x, m.aoMapIntensity, m.type, m.color.getHex(), m.emissive?.getHex(), m.emissiveIntensity, m.roughness, m.metalness, m.vertexColors, m.side, m.shadowSide, m.flatShading, m.toneMapped, m.fog, m.depthWrite, m.depthTest, m.colorWrite, m.polygonOffset, m.polygonOffsetFactor, m.polygonOffsetUnits, m.opacity, m.envMapIntensity, m.alphaTest, m.blending, m.dithering, m.wireframe, m.clipShadows, m.customProgramCacheKey(), JSON.stringify(m.userData)].join();
   }
 
   /** Only a colour, with nothing that makes its material its own. */
@@ -330,8 +343,11 @@ export class Thrift {
       mat.vertexColors = true;
       mat.color.set(0xffffff);
     } else if (first.twin) {
-      // (a copy: the original stays its owner's, glow and clipping included)
+      // (a copy: the original stays its owner's, glow and clipping included; its shader hook and
+      // program key with it — a material's copy drops them)
       mat = first.m.clone();
+      mat.onBeforeCompile = first.m.onBeforeCompile;
+      mat.customProgramCacheKey = first.m.customProgramCacheKey;
     }
     const batch = new THREE.Mesh(geo, mat);
     batch.name = "thrift";
@@ -440,6 +456,18 @@ export class Thrift {
     if (k.shared) return false;
     const m = k.m as THREE.MeshStandardMaterial;
     return m.color.getHex() !== k.color || (m.emissive?.getHex() ?? 0) !== k.emissive || m.opacity !== k.opacity || m.transparent || !m.visible;
+  }
+
+  /**
+   * Out of its batch right away, drawn by itself again (walls down is about to clip it, src/main.ts:
+   * the watch below would see it only after a few frames, the building whole meanwhile).
+   */
+  unmerge(root: THREE.Object3D) {
+    root.traverse((o) => {
+      if (!this.keptOf.has(o)) return;
+      const i = this.kept.findIndex((k) => k.o === o);
+      if (i >= 0) this.release(i);
+    });
   }
 
   /** Something merged is no longer what it was: its triangles go, and it draws itself again. */

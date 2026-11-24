@@ -141,10 +141,12 @@ const leg = async (name, lane, z0, z1, ms) => {
   console.log("  near:", JSON.stringify(await p.evaluate(() => { const c = street.gta.car.group.position; return [...street.goldenGate.boxes()].filter((b) => Math.hypot(b.x - c.x, b.z - c.z) < 14).map((b) => [b.x.toFixed(1), b.z.toFixed(1)]); })), "hit:", JSON.stringify(await p.evaluate(() => street.gta.car.hit)));
   return log;
 };
-// (SOUTH=0 skips the south leg; NORTH0=250 starts the north one in the tunnel, past Orchard Keys' own traffic)
+// (SOUTH=0 skips the south leg; NORTH0=630 starts the north one in the tunnel, past Orchard Keys' own traffic)
 // (two minutes a leg: behind the traffic, a driver keeps its pace)
 const MS = +(process.env.LEGMS ?? 120000);
-if (process.env.SOUTH !== "0") await leg("south", 156.4, 131, 398, MS);
-await leg("north", 159.6, +(process.env.NORTH0 ?? 398), 128, MS);
+// (Orchard Keys lies across the strait, ACROSS = 380 m further south since the bridge grew: Note Street's z + 18)
+const FAR = +(process.env.FAR ?? 398 + 380);
+if (process.env.SOUTH !== "0") await leg("south", 156.4, 131, FAR, MS);
+await leg("north", 159.6, +(process.env.NORTH0 ?? FAR), 128, MS);
 console.log("errors", errs.length, errs.slice(0, 5).join("\n"));
 await b.close();

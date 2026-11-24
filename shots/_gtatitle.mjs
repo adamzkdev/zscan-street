@@ -1,5 +1,7 @@
-// node shots/_gtatitle.mjs [URL] [OUT]: the game's front end (src/gta/frontend.ts): the title in the street, the
-// main menu, the line-up, Play into the game, then pause › zkSNARK › back in the game. PHONE=1 for a phone, W/H env for a size.
+// node shots/_gtatitle.mjs [URL] [OUT]: the game's front end (src/gta/frontend.ts): straight onto the main menu
+// over the street (no title any more: the sound starts on the first key, click or tap in it), the line-up, Play into
+// the game, then pause › zkSNARK › back in the game. PHONE=1 for a phone, W/H env for a size. ONLY=back: Esc on the
+// menu → the map. (The hub, the store, the wallet: shots/_gtamenu2.mjs.)
 import puppeteer from "puppeteer-core";
 const [URL = "http://localhost:3061/?debug&gta", OUT = "shots/gta/title"] = process.argv.slice(2);
 const PHONE = !!process.env.PHONE;
@@ -44,9 +46,11 @@ await p.waitForFunction(() => window.__streetUp && window.street?.gta?.front?.op
 if (process.env.STAGE) await p.evaluate((s) => street.gta.front.setStage(JSON.parse(s)), process.env.STAGE);
 // the boot screen goes, the far city streams in, the faces arrive
 await sleep(Number(process.env.WAIT) || 9000);
-await shot("title");
-if (ONLY === "title") {
-  // STAGES='[[x,z,yaw,look],…]': the title shot from each, for picking a street
+// the menu at once (nothing to press first)
+console.log("opened on", await state());
+await shot("menu-first");
+if (ONLY === "title" || ONLY === "stages") {
+  // STAGES='[[x,z,yaw,look],…]': the menu's shot from each, for picking a street
   for (const [x, z, yaw, look] of JSON.parse(process.env.STAGES ?? "[]")) {
     await p.evaluate((s) => street.gta.front.setStage(s), { x, z, yaw, look });
     await sleep(5000);
@@ -57,8 +61,8 @@ if (ONLY === "title") {
   process.exit(0);
 }
 if (ONLY === "back") {
-  // Esc on the title: back to the map, the street's own sky; the walker's button: the title again;
-  // its menu's "Back to the map"
+  // Esc on the menu: back to the map, the street's own sky; the walker's button: the menu again;
+  // its "Back to the map"
   const look = () => p.evaluate(() => ({ theme: document.documentElement.dataset.theme, frontOn: document.getElementById("ui").classList.contains("gta-front-on"), staged: !!street.gta.front.group.parent }));
   await p.keyboard.press("Escape");
   await sleep(2500);
@@ -67,8 +71,6 @@ if (ONLY === "back") {
   await p.evaluate(() => street.gta.start());
   await sleep(4000);
   console.log("again", await state(), await look());
-  await p.keyboard.press("Enter");
-  await sleep(1200);
   await p.evaluate(() => document.querySelector('.gf-item[data-k="map"]').click());
   await sleep(2500);
   console.log("map", await state(), await look());
@@ -77,19 +79,16 @@ if (ONLY === "back") {
   await b.close();
   process.exit(0);
 }
-await sleep(2500);
-await shot("title-later");
-// any key: the main menu
-if (PHONE) await p.touchscreen.tap(W / 2, H / 2);
-else await p.keyboard.press("Space");
-await sleep(2200);
-console.log(await state());
+// the first gesture: the city's sound on (a key, a click, a tap)
+// (a tap on the street, right of the menu)
+if (PHONE) await p.touchscreen.tap(W - 24, H * 0.42);
+else await p.keyboard.press("ArrowDown");
+await sleep(800);
+console.log("after a first key", await state());
 await shot("menu");
 if (!PHONE) {
-  await p.keyboard.press("ArrowDown");
-  await sleep(300);
   await shot("menu-down");
-  // settings over the front end, and back (Play, Choose, Missions, How to play, Settings: the fifth)
+  // settings over the front end, and back (Play, Store, Map, How to play, Settings: the fifth)
   for (let i = 0; i < 3; i++) await p.keyboard.press("ArrowDown");
   await p.keyboard.press("Enter");
   await sleep(700);
@@ -98,8 +97,10 @@ if (!PHONE) {
   await sleep(500);
   for (let i = 0; i < 4; i++) await p.keyboard.press("ArrowUp");
 }
-// the line-up
-await p.evaluate(() => document.querySelector('.gf-item[data-k="select"]').click());
+// the line-up: the STORE's zkSNARKs tab
+await p.evaluate(() => document.querySelector('.gf-item[data-k="store"]').click());
+await sleep(1200);
+await p.evaluate(() => document.querySelector('.gf-stabs [data-tab="zksnarks"]').click());
 await sleep(3500);
 await shot("select");
 for (let i = 0; i < 3; i++) {

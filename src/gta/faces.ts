@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { portraitImage } from "../data/portrait";
 import { ZScan } from "../data/zscan";
 import { snarkCells } from "../scene/snarkbody";
-import { bodyGeo, Fine, headGeo } from "./snarkgeo";
+import { bodyGeo, Fine, headGeo, lowDetail } from "./snarkgeo";
 import { artPixels, SLOT_NONE, slotAlloc, slotFree, SLOTS, slotWrite } from "./snarkmat";
 
 /**
@@ -32,6 +32,9 @@ export interface Look {
   /** The head (origin at its bottom middle, the neck; facing +z) and the shoulders (origin at their bottom middle). */
   head: THREE.BufferGeometry;
   body: THREE.BufferGeometry;
+  /** The same, far off (snarkgeo.ts lowDetail: about a fifth of the triangles; people3d.ts past ~20 m). */
+  headFar: THREE.BufferGeometry;
+  bodyFar: THREE.BufferGeometry;
   headH: number;
   bodyH: number;
   /** Half the shoulders' width (m). */
@@ -63,9 +66,14 @@ const looks = new Map<number, Look>();
 const pins = new Map<number, number>();
 /** (no more looks kept than the atlas has slots for, with room for the stand-ins and the pinned) */
 const KEEP = Math.min(320, SLOTS - 96);
-function drop(id: number, l: Look) {
+function freeGeo(l: Look) {
   l.head.dispose();
   l.body.dispose();
+  l.headFar.dispose();
+  l.bodyFar.dispose();
+}
+function drop(id: number, l: Look) {
+  freeGeo(l);
   slotFree(l.slot);
   looks.delete(id);
 }
@@ -90,8 +98,7 @@ function takeSlot() {
   for (const [k, l] of standIns) {
     if (pins.get(l.id)) continue;
     standIns.delete(k);
-    l.head.dispose();
-    l.body.dispose();
+    freeGeo(l);
     slotFree(l.slot);
     s = slotAlloc();
     if (s !== SLOT_NONE) return s;
@@ -267,8 +274,7 @@ function standInLook(id: number) {
       const [old] = standIns.keys();
       const o = standIns.get(old)!;
       standIns.delete(old);
-      o.head.dispose();
-      o.body.dispose();
+      freeGeo(o);
       slotFree(o.slot);
     }
   }
@@ -645,7 +651,7 @@ function build(id: number, src: Cells, real: boolean): Look {
   if (import.meta.env?.DEV) debugArt.set(id, { src: new Int32Array(src), art, opening, hood: hoodCol, neck, top, hatEnd });
   const hood = new THREE.Color().setHex(hoodCol, THREE.SRGBColorSpace);
   const hat = hatEnd >= top ? new THREE.Color().setHex(shell[top], THREE.SRGBColorSpace) : null;
-  const { geo: head } = headGeo({
+  const headIn = {
     slot,
     shape: new Fine(headShape, 3),
     opening,
@@ -658,14 +664,16 @@ function build(id: number, src: Cells, real: boolean): Look {
     hat,
     hatEnd,
     visor,
-  });
+  };
+  const { geo: head } = headGeo(headIn);
+  const { geo: headFar } = lowDetail(() => headGeo(headIn));
   // the torso: as wide as the picture's shoulders (a little narrower), down past them to a hoodie's hem
   const ext = 3;
   const halfW = (bw / 2) * v * BODY_SX;
   const H = (bottom + ext - neck) * v;
-  const body = bodyGeo({
+  const bodyIn = {
     slot,
-    shape: new Fine((x, y) => inBody(x, y), 1),
+    shape: new Fine((x: number, y: number) => inBody(x, y), 1),
     neck,
     bottom,
     ext,
@@ -675,7 +683,9 @@ function build(id: number, src: Cells, real: boolean): Look {
     halfW,
     H,
     cloth: new THREE.Color().setHex(cloth, THREE.SRGBColorSpace),
-  });
+  };
+  const body = bodyGeo(bodyIn);
+  const bodyFar = lowDetail(() => bodyGeo(bodyIn));
   let h = Math.imul(id ^ 0x5bd1e995, 0x27d4eb2d) >>> 0;
   const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0) / 4294967296);
   return {
@@ -683,6 +693,8 @@ function build(id: number, src: Cells, real: boolean): Look {
     real,
     head,
     body,
+    headFar,
+    bodyFar,
     headH: (neck - top + 1) * v * HEAD_K,
     bodyH: H,
     halfW,

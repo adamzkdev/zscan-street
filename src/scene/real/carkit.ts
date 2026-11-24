@@ -41,6 +41,8 @@ export function paint(color: THREE.ColorRepresentation, finish: "metal" | "solid
 }
 
 export const GLASS = keep(new THREE.MeshPhysicalMaterial({ color: "#0d1218", metalness: 0.25, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.7 }));
+/** A car's windows: tinted, see-through — its cabin is hollow, the driver shows behind them. */
+export const GLASS_TINT = keep(new THREE.MeshPhysicalMaterial({ color: "#1c2632", metalness: 0.1, roughness: 0.03, transparent: true, opacity: 0.58, depthWrite: false, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.6 }));
 /** See-through glass (a bus's windows: its riders show behind them). */
 export const GLASS_CLEAR = keep(new THREE.MeshPhysicalMaterial({ color: "#9fb4c4", metalness: 0.1, roughness: 0.04, transparent: true, opacity: 0.28, depthWrite: false, envMapIntensity: 1.5, side: THREE.DoubleSide }));
 export const CHROME = keep(new THREE.MeshStandardMaterial({ color: "#e4e8ec", metalness: 1, roughness: 0.13, envMapIntensity: 1.3 }));

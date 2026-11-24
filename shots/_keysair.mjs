@@ -1,4 +1,5 @@
 // node shots/_keysair.mjs [URL] [OUT]: Orchard Keys from the map's camera (src/scene/keys); SPOTS='[[x,z,zoom]]'
+// (positions south of the bay moved with the Golden Gate: ACROSS = 380 m, src/scene/city/plan.ts)
 import puppeteer from "puppeteer-core";
 const [URL = "http://localhost:3061/?debug&theme=day", OUT = "shots/gta/keys/air"] = process.argv.slice(2);
 const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1280, height: 800 } });
@@ -9,7 +10,7 @@ await p.waitForFunction(() => window.__streetUp && window.street?.keys?.done, { 
 await new Promise((r) => setTimeout(r, 5000));
 await p.evaluate(() => { document.getElementById("ui").style.display = "none"; });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const SPOTS = process.env.SPOTS ? JSON.parse(process.env.SPOTS) : [[205, 330, 1.1], [135, 300, 2.2], [255, 300, 2.2], [180, 395, 2.2], [158, 245, 2.4], [158, 190, 1.6]];
+const SPOTS = process.env.SPOTS ? JSON.parse(process.env.SPOTS) : [[205, 710, 1.1], [135, 680, 2.2], [255, 680, 2.2], [180, 775, 2.2], [158, 625, 2.4], [158, 570, 1.6]];
 let n = 0;
 for (const [x, z, zoom] of SPOTS) {
   await p.evaluate((x, z, zoom) => { const r = street.rig; r.district(r.controls.target.clone().set(x, 0, z), zoom); }, x, z, zoom);

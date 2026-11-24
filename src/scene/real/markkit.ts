@@ -53,7 +53,12 @@ const TILE: Record<string, [number, number]> = {
   wood: [1.5, 1.5],
 };
 const tileOf = (slot: string): [number, number] => {
-  if (slot.startsWith("lm.")) return TILE[slot.split(".")[1]] ?? [2, 2];
+  if (slot.startsWith("lm.")) {
+    const [, set, flavour] = slot.split(".");
+    const t = TILE[set] ?? [2, 2];
+    // (`blocks`: the set five times larger — a wall's stones become a monument's blocks)
+    return flavour === "blocks" ? [t[0] * 5, t[1] * 5] : t;
+  }
   return TILE[slot] ?? [2, 2];
 };
 

@@ -163,8 +163,16 @@ export class GtaCamera {
     // shorten at once, lengthen slowly (no pumping along a wall)
     this.arm = len < this.arm ? len : this.arm + (len - this.arm) * Math.min(1, dt * 2.5);
     const y = Math.max(this.pivot.y - 1.0, this.pivot.y + by * this.arm + 0.15);
-    this.camera.position.set(ox + bx * this.arm, Math.max(this.minY, y), oz + bz * this.arm);
-    look.set(ox, this.pivot.y + 0.1, oz);
+    // (the floor under the camera never above the body: a vault, a dome or a crypt below the
+    // street's level kept the camera up at the street, 12–80 m over the walker's head)
+    // backed against a wall (the arm cut short): up over the shoulder, looking ahead past the head, as the
+    // games do — not a head filling the picture
+    const short = Math.max(0, Math.min(1, (Math.min(arm, 3) - this.arm) / Math.max(0.5, Math.min(arm, 3) - 0.9)));
+    const up = short * 1.0,
+      side = short * 0.45,
+      ahead = short * 3.2;
+    this.camera.position.set(ox + bx * this.arm + rx * side, Math.max(Math.min(this.minY, this.pivot.y - 1.0), y) + up, oz + bz * this.arm + rz * side);
+    look.set(ox - bx * ahead + rx * side * 0.5, this.pivot.y + 0.1, oz - bz * ahead + rz * side * 0.5);
     this.camera.lookAt(look);
     this.fov(dt, fov);
   }

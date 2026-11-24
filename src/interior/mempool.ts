@@ -179,6 +179,7 @@ export function buildMempool(ctx: InteriorContext): Interior {
       pts.push([wx, wz]);
     }
     stanchions(scene, pts);
+    scene.add(blockBoxes((X0 + PART_X) / 2, Z0 / 2));
   }
   // the lockers on the back wall, the stanchions, the ATM and the bench by the window
   rects.push([X0, Z0, -4.6, Z0 + 0.7], [X0, -3.2, X0 + 0.7, -1.2], [X0, -1.0, X0 + 2.4, -0.4]);
@@ -453,25 +454,87 @@ class Parcels {
 }
 
 const parcelMats = new Map<string, THREE.Material[]>();
+/**
+ * A parcel's carton: corrugated brown board (fibre streaks, a darker edge), a strip of packing tape
+ * in its transaction kind's colour across the top and down the sides, a white shipping label with a
+ * barcode on the front.
+ */
+function cartonTexture(tape: string, label: boolean) {
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#b98a58";
+  g.fillRect(0, 0, S, S);
+  let r = 7;
+  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = `rgba(${rnd() < 0.5 ? "90,60,30" : "235,200,150"},${0.04 + rnd() * 0.06})`;
+    g.fillRect(0, rnd() * S, S, 1 + rnd() * 2);
+  }
+  const edge = g.createLinearGradient(0, 0, S, 0);
+  edge.addColorStop(0, "rgba(60,40,20,0.35)");
+  edge.addColorStop(0.06, "rgba(60,40,20,0)");
+  edge.addColorStop(0.94, "rgba(60,40,20,0)");
+  edge.addColorStop(1, "rgba(60,40,20,0.35)");
+  g.fillStyle = edge;
+  g.fillRect(0, 0, S, S);
+  g.fillStyle = tape;
+  g.globalAlpha = 0.88;
+  g.fillRect(S * 0.42, 0, S * 0.16, S);
+  g.globalAlpha = 0.25;
+  g.fillStyle = "#ffffff";
+  g.fillRect(S * 0.43, 0, S * 0.03, S);
+  g.globalAlpha = 1;
+  if (label) {
+    g.fillStyle = "#f6f4ee";
+    g.fillRect(S * 0.08, S * 0.6, S * 0.3, S * 0.3);
+    g.fillStyle = "#1a1a1e";
+    for (let x = S * 0.1; x < S * 0.36; x += 3 + Math.floor(rnd() * 3)) g.fillRect(x, S * 0.78, 1 + Math.floor(rnd() * 2), S * 0.09);
+    g.fillRect(S * 0.1, S * 0.63, S * 0.22, 4);
+    g.fillRect(S * 0.1, S * 0.68, S * 0.16, 4);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
 function parcelMaterial(t: Tx) {
   let m = parcelMats.get(t.kind);
   if (!m) {
-    const c = document.createElement("canvas");
-    c.width = c.height = 64;
-    const g = c.getContext("2d")!;
-    g.fillStyle = "#c8a070";
-    g.fillRect(0, 0, 64, 64);
-    g.fillStyle = KIND_COLOR[t.kind];
-    g.fillRect(0, 26, 64, 12);
-    g.fillRect(26, 0, 12, 64);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.magFilter = THREE.NearestFilter;
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
-    m = [mat, mat, mat, mat, mat, mat];
+    const side = new THREE.MeshStandardMaterial({ map: cartonTexture(KIND_COLOR[t.kind], true), roughness: 0.9 });
+    const top = new THREE.MeshStandardMaterial({ map: cartonTexture(KIND_COLOR[t.kind], false), roughness: 0.85 });
+    m = [side, side, top, top, side, side];
     parcelMats.set(t.kind, m);
   }
   return m;
+}
+
+/** The block shelves' boxes on the hall's left wall (the realistic pass): cartons with the chain's colours on their tape. */
+function blockBoxes(hallX: number, hallZ: number) {
+  const g = new THREE.Group();
+  const geo = new THREE.BoxGeometry(2 / 6 - 0.02, 2 / 6 - 0.02, 2 / 6 - 0.02);
+  // (one instanced draw per kind, the carton's side on every face: ~40 boxes in five draws)
+  geo.clearGroups();
+  const kinds = ["shielded", "transparent", "mixed", "shielding", "deshielding"] as Tx["kind"][];
+  const vz = (z: number) => Math.round((z + 14) * 6);
+  const at = new Map<Tx["kind"], THREE.Matrix4[]>();
+  const q = new THREE.Quaternion(),
+    e = new THREE.Euler(),
+    one = new THREE.Vector3(1, 1, 1);
+  for (const y of [3, 9, 15])
+    for (let z = vz(-11.4); z < vz(-4.8); z += 3) {
+      const k = kinds[(z + y) % 5];
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(hallX + (1.5 - 39) / 6, (y + 2) / 6, hallZ + (z + 1 - 42) / 6), q.setFromEuler(e.set(0, ((z * 7 + y) % 5) * 0.05 - 0.1, 0)), one);
+      at.set(k, [...(at.get(k) ?? []), m]);
+    }
+  for (const [k, list] of at) {
+    const im = new THREE.InstancedMesh(geo, parcelMaterial({ kind: k } as Tx)[0], list.length);
+    list.forEach((m, i) => im.setMatrixAt(i, m));
+    im.castShadow = true;
+    g.add(im);
+  }
+  return g;
 }
 
 // ---- the live board -------------------------------------------------------------------------------
@@ -739,7 +802,8 @@ function hallModel(real = false) {
   for (const y of [3, 9, 15]) {
     m.box(0, y, vz(-11.6), 3, y + 1, vz(-4.6), C("#6a6774"));
     m.box(3, y, vz(-11.6), 3.4, y + 1, vz(-4.6), E("#ff9f2e", 0.8));
-    for (let z = vz(-11.4); z < vz(-4.8); z += 3) m.box(0.5, y + 1, z, 2.5, y + 3, z + 2, C(["#3a7bff", "#f4b728", "#5cff9a", "#ff3e8a", "#b07bff"][(z + y) % 5]));
+    // (real: cardboard boxes drawn by the hall itself, see blockBoxes)
+    if (!real) for (let z = vz(-11.4); z < vz(-4.8); z += 3) m.box(0.5, y + 1, z, 2.5, y + 3, z + 2, C(["#3a7bff", "#f4b728", "#5cff9a", "#ff3e8a", "#b07bff"][(z + y) % 5]));
   }
   return m;
 }

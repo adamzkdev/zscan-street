@@ -15,6 +15,8 @@ export interface PayInfo {
   tip_uri: string | null;
   min: Record<PayAction, string>;
   sponsor: string;
+  /** ⓩ (the game's play money) for ZEC: the bundles on sale (absent until the API serves them). */
+  bundles?: { id: string; coins: number; zec: string }[];
 }
 
 export interface Intent {

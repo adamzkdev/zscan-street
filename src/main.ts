@@ -10,7 +10,7 @@ import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
 import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
-import { NU7Q, RIVER, ST, planCity } from "./scene/city/plan";
+import { GRID, NU7Q, RIVER, ST, planCity } from "./scene/city/plan";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
 import { buildDecor } from "./scene/decor";
@@ -20,6 +20,7 @@ import { cityMemes } from "./scene/memewalls";
 import { LampLights, speedBlur, tiltShift } from "./scene/post";
 import { GtaMode } from "./gta";
 import { goldenHour } from "./gta/frontend";
+import { Home, pickSite } from "./gta/home";
 import type { Person3 } from "./gta/people3d";
 import { FinishPass, GradePass, ScenePass } from "./scene/finish";
 import { cityEnvironment, loadSkies, SKY_ENVS } from "./scene/envmap";
@@ -30,6 +31,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { applyTheme, ATMOS, setRainWanted, type Theme } from "./scene/theme";
 import { applyDaylight, GameSky, type Daylight } from "./scene/daylight";
 import { Snark } from "./scene/snark";
+import { Car, Scooter, Truck } from "./scene/car";
 import { Overlays } from "./ui/overlays";
 import { openPartyHall, openTableGame, wireParty } from "./party/city";
 import { master } from "./audio/master";
@@ -42,8 +44,9 @@ import { BayMarks } from "./scene/real/baymarks";
 import { WalletCrowns } from "./scene/walletcrowns";
 import { Forest } from "./scene/forest";
 import { Keys } from "./scene/keys";
+import { Parking } from "./scene/real/parking";
 import { KeysSea } from "./scene/keys/sea";
-import { SEA_Y } from "./scene/keys/plan";
+import { corridor, SEA_Y } from "./scene/keys/plan";
 import { Cemetery } from "./scene/cemetery";
 import { Chatter } from "./scene/chatter";
 import { bubbles, drawBubbles } from "./scene/speech";
@@ -722,6 +725,8 @@ const walletCrowns = new WalletCrowns(scene, city);
 const forest = new Forest(scene, city, director, (z) => goldenGate.deckAt(z));
 // Orchard Keys: the beach town across the bridge, through the tunnel under the woods (built off the main thread)
 const keys = new Keys(city, forest.land, () => theme === "day");
+// cars parked at the kerbs of the wider streets (and Orchard Keys' once it is up): the game takes and shoves them
+const parking = new Parking(scene);
 // the ZK Cemetery: zombie zkSNARKs rising from their graves (more of them at night)
 const cemetery = new Cemetery(scene, city, director, { day: [4, 4, 3, 2, 1][worldLevel()], night: [10, 9, 7, 5, 3][worldLevel()] });
 // people talk to each other wherever the camera looks
@@ -935,6 +940,7 @@ const PLACES: Record<Interior["key"], string> = {
   university: "ZK UNIVERSITY",
   gamehouse: "GAME HOUSE",
   nu7tower: "NU7 TOWER",
+  home: "YOUR PENTHOUSE",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
@@ -972,7 +978,9 @@ function cityView(place: string, up: number, back = 3, side = 0): THREE.Texture 
   const hq = city.shops[0];
   // the NU7 TOWER is the game layer's (game/nu7quarter.ts): looking out from its axis, its building hidden
   const nu7v = place === "nu7tower" ? { door: new THREE.Vector3(NU7Q.door.x, CURB, NU7Q.door.z), occluder: { full: nu7Quarter.towerGroup, cut: nu7Hidden, extras: nu7Hidden } } : null;
-  const v = nu7v ?? (place === "factory" && f?.door ? { door: f.door, occluder: f.occluder } : place === "mempool" && hq ? { door: hq.door, occluder: hq.occluder } : city.venues.find((x) => x.kind === place));
+  // your home (src/gta/home.ts): from its tower's door (its top floor: Home.site.view says where)
+  const homev = place === "home" && homeSite ? { door: new THREE.Vector3(homeSite.door.x, CURB, homeSite.door.z), occluder: { full: nu7Hidden, cut: nu7Hidden, extras: nu7Hidden } } : null;
+  const v = nu7v ?? homev ?? (place === "factory" && f?.door ? { door: f.door, occluder: f.occluder } : place === "mempool" && hq ? { door: hq.door, occluder: hq.occluder } : city.venues.find((x) => x.kind === place));
   if (!v) return null;
   const key = viewKey(place, up, side);
   let e = views.get(key);
@@ -1017,7 +1025,17 @@ function cityView(place: string, up: number, back = 3, side = 0): THREE.Texture 
   // the stadium's own live screens and crowd belong to the building hidden above
   const live = place === "stadium" ? stadium.group.visible : null;
   if (live !== null) stadium.group.visible = false;
+  // nobody frozen in the picture: the street's people (their flat cut-outs, the crowd, the game's 3D
+  // ones) would stand pixelated and still behind the glass forever — the windows show the city only
+  const people: THREE.Object3D[] = [];
+  for (const s of Snark.live) people.push(s.root);
+  const cr = crowdOf();
+  if (cr) people.push(cr.mesh);
+  if (gta) people.push(gta.people.group, gta.peds.group);
+  const shown = people.map((o) => o.visible);
+  for (const o of people) o.visible = false;
   cam.update(renderer, scene);
+  people.forEach((o, i) => (o.visible = shown[i]));
   if (live !== null) stadium.group.visible = live;
   if (fog && scene.fog instanceof THREE.Fog) [scene.fog.near, scene.fog.far] = fog;
   city.lod(rig.focus, 40, 95);
@@ -1069,6 +1087,8 @@ const PLACE_CODE: Record<Interior["key"], () => Promise<PlaceBuilder>> = {
   cemetery: () => import("./interior/cemetery").then((m) => m.buildCemetery),
   gamehouse: () => import("./interior/gamehouse").then((m) => m.buildGameHouse),
   nu7tower: () => import("./interior/nu7tower").then((m) => m.buildNu7Tower),
+  // your home in the game (src/gta/home.ts): the penthouse PLAY starts you in
+  home: () => import("./interior/home").then((m) => m.buildHome),
   // any building of the city, walked into from the game (src/gta): dressed again on every visit
   building: () => import("./interior/building").then((m) => m.buildBuilding),
 };
@@ -1289,7 +1309,9 @@ function groundAt(x: number, z: number): number | null {
 onFoot.ground = groundAt;
 /** Vehicles and people, where they are right now: you walk round them, not through them. */
 function dynamicHit(x: number, z: number) {
+  if (parking.hit(x, z)) return true;
   for (const v of director.traffic.vehicles) {
+    if (v.stolen) continue;
     const p = v.mover.group.position;
     const half = v.mover.length / 2 + 0.35;
     if (Math.abs(x - p.x) < half && Math.abs(z - p.z) < 1.45) return true;
@@ -1314,7 +1336,8 @@ function dynamicHit(x: number, z: number) {
 }
 onFoot.collide = (x, z) => {
   const inPrison = x > PRISON.x0 + 0.6 && x < PRISON.x1 && z > PRISON.z0 + 0.6 && z < PRISON.z1 - 0.6;
-  if (!inPrison && !keys.owns(x, z) && (x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1)) return true;
+  // (across the strait: the woods and the town are past the board's edge, the bridge over it)
+  if (!inPrison && !keys.owns(x, z) && !forest.owns(x, z) && !goldenGate.onDeck(x, z) && (x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1)) return true;
   const here = onFoot.floor;
   const there = groundAt(x, z) ?? CURB;
   // no walking off a platform, no walking into the side of a staircase
@@ -1336,6 +1359,9 @@ let walking = false;
 let gta: GtaMode | null = null;
 /** The place walked into, to step back out of its door. */
 let cameIn: Interior["key"] | null = null;
+/** Your home in the game (src/gta/home.ts): an apartment tower on Park Row, facing Central Park. */
+const homeSite = pickSite(city.facades, GRID.park);
+Home.setSite(homeSite);
 /** Walk-in doors on the street (the Proof Factory's is on the avenue, in line with the others). */
 const doors: { key: Interior["key"]; at: THREE.Vector3; front: THREE.Vector3 }[] = [
   ...(city.shops[0] ? [{ key: "mempool" as const, at: city.shops[0].door, front: away(city.shops[0].door, city.shops[0].inside) }] : []),
@@ -1343,6 +1369,7 @@ const doors: { key: Interior["key"]; at: THREE.Vector3; front: THREE.Vector3 }[]
   ...(city.factory?.door ? [{ key: "factory" as const, at: city.factory.door, front: away(city.factory.door, city.factory.hall) }] : []),
   // the NU7 TOWER's doors on its plaza (the tower is game/nu7quarter.ts's: open once NU7 is live)
   { key: "nu7tower" as const, at: new THREE.Vector3(NU7Q.door.x, CURB, NU7Q.door.z), front: new THREE.Vector3(0, 0, 1) },
+  ...(homeSite ? [{ key: "home" as const, at: new THREE.Vector3(homeSite.door.x, CURB, homeSite.door.z), front: new THREE.Vector3(homeSite.out.x, 0, homeSite.out.z) }] : []),
 ];
 /** Any building of the city walked into from the game (src/gta): its door is set at each visit. */
 const buildingDoor = { key: "building" as const, at: new THREE.Vector3(), front: new THREE.Vector3(0, 0, 1) };
@@ -2420,6 +2447,7 @@ const PLACE_ICON: Record<Interior["key"], string> = {
   university: "学",
   gamehouse: "遊",
   nu7tower: "七",
+  home: "家",
 };
 const placeBlips: Blip[] = doors.filter((d) => d !== buildingDoor).map((d) => ({ x: d.at.x, z: d.at.z, kind: "place", label: PLACES[d.key], icon: PLACE_ICON[d.key] }));
 function mapBlips(): Blip[] {
@@ -2677,6 +2705,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       scene3: scene,
       /** Out of the place you are in (tests). */
       leavePlace: () => leavePlace(),
+      parking,
       ray,
       composer,
       setSamples: (n: number) => renderPass.setSamples(n),
@@ -2922,6 +2951,8 @@ function wallsDown(dt: number, allUp = false) {
     if (!plane) {
       plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
       clips.set(o, plane);
+      // (out of the draw-saver's batches first: a merged copy is not clipped)
+      thrift.unmerge(o.full);
       o.full.traverse((m) => {
         const mat = (m as THREE.Mesh).material as THREE.Material | undefined;
         if (mat) mat.clipShadows = true;
@@ -3067,6 +3098,38 @@ let gtaFurniture: { type: string; x: number; z: number; y: number }[] | null = n
 /** The game's keys for the street's people drawn in 3D (src/gta/people3d.ts). */
 const gtaKeys = new WeakMap<Snark, string>();
 let gtaKeyN = 0;
+/** How fast something moves now (m/s), from where it was 50 ms or more ago (`guess` until then). */
+function speedNow(o: THREE.Object3D, guess: number) {
+  const u = o.userData as { px?: number; pz?: number; pt?: number; pv?: number };
+  const t = performance.now();
+  if (u.pt === undefined || t - u.pt > 50) {
+    if (u.pt !== undefined && t - u.pt < 1000) u.pv = Math.hypot(o.position.x - u.px!, o.position.z - u.pz!) / ((t - u.pt) / 1000);
+    u.px = o.position.x;
+    u.pz = o.position.z;
+    u.pt = t;
+  }
+  return u.pv ?? guess;
+}
+/** Who drives a vehicle of the street's (a number kept with it, so the one you pull out is the one you saw). */
+function rideDriver(o: THREE.Object3D) {
+  return ((o.userData.driver as number | undefined) ??= 1 + Math.floor(Math.random() * 10000));
+}
+/**
+ * A copy of a vehicle to drive away (the avenue's goes on unseen): its body, wheels, door and signs
+ * — its geometries and materials shared — without the cut-outs riding in it.
+ */
+function cloneRide(g: THREE.Group) {
+  const out = new THREE.Group();
+  out.position.copy(g.position);
+  out.rotation.set(0, g.rotation.y, 0);
+  const roots = new Set([...Snark.live].map((s) => s.root));
+  for (const c of g.children) {
+    if (roots.has(c as THREE.Group) || (c as THREE.Light).isLight) continue;
+    out.add(c.clone(true));
+  }
+  out.userData.driver = g.userData.driver;
+  return out;
+}
 /** Shown and in the street's scene (every parent visible, the scene at the top). */
 const gtaTmp = new THREE.Vector3();
 function streetShown(o: THREE.Object3D) {
@@ -3095,6 +3158,7 @@ gta = new GtaMode({
     ...[...metro.trains, ...metro2.trains].map((t) => t.group),
     sky.blimp.group,
     goldenGate.group,
+    ...parking.cars.map((c) => c.obj),
   ],
   // (raised floors a body walks on: the deck, the woods, platforms and stairs up; a footbridge's gentle hump is the solid shape's)
   footSpecial: (x, z) => {
@@ -3116,11 +3180,11 @@ gta = new GtaMode({
   enter: (key) => {
     if (!jumping && !closeChoice) enterPlace(key);
   },
-  facades: () => [...city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out! })), ...keys.facades],
+  facades: () => [...city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out!, door: f.door })), ...keys.facades],
   // across the Golden Gate: the deck under the wheels (and its railings), the tunnel, the town's sand
   carSurface: (x, z) => (goldenGate.onDeck(x, z) ? goldenGate.deckAt(z) : keys.carSurface(x, z)),
   carHold: (p, r) => goldenGate.holdCar(p, r) || (keys.pushCar(p, r), false),
-  beyond: (x, z) => keys.owns(x, z) || goldenGate.onDeck(x, z),
+  beyond: (x, z) => keys.owns(x, z) || goldenGate.onDeck(x, z) || forest.owns(x, z) || corridor(x, z),
   underwater: (on) => sound.underwater(on),
   // (Orchard Keys' low sand and its sea: waded into, swum in)
   sea: (x, z) => {
@@ -3160,6 +3224,35 @@ gta = new GtaMode({
         alive: () => s.root.visible && s.root.parent === scene && s.state !== "riding",
       });
     }
+    // those riding in a vehicle (a courier on its scooter, the block taxi's riders): seated in it, in 3D
+    for (const s of director.snarks) {
+      const veh = s.root.parent;
+      if (!veh || veh === scene || !s.root.visible || !streetShown(s.root)) continue;
+      s.root.getWorldPosition(gtaTmp);
+      if ((gtaTmp.x - x) ** 2 + (gtaTmp.z - z) ** 2 > r * r) continue;
+      let k = gtaKeys.get(s);
+      if (!k) gtaKeys.set(s, (k = `s${++gtaKeyN}`));
+      const bike = veh.userData.bike === true;
+      out.push({
+        key: k,
+        id: s.id,
+        fixed: true,
+        scale: () => (bike ? 0.9 : 0.8),
+        // (on a bike: up on its saddle, the riding pose's hips just over the feet)
+        pos: (o) => {
+          s.root.getWorldPosition(o);
+          if (bike) o.y += 0.6;
+          return o;
+        },
+        down: () => ({ k: 0, side: 0 }),
+        face: () => null,
+        heading: () => veh.rotation.y + Math.PI / 2,
+        seat: () => (bike ? 0 : s.seatHeight),
+        act: (a) => (a.ride = bike),
+        hide: (on) => s.set3D(on),
+        alive: () => streetShown(s.root),
+      });
+    }
     // the cut-outs made elsewhere (the woods' hikers, visitors, the rides' queues, the parade): in 3D
     // too while they stand in the street, at their place in the world
     const inDirector = new Set(director.snarks);
@@ -3178,6 +3271,18 @@ gta = new GtaMode({
         seat: () => s.seatHeight,
         hide: (on) => s.set3D(on),
         alive: () => Snark.live.has(s) && streetShown(s.root),
+      });
+    }
+    // Shibuya's scramble crowd (its own instanced cut-outs): in 3D round you too
+    for (const w of shibuya.people(x, z, r)) {
+      out.push({
+        key: `sh${w.i}`,
+        id: w.id,
+        pos: (o) => shibuya.walkerAt(w.i, o),
+        down: () => ({ k: 0, side: 0 }),
+        face: () => shibuya.walkerFace(w.i),
+        hide: (on) => shibuya.hide3D(w.i, on),
+        alive: () => true,
       });
     }
     const crowd = crowdOf();
@@ -3232,6 +3337,7 @@ gta = new GtaMode({
   traffic: cityTraffic,
   *vehicles() {
     for (const v of director.traffic.vehicles) {
+      if (v.stolen) continue;
       const p = v.mover.group.position;
       yield { x: p.x, z: p.z, hx: v.mover.length / 2, hz: 1 };
     }
@@ -3244,6 +3350,53 @@ gta = new GtaMode({
       yield { x: p.x, z: p.z, hx: 7.4, hz: 1.5 };
     }
     yield* goldenGate.boxes();
+    // the parked cars: a crash shoves them out of their place (the game takes them out of the list)
+    for (const c of parking.cars) {
+      const p = c.obj.position;
+      const cs = Math.abs(Math.cos(c.obj.rotation.y)),
+        sn = Math.abs(Math.sin(c.obj.rotation.y));
+      yield { x: p.x, z: p.z, hx: cs * c.hl + sn * c.hw, hz: sn * c.hl + cs * c.hw, ref: { t: "parked", obj: c.obj, kind: c.kind }, vx: 0, vz: 0, mass: c.kind === "van" || c.kind === "pickup" || c.kind === "suv" ? 2.1 : 1.35 };
+    }
+  },
+  *rides() {
+    // the parked cars: nobody inside, you just get in
+    for (const c of parking.cars) yield { obj: c.obj, kind: c.kind as never, v: 0, driver: 0, take: () => parking.take(c.obj) };
+    // the avenue's: taxis, limousines, sedans, trucks, the couriers' scooters (not the block's bus)
+    for (const v of director.traffic.vehicles) {
+      const m = v.mover as unknown as { group: THREE.Group; kind?: string; constructor: unknown };
+      if (v.stolen || !m.group.visible) continue;
+      const kind = m instanceof Car ? (m.kind as "taxi" | "limo" | "sedan") : m instanceof Truck ? "truck" : m instanceof Scooter ? "scooter" : null;
+      if (!kind) continue;
+      // who is on board: a courier on its scooter, the block's riders in a taxi (cut-outs of the street's)
+      const aboard = [...Snark.live].filter((s) => s.root.parent === m.group);
+      const rider = kind === "scooter" ? aboard[0] : undefined;
+      yield {
+        obj: m.group,
+        kind,
+        v: v.v,
+        driver: rider ? rider.id : rideDriver(m.group),
+        take: () => {
+          // what you drive is a copy of it; it goes on unseen with its riders to its errand's end
+          v.stolen = true;
+          m.group.visible = false;
+          return cloneRide(m.group);
+        },
+      };
+    }
+    // the bridge's and Orchard Keys' loop
+    for (const b of goldenGate.boxes()) {
+      const c = b.ref as { obj?: THREE.Object3D; v?: number; len?: number } | undefined;
+      if (!c?.obj) continue;
+      const kind = (c.len ?? 4) > 6 ? "truck" : c.obj.userData.kind === "taxi" ? "taxi" : "sedan";
+      yield {
+        obj: c.obj,
+        kind,
+        // (its `v` is its cruising speed: how fast it goes now, from where it was a moment ago)
+        v: speedNow(c.obj, c.v ?? 0),
+        driver: rideDriver(c.obj),
+        take: () => goldenGate.take(c)?.group ?? null,
+      };
+    }
   },
   *people() {
     for (const s of director.snarks) if (s.root.visible && s.root.parent === scene) yield { x: s.root.position.x, z: s.root.position.z };
@@ -3309,7 +3462,15 @@ gta = new GtaMode({
       setTheme(theme);
     }
   },
-  takeCar: (ref) => goldenGate.take(ref),
+  takeCar: (ref) => {
+    const r = ref as { t?: string; obj?: THREE.Object3D; kind?: string };
+    if (r?.t === "parked" && r.obj) {
+      const g = parking.take(r.obj);
+      if (g) scene.add(g);
+      return g ? { group: g, kind: r.kind as never } : null;
+    }
+    return goldenGate.take(ref);
+  },
   tod: (d) => paintDay(d),
   thunder: () => {
     // the bolt's sound, a moment after its flash (farther, later)
@@ -3355,6 +3516,7 @@ goldenGate.blockers = () => {
 };
 // Orchard Keys is up: the maps drawn again with it, the game's solid shape and doors taken again there
 void keys.ready.then(() => {
+  for (const c of keys.parkedCars) parking.adopt(c.obj, c.kind);
   minimap.stale();
   gta?.keysReady();
 });
@@ -3443,6 +3605,9 @@ if (new URLSearchParams(location.search).has("wingsuit")) {
   wait();
 }
 
+
+/** Frames counted for the shadow map's cadence. */
+let shadowTick = 0;
 
 /** Advance the director by `sim` seconds in steps of at most 50 ms. */
 function runDirector(sim: number, t: number, q: THREE.Quaternion, right: THREE.Vector3) {
@@ -3641,7 +3806,9 @@ function frameBody(stepDt?: number) {
   const focus = menuCam ? gta!.front.focus : dive.active ? dive.focus : wing.active ? wing.focus : gta?.active ? gta.focus : walking ? footFocus.set(-Math.sin(onFoot.heading), 0, -Math.cos(onFoot.heading)).multiplyScalar(7).add(onFoot.camera.position).setY(0) : rig.focus;
   lampLights.update(t, focus);
   // the whole-city map: the lamps' pools are a few pixels there, the lights cost a third of the frame
-  lampLights.setOn(!(cam === rig.iso && pxPerMetre(renderer, rig.iso) < 6));
+  // (and off by day: a dozen point lights at intensity 0 were still in every lit shader, a dozen
+  // lights computed for every pixel of the realistic city for nothing — the off variant is warmed)
+  lampLights.setOn(!(cam === rig.iso && pxPerMetre(renderer, rig.iso) < 6) && lampLights.scale * lampLights.dim > 0.002);
   const wide = rig.mode === "overview";
   const ext = wide ? 90 : 30;
   // from that far out shadows are invisible; skip them and keep the frame rate
@@ -3651,7 +3818,11 @@ function frameBody(stepDt?: number) {
   const shadows = !wide && quality.tier.shadow > 0;
   // (a processor that cannot keep up: the shadow map is drawn again every other frame, or less; in
   // between it stays as it was, its own matrix with it, so the still city's shadows do not move)
-  moon.shadow.autoUpdate = shadows && load.turn(1);
+  // (in the game the shadow map is drawn every other frame: its pass draws the street a second time,
+  // a fifth of the frame; between two it stays as it was, its matrix with it — a moving car's shadow
+  // a frame late at 60 fps, which nobody sees)
+  shadowTick++;
+  moon.shadow.autoUpdate = shadows && (load.stride > 1 ? load.turn(1) : !gta?.active || shadowTick % 2 === 0);
   // (a map must exist all the same: after a resize to a new tier it is re-made once, unseen)
   if (!moon.shadow.map) moon.shadow.needsUpdate = true;
   // off: every fragment falls outside the map, so the shader skips the shadow lookups altogether
@@ -3826,7 +3997,8 @@ frame();
   const g = new URLSearchParams(location.search).get("gta");
   if (g !== null && gta) {
     const id = Number(g);
-    if (id >= 1 && id <= 10000) gta.play(id);
+    // (straight onto the street, for the tests; ?home starts you at home, as PLAY does)
+    if (id >= 1 && id <= 10000) gta.play(id, null, { home: new URLSearchParams(location.search).has("home") });
     else gta.start();
   }
 }

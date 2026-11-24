@@ -4,6 +4,8 @@
  * pitch on the revs, louder on the throttle), tyres (filtered noise while drifting), the nitrous'
  * hiss, a horn, crashes, the gear changes, and the little UI clicks.
  */
+import { hornSpec } from "./store";
+
 export interface AudioOut {
   ctx: AudioContext;
   out: AudioNode;
@@ -166,9 +168,11 @@ export class GtaSound {
       lp.type = "lowpass";
       lp.frequency.value = 2400;
       lp.connect(gain).connect(this.out!);
-      const oscs = [392, 494].map((fr) => {
+      // (the horn picked at the store: store.ts)
+      const hs = hornSpec();
+      const oscs = hs.notes.map((fr) => {
         const o = ctx.createOscillator();
-        o.type = "square";
+        o.type = hs.wave;
         o.frequency.value = fr;
         o.connect(lp);
         o.start();

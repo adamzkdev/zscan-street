@@ -6,12 +6,53 @@ import { faces } from "./faces";
 import { SnarkFigure } from "./figure";
 import { Mosaic } from "./mosaic";
 import { DriveCar } from "./vehicle";
+import { CATS, Store, type StoreCat, type StoreItem } from "./store";
+import { Wallet, openSheet } from "./wallet";
+import type { StoreTab, StoreTabContext } from "./economy";
+import { Economy } from "./economy";
+
+/**
+ * The STORE's tabs other modules bring (economy.ts `StoreTab`): Zilk Road's zkSNARKs (zilk.ts), the
+ * furniture of your home (home.ts), ⓩ for ZEC (zecshop.ts). Found at build time, loaded when their
+ * tab first opens (so one that fails to load takes only its tab with it): a tab whose module isn't
+ * there says so.
+ */
+const EXT = import.meta.glob<{ storeTab?: StoreTab }>("./{zilk,home,zecshop}.ts");
+const EXT_FILE: Record<StoreTab["key"], string> = { zksnarks: "./zilk.ts", home: "./home.ts", getz: "./zecshop.ts" };
+const extLoaded: Partial<Record<StoreTab["key"], StoreTab | null>> = {};
+async function loadTab(key: StoreTab["key"]): Promise<StoreTab | null> {
+  if (key in extLoaded) return extLoaded[key] ?? null;
+  const load = EXT[EXT_FILE[key]];
+  let t: StoreTab | null = null;
+  if (load)
+    try {
+      const m = await load();
+      t = m.storeTab?.key === key ? m.storeTab : null;
+    } catch (e) {
+      console.warn(`store: ${EXT_FILE[key]} did not load`, e);
+    }
+  return (extLoaded[key] = t);
+}
+/** (a tab already loaded, for its keys) */
+const extTab = (key: StoreTab["key"]) => extLoaded[key] ?? null;
+
+/** The STORE's tabs; VEHICLES has its own (paint, neon, rims, bike, horn). */
+type Tab = "zksnarks" | "vehicles" | "home" | "getz";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "zksnarks", label: "zkSNARKs" },
+  { key: "vehicles", label: "Vehicles" },
+  { key: "home", label: "Home" },
+  { key: "getz", label: "Get ⓩ" },
+];
+/** ↑/↓ through the store: every tab, VEHICLES' own included. */
+const FLAT: { tab: Tab; cat?: StoreCat }[] = [{ tab: "zksnarks" }, ...CATS.map((c) => ({ tab: "vehicles" as Tab, cat: c.key })), { tab: "home" }, { tab: "getz" }];
 import "./front.css";
 
 /**
- * The game's front end (src/gta): what you see before you play, in the street itself. The title:
- * golden hour on a street of the city, your ZK-GT at the kerb and a few zkSNARKs hanging out round
- * it, the camera drifting slowly; any key and the main menu comes up over the same shot. Choosing
+ * The game's front end (src/gta): what you see before you play, in the street itself. The main
+ * menu (after ZK CARDS' hub: the wordmark, Play, Store, Garage, Missions…, your ⓩ and the wallet top
+ * right) straight over golden hour on a street of the city, your ZK-GT at the kerb and a few
+ * zkSNARKs hanging out round it, the camera drifting slowly. The store dresses that car. Choosing
  * your zkSNARK is a line-up on the pavement: the camera glides from one to the next, the one in
  * front steps out and waves, its card says who it is (rank, rarity, traits). Play puts you in the
  * street right there, by your car.
@@ -41,6 +82,8 @@ export interface FrontHost {
   settings(tab?: string): void;
   /** The city now, for the menu's chips and its card: the chain, the hour and the weather, who is in town. */
   live?(): { block: number; nextIn: number | null; mempool: number; online: number; clock: string; weather: string; weatherIcon: string };
+  /** Sound the horn a moment (the store's horn, as picked). */
+  honk?(): void;
 }
 
 /** Where it is all set: a point on the kerb, and the way out from the pavement to the road (yaw). */
@@ -51,7 +94,7 @@ export interface Stage {
   /** The camera looks along the kerb from this side (+1: from +u). */
   look?: 1 | -1;
 }
-/** The street the title is shot on: Park Row's north kerb, looking west down the street to the low sun. */
+/** The street the menu is shot on: Park Row's north kerb, looking west down the street to the low sun. */
 export const STAGE: Stage = { x: -30, z: -128, yaw: 0, look: 1 };
 
 /** Where play starts: you, facing your car, and the car. */
@@ -62,9 +105,10 @@ export interface StartAt {
   car: { x: number; z: number; yaw: number };
 }
 
-type Mode = "title" | "menu" | "select";
+/** (the STORE is two modes: "select", its ZKSNARKS tab — the line-up — and "store", the others) */
+type Mode = "menu" | "select" | "store" | "howto";
 
-/** The crew round the car on the title: where (along the kerb, out to the road), facing, doing what. */
+/** The crew round the car under the menu: where (along the kerb, out to the road), facing, doing what. */
 interface Crew {
   fig: SnarkFigure;
   u: number;
@@ -113,9 +157,9 @@ export class FrontEnd {
   /** Everything it puts in the street (left out of the street's solid shape). */
   readonly group = new THREE.Group();
   open = false;
-  mode: Mode = "title";
+  mode: Mode = "menu";
   id: number;
-  /** Opened from the game (pause › zkSNARK): no title, Back returns to the game. */
+  /** Opened from the game (pause › zkSNARK): no menu, Back returns to the game. */
   private inGame = false;
   private el: HTMLElement;
   private mosaic: Mosaic;
@@ -157,27 +201,35 @@ export class FrontEnd {
     this.el.setAttribute("role", "dialog");
     this.el.setAttribute("aria-label", "ZStreet");
     this.el.innerHTML = `
-      <div class="gf-bars"><i></i><i></i></div>
       <div class="gf-shade"></div>
-      <section class="gf-title">
-        <h1 class="gf-mark" aria-label="ZStreet"><span>Z</span>STREET</h1>
-        <p class="gf-press"><b>${TOUCH ? "Tap to start" : "Press any key"}</b></p>
-      </section>
       <section class="gf-menu" aria-label="Main menu">
-        <h1 class="gf-mark small" aria-hidden="true"><span>Z</span>STREET<small>The zkSNARK city · the chain, live</small></h1>
+        <h1 class="gf-mark small" aria-label="ZStreet"><span>Z</span>STREET<small>The zkSNARK city · live on Zcash</small></h1>
         <nav class="gf-items" role="menu"></nav>
-        <div class="gf-chips" aria-label="The city now"></div>
-        <div class="gf-me"></div>
+        <div class="gf-me" role="button" tabindex="-1" aria-label="Choose your zkSNARK"></div>
         <div class="gf-live"></div>
       </section>
+      <div class="gf-wallet"><div class="gf-purse" aria-label="Your ⓩ and the city now"></div><button class="gf-connect" type="button"></button></div>
+      <nav class="gf-stabs" role="tablist" aria-label="Store"></nav>
+      <section class="gf-store" aria-label="Store">
+        <header class="gf-phead"><button class="gf-back" type="button" aria-label="Back"><i></i></button><h2>Store</h2></header>
+        <nav class="gf-vtabs" role="tablist" aria-label="Vehicles"></nav>
+        <div class="gf-shelf" role="listbox" aria-label="Items"></div>
+        <div class="gf-sbar"></div>
+        <div class="gf-ext"></div>
+      </section>
+      <section class="gf-howto" aria-label="How to play">
+        <header class="gf-phead"><button class="gf-back" type="button" aria-label="Back"><i></i></button><h2>How to play</h2></header>
+        <div class="gf-pbody"></div>
+      </section>
       <section class="gf-select" aria-label="Choose your zkSNARK">
-        <header class="gf-shead"><button class="gf-back" type="button" aria-label="Back">‹</button><h2>Choose your zkSNARK</h2><span class="gf-count"></span></header>
+        <header class="gf-shead"><button class="gf-back" type="button" aria-label="Back"><i></i></button><h2>Store</h2><span class="gf-count"></span></header>
         <div class="gf-card"></div>
         <div class="gf-nav"><button class="gf-arrow" data-step="-1" type="button" aria-label="Previous">‹</button><div class="gf-dots"></div><button class="gf-arrow" data-step="1" type="button" aria-label="Next">›</button></div>
         <div class="gf-tools">
           <form class="gf-num"><input type="number" min="1" max="10000" placeholder="#1–10000" aria-label="zkSNARK number"/><button class="gta-btn" type="submit">Find</button></form>
           <button class="gta-btn ghost" data-do="draw" type="button">Draw again</button>
           <button class="gta-btn ghost" data-do="all" type="button">All 10,000</button>
+          <button class="gta-btn ghost gf-zilk" data-do="zilk" type="button">Buy on Zilk Road</button>
         </div>
         <button class="gta-btn gold gf-play" type="button"><span>Play</span>${TOUCH ? "" : "<small>Enter</small>"}</button>
       </section>
@@ -189,7 +241,19 @@ export class FrontEnd {
     window.addEventListener("pointermove", (e) => this.move(e));
     window.addEventListener("pointerup", (e) => this.up(e));
     window.addEventListener("keydown", (e) => this.key(e), true);
-    this.el.querySelector(".gf-back")!.addEventListener("click", () => this.settled() && this.back());
+    for (const b of this.el.querySelectorAll<HTMLElement>(".gf-back")) b.addEventListener("click", () => this.settled() && this.back());
+    this.el.querySelector(".gf-connect")!.addEventListener("click", () => void Wallet.open(this.el));
+    this.el.querySelector(".gf-me")!.addEventListener("click", () => this.settled() && this.tab("zksnarks"));
+    this.el.querySelector("[data-do=zilk]")!.addEventListener("click", () => void this.zilk());
+    // what you own or wear changed, your ⓩ, the wallet: the menus say it at once (the car too)
+    Store.onChange(() => {
+      if (!this.open) return;
+      this.dressStage();
+      this.renderWallet();
+      if (this.mode === "store" && this.storeTab === "vehicles") this.renderStore();
+      if (this.mode === "menu") this.renderMenu();
+    });
+    Wallet.onChange(() => this.open && this.renderWallet());
     this.el.querySelector(".gf-play")!.addEventListener("click", () => this.settled() && this.play());
     for (const b of this.el.querySelectorAll<HTMLElement>(".gf-arrow")) b.addEventListener("click", () => this.step(Number(b.dataset.step)));
     this.el.querySelector("[data-do=draw]")!.addEventListener("click", () => this.draw());
@@ -221,8 +285,9 @@ export class FrontEnd {
   // ---- in and out ---------------------------------------------------------------------------------
 
   /**
-   * Up: the title (from the map), or straight to the line-up (from the game). `play` gets the
-   * zkSNARK picked and, from the title, where to start; `close` is called on the way out without.
+   * Up: the main menu over the street (from the map), or straight to the line-up (from the game).
+   * `play` gets the zkSNARK picked and, from the menu, where to start; `close` is called on the way
+   * out without.
    */
   show(o: { select?: boolean; inGame?: boolean; play: (id: number, at: StartAt | null, then?: "map") => void; close: () => void }) {
     this.onPlay = o.play;
@@ -231,13 +296,14 @@ export class FrontEnd {
     this.open = true;
     this.cut = true;
     this.t = 0;
+    this.sounded = false;
     this.el.classList.add("on");
     this.el.classList.toggle("ingame", this.inGame);
     this.host.ui.classList.add("gta-front-on");
     this.host.look(true);
     this.host.scene.add(this.group);
     this.stageUp();
-    this.go(o.select ? "select" : "title");
+    this.go(o.select ? "select" : "menu");
     if (!this.rare.length)
       void ZScan.rarest(12).then((r) => {
         this.rare = r;
@@ -255,6 +321,9 @@ export class FrontEnd {
   private down_() {
     this.open = false;
     this.mosaic.show(false);
+    // (what was only being looked at in the store is not what you drive away in)
+    Store.clearPreview();
+    this.unmountExt();
     this.el.classList.remove("on", "fade");
     this.host.ui.classList.remove("gta-front-on");
     this.host.look(false);
@@ -349,6 +418,31 @@ export class FrontEnd {
     return this.stage.yaw + ((this.stage.look ?? 1) > 0 ? 0 : Math.PI);
   }
 
+  /** The ZK-R beside the car while the store is up (its paint is for sale too). */
+  private bike: DriveCar | null = null;
+  private bikeAt() {
+    return this.P(-(this.stage.look ?? 1) * 4.6, 2.3);
+  }
+  /** The car (and the bike) again in what you wear or what you are looking at in the store. */
+  private dressStage() {
+    if (!this.car) return;
+    this.car.dispose();
+    this.car.group.removeFromParent();
+    this.car = new DriveCar("gt");
+    const c = this.P(0, 1.75);
+    this.car.place(c.x, c.z, this.carYaw());
+    this.group.add(this.car.group);
+    this.bike?.dispose();
+    this.bike?.group.removeFromParent();
+    this.bike = null;
+    if (this.mode === "store") {
+      this.bike = new DriveCar("moto");
+      const b = this.bikeAt();
+      this.bike.place(b.x, b.z, this.carYaw() + 0.35);
+      this.group.add(this.bike.group);
+    }
+  }
+
   private crewIds() {
     // the same faces for a visit (a different crew another day)
     let seed = Math.floor(Date.now() / 864e5) * 7919 + 17;
@@ -364,6 +458,9 @@ export class FrontEnd {
     this.car?.dispose();
     this.car?.group.removeFromParent();
     this.car = null;
+    this.bike?.dispose();
+    this.bike?.group.removeFromParent();
+    this.bike = null;
   }
 
   /** The line-up along the pavement, past the car (rebuilt keeps those already standing). */
@@ -458,16 +555,34 @@ export class FrontEnd {
   // ---- the modes ----------------------------------------------------------------------------------
 
   private go(m: Mode) {
+    const was = this.mode;
     this.mode = m;
     this.wentAt = performance.now();
     this.el.dataset.mode = m;
+    // the store's previews stop when you leave it; the bike comes and goes with it
+    if (was === "store" && m !== "store") {
+      Store.clearPreview();
+      this.dressStage();
+    }
+    if (m === "store" && was !== "store") {
+      this.dressStage();
+      this.renderStore(true);
+    }
+    if (m !== "store") this.unmountExt();
+    // the line-up: the STORE's first tab (from the game: the zkSNARKs alone)
+    if (m === "select") this.el.querySelector(".gf-select h2")!.textContent = this.inGame ? "zkSNARKs" : "Store";
+    if (m === "select" || m === "store") this.renderTabs();
+    if (m === "howto") this.renderHowto();
+    this.renderWallet();
     if (m === "menu") this.renderMenu();
     if (m === "select") {
       if (!this.line.length) this.lineUp();
       else this.renderSelect();
       // you step into the line: the one by the car goes
       for (const c of this.crew) if (c.hero) c.fig.root.visible = false;
-    } else for (const c of this.crew) if (c.hero) c.fig.root.visible = true;
+    } else for (const c of this.crew) c.fig.root.visible = true;
+    // in the store the car stands alone (the crew would stand between it and you)
+    if (m === "store") for (const c of this.crew) c.fig.root.visible = false;
     this.renderHints();
   }
 
@@ -478,44 +593,56 @@ export class FrontEnd {
 
   private back() {
     if (this.mosaic.isOpen) return this.mosaic.show(false);
+    if (this.mode === "store" || this.mode === "howto") return this.go("menu");
     if (this.mode === "select") return this.inGame ? this.close() : this.go("menu");
-    if (this.mode === "menu") return this.go("title");
+    // (the menu: back to the map)
     this.close();
   }
 
-  private items(): { k: string; label: string; sub?: string }[] {
-    const l = this.host.live?.();
+  private items(): { k: string; label: string; badge?: string; hot?: boolean }[] {
+    const can = Store.affordable();
     return [
-      { k: "play", label: "Play", sub: `as zkSNARK #${this.id}${l ? ` · ${l.clock} · ${l.weather}` : ""}` },
-      { k: "select", label: "Choose your zkSNARK", sub: "1 of 10,000 · yours, the rarest, any number" },
-      { k: "missions", label: "Missions", sub: "Block Run · Shielded Ride · Proof Boards · Speed Traps" },
-      { k: "howto", label: "How to play", sub: "Drive, fight, swim, the car radio" },
-      { k: "settings", label: "Settings", sub: "Camera, display, day and weather, sound" },
-      { k: "map", label: "Back to the map" },
+      { k: "play", label: "Play", badge: `#${this.id}` },
+      { k: "store", label: "Store", ...(can ? { badge: `${can} to unlock`, hot: true } : {}) },
+      // (the city as it was before the game: the free camera over the districts, click a place)
+      { k: "map", label: "Map" },
+      { k: "howto", label: "How to play" },
+      { k: "settings", label: "Settings" },
     ];
   }
 
-  /** The chips top right and the card bottom right: the live chain, the hour, who is in town. */
+  /** Top right: your ⓩ, the block, who is in town, and the wallet (ZK Cards' purse and its connect button). */
+  private renderWallet() {
+    const n = (v: number) => v.toLocaleString("en-US");
+    const l = this.host.live?.();
+    const purse = this.el.querySelector(".gf-purse")!;
+    purse.innerHTML = `<span title="Your ⓩ: earned in the missions, spent in the store"><i class="gf-coin">ⓩ</i><b>${n(Store.balance())}</b></span><span title="The last block"><i class="gf-cube"></i><b>${l?.block ? n(l.block) : "—"}</b></span><span title="Players in town"><i class="gf-dotp"></i><b>${l ? n(l.online) : "—"}</b></span>`;
+    const w = Wallet.state();
+    const btn = this.el.querySelector(".gf-connect")!;
+    btn.classList.toggle("on", !!w.address);
+    btn.innerHTML = w.address ? `<i></i><b>${esc(w.label!)}</b>` : `<b>Connect wallet</b>`;
+    btn.setAttribute("aria-label", w.address ? `Wallet ${w.label}` : "Connect wallet");
+  }
+
+  /** Bottom right: the chain's next block, the hour and the weather. */
   private renderLive() {
     const l = this.host.live?.();
-    const chips = this.el.querySelector(".gf-chips");
     const card = this.el.querySelector(".gf-live");
-    if (!chips || !card) return;
-    if (!l) {
-      chips.innerHTML = card.innerHTML = "";
-      return;
-    }
+    if (!card) return;
+    if (!l) return void (card.innerHTML = "");
     const n = (v: number) => v.toLocaleString("en-US");
-    chips.innerHTML = `<span class="gf-chip"><i class="gf-pip gold"></i><b>${l.block ? n(l.block) : "—"}</b><small>block</small></span><span class="gf-chip"><i class="gf-wx">${l.weatherIcon}</i><b>${esc(l.clock)}</b><small>${esc(l.weather.toLowerCase())}</small></span><span class="gf-chip"><i class="gf-pip teal"></i><b>${n(l.online)}</b><small>in town</small></span>`;
-    const eta = l.nextIn === null ? "any second" : l.nextIn <= 1 ? "any second" : `in ~${Math.round(l.nextIn)} s`;
-    card.innerHTML = `<span><small>Live on the chain</small><b class="gta-disp">Block ${l.block ? n(l.block + 1) : "—"}</b><em>${eta} · ${n(l.mempool)} tx waiting</em></span><span class="gf-zec" aria-hidden="true">ⓩ</span>`;
+    const eta = l.nextIn === null || l.nextIn <= 1 ? "any second" : `in ~${Math.round(l.nextIn)} s`;
+    card.innerHTML = `<span class="gf-who"><small>Live on the chain</small><b>Block ${l.block ? n(l.block + 1) : "—"}</b><em>${eta} · ${n(l.mempool)} tx waiting</em><em class="dim">${esc(l.clock)} · ${esc(l.weather)}</em></span><span class="gf-zec" aria-hidden="true">ⓩ</span>`;
+    this.renderWallet();
   }
 
   private renderMenu() {
     const items = this.items();
     this.menuAt = Math.min(this.menuAt, items.length - 1);
     const nav = this.el.querySelector(".gf-items")!;
-    nav.innerHTML = items.map((it, i) => `<button class="gf-item ${i === this.menuAt ? "on" : ""}" role="menuitem" data-k="${it.k}" data-i="${i}" type="button"><b>${esc(it.label)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ""}</button>`).join("");
+    nav.innerHTML = items
+      .map((it, i) => `<button class="gf-item ${i === this.menuAt ? "on" : ""}" role="menuitem" data-k="${it.k}" data-i="${i}" type="button"><b>${esc(it.label)}</b>${it.badge ? `<em class="gf-badge ${it.hot ? "hot" : ""}">${esc(it.badge)}</em>` : ""}</button>`)
+      .join("");
     for (const b of nav.querySelectorAll<HTMLElement>(".gf-item")) {
       b.addEventListener("pointerenter", () => {
         if (TOUCH) return;
@@ -526,16 +653,218 @@ export class FrontEnd {
     }
     this.renderLive();
     const mine = this.id === profile.p.avatar;
-    this.el.querySelector(".gf-me")!.innerHTML = `<span class="gf-pic"><img src="${esc(ZScan.zkSnarkImage(this.id))}" alt=""/></span><span><small>Playing as</small><b class="gta-disp">#${this.id}</b>${mine ? `<i class="gta-tag gold">Yours</i>` : ""}</span>`;
+    const me = this.el.querySelector<HTMLElement>(".gf-me")!;
+    me.innerHTML = `<span class="gf-face"><img src="${esc(ZScan.zkSnarkImage(this.id))}" alt=""/></span><span class="gf-who"><small>Playing as</small><b>zkSNARK #${this.id}</b><em>${mine ? "Yours" : "Store · change"}</em></span>`;
   }
 
   private pick(k: string) {
     if (k === "play") this.play();
-    else if (k === "missions") this.play("map");
-    else if (k === "howto") this.host.settings("controls");
-    else if (k === "select") this.go("select");
+    else if (k === "store") this.tab(this.storeTab);
+    else if (k === "howto") this.go("howto");
     else if (k === "settings") this.host.settings();
     else if (k === "map") this.close();
+  }
+
+  // ---- the store ---------------------------------------------------------------------------------
+
+  private storeTab: Tab = "vehicles";
+  private storeCat: StoreCat = "paint";
+  private storeAt = 0;
+  private storeMsg = "";
+
+  /** To a tab of the STORE (zkSNARKs: the line-up). */
+  private tab(t: Tab, cat?: StoreCat) {
+    if (t !== "zksnarks") this.storeTab = t;
+    if (t === "zksnarks") return this.mode === "select" ? this.renderTabs() : this.go("select");
+    if (cat && cat !== this.storeCat) {
+      Store.preview(this.storeCat, null);
+      this.storeCat = cat;
+      this.storeMsg = "";
+      if (this.mode === "store") this.renderStore(true);
+    }
+    if (this.mode !== "store") return this.go("store");
+    this.renderStore(true);
+    this.renderTabs();
+  }
+
+  private renderTabs() {
+    const on: Tab = this.mode === "select" ? "zksnarks" : this.storeTab;
+    const tabs = this.el.querySelector(".gf-stabs")!;
+    tabs.innerHTML = TABS.map((c) => `<button type="button" role="tab" data-tab="${c.key}" class="${c.key === on ? "on" : ""}" aria-selected="${c.key === on}">${c.label}</button>`).join("");
+    for (const b of tabs.querySelectorAll<HTMLElement>("button")) b.addEventListener("click", () => this.settled() && this.tab(b.dataset.tab as Tab));
+    this.el.dataset.tab = on;
+    this.renderHints();
+  }
+
+  /** HOME and GET ⓩ: their module's tab, mounted in the store (or what is coming). */
+  private extOff: (() => void) | null = null;
+  private extKey: Tab | null = null;
+  private unmountExt() {
+    this.extOff?.();
+    this.extOff = null;
+    this.extKey = null;
+    const el = this.el.querySelector<HTMLElement>(".gf-ext");
+    if (el) el.innerHTML = "";
+  }
+  private ctx(): StoreTabContext {
+    return {
+      economy: Economy,
+      root: this.el,
+      play: (id) => (id ? this.choose(id) : undefined, this.settled() && this.play()),
+      choose: (id) => this.choose(id),
+      say: (t) => {
+        const n = this.el.querySelector<HTMLElement>(".gf-ext-note");
+        if (n) n.textContent = t;
+      },
+    };
+  }
+  private mountExt() {
+    const key = this.storeTab;
+    if (this.extKey === key) return;
+    this.unmountExt();
+    this.extKey = key;
+    const el = this.el.querySelector<HTMLElement>(".gf-ext")!;
+    const k = key === "home" ? "home" : "getz";
+    if (!(k in extLoaded)) {
+      void loadTab(k).then(() => {
+        if (this.open && this.mode === "store" && this.extKey === key) {
+          this.extKey = null;
+          this.mountExt();
+        }
+      });
+      return;
+    }
+    const t = extTab(k);
+    if (!t) {
+      el.innerHTML =
+        key === "home"
+          ? `<div class="gf-soon gf-plate"><small>Home</small><b>Your house, furnished</b><p>You start the game in one of your houses: its furniture is sold here, for ⓩ, and stays where you put it. Coming to the store.</p></div>`
+          : `<div class="gf-soon gf-plate"><small>Get ⓩ</small><b>ⓩ for ZEC</b><p>Play money bought with real ZEC, from your own wallet. Coming to the store. Until then ⓩ are earned in the missions (the map, <kbd>M</kbd>, shows them all).</p></div>`;
+      return;
+    }
+    el.innerHTML = `<div class="gf-ext-body"></div><p class="gf-ext-note gf-snote"></p>`;
+    const off = t.mount(el.querySelector<HTMLElement>(".gf-ext-body")!, this.ctx());
+    this.extOff = typeof off === "function" ? off : null;
+  }
+
+  /** Zilk Road's market (zilk.ts) over the line-up: buy a zkSNARK for real. */
+  private async zilk() {
+    const t = await loadTab("zksnarks");
+    if (!this.open || this.el.querySelector(".gfw")) return;
+    const s = openSheet(
+      this.el,
+      t
+        ? `<h2>Zilk Road</h2><div class="gfw-ext"></div>`
+        : `<h2>Zilk Road</h2><p class="gfw-note">The zkSNARKs for sale on Zilk Road, their prices, and buying one from your wallet: coming to the store. You can already play as any of the 10,000 here.</p>`,
+      () => off?.(),
+      t ? "wide" : "",
+    );
+    const r = t?.mount(s.el.querySelector<HTMLElement>(".gfw-ext")!, { ...this.ctx(), choose: (id) => (this.choose(id), s.close()) });
+    const off = typeof r === "function" ? r : null;
+  }
+
+  /** The items of the tab, the one in focus previewed on the car (or the bike). */
+  private renderStore(reset = false) {
+    this.el.dataset.tab = this.storeTab;
+    if (this.storeTab !== "vehicles") {
+      Store.clearPreview();
+      return this.mountExt();
+    }
+    this.unmountExt();
+    const list = Store.of(this.storeCat);
+    if (reset) this.storeAt = Math.max(0, list.findIndex((i) => i.id === Store.wearing(this.storeCat)));
+    this.storeAt = Math.min(this.storeAt, list.length - 1);
+    const it = list[this.storeAt];
+    const tabs = this.el.querySelector(".gf-vtabs")!;
+    tabs.innerHTML = CATS.map((c) => `<button type="button" role="tab" data-cat="${c.key}" class="${c.key === this.storeCat ? "on" : ""}" aria-selected="${c.key === this.storeCat}">${c.label}</button>`).join("");
+    for (const b of tabs.querySelectorAll<HTMLElement>("button")) b.addEventListener("click", () => this.storeSub(b.dataset.cat as StoreCat));
+    const shelf = this.el.querySelector(".gf-shelf")!;
+    shelf.innerHTML = list
+      .map((x, i) => {
+        const owned = Store.owns(x.id),
+          worn = Store.wearing(x.cat) === x.id;
+        const tag = worn ? `<em class="gf-tag gold">Wearing</em>` : owned ? `<em class="gf-tag">Owned</em>` : `<em class="gf-price">ⓩ ${x.price.toLocaleString("en-US")}</em>`;
+        return `<button type="button" role="option" class="gf-tile ${i === this.storeAt ? "on" : ""} ${worn ? "worn" : ""}" data-i="${i}" aria-selected="${i === this.storeAt}">${this.swatch(x)}<b>${esc(x.name)}</b>${tag}</button>`;
+      })
+      .join("");
+    for (const b of shelf.querySelectorAll<HTMLElement>(".gf-tile"))
+      b.addEventListener("click", () => {
+        const i = Number(b.dataset.i);
+        if (i === this.storeAt) return this.storeAct();
+        this.storeAt = i;
+        this.storeFocus();
+      });
+    shelf.querySelector(".gf-tile.on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    // the bar: your ⓩ, and buy / wear / wearing
+    const bal = Store.balance();
+    const owned = it ? Store.owns(it.id) : false,
+      worn = it ? Store.wearing(it.cat) === it.id : false;
+    const short = it && !owned ? it.price - bal : 0;
+    const main = !it ? "" : worn ? `<button class="gf-btn gold" type="button" disabled>Wearing</button>` : owned ? `<button class="gf-btn gold" data-act type="button">Wear <small>Enter</small></button>` : short > 0 ? `<button class="gf-btn gold" type="button" disabled>ⓩ ${short.toLocaleString("en-US")} short</button>` : `<button class="gf-btn gold" data-act type="button">Buy <small>ⓩ ${it.price.toLocaleString("en-US")}</small></button>`;
+    const note = this.storeMsg || (it?.horn ? it.horn.line : short > 0 ? "Earn ⓩ in the missions (Block Run, Shielded Ride, Proof Boards, Speed Traps), or get them at Get ⓩ." : this.storeCat === "bike" ? "The ZK-R parked by your car, in this paint." : "Your ZK-GT, in the street behind.");
+    this.el.querySelector(".gf-sbar")!.innerHTML = `<span class="gf-bal"><b>${bal.toLocaleString("en-US")}</b><small>Your ⓩ</small></span>${main}<button class="gf-btn" data-play type="button">Play</button>${it?.horn ? `<button class="gf-btn" data-honk type="button">Sound it</button>` : ""}<p class="gf-snote">${esc(note)}</p>`;
+    this.el.querySelector(".gf-sbar [data-act]")?.addEventListener("click", () => this.storeAct());
+    this.el.querySelector(".gf-sbar [data-play]")?.addEventListener("click", () => this.settled() && this.play());
+    this.el.querySelector(".gf-sbar [data-honk]")?.addEventListener("click", () => this.host.honk?.());
+  }
+
+  private swatch(x: StoreItem) {
+    if (x.cat === "horn") return `<span class="gf-sw horn" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg></span>`;
+    if (x.cat === "neon") return x.color ? `<span class="gf-sw neon" style="--c:${x.color}" aria-hidden="true"></span>` : `<span class="gf-sw off" aria-hidden="true"></span>`;
+    if (x.cat === "rims") return `<span class="gf-sw rim" style="--c:${x.color}" aria-hidden="true"></span>`;
+    return `<span class="gf-sw paint ${x.finish ?? ""}" style="--c:${x.color};--a:${x.accent ?? "#141418"}" aria-hidden="true"></span>`;
+  }
+
+  private storeSub(cat: StoreCat) {
+    if (cat === this.storeCat) return;
+    Store.preview(this.storeCat, null);
+    this.storeCat = cat;
+    this.storeMsg = "";
+    this.renderStore(true);
+    this.storeFocus();
+  }
+
+  /** The item in focus on the car (or the horn, sounded). */
+  private storeFocus() {
+    const it = Store.of(this.storeCat)[this.storeAt];
+    this.storeMsg = "";
+    if (!it) return;
+    // (what you wear needs no preview)
+    Store.preview(it.cat, Store.wearing(it.cat) === it.id ? null : it.id);
+    if (it.cat === "horn") this.host.honk?.();
+    this.renderStore();
+  }
+
+  /** Buy (or wear) the item in focus. */
+  private storeAct() {
+    const it = Store.of(this.storeCat)[this.storeAt];
+    if (!it) return;
+    if (Store.wearing(it.cat) === it.id) return;
+    const owned = Store.owns(it.id);
+    if (owned ? Store.wear(it.id) : Store.buy(it.id)) {
+      Store.preview(it.cat, null);
+      this.storeMsg = owned ? `${it.name}: on.` : `${it.name}: yours. ⓩ ${it.price.toLocaleString("en-US")} spent.`;
+    } else this.storeMsg = `Not enough ⓩ for ${it.name}.`;
+    this.renderStore();
+  }
+
+  // ---- how to play -----------------------------------------------------------------------------------
+
+  private renderHowto() {
+    const k = (s: string) => `<kbd>${s}</kbd>`;
+    const step = (n: string, title: string, html: string) => `<article class="gf-step gf-plate"><i>${n}</i><h4>${title}</h4><p>${html}</p></article>`;
+    const body = this.el.querySelector(".gf-howto .gf-pbody")!;
+    body.innerHTML = `<div class="gf-steps">
+        ${step("1", "On foot", `${k("W")}${k("A")}${k("S")}${k("D")} walk (${k("Z")}${k("Q")}${k("S")}${k("D")} too), ${k("Shift")} sprint, ${k("Space")} jump. ${k("E")} opens a door, talks to someone, uses what is in front of you.`)}
+        ${step("2", "Any ride", `${k("F")} by any car, taxi, cruiser, van, bike or scooter: its driver is pulled out (and may fight back). ${k("F")} again to get out.`)}
+        ${step("3", "Driving", `${k("Shift")} nitrous, ${k("Space")} handbrake drift, ${k("C")} camera, ${k("B")} look back, ${k("Q")} next radio station, ${k("H")} horn, ${k("R")} back on the road.`)}
+        ${step("4", "Missions", `${k("M")} the map: Block Run, Shielded Ride, Proof Boards, Speed Traps. Each pays ⓩ — spend them in the store: your car and bike (paint, neon, rims, the horn), your home's furniture.`)}
+        ${step("5", "Fists", `${k("Click")} punch, ${k("Right click")} guard (it turns you to whoever is in front). Hit someone and the street reacts: they run, film, call the police.`)}
+        ${step("6", "The city", "Walk into 30+ places, cross the Golden Gate to Orchard Keys, swim off Orchard Beach. Every block of Zcash arrives live: on the metro, the screens, the radio.")}
+      </div>
+      <div class="gf-pbar"><button class="gf-btn gold" data-play type="button">Play</button><button class="gf-btn" data-keys type="button">All the controls</button></div>`;
+    body.querySelector("[data-play]")!.addEventListener("click", () => this.settled() && this.play());
+    body.querySelector("[data-keys]")!.addEventListener("click", () => this.host.settings("controls"));
   }
 
   private renderSelect() {
@@ -577,30 +906,35 @@ export class FrontEnd {
     const h = this.el.querySelector(".gf-hints")!;
     if (TOUCH) return void (h.innerHTML = "");
     h.innerHTML =
-      this.mode === "title"
-        ? ""
+      this.mode === "howto"
+        ? `<span>${k("Enter")} Play</span><span>${k("Esc")} Back</span>`
         : this.mode === "menu"
-          ? `<span>${k("↑")}${k("↓")} Choose</span><span>${k("Enter")} Select</span><span>${k("Esc")} Back</span>`
-          : `<span>${k("←")}${k("→")} Browse</span><span>${k("Enter")} ${this.inGame ? "Wear" : "Play"}</span><span>${k("Esc")} Back</span>`;
+          ? `<span>${k("↑")}${k("↓")} Choose</span><span>${k("Enter")} Select</span><span>${k("Esc")} Map</span>`
+          : this.mode === "store"
+            ? `<span>${k("←")}${k("→")} Browse</span><span>${k("↑")}${k("↓")} Tabs</span><span>${k("Enter")} Buy · wear</span><span>${k("Esc")} Back</span>`
+            : `<span>${k("←")}${k("→")} Browse</span>${this.inGame ? "" : `<span>${k("↑")}${k("↓")} Tabs</span>`}<span>${k("Enter")} ${this.inGame ? "Wear" : "Play"}</span><span>${k("Esc")} Back</span>`;
   }
 
   // ---- input -------------------------------------------------------------------------------------
 
-  /** The first gesture of the title: the sound on, the menu up. */
-  private start() {
+  /** The first gesture in the front end (a key, a click, a tap: the browser wants one): the city's sound on. */
+  private sounded = false;
+  private gesture() {
+    if (this.sounded) return;
+    this.sounded = true;
     this.host.startSound();
-    this.go("menu");
   }
 
   private key(e: KeyboardEvent) {
     if (!this.open || this.fading) return;
+    if (!e.metaKey && !e.ctrlKey) this.gesture();
     const tag = (e.target as HTMLElement)?.tagName ?? "";
     if (/input|textarea|select/i.test(tag)) {
       if (e.key === "Escape") (e.target as HTMLElement).blur();
       return;
     }
-    // the game's settings panel is over us: it has its own keys
-    if (this.host.ui.querySelector(".gta-hud.front .gh-pause.on")) return;
+    // the game's settings panel is over us: it has its own keys (the wallet's sheet too)
+    if (this.host.ui.querySelector(".gta-hud.front .gh-pause.on") || this.el.querySelector(".gfw")) return;
     if (this.mosaic.isOpen) {
       if (e.key === "Escape") {
         this.mosaic.show(false);
@@ -613,12 +947,30 @@ export class FrontEnd {
     if (["Shift", "Meta", "Control", "Alt", "CapsLock", "Tab"].includes(e.key)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    if (e.repeat && this.mode === "title") return;
-    if (this.mode === "title") {
-      if (e.key === "Escape") return this.close();
-      return this.start();
-    }
     if (e.key === "Escape" || e.key === "Backspace") return this.back();
+    // ↑/↓ through the store's tabs (the line-up's too, from the menu)
+    const down = e.key === "ArrowDown" || e.key === "s" || e.key === "S",
+      up = e.key === "ArrowUp" || e.key === "w" || e.key === "W" || e.key === "z" || e.key === "Z";
+    if ((this.mode === "store" || (this.mode === "select" && !this.inGame)) && (down || up)) {
+      const at = this.mode === "select" ? 0 : FLAT.findIndex((f) => f.tab === this.storeTab && (f.tab !== "vehicles" || f.cat === this.storeCat));
+      const f = FLAT[(at + (down ? 1 : FLAT.length - 1)) % FLAT.length];
+      return this.tab(f.tab, f.cat);
+    }
+    if (this.mode === "store") {
+      if (this.storeTab !== "vehicles") {
+        extTab(this.storeTab === "home" ? "home" : "getz")?.onKey?.(e);
+        return;
+      }
+      const list = Store.of(this.storeCat);
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") (this.storeAt = (this.storeAt + 1) % list.length), this.storeFocus();
+      else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A" || e.key === "q" || e.key === "Q") (this.storeAt = (this.storeAt + list.length - 1) % list.length), this.storeFocus();
+      else if (e.key === "Enter" || e.key === " ") this.storeAct();
+      return;
+    }
+    if (this.mode === "howto") {
+      if (e.key === "Enter" || e.key === " ") this.play();
+      return;
+    }
     if (this.mode === "menu") {
       const n = this.items().length;
       if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") this.menuAt = (this.menuAt + 1) % n;
@@ -635,10 +987,7 @@ export class FrontEnd {
   private down(e: PointerEvent) {
     if (!this.open || this.fading) return;
     const t = e.target as HTMLElement;
-    if (this.mode === "title") {
-      e.preventDefault();
-      return this.start();
-    }
+    this.gesture();
     if (this.mode !== "select" || t.closest("button,input,form,.gg-mosaic,.gf-card")) return;
     this.dragX = e.clientX;
     this.dragged = 0;
@@ -685,8 +1034,8 @@ export class FrontEnd {
       localStorage.setItem(LAST, String(id));
     } catch {}
     this.id = id;
-    // where you start: where you stood on the title, by the car's nose, looking down the street
-    // the way the title's camera did (the game's camera comes in behind you, where it was)
+    // where you start: where you stood under the menu, by the car's nose, looking down the street
+    // the way the menu's camera did (the game's camera comes in behind you, where it was)
     const k = this.stage.look ?? 1;
     const p = this.P(k * 3.15, 3.45);
     const c = this.P(0, 1.75);
@@ -717,10 +1066,13 @@ export class FrontEnd {
     this.t += dt;
     const t = this.t;
     // the chips and the chain's card tick on (the next block's countdown, the hour)
-    if (this.mode === "menu" && (this.liveT -= dt) <= 0) {
+    if ((this.liveT -= dt) <= 0) {
       this.liveT = 1;
-      this.renderLive();
+      if (this.mode === "menu") this.renderLive();
+      else this.renderWallet();
     }
+    // the store's bike stands by (its wheels and lean settled)
+    this.bike?.group.updateMatrixWorld();
     // the crew: the pair talking in turns, you waving now and then
     for (const c of this.crew) {
       if (c.pair !== undefined) {
@@ -754,7 +1106,21 @@ export class FrontEnd {
   private aim(dt: number) {
     const t = this.t;
     const narrow = this.camera.aspect < 1;
-    if (this.mode === "select" && this.line[this.sel]) {
+    if (this.mode === "store") {
+      const k = this.stage.look ?? 1;
+      const bike = this.storeCat === "bike";
+      const c = bike ? this.bikeAt() : this.P(0, 1.75);
+      this.wantAim.set(c.x, bike ? 0.75 : 0.62, c.z);
+      // a slow turn round it, from the road side, a little above
+      const a = (bike ? 0.9 : 0.75) + Math.sin(t * 0.12) * 0.32;
+      const r = narrow ? (bike ? 6.2 : 8.4) : bike ? 5.2 : 6.3;
+      const du = Math.cos(a) * r * k,
+        dv = Math.sin(a) * r;
+      const p = this.P(0, 0, this.wantPos);
+      p.set(c.x + this.al.x * du + this.ou.x * dv, (bike ? 1.4 : 1.7) + Math.sin(t * 0.1) * 0.12, c.z + this.al.z * du + this.ou.z * dv);
+      // (the thing a little above the middle of the picture: the shelf and the bar take the bottom)
+      this.wantAim.y -= narrow ? 0.55 : 0.32;
+    } else if (this.mode === "select" && this.line[this.sel]) {
       // across the road at the one in front of the line, a little to its side; the card on the left
       const s = this.line[this.sel];
       const k = this.stage.look ?? 1;
@@ -768,7 +1134,7 @@ export class FrontEnd {
     } else {
       // a cover shot down the street: from out in the road past the car's nose, a little above the
       // crew's heads, the street going on behind to the low sun; under the menu a little wider. It sways.
-      const menu = this.mode === "menu";
+      const menu = this.mode === "menu" || this.mode === "howto";
       const k = this.stage.look ?? 1;
       const a = (menu ? 0.36 : 0.3) + Math.sin(t * 0.085) * 0.06;
       const r = (narrow ? 15 : menu ? 12 : 11) + Math.sin(t * 0.05) * 0.7;

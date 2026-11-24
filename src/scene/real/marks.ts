@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { BuildingJob } from "../city/plan";
 import type { Built } from "../voxel/buildings";
 import type { RGeo } from "./buildings";
-import { arcadeShape, ellipseShape, hex, Kit, rectShape, rng, shadeC, windowsShape, type V3 } from "./markkit";
+import { arcadeShape, ellipseShape, hex, Kit, rectShape, rng, shadeC, WHITE, windowsShape, type V3 } from "./markkit";
 import { ANGEL, CHAPEL, COLUMBARIUM, CRYPT, FX0, FX1, FZ0, FZ1, GATE, GRAVE_LEN, GRAVES, groundV, groundY, LANES, LANTERNS, OBELISK, pitOf, STONE_T, TOMBS, TREES, type Grave } from "../cemetery/layout";
 
 /**
@@ -647,62 +647,168 @@ function pyramid(c: Ctx) {
   const LIME = "lm.Bricks083";
   // ---- the sand (and the paved strip along the street)
   groundBase(c, "lm.Ground054", sand);
-  // ---- the core: stepped courses, the tunnel's lane left open through the lowest ones
+  // ---- the core: four smooth weathered faces of limestone (the courses are the stone's own: rows
+  // of 0.75 m blocks in its texture and relief, `lm.Bricks084.blocks`), the tunnel's mouth cut into
+  // the front low down; over its top the white casing that remains, its lower edge broken
   const tw = 5,
     th = 11,
     tz = PZ1 - 22;
   const cx = X(CX),
     cz = Z(CZ);
   const r = rng(91);
-  for (let i = 0; i < CASE; i++) {
-    const h = m(halfAt(i)),
-      y0 = m(1 + i * CH),
-      hh = m(CH);
-    const col = shadeC(lime, 0.9 + r() * 0.16);
-    if (y0 < m(1 + th + 1)) {
-      // behind the tunnel's end, all across; in front of it, either side of the lane
-      const zb = Z(tz);
-      K.span(LIME, cx - h, y0, cz - h, cx + h, y0 + hh, zb, col);
-      K.span(LIME, cx - h, y0, zb, X(CX - tw - 2), y0 + hh, cz + h, col);
-      K.span(LIME, X(CX + tw + 2), y0, zb, cx + h, y0 + hh, cz + h, col);
-      // the lane's jambs: dressed granite
-      for (const s of [-1, 1]) K.span("lm.Bricks008", X(CX + s * tw), y0, zb, X(CX + s * (tw + 2)), y0 + hh, Math.min(cz + h, Z(PZ1 + 2)), hex("#a89888"));
-      // over the lane: the course closes again
-      if (y0 + hh > m(1 + th)) K.span(LIME, X(CX - tw), m(1 + th), zb, X(CX + tw), y0 + hh, cz + h, col);
-    } else K.box(LIME, cx, y0, cz, h * 2, hh, h * 2, col);
-    // the course's ragged edge: a few blocks proud or fallen (near only)
-    if (!lod && i % 2 === 0)
-      for (let n = 0; n < 6; n++) {
-        const side = n % 4,
-          t = (r() - 0.5) * h * 1.6;
-        const bs = 0.8 + r() * 0.5;
-        const [bx, bz] = side === 0 ? [cx + t, cz + h + bs * 0.2] : side === 1 ? [cx + t, cz - h - bs * 0.2] : side === 2 ? [cx + h + bs * 0.2, cz + t] : [cx - h - bs * 0.2, cz + t];
-        if (side === 0 && Math.abs(bx - cx) < m(tw + 3) && y0 < m(14)) continue;
-        K.box(LIME, bx, y0, bz, bs, hh * (0.6 + r() * 0.4), bs, shadeC(lime, 0.85 + r() * 0.12), r() * 0.3);
-      }
-  }
-  // ---- the casing that remains: smooth white limestone to the top, the gilded pyramidion
-  const yC = m(1 + CASE * CH),
+  // (the face through the old courses' outer foot: half0 at y = m(1), narrowing k metres per metre)
+  const k = (half0 - 3) / NC / CH;
+  const yB = m(1) - 0.3,
+    yC = m(1 + CASE * CH),
     yTop = m(1 + NC * CH);
-  K.frustum("lm.Bricks083", cx, yC, cz, m(halfAt(CASE)) * 2 + 0.3, m(halfAt(CASE)) * 2 + 0.3, m(halfAt(NC)) * 2, m(halfAt(NC)) * 2, yTop - yC, limeL);
-  // its ragged lower edge
+  const half = (y: number) => m(half0) - (y - m(1)) * k;
+  const sandy = hex("#c9a874");
+  /** The weathering: slow mottling, wind streaks down the faces, sand staining the foot. */
+  const tint = (base: V3, a: number, y: number, amp: number): V3 => {
+    const n = 0.5 + 0.22 * Math.sin(a * 0.13 + y * 0.09) + 0.16 * Math.sin(a * 0.41 - y * 0.13 + 1.7) + 0.12 * Math.sin(a * 1.3 + 2.3);
+    const streak = 1 - 0.05 * Math.max(0, Math.sin(a * 0.7 + 0.4)) * Math.max(0, Math.sin(a * 2.9));
+    const foot = Math.max(0, 1 - (y - yB) / 4.5);
+    const k2 = (1 - amp / 2 + amp * n) * streak;
+    return [
+      (base[0] * (1 - foot * 0.45) + sandy[0] * foot * 0.45) * k2,
+      (base[1] * (1 - foot * 0.45) + sandy[1] * foot * 0.45) * k2,
+      (base[2] * (1 - foot * 0.45) + sandy[2] * foot * 0.45) * k2,
+    ];
+  };
+  /**
+   * One face's piece between heights y0 and y1, from x = xa(y) to x = xb(y) across it (the face's
+   * own frame: x across, seen from outside), out `off` metres proud of the core's plane; `bot` lifts
+   * its lower edge (a broken edge) at t across. Quads in rows and columns, vertex colours per vertex.
+   */
+  const facePiece = (slot: string, side: number, y0: number, y1: number, xa: (y: number) => number, xb: (y: number) => number, base: V3, o: { off?: number; rows?: number; cols?: number; amp?: number; bot?: (t: number) => number } = {}) => {
+    const off = o.off ?? 0,
+      rows = o.rows ?? 1,
+      cols = o.cols ?? 1;
+    // the outward normal of the face's plane (slope k: per metre up, the face comes in k metres)
+    const nl = Math.hypot(1, k);
+    const nh = 1 / nl,
+      nv = k / nl;
+    const W3 = (x: number, y: number): V3 => {
+      const h = half(y) + off * nh;
+      const yy = y + off * nv;
+      // front +z, right +x, back −z, left −x (x across as seen from outside)
+      return side === 0 ? [cx + x, yy, cz + h] : side === 1 ? [cx + h, yy, cz - x] : side === 2 ? [cx - x, yy, cz - h] : [cx - h, yy, cz + x];
+    };
+    const out: V3 = side === 0 ? [0, nv, nh] : side === 1 ? [nh, nv, 0] : side === 2 ? [0, nv, -nh] : [-nh, nv, 0];
+    const pos: number[] = [],
+      col: number[] = [];
+    const P = (i: number, j: number) => {
+      const t = j / cols;
+      const yb = o.bot ? y0 + o.bot(t) : y0;
+      const y = yb + ((y1 - yb) * i) / rows;
+      const x = xa(y) + (xb(y) - xa(y)) * t;
+      return { p: W3(x, y), a: x + side * 97, y };
+    };
+    for (let i = 0; i < rows; i++)
+      for (let j = 0; j < cols; j++) {
+        const q = [P(i, j), P(i, j + 1), P(i + 1, j + 1), P(i + 1, j)];
+        // (wound to face out)
+        const e1 = [q[1].p[0] - q[0].p[0], q[1].p[1] - q[0].p[1], q[1].p[2] - q[0].p[2]],
+          e2 = [q[3].p[0] - q[0].p[0], q[3].p[1] - q[0].p[1], q[3].p[2] - q[0].p[2]];
+        const nx = e1[1] * e2[2] - e1[2] * e2[1],
+          ny = e1[2] * e2[0] - e1[0] * e2[2],
+          nz = e1[0] * e2[1] - e1[1] * e2[0];
+        const tri = nx * out[0] + ny * out[1] + nz * out[2] >= 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+        for (const v of tri) {
+          pos.push(...q[v].p);
+          col.push(...tint(base, q[v].a, q[v].y, o.amp ?? 0.14));
+        }
+      }
+    if (!pos.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    K.add(slot, g, WHITE);
+    // (the vertex colours: the weathering, over the kit's flat white)
+    g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  };
+  const CORE = "lm.Bricks084.blocks";
+  // (the core's limestone paler and greyer than the lot's sandstone details: weathered Tura stone)
+  const stone = hex("#c2b293");
+  void lime;
+  const rowsAt = (h: number) => Math.max(1, Math.round(h / (lod ? 5 : 1.6)));
+  const colsAt = (w: number) => Math.max(1, Math.round(w / (lod ? 7 : 2.4)));
+  // the tunnel's portal: its outer edges, the top of its lintel
+  const hx0 = X(CX - tw - 2) - cx,
+    hx1 = X(CX + tw + 2) - cx,
+    yL = m(1 + th) + 0.6;
+  for (let side = 0; side < 4; side++) {
+    if (side === 0) {
+      // the front: either side of the portal low down, whole above it
+      facePiece(CORE, 0, yB, yL, (y) => -half(y), () => hx0, stone, { rows: rowsAt(yL - yB), cols: colsAt(half(yB) + hx0) });
+      facePiece(CORE, 0, yB, yL, () => hx1, (y) => half(y), stone, { rows: rowsAt(yL - yB), cols: colsAt(half(yB) - hx1) });
+      facePiece(CORE, 0, yL, yTop, (y) => -half(y), (y) => half(y), stone, { rows: rowsAt(yTop - yL), cols: colsAt(half(yL) * 2) });
+    } else facePiece(CORE, side, yB, yTop, (y) => -half(y), (y) => half(y), stone, { rows: rowsAt(yTop - yB), cols: colsAt(half(yB) * 2) });
+  }
+  // the portal: dressed granite jambs and lintel round the lane, the lane's floor
+  {
+    const zb = Z(tz),
+      zf = Z(PZ1 + 2);
+    for (const s2 of [-1, 1]) K.span("lm.Bricks008", X(CX + s2 * tw), yB, zb, X(CX + s2 * (tw + 2)), m(1 + th), zf, hex("#a89888"));
+    K.span("lm.Bricks008", X(CX - tw - 2), m(1 + th), zb, X(CX + tw + 2), yL, zf, hex("#a89888"));
+  }
+  // fallen blocks at the foot, half sunk in the sand (near only)
   if (!lod)
-    for (let n = 0; n < 28; n++) {
+    for (let n = 0; n < 16; n++) {
       const side = n % 4,
-        t = (r() - 0.5) * m(halfAt(CASE)) * 1.8;
-      const hc = m(halfAt(CASE - 1));
-      const [bx, bz] = side === 0 ? [cx + t, cz + hc - 0.4] : side === 1 ? [cx + t, cz - hc + 0.4] : side === 2 ? [cx + hc - 0.4, cz + t] : [cx - hc + 0.4, cz + t];
-      K.box(LIME, bx, yC - m(CH), bz, 1.2 + r(), m(CH) * (0.5 + r() * 0.5), 1.2 + r(), limeL, r() * 0.2);
+        t = (r() - 0.5) * half(0) * 1.7;
+      const bs = 0.9 + r() * 0.6;
+      const d = half(0) + 0.6 + r() * 2.2;
+      const [bx, bz] = side === 0 ? [cx + t, cz + d] : side === 1 ? [cx + d, cz + t] : side === 2 ? [cx + t, cz - d] : [cx - d, cz + t];
+      if (side === 0 && Math.abs(bx - cx) < m(tw + 6)) continue;
+      K.box(CORE, bx, -0.25, bz, bs * 1.4, bs * (0.55 + r() * 0.3), bs, shadeC(sandy, 0.95 + r() * 0.1), r() * Math.PI);
     }
-  const ph = m(halfAt(NC)) * 2;
-  K.frustum("lm.Metal024.metal", cx, yTop, cz, ph, ph, 0.02, 0.02, m(10), gold);
+  // ---- the casing that remains: smooth white limestone to the top (proud of the core, its lower
+  // edge broken off unevenly, its thickness showing there), the gilded pyramidion
+  {
+    const CASING = "lm.Plaster001";
+    const off = 0.14;
+    for (let side = 0; side < 4; side++) {
+      // the broken edge: up to 1.6 m higher here and there, in a few runs
+      const seed = side * 13.7;
+      const bot = (t: number) => Math.max(0, 0.9 * Math.sin(t * 9.1 + seed) + 0.6 * Math.sin(t * 23.3 + seed * 2.1) + 0.35 * Math.sin(t * 61 + seed));
+      const cols = lod ? 10 : 36;
+      facePiece(CASING, side, yC, yTop, (y) => -half(y), (y) => half(y), limeL, { off, rows: lod ? 2 : 6, cols, amp: 0.08, bot });
+      // its thickness along the broken edge: a band from the casing's face back to the core's
+      if (!lod) {
+        const nl = Math.hypot(1, k);
+        const pos: number[] = [];
+        for (let j = 0; j < cols; j++) {
+          const pts = [j / cols, (j + 1) / cols].map((t) => {
+            const y = yC + bot(t);
+            const x = -half(y) + 2 * half(y) * t;
+            const at = (o2: number): V3 => {
+              const h = half(y) + o2 / nl,
+                yy = y + (o2 * k) / nl;
+              return side === 0 ? [cx + x, yy, cz + h] : side === 1 ? [cx + h, yy, cz - x] : side === 2 ? [cx - x, yy, cz - h] : [cx - h, yy, cz + x];
+            };
+            return [at(off), at(0)];
+          });
+          const [a0, a1] = pts[0],
+            [b0, b1] = pts[1];
+          pos.push(...a0, ...b0, ...b1, ...a0, ...b1, ...a1, ...a0, ...b1, ...b0, ...a0, ...a1, ...b1);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+        g.computeVertexNormals();
+        K.add(CASING, g, shadeC(limeL, 0.82));
+      }
+    }
+    const ph = m(halfAt(NC)) * 2;
+    K.frustum("lm.Metal024.metal", cx, yTop, cz, ph + 0.2, ph + 0.2, 0.02, 0.02, m(10), gold);
+  }
   // ---- the entrance: the dark tunnel's end, the floor, the chevron of granite beams over it
   {
     const zb = Z(tz),
       zf = Z(PZ1 + 2);
     K.span("lm.dark", X(CX - tw), 0, zb - 0.3, X(CX + tw), m(1 + th), zb, "#0c0907");
     K.span("lm.Bricks008", X(CX - tw), -0.02, zb, X(CX + tw), 0.06, zf, hex("#8a7a62"));
-    const yA = m(1 + th) + 0.2,
+    const yA = yL,
       span = m(tw + 3);
     for (const s of [-1, 1]) for (const dz of [0, 1.4]) K.beam("lm.Bricks008", [cx + s * span, yA, zf - 1 - dz], [cx, yA + span * 0.75, zf - 1 - dz], 0.9, hex("#9a8c7c"), 1.2);
     // a lamp inside
@@ -2353,8 +2459,9 @@ function needle(c: Ctx) {
       x1 = X(lx1),
       z0 = Z(frontTip - 8),
       z1 = Z(lz1);
+    // (no lit box inside it: behind opaque glass it showed only where the lot's edge pressed the two
+    // fronts into one plane — a brown slab fighting the glass, taken for a half-drawn board)
     K.span("lm.glass", x0, 0, z0, x1, lobbyH, z1, hex("#d8e4ec"));
-    K.span("lm.glow", x0 + 0.3, 0.02, z0 + 0.3, x1 - 0.3, lobbyH * 0.55, z1 - 0.05, hex("#6a5a48"));
     if (!lod) {
       for (let x = lx0; x <= lx1; x += 5) K.span("lm.chrome", X(x) - 0.06, 0, z1 - 0.02, X(x) + 0.06, lobbyH, z1 + 0.08, hex("#c8a860"));
       for (let y = 6; y < 24; y += 6) K.span("lm.chrome", x0, m(y) - 0.06, z1 - 0.02, x1, m(y) + 0.06, z1 + 0.08, hex("#c8a860"));

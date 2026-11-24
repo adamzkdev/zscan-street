@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { ACROSS } from "../city/plan";
 import type { City } from "../city";
 import type { Director } from "../director";
 import { loadArt, Snark } from "../snark";
@@ -105,7 +106,7 @@ export class Forest {
       if (walkD(x, z) < r + 0.6) return false;
       if (creekAt(x, z).d < 1.6 + r * 0.4) return false;
       if (Math.hypot((x - SITES.plaza.x) / 7, (z - SITES.plaza.z) / 4.6) < 1.25) return false;
-      if (Math.abs(x - BX) < 8.5 && z > 209 && z < 230) return false;
+      if (Math.abs(x - BX) < 8.5 && z > 209 + ACROSS && z < 230 + ACROSS) return false;
       if (near(x, z, SITES.camp, 8.5) || near(x, z, SITES.cabin, 8.5) || near(x, z, SITES.lookout, 6) || near(x, z, SITES.fallsDeck, 3.2) || near(x, z, SITES.genesis, 5.5)) return false;
       if (x > F.x1 - 0.8 || z > F.z1 - 0.8) return false;
       return true;
@@ -167,7 +168,7 @@ export class Forest {
         const c = creekAt(x, z).d;
         if (td < 1.1 || c < 1.3 || walkD(x, z) < 1.1) continue;
         if (Math.hypot((x - SITES.plaza.x) / 7, (z - SITES.plaza.z) / 4.6) < 1.1) continue;
-        if (Math.abs(x - BX) < 7.5 && z > 211 && z < 229.5) continue;
+        if (Math.abs(x - BX) < 7.5 && z > 211 + ACROSS && z < 229.5 + ACROSS) continue;
         if (near(x, z, SITES.camp, 4.2) || near(x, z, SITES.cabin, 5.5) || near(x, z, SITES.lookout, 3.6)) continue;
         if (x > F.x1 - 0.5 || z > F.z1 - 0.5) continue;
         const gold = goldAt(x, z);
@@ -218,7 +219,7 @@ export class Forest {
 
   /** On foot: is (x, z) the forest's to say? */
   owns(x: number, z: number) {
-    return this.land.inside(x, z) && !(Math.abs(x - BX) < 5.6 && z < 226);
+    return this.land.inside(x, z) && !(Math.abs(x - BX) < 5.6 && z < 226 + ACROSS);
   }
 
   /** On foot: the floor under (x, z) (ground, boardwalk, deck), or null outside the forest. */
@@ -234,7 +235,7 @@ export class Forest {
     const h = L.raw(x, z);
     if (h < WATER + 0.35) return true;
     // the tunnel mouth and the road's cutting
-    if (Math.abs(x - BX) < 7.4 && z > 227.4) return true;
+    if (Math.abs(x - BX) < 7.4 && z > 227.4 + ACROSS) return true;
     // the creek itself (cross on the boardwalks)
     const c = creekAt(x, z);
     if (c.d < 0.9 && c.bed > WATER) return true;

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { BAY } from "../city/plan";
+import { ACROSS, BAY } from "../city/plan";
 import { GROUND, groundMat } from "./ground";
 import { maps, real } from "./tex";
 
@@ -13,10 +13,15 @@ import { maps, real } from "./tex";
  * the walkways, red aviation lights. International Orange over painted steel panels, concrete,
  * photographed asphalt with its paint.
  *
- * The deck runs from Bay Road's south kerb (z0) up over the bay and down into the headland's cut,
- * where the carriageway narrows to the Orchard Tunnel's four lanes (the walkways and cycle lanes
- * stop at the viewpoint past the north tower). Its geometry is analytic: the game reads the same
- * profile (deckY, roadHalf) the bridge is built from (src/scene/goldengate.ts).
+ * At the scale of the real one's presence: over the strait (plan.ts ACROSS) a 170 m main span
+ * between towers some 90 m tall over the water, the deck 20–23 m over it (ships pass under), side spans
+ * to the anchorages standing in the water, long approach viaducts on piers rising off Bay Road and
+ * coming down onto the headland — more than four hundred metres from end to end.
+ *
+ * The deck runs from Bay Road's south kerb (z0) up over the strait and down into the headland's
+ * cut, where the carriageway narrows to the Orchard Tunnel's four lanes (the walkways and cycle
+ * lanes stop at the viewpoint past the north tower). Its geometry is analytic: the game reads the
+ * same profile (deckY, roadHalf) the bridge is built from (src/scene/goldengate.ts).
  */
 
 /** The bridge's plan (world metres; x across from the centre line, z along). */
@@ -26,10 +31,10 @@ export const GG = {
   z0: 141,
   /** Where the deck proper starts (the quay's kerb): barriers, cycle lanes and walkways from here. */
   quay: 144,
-  z1: 226,
-  /** The towers. */
-  ta: 164,
-  tb: 204,
+  z1: 226 + ACROSS,
+  /** The towers (a 170 m main span; the side spans and their ramps ~150 m each). */
+  ta: 290,
+  tb: 460,
   /** Half widths: the median barrier, the carriageway, its barrier, the cycle lane, the walkway, the railing, the edge girder (the cable plane). */
   med: 0.45,
   road: 10.7,
@@ -40,18 +45,20 @@ export const GG = {
   rail: 15.8,
   edge: 18.2,
   /** The towers' legs: their centre off the centre line, half width at the base. */
-  leg: 19.4,
-  legHalf: 1.3,
+  leg: 20.3,
+  legHalf: 2.1,
   /** Where the carriageway narrows to the tunnel's (half 6.6) over the headland's cut. */
-  narrowFrom: 205,
-  narrowTo: 214,
+  narrowFrom: 205 + ACROSS,
+  narrowTo: 214 + ACROSS,
   roadEnd: 6.6,
   /** The walkways and cycle lanes stop here (the viewpoint), past the north tower. */
-  walkEnd: 210,
-  /** The deck's height: at the towers, at mid-span, the tower tops. */
-  yTower: 6.5,
-  yMid: 7.5,
-  top: 52,
+  walkEnd: 210 + ACROSS,
+  /** The deck's height: at the towers, at mid-span (20.6 and 23.1 m over the water: ships pass under), the tower tops (~90 m). */
+  yTower: 19,
+  yMid: 21.5,
+  top: 88,
+  /** The approach viaducts' ramps: eased this many metres at each end, straight between. */
+  ease: 26,
   /**
    * Traffic lanes' centres: three each way over the water (the traffic keeps to the inner two), two
    * each way through the headland's cut and the Orchard Tunnel (3 m apart from the oncoming ones:
@@ -61,7 +68,7 @@ export const GG = {
   tunnelLanes: [1.5, 3.9],
   streetLanes: [1.1, 3.2],
   /** The tunnel's far portal (KTUNNEL.z1): past it the lanes ease back to the town's. */
-  tunnelEnd: 257,
+  tunnelEnd: 257 + ACROSS,
 };
 
 const smooth = (t: number) => {
@@ -69,19 +76,33 @@ const smooth = (t: number) => {
   return u * u * (3 - 2 * u);
 };
 
+/**
+ * A ramp's share (0…1) `u` metres along `len`: eased in and out over `e` metres (a vertical curve
+ * at each end), a straight grade between — the gentlest climb for the length (13–14 % here).
+ */
+function ramp(u: number, len: number, e = GG.ease) {
+  if (u <= 0) return 0;
+  if (u >= len) return 1;
+  const m = 1 / (len - e);
+  if (u < e) return (m * u * u) / (2 * e);
+  if (u > len - e) return 1 - (m * (len - u) * (len - u)) / (2 * e);
+  return (m * e) / 2 + m * (u - e);
+}
+
 /** The road's surface height along the deck (0 at Bay Road's asphalt, ~CURB at the tunnel). */
 export function deckY(z: number) {
-  const { z0, z1, ta, tb, yTower, yMid } = GG;
+  const { z0, z1, ta, tb, yMid } = GG;
   const mid = (ta + tb) / 2;
   if (z <= z0) return 0;
-  if (z < ta) return yTower * smooth((z - z0) / (ta - z0));
-  if (z <= tb) {
-    const u = (z - mid) / ((tb - ta) / 2);
-    return yTower + (yMid - yTower) * (1 - u * u);
-  }
   if (z >= z1) return 0.22;
-  return 0.22 + (yTower - 0.22) * (1 - smooth((z - tb) / (z1 - tb)));
+  // one long climb from Bay Road to the crown at mid-span and one long descent to the headland's
+  // cut: ~10 % at most (the ramps to the towers alone were 15–16 %), the towers at ~13 m, the crown
+  // at 21.5 m over the water, a vertical curve at each end and over the top
+  const e = 34;
+  if (z <= mid) return yMid * ramp(z - z0, mid - z0, e);
+  return 0.22 + (yMid - 0.22) * (1 - ramp(z - mid, z1 - mid, e));
 }
+void [GG.yTower];
 
 /** The carriageway's half width at z (narrowing into the headland's cut). */
 export function roadHalf(z: number) {
@@ -107,7 +128,7 @@ export function laneAt(z: number, lane: 0 | 1) {
 /** The main cables' height at z (the catenary over the span, the backstays to the anchorages). */
 export function cableY(z: number) {
   const { ta, tb, top } = GG;
-  const saddle = top - 1;
+  const saddle = top - 1.4;
   const mid = (ta + tb) / 2;
   const low = deckY(mid) + 2.2;
   if (z >= ta && z <= tb) {
@@ -117,10 +138,12 @@ export function cableY(z: number) {
   const [za, ya, zt] = z < ta ? [ANCHOR.city.z, ANCHOR.city.y, ta] : [ANCHOR.head.z, ANCHOR.head.y, tb];
   const t = (z - za) / (zt - za);
   if (t < 0 || t > 1) return -1;
-  return ya + (saddle - ya) * t - 4 * 1.6 * t * (1 - t);
+  return ya + (saddle - ya) * t - 4 * 4 * t * (1 - t);
 }
-/** Where the cables go into the ground: the anchorages' cable mouths. */
-const ANCHOR = { city: { z: 154, y: 4.6 }, head: { z: 214, y: 8.6 } };
+/** Where the cables go into the ground: the anchorages' cable mouths (out in the water, 75 m off the towers, a few metres over the deck there). */
+const ANCHOR = { city: { z: 205, y: 0 }, head: { z: 545, y: 0 } };
+ANCHOR.city.y = deckY(ANCHOR.city.z) + 3.4;
+ANCHOR.head.y = deckY(ANCHOR.head.z) + 3.4;
 
 // ---- materials ---------------------------------------------------------------------------------
 
@@ -278,9 +301,13 @@ function gantrySign() {
   g.lineWidth = 5;
   g.strokeRect(8, 8, 1008, 112);
   g.fillStyle = "#f2f2ee";
-  g.font = "700 54px Archivo, Roboto, sans-serif";
   g.textBaseline = "middle";
-  g.fillText("ORCHARD KEYS  ·  ORCHARD TUNNEL", 40, 64);
+  // (the names fitted short of the arrows, whatever face the browser has to hand)
+  const words = "ORCHARD KEYS  ·  ORCHARD TUNNEL";
+  let px = 54;
+  do g.font = `700 ${px}px Archivo, Roboto, sans-serif`;
+  while (g.measureText(words).width > 790 && (px -= 2) > 30);
+  g.fillText(words, 40, 64);
   g.font = "800 60px Archivo, Roboto, sans-serif";
   g.fillText("↑ ↑ ↑", 860, 66);
   const t = new THREE.CanvasTexture(c);
@@ -430,6 +457,9 @@ class Builder {
   }
 }
 
+/** The stiffening truss's depth under the deck (m). */
+const TRUSS = 5.2;
+
 /** The texture's tile (m) of the sets drawn with world-metre UVs. */
 const UV_TILE: Partial<Record<Mat, number>> = { steel: 2, steelDark: 2, concrete: 2, concreteDark: 2, barrier: 2, cable: 1 };
 
@@ -524,21 +554,31 @@ export function buildBridge(): THREE.Group {
     B.box("dark", 0.9, 0.3, 0.06, X, y + 0.5, z + d * 2.42);
   }
 
-  // ---- the truss under the deck (over the water), floor beams, lateral bracing -----
-  const span0 = GG.quay + 3,
-    span1 = GG.narrowFrom + 2;
+  // ---- the truss under the deck (over the water, wherever the deck stands high enough), floor beams, lateral bracing -----
+  const depth = TRUSS;
+  let span0 = GG.z0,
+    span1 = GG.z1;
+  for (let z = GG.z0; z < GG.z1; z += 1)
+    if (deckY(z) > depth + 1.4) {
+      span0 = z;
+      break;
+    }
+  for (let z = GG.z1; z > GG.z0; z -= 1)
+    if (deckY(z) > depth + 1.4) {
+      span1 = z;
+      break;
+    }
   for (const s of [-1, 1]) {
     const x = X + s * (GG.edge - 0.3);
-    const depth = 3.2;
     // the bottom chord
     B.sweep("steel", [[-0.25, -depth], [0.25, -depth], [0.25, -depth - 0.4], [-0.25, -depth - 0.4], [-0.25, -depth]], () => x, span0 + 4, span1 - 2, 1, 1);
-    // verticals and Warren diagonals every 6 m
+    // verticals and Warren diagonals every 7.5 m
     let up = true;
-    for (let z = span0 + 4; z < span1 - 2; z += 6) {
+    for (let z = span0 + 4; z < span1 - 2; z += 7.5) {
       const ya = deckY(z) - 1.4,
         yb = deckY(z) - depth - 0.2;
       B.beam("steel", new THREE.Vector3(x, yb, z), new THREE.Vector3(x, ya, z), 0.3);
-      const zn = Math.min(span1 - 2, z + 6);
+      const zn = Math.min(span1 - 2, z + 7.5);
       const a = new THREE.Vector3(x, up ? yb : deckY(z) - 1.4, z),
         b = new THREE.Vector3(x, up ? deckY(zn) - 1.4 : deckY(zn) - depth - 0.2, zn);
       B.beam("steel", a, b, 0.24);
@@ -552,32 +592,71 @@ export function buildBridge(): THREE.Group {
     }
   }
 
-  // ---- the approach piers and the abutments -----
-  // (a cap under the deck's slab — under its truss over the water — on four columns)
-  for (const z of [151, 157, 209]) {
-    const y = deckY(z) - (z > tb ? 0.55 : 3.8);
+  // ---- the approach viaducts' piers and the abutments -----
+  // (a cap under the deck's slab — under its truss where it has one — on four tapered columns,
+  // every 24 m up the city's approach and down the headland's, clear of the towers and anchorages)
+  const piers: number[] = [];
+  for (let z = GG.quay + 12; z < ta - 14; z += 24) piers.push(z);
+  for (let z = tb + 16; z < GG.narrowFrom - 4; z += 24) piers.push(z);
+  for (const z of piers) {
+    if (Math.abs(z - ANCHOR.city.z) < 9 || Math.abs(z - ANCHOR.head.z) < 9) continue;
+    const truss = z > span0 + 2 && z < span1 - 2;
+    const y = deckY(z) - (truss ? depth + 0.5 : 0.55);
     if (y < 1.7) continue;
-    for (const s of [-1, 1]) for (const cx of [6, 15]) B.box("concrete", 1.4, y - 1.2 - BAY.bed, 1.8, X + s * cx, BAY.bed + (y - 1.2 - BAY.bed) / 2, z);
-    B.box("concrete", GG.edge * 2 - 2, 1.2, 2.2, X, y - 0.6, z);
+    const h = y - 1.2 - BAY.bed;
+    for (const s of [-1, 1])
+      for (const cx of [7, 15.5]) {
+        B.cyl("concrete", 0.95, h, X + s * cx, BAY.bed, z, 14, 0.75);
+        B.cyl("concreteDark", 1.05, 1.1, X + s * cx, BAY.water - 0.5, z, 14);
+      }
+    B.box("concrete", GG.edge * 2 - 1, 1.3, 2.6, X, y - 0.65, z);
   }
   // the city end's abutment: from the quay's wall down into the water
   B.box("concrete", GG.edge * 2, 2.6, 3, X, -1.25, GG.quay + 3.6);
+  // the headland end: where the deck comes down near the water it lands on an embankment — a
+  // concrete abutment wall the deck rests on, its wing walls, and a causeway of rock armour down
+  // to the shore, so the road reaches the cut over solid ground (it used to skim the water)
+  {
+    let zs = GG.z1;
+    for (let z = GG.tb + 20; z < GG.z1; z += 1)
+      if (deckY(z) < 4.2) {
+        zs = z;
+        break;
+      }
+    const half = GG.edge - 1.2;
+    const yw = deckY(zs) - 0.6;
+    // the abutment wall across the deck's end of the viaduct
+    B.box("concrete", half * 2 + 2, yw - BAY.bed, 2.4, X, (yw + BAY.bed) / 2, zs - 1.2);
+    for (const sx of [-1, 1]) B.box("concrete", 1.2, yw - BAY.bed + 0.6, GG.z1 - zs + 4, X + sx * (half + 0.6), (yw + BAY.bed) / 2, (zs + GG.z1) / 2);
+    // the fill under the deck between the walls, stepping down with it, and the rock armour round its foot
+    for (let z = zs; z < GG.z1 + 2; z += 3) {
+      const y = deckY(z) - 0.35;
+      B.box("concreteDark", half * 2, y - BAY.bed, 3.05, X, (y + BAY.bed) / 2, z + 1.5);
+    }
+    for (let z = zs - 4; z < GG.z1 + 4; z += 2.2)
+      for (const sx of [-1, 1]) {
+        const rx = X + sx * (half + 2.4 + ((z * 7.3) % 1.4));
+        B.box("concreteDark", 2.2, 1.6, 2.0, rx, BAY.water - 0.1, z);
+        B.box("concreteDark", 1.6, 1.2, 1.5, rx + sx * 1.4, BAY.water - 0.6, z + 1.1);
+      }
+  }
 
   // ---- the towers -----
+  // (the legs step in at each setback, as the real one's do: tall shafts, recessed cells, ledges)
   const tiers: [number, number, number, number][] = [
     // y0, y1, half width (x), half depth (z)
-    [4.6, 22, GG.legHalf, 2.3],
-    [22, 33, GG.legHalf - 0.12, 2.1],
-    [33, 43, GG.legHalf - 0.24, 1.9],
-    [43, top, GG.legHalf - 0.36, 1.7],
+    [4.6, 40, GG.legHalf, 3.6],
+    [40, 57, GG.legHalf - 0.25, 3.25],
+    [57, 73, GG.legHalf - 0.5, 2.9],
+    [73, top, GG.legHalf - 0.75, 2.55],
   ];
+  // the portal struts: a few, high over the road and open between them (no panels filling the
+  // opening: from the deck you look up through the tower's arch at the sky)
   const portals: [number, number][] = [
-    [0, 0],
-    [GG.yTower + 6.8, GG.yTower + 8.8],
-    [23, 25.5],
-    [34, 36.5],
-    [44.2, 46.6],
-    [top - 2.2, top],
+    [38.2, 41.4],
+    [55.4, 58.2],
+    [71.6, 74],
+    [top - 2.6, top],
   ];
   for (const tz of [ta, tb]) {
     // the pier: a rounded concrete fender in the water
@@ -596,24 +675,29 @@ export function buildBridge(): THREE.Group {
         B.box("steelDark", hx * 2 + 0.3, 0.35, hz * 2 + 0.3, lx, y1 - 0.17, tz);
       }
       // the cap: stepped, with its aviation light
-      B.box("steel", (GG.legHalf - 0.45) * 2, 1.2, 2.6, lx, top + 0.6, tz);
-      B.box("steelDark", (GG.legHalf - 0.7) * 2, 0.8, 1.8, lx, top + 1.6, tz);
-      B.box("red", 0.5, 0.5, 0.5, lx, top + 2.3, tz);
+      B.box("steel", (GG.legHalf - 0.8) * 2, 1.6, 4.4, lx, top + 0.8, tz);
+      B.box("steelDark", (GG.legHalf - 1.1) * 2, 1.2, 3.2, lx, top + 2.2, tz);
+      B.box("red", 0.6, 0.6, 0.6, lx, top + 3.1, tz);
       // the saddle housing the cable runs over
-      B.box("steelDark", 1.0, 1.0, 3.2, X + s * GG.edge, top - 0.3, tz);
+      B.box("steelDark", 1.6, 1.6, 4.6, X + s * GG.edge, top - 1.1, tz);
     }
-    // the portal struts between the legs (over the deck: clear of the trucks), panelled
+    // the portal struts between the legs: a deep beam each, a ledge along its foot and a cornice
+    // on top (the Art-Deco line), the shallow arch of its soffit
     for (const [y0, y1] of portals) {
-      if (y1 <= y0) continue;
-      const w = (GG.leg - GG.legHalf) * 2 + 0.4;
-      B.box("steel", w, y1 - y0, 2.2, X, (y0 + y1) / 2, tz);
-      for (let px = -w / 2 + 1.6; px < w / 2 - 1.2; px += 3.2) {
-        B.box("steelDark", 2.2, (y1 - y0) * 0.55, 0.1, X + px + 0.8, (y0 + y1) / 2, tz + 1.12);
-        B.box("steelDark", 2.2, (y1 - y0) * 0.55, 0.1, X + px + 0.8, (y0 + y1) / 2, tz - 1.12);
-      }
+      const w = (GG.leg - GG.legHalf) * 2 + 0.6;
+      B.box("steel", w, y1 - y0, 2.8, X, (y0 + y1) / 2, tz);
+      B.box("steelDark", w, 0.35, 3.2, X, y0 + 0.17, tz);
+      B.box("steelDark", w, 0.3, 3.1, X, y1 - 0.15, tz);
+      // the haunches where the beam meets each leg
+      for (const s of [-1, 1]) B.beam("steel", new THREE.Vector3(X + s * (w / 2 - 0.1), y0 - 3.2, tz), new THREE.Vector3(X + s * (w / 2 - 3.2), y0 + 0.2, tz), 1.1, 2.6);
     }
-    // the strut under the deck between the legs
-    B.box("steel", (GG.leg - GG.legHalf) * 2 + 0.4, 1.8, 2.2, X, GG.yTower - 4.2, tz);
+    // under the deck: the strut between the legs and the X of the bracing down to the pier
+    {
+      const w = (GG.leg - GG.legHalf) * 2 + 0.6;
+      const yb = deckY(tz) - depth - 1.6;
+      B.box("steel", w, 2.2, 2.8, X, yb, tz);
+      for (const s of [-1, 1]) B.beam("steel", new THREE.Vector3(X - s * (w / 2 - 0.4), 5.2, tz), new THREE.Vector3(X + s * (w / 2 - 0.4), yb - 1, tz), 0.9, 1.6);
+    }
   }
 
   // ---- the main cables, their bands, the suspenders, the necklace of lights -----
@@ -626,16 +710,19 @@ export function buildBridge(): THREE.Group {
       pts.push(new THREE.Vector3(xc, y, z));
     }
     const curve = new THREE.CatmullRomCurve3(pts);
-    const tube = new THREE.TubeGeometry(curve, 260, 0.42, 10, false);
+    const tube = new THREE.TubeGeometry(curve, 1400, 0.62, 10, false);
     B.add("cable", tube);
-    for (let z = ANCHOR.city.z + 3; z < ANCHOR.head.z - 2; z += 2.5) {
+    // (every 5 m, thick enough not to break into dashes from across the water; a lamp of the
+    // necklace on every other band)
+    let n = 0;
+    for (let z = ANCHOR.city.z + 3; z < ANCHOR.head.z - 2; z += 5) {
       const yc = cableY(z),
         yd = deckY(z) + 0.3;
       if (yc - yd < 1.6) continue;
       // a suspender (a thin pair of ropes), its band on the cable
-      B.cyl("cable", 0.06, yc - yd, xc, yd, z, 6);
-      B.box("steelDark", 0.95, 0.5, 0.5, xc, yc - 0.25, z);
-      if (Math.round(z * 2) % 15 === 0) B.box("pearl", 0.18, 0.18, 0.18, xc, yc + 0.45, z);
+      B.cyl("cable", 0.11, yc - yd, xc, yd, z, 6);
+      B.box("steelDark", 1.4, 0.7, 0.7, xc, yc - 0.3, z);
+      if (n++ % 2 === 0) B.box("pearl", 0.24, 0.24, 0.24, xc, yc + 0.5, z);
     }
   }
 
@@ -646,19 +733,19 @@ export function buildBridge(): THREE.Group {
     [ANCHOR.head.z, ANCHOR.head.y, 1],
   ] as const) {
     for (const s of [-1, 1]) {
-      const ax = X + s * (GG.edge + 2.4),
-        az = z + dz * 3.8;
-      const h = y + 1.4 - BAY.bed;
-      B.box("concrete", 5.2, h, 7.6, ax, BAY.bed + h / 2, az);
+      const ax = X + s * (GG.edge + 3.4),
+        az = z + dz * 6;
+      const h = y + 1.6 - BAY.bed;
+      B.box("concrete", 7.2, h, 12, ax, BAY.bed + h / 2, az);
       // the stepped cornice, the recessed panels (Art-Deco, like the towers)
-      B.box("concreteDark", 5.6, 0.5, 8.0, ax, y + 1.4 + 0.25, az);
-      B.box("concrete", 4.4, 0.6, 6.6, ax, y + 1.4 + 0.8, az);
-      for (const pz of [-2.2, 0, 2.2]) B.box("concreteDark", 0.12, h - 3.2, 1.5, ax + s * 2.62, BAY.bed + 1.2 + (h - 3.2) / 2 + 1, az + pz);
+      B.box("concreteDark", 7.7, 0.6, 12.5, ax, y + 1.6 + 0.3, az);
+      B.box("concrete", 6.2, 0.8, 10.6, ax, y + 1.6 + 1.0, az);
+      for (const pz of [-3.6, -1.2, 1.2, 3.6]) B.box("concreteDark", 0.14, h - 4.4, 1.6, ax + s * 3.62, BAY.bed + 1.2 + (h - 4.4) / 2 + 1, az + pz);
       // the cable's mouth: a dark collar where it goes in
       B.box("steelDark", 1.4, 1.4, 0.6, X + s * GG.edge, y, z);
       // the gate lamp on top
-      B.cyl("dark", 0.14, 2.2, ax, y + 2.1, az);
-      B.box("lamp", 0.5, 0.6, 0.5, ax, y + 4.4, az);
+      B.cyl("dark", 0.16, 2.6, ax, y + 2.9, az);
+      B.box("lamp", 0.55, 0.65, 0.55, ax, y + 5.6, az);
     }
   }
 
@@ -719,8 +806,8 @@ function railStrip(B: Builder, x: number, za: number, zb: number) {
 
 /** A tower's pier: a rounded concrete fender round the legs' footings, standing out of the bay. */
 function pier(B: Builder, x: number, z: number) {
-  const hx = GG.leg + GG.legHalf + 2.4,
-    hz = 4.6;
+  const hx = GG.leg + GG.legHalf + 3,
+    hz = 6.6;
   const s = new THREE.Shape();
   const r = hz;
   s.moveTo(-hx + r, -hz);

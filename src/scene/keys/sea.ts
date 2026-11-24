@@ -12,10 +12,12 @@ import { KEYS, SEA_Y } from "./plan";
  */
 
 /**
- * Where this water lies (the city's own bay water runs to CITY.maxZ: this starts there), on out past
- * the town's box a way, so where it meets the city's plain sea is far off in the haze.
+ * Where this water lies: round the town, from just short of its north edge (the strait the Golden
+ * Gate spans is the city's own sea: where the two meet runs along the woods' and the town's north
+ * shores, mostly under the land), on out past the town's box a way, so where it meets the city's
+ * plain sea is far off in the haze.
  */
-export const SEA_RECT = { x0: KEYS.x0 - 120, x1: KEYS.x1 + 120, z0: CITY.maxZ, z1: KEYS.z1 + 160 };
+export const SEA_RECT = { x0: KEYS.x0 - 120, x1: KEYS.x1 + 120, z0: Math.max(CITY.maxZ, KEYS.z0 - 8), z1: KEYS.z1 + 160 };
 
 const VERT = /* glsl */ `
 attribute float aDepth;

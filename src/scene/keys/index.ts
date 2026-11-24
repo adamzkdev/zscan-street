@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { carObject } from "../real/cars";
+import { carObject, type CarKind } from "../real/cars";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { City } from "../city";
 import { BAY, CURB } from "../city/plan";
@@ -49,6 +49,8 @@ export class Keys {
   readonly sea: KeysSea;
   facades: KeysFacade[] = [];
   palms: { x: number; z: number }[] = [];
+  /** The parked cars along its streets (the game can take them: main.ts hands them to Parking). */
+  parkedCars: { obj: THREE.Group; kind: CarKind }[] = [];
   private land: Land | null;
   /** The ground's height every metre over the town's box (NaN: open sea, or the town's own slabs). */
   private hgt: Float32Array;
@@ -68,7 +70,12 @@ export class Keys {
     for (let j = 0; j < this.nz; j++) for (let i = 0; i < this.nx; i++) this.hgt[i + j * this.nx] = this.height(KEYS.x0 + i, KEYS.z0 + j);
     this.group.add(this.terrain());
     // the sea round the town: clear over the sand, deeper blue further out, waves and foam
-    this.sea = new KeysSea((x, z) => this.ground(x, z), day);
+    // (north of the town: the strait the Golden Gate spans — deep water, and the woods' own shores)
+    this.sea = new KeysSea((x, z) => {
+      if (z >= KEYS.z0) return this.ground(x, z);
+      if (this.land && x > F.x0 && x < F.x1 && z > F.z0) return this.land.raw(x, z);
+      return BAY.bed - 4;
+    }, day);
     this.group.add(this.sea.mesh);
     this.streets();
     for (const l of kLots()) {
@@ -367,6 +374,7 @@ export class Keys {
       car.position.set(x, 0.02, z);
       car.rotation.y = yaw;
       this.group.add(car);
+      this.parkedCars.push({ obj: car, kind: k >= PARKED.length ? "taxi" : kinds[k % kinds.length] });
     }
     for (const c of out.circles) {
       const k = cellKey(c[0], c[1]);

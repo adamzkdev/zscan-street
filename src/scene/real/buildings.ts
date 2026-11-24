@@ -121,6 +121,26 @@ export interface BuildOpts {
   clipY?: number;
 }
 
+/**
+ * Where a realistic building's street door is (voxels across the model, its front at body z1): the one
+ * the game's E uses, the same the builders below draw (apartment lobby, shop door in the glazing,
+ * office entrance, house door, the izakaya's noren).
+ */
+export function realDoorX(j: BuildingJob, b: Built): number {
+  const [x0, , x1] = b.body;
+  const shop = (j.opts as { shop?: string }).shop;
+  switch (j.type) {
+    case "apartment":
+      return b.door[0];
+    case "shophouse":
+      return shop && shop !== "shutter" ? (x0 + x1) / 2 : shop === "shutter" ? x1 - 6 : x0 + 7;
+    case "house":
+      return shop ? (x0 + x1) / 2 : x0 + 7;
+    default:
+      return (x0 + x1) / 2;
+  }
+}
+
 /** The types built realistically (the rest stay voxel this round). */
 export const REAL_TYPES = new Set(["shophouse", "apartment", "office", "house", "izakaya", "machiya"]);
 
@@ -499,6 +519,16 @@ function shopfront(c: Ctx, x0: number, x1: number, top: number, kind: string | u
     }
     M.box("metal", x0 + 0.6, glassTop - 0.5, z - 0.9, x1 - 0.6, glassTop, z - 0.4, hex("#2c2d32"));
   }
+  // the shop's own door in the glazing, at its middle: a heavier frame, a push bar, a step (where the
+  // game's E takes you in: realDoorX)
+  {
+    const mx = (x0 + x1) / 2;
+    const dk = hex("#1c1d22");
+    for (const x of [mx - 3.4, mx + 3.1]) M.box("metal", x, 0.6, z - 1.2, x + 0.3, Math.min(14, glassTop), z - 0.3, dk);
+    M.box("metal", mx - 3.4, Math.min(14, glassTop), z - 1.2, mx + 3.4, Math.min(14, glassTop) + 0.4, z - 0.3, dk);
+    M.box("metal", mx - 0.15, 0.6, z - 1.2, mx + 0.15, Math.min(14, glassTop), z - 0.4, dk);
+    if (M.lod === 0) M.box("metal", mx - 2.6, 6, z - 0.4, mx + 2.6, 6.4, z - 0.1, hex("#b8bcc4"));
+  }
   // the fascia up to the floor above
   const fs = o.fascia ?? "metal";
   M.box(fs, x0, glassTop + 0.6, z - 1.2, x1, top, z + 0.5, o.fcol ?? hex("#25262b"), { skip: "-z" });
@@ -595,6 +625,15 @@ function office(c: Ctx) {
   interior(M, 5, x0 + 2, x1 - 2, 0.6, gh - 3, z - 4);
   for (const x of [x0, x1 - 2]) M.box("concrete", x, 0, z - 4, x + 2, gh, z, hex("#e4dfd4"), { skip: "-y" });
   if (M.lod <= 1) for (let x = x0 + 8; x < x1 - 4; x += 8) M.box("metal", x - 0.3, 0.6, z - 3.2, x + 0.3, gh - 3, z - 2.8, hex("#202126"));
+  // the entrance at the middle of the lobby: a pair of glass doors in a bronze frame under a lit soffit
+  {
+    const mx = (x0 + x1) / 2;
+    const br = hex("#5a4a32");
+    for (const x of [mx - 4.4, mx + 4]) M.box("metal", x, 0.6, z - 2.6, x + 0.4, 14, z - 2.2, br);
+    M.box("metal", mx - 4.4, 14, z - 2.6, mx + 4.4, 14.6, z - 2.2, br);
+    M.box("metal", mx - 0.15, 0.6, z - 2.6, mx + 0.15, 14, z - 2.3, br);
+    if (M.lod === 0) for (const x of [mx - 1.2, mx + 0.8]) M.box("metal", x, 5, z - 2.3, x + 0.4, 9, z - 2.0, hex("#c8b88a"));
+  }
   M.box("concrete", x0, gh - 3, z - 4, x1, gh, z, trim, { skip: "-z" });
   M.box("metal", x0 + 3, gh - 2.5, z, x1 - 3, gh - 1.5, z + 6, hex("#2a2b30"));
   // the crown: a parapet band, lit edges for a supertall, a mast
@@ -648,13 +687,21 @@ function punchedBlock(c: Ctx, s: "plaster" | "brick", tint: V3, y0: number, y1: 
   const frame: Slot = s === "plaster" ? "concrete" : "metal";
   const fcol = s === "plaster" ? hex("#f4f1ea") : hex("#2a2a30");
   windowRows(M, x0 + 1, x1 - 1, D, levels, fh, r, { w: o.ww, frame, fcol, ac: o.ac });
-  // a column of windows on the +x side (seen at the corners)
+  // windows all round: both sides and the back too (a wall with windows only on the street side read
+  // as a stage flat: "only facades"), a sill under each
   if (M.lod <= 1)
-    for (const y of levels)
-      for (let z = 6; z < D - 8; z += 12) {
-        M.box("glass", x1 + 0.3, y + 3, z, x1 + 0.6, y + fh - 4, z + 5, [r(), 1, 0.6], { skip: "-x-z+z-y+y" });
-        if (M.lod === 0) M.box(frame, x1, y + 2.5, z - 0.5, x1 + 0.8, y + 3, z + 5.5, fcol);
+    for (const y of levels) {
+      for (let z = 6; z < D - 8; z += 12)
+        for (const sx of [1, -1]) {
+          const xw = sx > 0 ? x1 : x0;
+          M.box("glass", sx > 0 ? xw + 0.3 : xw - 0.6, y + 3, z, sx > 0 ? xw + 0.6 : xw - 0.3, y + fh - 4, z + 5, [r(), 1, 0.6], { skip: (sx > 0 ? "-x" : "+x") + "-z+z-y+y" });
+          if (M.lod === 0) M.box(frame, sx > 0 ? xw : xw - 0.8, y + 2.5, z - 0.5, sx > 0 ? xw + 0.8 : xw, y + 3, z + 5.5, fcol);
+        }
+      for (let x = x0 + 4; x < x1 - 8; x += 11) {
+        M.box("glass", x, y + 3, -0.6, x + 6, y + fh - 4, -0.3, [r(), 1, 0.6], { skip: "+z-x+x-y+y" });
+        if (M.lod === 0) M.box(frame, x - 0.5, y + 2.5, -0.8, x + 6.5, y + 3, 0, fcol);
       }
+    }
 }
 
 function apartment(c: Ctx) {

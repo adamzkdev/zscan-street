@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { ACROSS } from "../city/plan";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { maps } from "../real/tex";
 import { BOARDWALKS, CREEK, F, Land, SITES, TRAILS } from "./land";
@@ -162,7 +163,7 @@ function mapTexture(land: Land) {
   dot(SITES.plaza.x, SITES.plaza.z, "YOU ARE HERE", "#f4b728");
   dot(SITES.lookout.x, SITES.lookout.z, "Viewing Key Point", "#fff4d6");
   dot(SITES.camp.x, SITES.camp.z, "Campfire", "#ff7a2a");
-  dot(213, 223, "Sprout Falls", "#7ac0e0");
+  dot(213, 223 + ACROSS, "Sprout Falls", "#7ac0e0");
   dot(SITES.cabin.x, SITES.cabin.z, "Ranger", "#fff4d6");
   dot(SITES.genesis.x, SITES.genesis.z, "Genesis Tree", "#fff4d6");
   g.font = '800 30px "Trebuchet MS", sans-serif';
@@ -480,9 +481,9 @@ export function buildProps(land: Land): Built {
   {
     const P = SITES.plaza;
     const gx = 170.5,
-      gz = 221;
+      gz = 221 + ACROSS;
     const y = at(gx, gz);
-    const yaw = Math.atan2(174.5 - 166, 215.5 - 226);
+    const yaw = Math.atan2(174.5 - 166, 215.5 - 226); // (a direction: the same in any frame)
     const ax = Math.cos(yaw),
       az = -Math.sin(yaw);
     for (const s of [-1, 1]) {
@@ -517,7 +518,7 @@ export function buildProps(land: Land): Built {
   sign(["VIEWING KEY POINT", "VIEW OF THE CITY · ELEV 14 m"], SITES.lookout.x + 2.6, SITES.lookout.z + 3.4, Math.PI * 0.85, 1.9, 0.62, 1.0, 58);
   sign(["SPROUT FALLS", "6 m DROP"], SITES.fallsDeck.x - 2.1, SITES.fallsDeck.z - 1.6, Math.PI * 0.25, 1.7, 0.55, 1.0, 58);
   sign(["RANGER STATION"], SITES.cabin.x - 7.5, SITES.cabin.z + 2.2, -Math.PI / 2, 2.2, 0.5, 1.2, 64);
-  sign(["CAMPGROUND", "NO FIRES OUTSIDE THE RING"], 190.5, 210.8, Math.PI * 0.6, 1.8, 0.55, 1.0, 54);
+  sign(["CAMPGROUND", "NO FIRES OUTSIDE THE RING"], 190.5, 210.8 + ACROSS, Math.PI * 0.6, 1.8, 0.55, 1.0, 54);
   sign(["GENESIS TREE", "THE OLDEST · BLOCK 0 · 28 OCT 2016"], SITES.genesis.x + 3.4, SITES.genesis.z - 3.0, Math.PI * 1.1, 2.2, 0.6, 0.9, 58);
 
   // ---- the Genesis Tree's fence: a low split-rail round the giant ---------------------------------

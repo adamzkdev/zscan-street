@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { toObject } from "../scene/voxel/mesher";
 import { grandPianoReal, type Realizable, withReal } from "./realfurn";
+import { bathtubReal, bistroTableReal, columnReal, exerciseBikeReal, floorLampReal, fridgeReal, kitchenReal, pendantReal, receptionDeskReal, rugReal, sconceReal, toiletReal, treadmillReal, vanityReal } from "./realfurn2";
+import { armchairReal, backBarReal, barCounterReal, bedReal, benchReal, bookshelfReal, chairReal, coffeeTableReal, curtainReal, deskReal, diningTableReal, indoorTreeReal, loungerReal, nightstandReal, plantReal, sofaReal, stoolReal, tvUnitReal, wardrobeReal } from "./realfurn2";
 import { realOn } from "./realvox";
 import { C, E, G, hash, shades, VoxelModel, type Paint } from "../scene/voxel/model";
 
@@ -56,7 +58,7 @@ const m = (w: number, h: number, d: number) => new VoxelModel(w, h, d);
 // ---- seating ------------------------------------------------------------------------------------
 
 /** A sofa `seats` cushions wide: plinth, seat cushions with seams, back cushions, arms, pillows. */
-export function sofa(color: string, seats = 3, pillow = "#e8d8b0") {
+function sofaVox(color: string, seats = 3, pillow = "#e8d8b0") {
   const W = 8 + seats * 9,
     v = m(W, 11, 11);
   const f = fabric(color);
@@ -76,7 +78,7 @@ export function sofa(color: string, seats = 3, pillow = "#e8d8b0") {
   return v;
 }
 
-export function armchair(color: string) {
+function armchairVox(color: string) {
   const v = m(11, 11, 11);
   const f = fabric(color);
   v.box(0, 1, 0, 11, 4, 11, f);
@@ -89,7 +91,7 @@ export function armchair(color: string) {
 }
 
 /** A dining or office chair: four legs, a seat, a back. */
-export function chair(color: string, office = false) {
+function chairVox(color: string, office = false) {
   const v = m(6, 12, 6);
   if (office) {
     v.box(2, 0, 2, 4, 1, 4, black);
@@ -101,7 +103,7 @@ export function chair(color: string, office = false) {
   return v;
 }
 
-export function stool(color: string) {
+function stoolVox(color: string) {
   const v = m(5, 9, 5);
   v.box(2, 0, 2, 3, 8, 3, metal);
   v.box(1, 0, 1, 4, 1, 4, metal);
@@ -111,7 +113,7 @@ export function stool(color: string) {
 
 // ---- tables and storage -------------------------------------------------------------------------
 
-export function coffeeTable() {
+function coffeeTableVox() {
   const v = m(14, 5, 8);
   v.box(0, 4, 0, 14, 5, 8, wood());
   v.box(1, 1, 1, 13, 2, 7, darkWood());
@@ -123,7 +125,7 @@ export function coffeeTable() {
   return v;
 }
 
-export function diningTable(seats = 4) {
+function diningTableVox(seats = 4) {
   const W = seats > 4 ? 22 : 16,
     v = m(W, 9, 10);
   v.box(0, 8, 0, W, 9, 10, wood(4));
@@ -136,7 +138,7 @@ export function diningTable(seats = 4) {
   return v;
 }
 
-export function bookshelf(seed = 1, w = 14) {
+function bookshelfVox(seed = 1, w = 14) {
   const v = m(w, 24, 5);
   v.box(0, 0, 0, w, 24, 5, darkWood(seed));
   const books = ["#b0413e", "#3a6ea5", "#d9a441", "#2f7d5b", "#6b4c9a", "#c76b2d", "#e8e0cf", "#2a2a35"];
@@ -153,7 +155,7 @@ export function bookshelf(seed = 1, w = 14) {
   return v;
 }
 
-export function wardrobe(color = "#d8d0c4") {
+function wardrobeVox(color = "#d8d0c4") {
   const v = m(16, 26, 7);
   v.box(0, 0, 0, 16, 26, 7, C(color));
   v.box(7, 1, 6, 8, 25, 7, C(shadeOf(color, -0.2)));
@@ -162,7 +164,7 @@ export function wardrobe(color = "#d8d0c4") {
   return v;
 }
 
-export function nightstand() {
+function nightstandVox() {
   const v = m(6, 14, 5);
   v.box(0, 0, 0, 6, 6, 5, wood(7));
   v.box(1, 3, 5, 5, 3, 5, darkWood());
@@ -175,7 +177,7 @@ export function nightstand() {
   return v;
 }
 
-export function tvUnit(w = 20) {
+function tvUnitVox(w = 20) {
   const v = m(w, 6, 6);
   v.box(0, 1, 0, w, 6, 6, darkWood(5));
   v.box(1, 2, 6, w - 1, 5, 6, wood(5));
@@ -190,7 +192,7 @@ export function tvUnit(w = 20) {
 }
 
 /** A double bed: headboard with padding, frame, mattress, duvet folded back, pillows. */
-export function bed(color: string, accent = "#e8e2f0") {
+function bedVox(color: string, accent = "#e8e2f0") {
   const v = m(20, 14, 26);
   v.box(0, 0, 0, 20, 4, 26, darkWood(8));
   v.box(0, 0, 0, 20, 14, 2, darkWood(8));
@@ -208,7 +210,7 @@ export function bed(color: string, accent = "#e8e2f0") {
 // ---- kitchen and bathroom -----------------------------------------------------------------------
 
 /** A run of kitchen units `len` metres long: doors and handles, worktop, sink, hob, wall units, hood. */
-export function kitchen(len: number, color: string, top = "#2a2830") {
+function kitchenVox(len: number, color: string, top = "#2a2830") {
   const W = Math.round(len * FINE),
     v = m(W, 28, 8);
   const body = C(color),
@@ -242,7 +244,7 @@ export function kitchen(len: number, color: string, top = "#2a2830") {
   return v;
 }
 
-export function fridge() {
+function fridgeVox() {
   const v = m(9, 23, 8);
   v.box(0, 0, 0, 9, 23, 8, shades(["#c8ccd4", "#c0c4cc"], 1, 4));
   v.box(0, 14, 8, 9, 14, 8, C("#9aa0aa"));
@@ -252,7 +254,7 @@ export function fridge() {
   return v;
 }
 
-export function toilet() {
+function toiletVox() {
   const v = m(5, 10, 8);
   v.box(1, 0, 3, 4, 4, 7, white);
   v.box(0, 4, 2, 5, 5, 8, white);
@@ -264,7 +266,7 @@ export function toilet() {
 }
 
 /** The washbasin on its cabinet, a mirror lit from above. */
-export function vanity(color: string) {
+function vanityVox(color: string) {
   const v = m(12, 26, 6);
   v.box(0, 0, 0, 12, 10, 6, C(color));
   v.box(5, 1, 6, 6, 9, 6, C(shadeOf(color, -0.2)));
@@ -277,7 +279,7 @@ export function vanity(color: string) {
   return v;
 }
 
-export function bathtub() {
+function bathtubVox() {
   const v = m(9, 7, 20);
   v.box(0, 0, 0, 9, 7, 20, white);
   v.clear(1, 2, 1, 8, 7, 19);
@@ -289,7 +291,7 @@ export function bathtub() {
 // ---- plants and decor -----------------------------------------------------------------------------
 
 /** A potted plant: monstera, ficus or a cactus. */
-export function plant(kind: "monstera" | "ficus" | "cactus", seed = 1) {
+function plantVox(kind: "monstera" | "ficus" | "cactus", seed = 1) {
   const v = m(9, kind === "ficus" ? 22 : 15, 9);
   v.box(2, 0, 2, 7, 4, 7, C(kind === "cactus" ? "#c86a3a" : "#2a2630"));
   v.box(2, 4, 2, 7, 4, 7, C("#4a3020"));
@@ -316,7 +318,7 @@ export function plant(kind: "monstera" | "ficus" | "cactus", seed = 1) {
 }
 
 /** A rug: a border and a pattern. */
-export function rug(w: number, d: number, color: string, accent: string) {
+function rugVox(w: number, d: number, color: string, accent: string) {
   const W = Math.round(w * FINE),
     D = Math.round(d * FINE),
     v = m(W, 1, D);
@@ -331,7 +333,7 @@ export function rug(w: number, d: number, color: string, accent: string) {
 }
 
 /** Curtains drawn to one side of a window, falling in folds. */
-export function curtain(color: string, h = 3) {
+function curtainVox(color: string, h = 3) {
   const H = Math.round(h * FINE),
     v = m(10, H, 2);
   for (let x = 0; x < 10; x++) v.box(x, 0, x % 3 === 0 ? 1 : 0, x + 1, H - 1, (x % 3 === 0 ? 1 : 0) + 1, C(x % 3 === 0 ? shadeOf(color, -0.1) : color));
@@ -339,7 +341,7 @@ export function curtain(color: string, h = 3) {
   return v;
 }
 
-export function floorLamp() {
+function floorLampVox() {
   const v = m(5, 20, 5);
   v.box(1, 0, 1, 4, 1, 4, black);
   v.box(2, 1, 2, 3, 16, 3, metal);
@@ -349,7 +351,7 @@ export function floorLamp() {
 }
 
 /** A pendant lamp hanging `drop` metres from the ceiling. */
-export function pendant(drop = 0.9, color = "#ffe2b0") {
+function pendantVox(drop = 0.9, color = "#ffe2b0") {
   const D = Math.round(drop * FINE),
     v = m(5, D, 5);
   v.box(2, 3, 2, 3, D, 3, black);
@@ -359,7 +361,7 @@ export function pendant(drop = 0.9, color = "#ffe2b0") {
 }
 
 /** A wall sconce: a little lit box on a bracket (faces +z, mount on a wall). */
-export function sconce(color = "#ffd8a0") {
+function sconceVox(color = "#ffd8a0") {
   const v = m(3, 4, 3);
   v.box(1, 1, 0, 2, 2, 1, black);
   v.box(0, 0, 1, 3, 4, 3, E(color, 1.4));
@@ -369,7 +371,7 @@ export function sconce(color = "#ffd8a0") {
 // ---- the office ---------------------------------------------------------------------------------------
 
 /** A desk with a keyboard, a mouse and a mug (the monitors are live screens set on top). */
-export function desk(seed = 1) {
+function deskVox(seed = 1) {
   const v = m(19, 9, 10);
   v.box(0, 8, 0, 19, 9, 10, C("#e4e0d8"));
   for (const x of [0, 18]) v.box(x, 0, 1, x + 1, 8, 9, metal);
@@ -569,7 +571,7 @@ export function pin() {
 
 // ---- the gym ------------------------------------------------------------------------------------------------
 
-export function treadmill() {
+function treadmillVox() {
   const v = m(10, 18, 24);
   v.box(0, 0, 4, 10, 2, 24, C("#24222a"));
   v.box(1, 2, 5, 9, 2, 23, C("#3a3842"));
@@ -580,7 +582,7 @@ export function treadmill() {
   return v;
 }
 
-export function exerciseBike() {
+function exerciseBikeVox() {
   const v = m(6, 15, 16);
   v.box(1, 0, 0, 5, 1, 16, C("#24222a"));
   v.box(2, 1, 2, 4, 6, 7, C("#d0303a"));
@@ -618,7 +620,7 @@ export function dumbbellRack() {
 
 // ---- pool deck, bar, lobby ---------------------------------------------------------------------------------
 
-export function lounger(color: string) {
+function loungerVox(color: string) {
   const v = m(8, 9, 24);
   for (const z of [1, 21]) for (const x of [0, 7]) v.box(x, 0, z, x + 1, 3, z + 1, metal);
   v.box(0, 3, 0, 8, 4, 18, white);
@@ -642,7 +644,7 @@ export function umbrella(color: string) {
 }
 
 /** A bar counter `len` metres with a footrail; a lit back bar with bottles stands separately. */
-export function barCounter(len: number, accent: string) {
+function barCounterVox(len: number, accent: string) {
   const W = Math.round(len * FINE),
     v = m(W, 13, 8);
   v.box(0, 0, 0, W, 12, 7, darkWood(10));
@@ -653,7 +655,7 @@ export function barCounter(len: number, accent: string) {
   return v;
 }
 
-export function backBar(len: number) {
+function backBarVox(len: number) {
   const W = Math.round(len * FINE),
     v = m(W, 26, 5);
   v.box(0, 0, 0, W, 26, 5, darkWood(11));
@@ -669,7 +671,7 @@ export function backBar(len: number) {
   return v;
 }
 
-export function receptionDesk() {
+function receptionDeskVox() {
   const v = m(48, 14, 12);
   v.box(0, 0, 0, 48, 13, 11, shades(["#4a3020", "#44302a"], 1, 3));
   v.box(0, 13, 0, 48, 14, 12, C("#ece8e0"));
@@ -696,7 +698,7 @@ export { type Paint };
 // ---- the lobby ------------------------------------------------------------------------------------------
 
 /** A marble column `h` metres tall with a gold collar top and bottom. */
-export function column(h: number) {
+function columnVox(h: number) {
   const H = Math.round(h * FINE),
     v = m(10, H, 10);
   v.box(0, 0, 0, 10, 2, 10, C("#2a2630"));
@@ -764,7 +766,7 @@ export function luggageCart() {
   return v;
 }
 
-export function bistroTable() {
+function bistroTableVox() {
   const v = m(8, 9, 8);
   v.box(0, 8, 0, 8, 9, 8, C("#ece8e0"));
   v.box(3, 1, 3, 5, 8, 5, C("#2a2830"));
@@ -807,7 +809,7 @@ export function parcelLockers(w: number) {
   return v;
 }
 
-export function bench() {
+function benchVox() {
   const v = m(20, 6, 6);
   v.box(0, 4, 0, 20, 6, 6, shades(["#7a5236", "#724c32"], 2, 4));
   for (const x of [1, 17]) v.box(x, 0, 1, x + 2, 4, 5, C("#2a2830"));
@@ -825,7 +827,7 @@ export function kiosk() {
 }
 
 /** An indoor tree in a big square planter, 3–4 m tall. */
-export function indoorTree(seed = 1) {
+function indoorTreeVox(seed = 1) {
   const v = m(20, 46, 20);
   v.box(3, 0, 3, 17, 7, 17, C("#2a2630"));
   v.box(3, 7, 3, 17, 7, 17, C("#4a3020"));
@@ -841,4 +843,106 @@ export function indoorTree(seed = 1) {
     v.box(10 + Math.cos(a) * r, y, 10 + Math.sin(a) * r, 11 + Math.cos(a) * r, y + 1, 11 + Math.sin(a) * r, leaf);
   }
   return v;
+}
+
+// ---- the realistic twins (src/interior/realfurn2.ts): each voxel piece carries its real model ----
+
+export function sofa(color: string, seats = 3, pillow = "#e8d8b0") {
+  return withReal(sofaVox(color, seats, pillow), () => sofaReal(color, seats, pillow));
+}
+export function armchair(color: string) {
+  return withReal(armchairVox(color), () => armchairReal(color));
+}
+export function chair(color: string, office = false) {
+  return withReal(chairVox(color, office), () => chairReal(color, office));
+}
+export function stool(color: string) {
+  return withReal(stoolVox(color), () => stoolReal(color));
+}
+export function bench() {
+  return withReal(benchVox(), () => benchReal());
+}
+export function lounger(color: string) {
+  return withReal(loungerVox(color), () => loungerReal(color));
+}
+export function coffeeTable() {
+  return withReal(coffeeTableVox(), () => coffeeTableReal());
+}
+export function diningTable(seats = 4) {
+  return withReal(diningTableVox(seats), () => diningTableReal(seats));
+}
+export function desk(seed = 1) {
+  return withReal(deskVox(seed), () => deskReal(seed));
+}
+export function bookshelf(seed = 1, w = 14) {
+  return withReal(bookshelfVox(seed, w), () => bookshelfReal(seed, w));
+}
+export function wardrobe(color = "#d8d0c4") {
+  return withReal(wardrobeVox(color), () => wardrobeReal(color));
+}
+export function nightstand() {
+  return withReal(nightstandVox(), () => nightstandReal());
+}
+export function tvUnit(w = 20) {
+  return withReal(tvUnitVox(w), () => tvUnitReal(w));
+}
+export function bed(color: string, accent = "#e8e2f0") {
+  return withReal(bedVox(color, accent), () => bedReal(color, accent));
+}
+export function curtain(color: string, h = 3) {
+  return withReal(curtainVox(color, h), () => curtainReal(color, h));
+}
+export function barCounter(len: number, accent: string) {
+  return withReal(barCounterVox(len, accent), () => barCounterReal(len, accent));
+}
+export function backBar(len: number) {
+  return withReal(backBarVox(len), () => backBarReal(len));
+}
+export function plant(kind: "monstera" | "ficus" | "cactus", seed = 1) {
+  return withReal(plantVox(kind, seed), () => plantReal(kind, seed));
+}
+export function indoorTree(seed = 1) {
+  return withReal(indoorTreeVox(seed), () => indoorTreeReal(seed));
+}
+export function kitchen(len: number, color: string, top = "#2a2830") {
+  return withReal(kitchenVox(len, color, top), () => kitchenReal(len, color, top));
+}
+export function fridge() {
+  return withReal(fridgeVox(), () => fridgeReal());
+}
+export function toilet() {
+  return withReal(toiletVox(), () => toiletReal());
+}
+export function vanity(color: string) {
+  return withReal(vanityVox(color), () => vanityReal(color));
+}
+export function bathtub() {
+  return withReal(bathtubVox(), () => bathtubReal());
+}
+export function receptionDesk() {
+  return withReal(receptionDeskVox(), () => receptionDeskReal());
+}
+export function bistroTable() {
+  return withReal(bistroTableVox(), () => bistroTableReal());
+}
+export function floorLamp() {
+  return withReal(floorLampVox(), () => floorLampReal());
+}
+export function pendant(drop = 0.9, color = "#ffe2b0") {
+  return withReal(pendantVox(drop, color), () => pendantReal(drop, color));
+}
+export function sconce(color = "#ffd8a0") {
+  return withReal(sconceVox(color), () => sconceReal(color));
+}
+export function rug(w: number, d: number, color: string, accent: string) {
+  return withReal(rugVox(w, d, color, accent), () => rugReal(w, d, color, accent));
+}
+export function column(h: number) {
+  return withReal(columnVox(h), () => columnReal(h));
+}
+export function treadmill() {
+  return withReal(treadmillVox(), () => treadmillReal());
+}
+export function exerciseBike() {
+  return withReal(exerciseBikeVox(), () => exerciseBikeReal());
 }

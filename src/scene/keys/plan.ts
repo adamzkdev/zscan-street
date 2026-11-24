@@ -1,4 +1,7 @@
-import { BAY, CURB } from "../city/plan";
+import { ACROSS, BAY, CURB } from "../city/plan";
+
+/** (the town lies ACROSS metres further south than its figures below were first drawn: the Golden Gate's strait) */
+const A = ACROSS;
 
 /**
  * ORCHARD KEYS: the beach town across the Golden Gate. Off the bridge the road runs through the
@@ -10,36 +13,36 @@ import { BAY, CURB } from "../city/plan";
  */
 
 /** The town's box (beaches included; the sea beyond), and the road's centre line off the bridge. */
-export const KEYS = { x0: 56, x1: 366, z0: 228, z1: 540, name: "Orchard Keys" };
+export const KEYS = { x0: 56, x1: 366, z0: 228 + A, z1: 540 + A, name: "Orchard Keys" };
 export const KX = 158;
 
 /** The tunnel under the headland: its centre, its two portals (z), the half width inside, its ceiling. */
-export const KTUNNEL = { x: KX, z0: 228.6, z1: 257, half: 5.6, top: 6.6 };
+export const KTUNNEL = { x: KX, z0: 228.6 + A, z1: 257 + A, half: 5.6, top: 6.6 };
 /** The bridge-to-town corridor: the deck's end, the headland's road, the tunnel. */
-export const corridor = (x: number, z: number) => Math.abs(x - KX) < KTUNNEL.half + 1 && z > 225.5 && z < KTUNNEL.z1 + 0.5;
+export const corridor = (x: number, z: number) => Math.abs(x - KX) < KTUNNEL.half + 1 && z > 225.5 + A && z < KTUNNEL.z1 + 0.5;
 
 /** The streets (centre lines and widths), the beach and the pier. */
 export const KGRID = {
   xs: [110, 158, 206, 254, 302],
   xw: [10, 14, 10, 10, 10],
-  zs: [268, 320, 366, 404],
+  zs: [268 + A, 320 + A, 366 + A, 404 + A],
   zw: [10, 10, 10, 14],
   /** The town's paved edge: west, east (to the beaches), north (the foot of the hill), south (the promenade's sea side). */
   west: 96,
   east: 324,
-  north: 258,
-  south: 416,
+  north: 258 + A,
+  south: 416 + A,
 };
 /**
  * The beach: where the sand meets the water on each side (z on the south, x on the west and east).
  * The south beach is the big one (the promenade at z 416, the water's edge 76 m out); the west and
  * east ones about 25 m of sand. The sea floor shelves gently (wade out, then swim) down to KBED.
  */
-export const KSHORE = { south: 492, west: 70, east: 352, north: 232 };
+export const KSHORE = { south: 492 + A, west: 70, east: 352, north: 232 + A };
 /** The sea floor off the town's beaches (deeper than the bay's: room to swim). */
 export const KBED = -4.4;
 /** The pier off the beach, at the end of Vesta Street. */
-export const KPIER = { x: 206, z0: 414, z1: 536, half: 2.6, y: CURB + 0.9 };
+export const KPIER = { x: 206, z0: 414 + A, z1: 536 + A, half: 2.6, y: CURB + 0.9 };
 
 export interface KStreet {
   axis: "x" | "z";
@@ -106,9 +109,9 @@ export function kLots(): KLot[] {
     [259, 297],
   ];
   const rows = [
-    [273, 315],
-    [325, 361],
-    [371, 397],
+    [273 + A, 315 + A],
+    [325 + A, 361 + A],
+    [371 + A, 397 + A],
   ];
   const inner = (c: number, r: number) => ({ x0: cols[c][0] + M, x1: cols[c][1] - M, z0: rows[r][0] + M, z1: rows[r][1] - M });
   /** Lots along an east or west street front: split along z. */
@@ -215,7 +218,7 @@ export function kLots(): KLot[] {
 const centre = (b: { x0: number; x1: number; z0: number; z1: number }) => ({ x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2 });
 
 /** Sapling Park: the block between Vesta Street and Poseidon Avenue, Commitment Row and Anchor Avenue. */
-export const KPARK = { x0: 211, x1: 249, z0: 325, z1: 361 };
+export const KPARK = { x0: 211, x1: 249, z0: 325 + A, z1: 361 + A };
 
 /** The yaw that turns a model (its front facing +z) to face this way. */
 export const faceYaw = (f: KLot["face"]) => (f === "s" ? 0 : f === "e" ? Math.PI / 2 : f === "n" ? Math.PI : -Math.PI / 2);
@@ -236,7 +239,7 @@ export function shoreDist(x: number, z: number) {
   const S = KSHORE;
   // (north: the headland's woods go on over the town's back between x 94 and 236)
   const north = x > 92 && x < 238 ? 99 : z - S.north;
-  const d = Math.min(z < 300 ? north : 99, S.south - z, x - S.west, S.east - x);
+  const d = Math.min(z < 300 + A ? north : 99, S.south - z, x - S.west, S.east - x);
   // rounded corners
   const cs = 18;
   const cx = x < S.west + cs ? S.west + cs - x : x > S.east - cs ? x - (S.east - cs) : 0;
@@ -287,13 +290,13 @@ export function beachSpots(): BeachSpot[] {
     x1 = KGRID.east - 6;
   const clear = (x: number, z: number, r: number) => Math.abs(x - KPIER.x) > KPIER.half + 3 + r && !out.some((o) => o.kind !== "swim" && o.kind !== "palm" && Math.hypot(o.x - x, o.z - z) < r + (o.kind === "court" ? 9 : o.kind === "bar" ? 8 : o.kind === "guard" ? 4 : o.kind === "set" ? 3.6 : 1.8));
   // the bars and the courts first, the towers by the water
-  out.push({ kind: "bar", x: 132, z: 424, yaw: Math.PI, seed: 1 }, { kind: "bar", x: 288, z: 424, yaw: Math.PI, seed: 2 });
-  out.push({ kind: "court", x: 168, z: 446, yaw: 0, seed: 1 }, { kind: "court", x: 252, z: 446, yaw: 0, seed: 2 });
+  out.push({ kind: "bar", x: 132, z: 424 + A, yaw: Math.PI, seed: 1 }, { kind: "bar", x: 288, z: 424 + A, yaw: Math.PI, seed: 2 });
+  out.push({ kind: "court", x: 168, z: 446 + A, yaw: 0, seed: 1 }, { kind: "court", x: 252, z: 446 + A, yaw: 0, seed: 2 });
   for (const x of [112, 186, 236, 306]) out.push({ kind: "guard", x, z: S - 22, yaw: 0, seed: x });
   // palms along the foot of the promenade
-  for (let x = x0 + 4; x < x1; x += 17) if (Math.abs(x - KPIER.x) > 6 && Math.abs(x - 132) > 9 && Math.abs(x - 288) > 9) out.push({ kind: "palm", x: x + (R() - 0.5) * 3, z: 419.5 + R() * 1.5, yaw: R() * 6.28, seed: Math.floor(R() * 4) });
+  for (let x = x0 + 4; x < x1; x += 17) if (Math.abs(x - KPIER.x) > 6 && Math.abs(x - 132) > 9 && Math.abs(x - 288) > 9) out.push({ kind: "palm", x: x + (R() - 0.5) * 3, z: 419.5 + A + R() * 1.5, yaw: R() * 6.28, seed: Math.floor(R() * 4) });
   // umbrellas on the dry sand: a loose grid
-  for (let z = 431; z < S - 30; z += 8.5)
+  for (let z = 431 + A; z < S - 30; z += 8.5)
     for (let x = x0 + 2; x < x1 - 2; x += 9) {
       if (R() < 0.18) continue;
       const px = x + (R() - 0.5) * 4,
@@ -317,8 +320,8 @@ export function beachSpots(): BeachSpot[] {
     [KGRID.west - 12, -1],
     [KGRID.east + 13, 1],
   ] as const)
-    for (let z = 292; z < 404; z += 11) {
-      if (Math.abs(z - 330) < 7) continue;
+    for (let z = 292 + A; z < 404 + A; z += 11) {
+      if (Math.abs(z - 330 - A) < 7) continue;
       const pz = z + (R() - 0.5) * 3;
       if (R() < 0.55) out.push({ kind: "set", x: bx + (R() - 0.5) * 3, z: pz, yaw: face * Math.PI * 0.5 + Math.PI, seed: Math.floor(R() * 1000) });
       else out.push({ kind: "towel", x: bx + face * 4 + (R() - 0.5) * 3, z: pz, yaw: face * Math.PI * 0.5, seed: Math.floor(R() * 1000) });
@@ -329,6 +332,6 @@ export function beachSpots(): BeachSpot[] {
       pz = S + 4 + R() * 22;
     if (Math.abs(px - KPIER.x) > KPIER.half + 4) out.push({ kind: "swim", x: px, z: pz, yaw: R() * 6.28, seed: k });
   }
-  for (let k = 0; k < 6; k++) out.push({ kind: "swim", x: k < 3 ? KSHORE.west - 6 - R() * 8 : KSHORE.east + 6 + R() * 8, z: 300 + R() * 90, yaw: R() * 6.28, seed: 100 + k });
+  for (let k = 0; k < 6; k++) out.push({ kind: "swim", x: k < 3 ? KSHORE.west - 6 - R() * 8 : KSHORE.east + 6 + R() * 8, z: 300 + A + R() * 90, yaw: R() * 6.28, seed: 100 + k });
   return out;
 }

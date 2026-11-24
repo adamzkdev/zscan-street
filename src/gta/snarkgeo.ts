@@ -215,6 +215,23 @@ const radiusAt = (c: Float32Array, a: number) => {
   return c[i % n] * (1 - t) + c[(i + 1) % n] * t;
 };
 
+// ---- level of detail ---------------------------------------------------------------------------------------
+
+/**
+ * The far version (people3d.ts draws a figure past ~20 m with it): the same shapes with a third of the
+ * rings and segments, the small things (pleats, the seam, drawstrings, the pocket's panel) left out —
+ * about a fifth of the triangles. Set while a builder runs (`lowDetail`).
+ */
+let LOD = 0;
+export function lowDetail<T>(fn: () => T): T {
+  LOD = 1;
+  try {
+    return fn();
+  } finally {
+    LOD = 0;
+  }
+}
+
 // ---- the head -----------------------------------------------------------------------------------------
 
 export interface HeadIn {
@@ -256,8 +273,8 @@ export function headGeo(o: HeadIn) {
   const halfW = (radiusAt(C, 0) + radiusAt(C, Math.PI)) * 0.5 * v;
   const rz = Math.max(0.16, halfW * 0.98);
   const n = 2.15;
-  const SEG = 36,
-    RING = 26;
+  const SEG = LOD ? 14 : 36,
+    RING = LOD ? 10 : 26;
   const hatY = o.hatEnd >= 0 ? (neck + 1 - (o.hatEnd + 1)) * v : Infinity;
   const recess = Math.min(0.12, rz * 0.32);
   const uvp: [number, number] = [0, 0];
@@ -286,10 +303,10 @@ export function headGeo(o: HeadIn) {
       // the hood gathers at the neck behind (soft pleats), a seam runs over its crown to the back
       const back = 1 - smooth(-0.3, 0.2, uz);
       const gather = smooth(-0.1, -0.7, uy) * back;
-      const pleat = 0.007 * Math.sin(th * 11) * gather;
+      const pleat = LOD ? 0 : 0.007 * Math.sin(th * 11) * gather;
       let dth = th - Math.PI * 2;
       dth = Math.atan2(Math.sin(dth), Math.cos(dth));
-      const seam = 0.005 * Math.exp(-((dth / 0.07) ** 2)) * smooth(-0.6, 0.4, uy) * back;
+      const seam = LOD ? 0 : 0.005 * Math.exp(-((dth / 0.07) ** 2)) * smooth(-0.6, 0.4, uy) * back;
       const ol = Math.hypot(x - X0, y - Y0, z) || 1;
       x += ((x - X0) / ol) * (pleat + seam);
       y += ((y - Y0) / ol) * (pleat + seam);
@@ -341,8 +358,8 @@ export function headGeo(o: HeadIn) {
     const w = halfW * 0.82,
       L = rz * 0.5;
     const s0 = B.n;
-    const SEGV = 12,
-      ROWV = 4;
+    const SEGV = LOD ? 5 : 12,
+      ROWV = LOD ? 1 : 4;
     for (let t = 0; t <= 1; t++)
       for (let r = 0; r <= ROWV; r++)
         for (let s = 0; s <= SEGV; s++) {
@@ -394,7 +411,7 @@ export function bodyGeo(o: BodyIn) {
   const { H, halfW: A } = o;
   const D = A * 0.62;
   const n = 2.7;
-  const SEG = 26;
+  const SEG = LOD ? 10 : 26;
   // rings from the hem up to the neck: half width, half depth, fabric
   const prof: [number, number, number, number][] = [];
   const push = (y: number, a: number, d: number, mat: number) => prof.push([y, a, d, mat]);
@@ -404,9 +421,10 @@ export function bodyGeo(o: BodyIn) {
   push(0.065, 0.97, 0.95, MAT.jersey);
   push(0.1, 1.0, 0.98, MAT.jersey);
   const shoulder = Math.max(0.12, H - 0.16);
-  for (let y = 0.14; y < shoulder; y += 0.05) push(y, 1.0, 1.0, MAT.jersey);
-  for (let k = 0; k <= 6; k++) {
-    const t = k / 6;
+  for (let y = 0.14; y < shoulder; y += LOD ? 0.15 : 0.05) push(y, 1.0, 1.0, MAT.jersey);
+  const SH = LOD ? 3 : 6;
+  for (let k = 0; k <= SH; k++) {
+    const t = k / SH;
     const y = shoulder + (H - shoulder) * Math.sin((t * Math.PI) / 2);
     const a = 0.46 + 0.54 * Math.cos((t * Math.PI) / 2) ** 0.8;
     const d = 0.55 + 0.45 * Math.cos((t * Math.PI) / 2);
@@ -456,7 +474,7 @@ export function bodyGeo(o: BodyIn) {
     return D * d * Math.pow(Math.max(0, 1 - Math.pow(ux, n)), 1 / n);
   };
   // the kangaroo pocket: a panel on the belly, its slanted openings darker
-  {
+  if (!LOD) {
     const y0 = 0.07,
       y1 = Math.min(H * 0.48, 0.07 + 0.14);
     const s0 = B.n;
@@ -485,7 +503,7 @@ export function bodyGeo(o: BodyIn) {
     B.ao = 1;
   }
   // the drawstrings from the collar, their aglets
-  {
+  if (!LOD) {
     const white = new THREE.Color(0.9, 0.9, 0.88);
     const tip = new THREE.Color(0.12, 0.12, 0.13);
     for (const side of [-1, 1]) {
@@ -510,8 +528,8 @@ export function bodyGeo(o: BodyIn) {
   // the collar round the neck (the hood's seam): a rolled rib
   {
     const s0 = B.n;
-    const SG = 20,
-      RG = 4;
+    const SG = LOD ? 8 : 20,
+      RG = LOD ? 2 : 4;
     const c = o.cloth.clone().multiplyScalar(0.9);
     for (let r = 0; r <= RG; r++) {
       const b = (r / RG) * Math.PI * 2;
@@ -535,6 +553,11 @@ export function bodyGeo(o: BodyIn) {
  */
 function tube(B: GeoB, prof: [number, number, number, number, number][], seg: number, o: { x?: number; z?: number; n?: number } = {}) {
   const n = o.n ?? 2.2;
+  if (LOD) {
+    seg = Math.max(5, Math.round(seg * 0.42));
+    // (every other ring of the profile, its ends kept)
+    prof = prof.filter((_, i) => i === 0 || i === prof.length - 1 || i % 2 === 0);
+  }
   const start = B.n;
   const c = new THREE.Color();
   let len = 0;
@@ -684,7 +707,7 @@ export function partGeo(kind: PartKind): THREE.BufferGeometry {
     }
     case "shoe": {
       // the sneaker's upper: lofted from the heel to the round toe
-      const SEG = 12;
+      const SEG = LOD ? 5 : 12;
       const secs: [number, number, number][] = [];
       // [z, half width, top height] (y from the sole's top at −0.0525)
       for (const [z, w, h] of [
@@ -719,7 +742,7 @@ export function partGeo(kind: PartKind): THREE.BufferGeometry {
     }
     case "sole": {
       // the sole (rubber, all round), the toe's bumper, the laces and a stripe on each side, in the sole's colour
-      const SEG = 18;
+      const SEG = LOD ? 10 : 18;
       const outline: [number, number][] = [];
       for (let s = 0; s < SEG; s++) {
         const a = (s / SEG) * Math.PI * 2;

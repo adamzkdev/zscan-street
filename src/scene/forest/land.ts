@@ -1,4 +1,8 @@
-import { BAY, CURB } from "../city/plan";
+import { ACROSS, BAY, CURB } from "../city/plan";
+
+/** (the headland lies ACROSS metres further south than its figures below were first drawn: the Golden Gate's strait) */
+const A = ACROSS;
+const down = (pts: [number, number][]) => pts.map(([x, z]) => [x, z + A] as [number, number]);
 
 /**
  * Shielded Woods: the headland across the Golden Gate as a redwood forest (Muir Woods on the Marin
@@ -11,7 +15,7 @@ import { BAY, CURB } from "../city/plan";
 export const WATER = BAY.water;
 export const BX = BAY.bridge.x;
 /** The forest's extent (world metres). */
-export const F = { x0: 94, x1: 236, z0: 178, z1: 236 };
+export const F = { x0: 94, x1: 236, z0: 178 + A, z1: 236 + A };
 
 // ---- noise --------------------------------------------------------------------------------------
 const hash2 = (x: number, z: number, s = 0) => {
@@ -44,7 +48,7 @@ export const rnd = (seed: number) => {
 // ---- the plan -------------------------------------------------------------------------------------
 type P2 = [number, number];
 /** The shore line: z of the water's edge along x (the land is south of it). */
-const SHORE: P2[] = [
+const SHORE: P2[] = down([
   [92, 240],
   [98, 229],
   [106, 216],
@@ -61,7 +65,7 @@ const SHORE: P2[] = [
   [212, 184],
   [224, 186],
   [238, 188],
-];
+]);
 export function shoreZ(x: number) {
   let z = SHORE[SHORE.length - 1][1];
   for (let i = 1; i < SHORE.length; i++)
@@ -77,7 +81,7 @@ export function shoreZ(x: number) {
 }
 
 /** Sprout Creek: from the spring on the ridge over the falls, down the gorge to the bay (x, z, bed). */
-export const CREEK: [number, number, number][] = [
+export const CREEK: [number, number, number][] = ([
   [217.4, 231.2, 13.6],
   [216, 228.4, 13.2],
   [214, 225.6, 12.8],
@@ -92,29 +96,29 @@ export const CREEK: [number, number, number][] = [
   [203.4, 196.4, 0.6],
   [202.4, 191.4, -0.9],
   [201.8, 185, -2.4],
-];
+] as [number, number, number][]).map(([x, z, b]) => [x, z + A, b] as [number, number, number]);
 /** Where the water drops: the brink and the plunge pool. */
-export const FALLS = { top: [213.6, 224.6, 12.6 + 0.3] as const, foot: [213.2, 223.2, 6.6 + 0.3] as const, pool: [212.4, 221.8] as const };
+export const FALLS = { top: [213.6, 224.6 + A, 12.6 + 0.3] as const, foot: [213.2, 223.2 + A, 6.6 + 0.3] as const, pool: [212.4, 221.8 + A] as const };
 
 export const SITES = {
   /** The trailhead plaza by the bridge's landing, east of the road. */
-  plaza: { x: 168, z: 225 },
+  plaza: { x: 168, z: 225 + A },
   /** Viewing Key Point: the lookout deck on the bluff, facing the city and the bridge. */
-  lookout: { x: 183.5, z: 197.5 },
+  lookout: { x: 183.5, z: 197.5 + A },
   /** The campfire clearing. */
-  camp: { x: 197, z: 214 },
+  camp: { x: 197, z: 214 + A },
   /** The ranger cabin's pad. */
-  cabin: { x: 224, z: 207 },
+  cabin: { x: 224, z: 207 + A },
   /** The overlook at the plunge pool. */
-  fallsDeck: { x: 208.6, z: 220.2 },
+  fallsDeck: { x: 208.6, z: 220.2 + A },
   /** The Genesis Tree, the oldest giant, in its grove west of the road. */
-  genesis: { x: 124, z: 223 },
+  genesis: { x: 124, z: 223 + A },
   /** The beach of round stones at the creek's mouth. */
-  cove: { x: 203, z: 189 },
+  cove: { x: 203, z: 189 + A },
 };
 
 /** The trails (polylines): the east loop, its spurs, the west trail to the Genesis Tree. */
-export const TRAILS: P2[][] = [
+export const TRAILS: P2[][] = ([
   // trailhead to Viewing Key Point
   [
     [166, 226],
@@ -179,10 +183,10 @@ export const TRAILS: P2[][] = [
     [168, 231],
     [174, 233.5],
   ],
-];
+] as P2[][]).map(down);
 
 /** Raised boardwalks: across the gorge (twice), along the falls pool, into the Genesis grove. */
-export const BOARDWALKS: P2[][] = [
+export const BOARDWALKS: P2[][] = ([
   [
     [201.5, 212.1],
     [211.2, 209.6],
@@ -201,7 +205,7 @@ export const BOARDWALKS: P2[][] = [
     [124, 220],
     [120, 221.6],
   ],
-];
+] as P2[][]).map(down);
 
 // ---- geometry helpers -------------------------------------------------------------------------------
 /** Distance from (x, z) to segment a–b, and the position along it (0..1). */
@@ -256,8 +260,10 @@ export const NX = Math.round((F.x1 - F.x0) / RES) + 1;
 export const NZ = Math.round((F.z1 - F.z0) / RES) + 1;
 
 /** The ground before the trails and sites are cut into it. */
-function raw(x: number, z: number) {
-  const d = z - shoreZ(x);
+function raw(x: number, zw: number) {
+  const d = zw - shoreZ(x);
+  // (the hills' own shapes in the figures they were drawn in)
+  const z = zw - A;
   const inland = 3 + 4.2 * fbm(x * 0.045, z * 0.05, 3);
   let ridge = 0;
   if (x > 160) ridge = Math.max(0, z - 200) * 0.3 * smooth(160, 176, x);
@@ -280,7 +286,7 @@ export class Land {
   readonly roadY: number;
 
   constructor(deckAt: (z: number) => number) {
-    const roadEnd = 226;
+    const roadEnd = 226 + A;
     this.roadY = CURB + 0.02;
     for (let j = 0; j < NZ; j++)
       for (let i = 0; i < NX; i++) {
@@ -297,8 +303,8 @@ export class Land {
         if (pz < 1.6) h = this.roadY - 0.05 + (h - this.roadY + 0.05) * smooth(1, 1.6, pz);
         // the road off the bridge into the tunnel, and the hill over the tunnel
         const ax = Math.abs(x - BX);
-        if (z > 229) h = Math.max(h, (9.2 + (z - 229) * 0.35) * smooth(15, 8.5, ax) + h * (1 - smooth(15, 8.5, ax)));
-        if (ax < 7.5 && z > 211 && z <= 229.2) h = z < roadEnd ? Math.min(h, deckAt(z) - 0.6) : this.roadY - 0.05;
+        if (z > 229 + A) h = Math.max(h, (9.2 + (z - 229 - A) * 0.35) * smooth(15, 8.5, ax) + h * (1 - smooth(15, 8.5, ax)));
+        if (ax < 7.5 && z > 211 + A && z <= 229.2 + A) h = z < roadEnd ? Math.min(h, deckAt(z) - 0.6) : this.roadY - 0.05;
         // the clearings, flattened to their centre
         for (const [s, r0, r1] of [
           [SITES.camp, 4.5, 7.5],

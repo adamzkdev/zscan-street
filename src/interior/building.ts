@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { box, glowMat, makeScene, room, std, textPlane, wall } from "./kit";
-import { armchair, bookshelf, chair, coffeeMachine, coffeeTable, desk, diningTable, floorLamp, fridge, pendant, place, plant, rug, sofa, stool } from "./furniture";
+import { armchair, backBar, barCounter, bench, bookshelf, chair, coffeeMachine, coffeeTable, desk, diningTable, floorLamp, fridge, nightstand, pendant, place, plant, rug, sconce, sofa, stool } from "./furniture";
 import type { Interior, InteriorContext, Rect } from "./types";
 
 /**
@@ -36,6 +36,81 @@ export function kindOf(type: string, seed: number): BuildingKind {
   if (type === "apartment" || type === "house") return "home";
   if (type === "shophouse") return seed % 3 === 0 ? "cafe" : "shop";
   return "office";
+}
+
+/**
+ * The street seen through a shop window (512 × 256): the sky, the facades across the road with
+ * their windows (lit at night), a lamp post, a parked car, the kerb and the pavement — drawn then
+ * blurred, the way a street reads through glass from inside.
+ */
+function streetThrough(seed: number, night: boolean) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 256;
+  const g = c.getContext("2d")!;
+  const r = rnd(seed * 131 + 7);
+  const sky = g.createLinearGradient(0, 0, 0, 140);
+  sky.addColorStop(0, night ? "#0c1424" : "#9ec4e4");
+  sky.addColorStop(1, night ? "#1c2638" : "#dce8f0");
+  g.fillStyle = sky;
+  g.fillRect(0, 0, 512, 256);
+  g.filter = "blur(2.5px)";
+  // the facades across the road
+  const fac = night ? ["#2a2630", "#33303a", "#262a34", "#3a3236"] : ["#c8b8a4", "#a8aeb6", "#d6cbb8", "#8e7a6a", "#b4a08a", "#e0dcd2"];
+  for (let x = -10; x < 520; ) {
+    const w = 70 + r() * 90,
+      top = 10 + r() * 70;
+    g.fillStyle = fac[Math.floor(r() * fac.length)];
+    g.fillRect(x, top, w, 170 - top);
+    for (let wy = top + 10; wy < 150; wy += 18)
+      for (let wx = x + 8; wx < x + w - 10; wx += 16) {
+        g.fillStyle = night ? (r() < 0.45 ? "#ffd590" : "#141820") : r() < 0.2 ? "#5a6a7a" : "#3c4a5a";
+        g.fillRect(wx, wy, 9, 11);
+      }
+    // a shop sign at the foot of it
+    g.fillStyle = ["#e8463a", "#f4b728", "#3fa8ff", "#43d17a", "#2a2830"][Math.floor(r() * 5)];
+    g.fillRect(x + 6, 150, w - 12, 9);
+    x += w + 2;
+  }
+  // the road, the kerb, the pavement right outside
+  g.fillStyle = night ? "#15161a" : "#4a4c50";
+  g.fillRect(0, 170, 512, 44);
+  g.fillStyle = night ? "#2a2a2e" : "#a8a49c";
+  g.fillRect(0, 212, 512, 6);
+  g.fillStyle = night ? "#22222a" : "#8e8a84";
+  g.fillRect(0, 218, 512, 38);
+  // a parked car, a lamp post
+  const cx = 60 + r() * 330;
+  g.fillStyle = ["#c8202e", "#2a4a7a", "#e8e4dc", "#1a1a1e", "#3a6a4a"][Math.floor(r() * 5)];
+  g.beginPath();
+  g.roundRect(cx, 176, 120, 26, 8);
+  g.roundRect(cx + 24, 160, 66, 22, 8);
+  g.fill();
+  g.fillStyle = night ? "#3a4660" : "#9ab4c8";
+  g.fillRect(cx + 30, 164, 54, 13);
+  g.fillStyle = "#101014";
+  for (const wx of [cx + 22, cx + 98]) {
+    g.beginPath();
+    g.arc(wx, 202, 10, 0, Math.PI * 2);
+    g.fill();
+  }
+  const lx = (cx + 220) % 480 + 16;
+  g.fillStyle = "#26282c";
+  g.fillRect(lx, 70, 5, 150);
+  g.fillStyle = night ? "#ffe0a0" : "#d8d8d0";
+  g.fillRect(lx - 8, 66, 20, 6);
+  g.filter = "none";
+  if (night) {
+    const glow = g.createRadialGradient(lx + 2, 74, 2, lx + 2, 74, 60);
+    glow.addColorStop(0, "rgba(255,210,140,0.5)");
+    glow.addColorStop(1, "rgba(255,210,140,0)");
+    g.fillStyle = glow;
+    g.fillRect(0, 0, 512, 256);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
 }
 
 const rnd = (seed: number) => {
@@ -104,12 +179,22 @@ export function buildBuilding(ctx: InteriorContext): Interior {
     const floorM = mat(pick(P.floor), v.kind === "office" ? 0.2 : 0.6, 0.05);
     const wallM = mat(pick(P.wall), 0.85);
     rects.push(...room(shell, { x0: -W, z0: -D, x1: W, z1: 0, h: H, floor: floorM, wall: wallM, ceiling: mat(P.ceil, 0.9), door: [-1.3, 1.3] }));
-    // the shop front: glass either side of the door, the street's light through it
-    const glassM = new THREE.MeshBasicMaterial({ color: ctx.theme === "night" ? "#1c2a44" : "#cfe4f2", toneMapped: false });
-    own.push(glassM);
+    // the shop front: glass either side of the door, and through it the street (the pavement, a
+    // parked car, the facades across the road under the sky, softly out of focus), not a white sheet
+    const streetT = streetThrough(v.seed, ctx.theme === "night");
+    const glassM = new THREE.MeshBasicMaterial({ map: streetT, color: "#e8eef2" });
+    const frameM = mat("#24262c", 0.4, 0.6);
+    own.push(glassM, streetT);
     for (const sx of [-1, 1]) {
-      const g = box(shell, W - 2.2, H - 1.4, 0.06, glassM, sx * (W / 2 + 0.9), 0.6, -0.12);
+      const gw = W - 2.2,
+        gh = H - 1.4,
+        gx = sx * (W / 2 + 0.9);
+      const g = box(shell, gw, gh, 0.06, glassM, gx, 0.6, -0.12);
       g.name = "window";
+      // the frame and its mullions
+      box(shell, gw + 0.1, 0.08, 0.12, frameM, gx, 0.56, -0.16);
+      box(shell, gw + 0.1, 0.08, 0.12, frameM, gx, 0.6 + gh - 0.04, -0.16);
+      for (const k of [-0.5, 0, 0.5]) box(shell, 0.06, gh, 0.12, frameM, gx + k * gw, 0.6, -0.16);
     }
     for (const l of lights) {
       l.color.set(P.light);
@@ -137,19 +222,62 @@ export function buildBuilding(ctx: InteriorContext): Interior {
     };
     const goods = ["#e8463a", "#f4b728", "#3fa8ff", "#43d17a", "#ff8a1f", "#b07bff", "#f2f0ea", "#ff5aa8"];
     if (v.kind === "shop") {
-      // aisles of shelves with goods, the fridges along the left wall, the counter by the door
-      const shelfM = mat("#d8dce2", 0.4, 0.4);
+      // aisles of gondola shelving (a base, a pegboard spine, four shelves each side, a price rail)
+      // filled shelf by shelf with packs, cans and bottles; the fridges along the left wall; the
+      // counter by the door
+      const shelfM = mat("#e4e6ea", 0.35, 0.5);
+      const spineM = mat("#c8ccd2", 0.6, 0.2);
+      const railM = mat("#f4b728", 0.5, 0.1);
+      const packGeo = new THREE.BoxGeometry(1, 1, 1);
+      const canGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
+      const bottleGeo = new THREE.CylinderGeometry(0.32, 0.5, 1, 10);
+      // (every product of a kind in one instanced draw, its colour per instance: hundreds of them)
+      const stock: { geo: THREE.BufferGeometry; m: THREE.Matrix4[]; c: THREE.Color[]; mat: THREE.MeshStandardMaterial }[] = [
+        { geo: packGeo, m: [], c: [], mat: new THREE.MeshStandardMaterial({ roughness: 0.55 }) },
+        { geo: canGeo, m: [], c: [], mat: new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0.5 }) },
+        { geo: bottleGeo, m: [], c: [], mat: new THREE.MeshStandardMaterial({ roughness: 0.15, metalness: 0.05 }) },
+      ];
+      own.push(packGeo, canGeo, bottleGeo, ...stock.map((q) => q.mat));
+      const q = new THREE.Quaternion(),
+        sc = new THREE.Vector3(),
+        ps = new THREE.Vector3();
       for (const x of [-3.6, 0, 3.6]) {
         if (x === 0 && r() < 0.3) continue;
         const z0 = -4.2,
-          len = 6.4;
-        box(fit, 0.9, 1.6, len, shelfM, x, 0, z0 - len / 2);
+          len = 6.4,
+          zc = z0 - len / 2;
+        box(fit, 0.95, 0.12, len, spineM, x, 0, zc);
+        box(fit, 0.06, 1.75, len, spineM, x, 0.12, zc);
         solid(x - 0.5, z0 - len, x + 0.5, z0);
-        for (let k = 0; k < 18; k++) {
-          const gm = mat(pick(goods), 0.6);
-          const g = box(fit, 0.22 + r() * 0.12, 0.26 + r() * 0.12, 0.2, gm, x + (r() < 0.5 ? -0.5 : 0.5), 0.3 + Math.floor(r() * 3) * 0.48, z0 - 0.3 - r() * (len - 0.6));
-          g.name = "goods";
-        }
+        for (const side of [-1, 1])
+          for (let shelf = 0; shelf < 4; shelf++) {
+            const y = 0.14 + shelf * 0.42;
+            box(fit, 0.42, 0.025, len, shelfM, x + side * 0.24, y, zc);
+            box(fit, 0.012, 0.035, len, railM, x + side * 0.455, y, zc);
+            // a run of one product, then the next (shops stock in facings)
+            for (let zz = z0 - 0.15; zz > z0 - len + 0.15; ) {
+              const kind = r(),
+                n = 2 + Math.floor(r() * 4),
+                col = new THREE.Color(pick(goods));
+              const w = kind < 0.4 ? 0.14 + r() * 0.08 : 0.07 + r() * 0.03,
+                h = kind < 0.4 ? 0.2 + r() * 0.12 : kind < 0.7 ? 0.12 : 0.24 + r() * 0.06;
+              const st = stock[kind < 0.4 ? 0 : kind < 0.7 ? 1 : 2];
+              for (let i = 0; i < n && zz > z0 - len + 0.12; i++) {
+                st.m.push(new THREE.Matrix4().compose(ps.set(x + side * 0.27, y + 0.025 + h / 2, zz - w / 2), q, sc.set(kind < 0.4 ? 0.3 : w, h, w)));
+                st.c.push(col);
+                zz -= w + 0.012;
+              }
+              zz -= 0.03;
+            }
+          }
+      }
+      for (const st of stock) {
+        const im = new THREE.InstancedMesh(st.geo, st.mat, st.m.length);
+        st.m.forEach((mm, i) => (im.setMatrixAt(i, mm), im.setColorAt(i, st.c[i])));
+        im.castShadow = true;
+        im.name = "goods";
+        im.userData.noBreak = true;
+        fit.add(im);
       }
       // fridges: lit glass doors
       const fridgeM = glowMat("#dff6ff", 1.1);
@@ -160,8 +288,7 @@ export function buildBuilding(ctx: InteriorContext): Interior {
       }
       solid(-W, -D, -W + 0.8, -1.4);
       // the counter, its till, a coffee machine
-      const counterM = mat("#2a2c33", 0.4, 0.2);
-      box(fit, 3.2, 1.05, 0.8, counterM, W - 2.4, 0, -2.2);
+      place(fit, "shop-counter", () => barCounter(3.2, "#f4b728"), W - 2.4, 0, -2.2, 0);
       solid(W - 4.1, -2.7, W - 0.7, -1.7);
       place(fit, "coffee-machine", coffeeMachine, W - 1.4, 1.05, -2.2, Math.PI);
       const till = box(fit, 0.45, 0.32, 0.4, mat("#16161c", 0.3, 0.6), W - 3.2, 1.05, -2.2);
@@ -210,18 +337,25 @@ export function buildBuilding(ctx: InteriorContext): Interior {
       }
       solid(-5, -D, -2, -D + 2.8);
       place(fit, "rug-home", () => rug(2, 5, "#7a3a2f", "#e8d8b0"), 1, 0.01, -6, 0);
+      // a bench by the mailboxes, a lamp on a little table, wall lights, a second plant
+      put("bench", bench, -W + 1.1, -6.8, Math.PI / 2, 1.4, 0.5);
+      put("nightstand", nightstand, 6.4, -9.2, -Math.PI / 2, 0.5, 0.45);
+      put("monstera-h" + (v.seed & 3), () => plant("monstera", v.seed & 3), -W + 0.8, -D + 3.6, 0, 0.8, 0.8);
+      for (const z of [-3.5, -8.5]) {
+        place(shell, "sconce", () => sconce(), W - 0.21, 2.2, z, -Math.PI / 2);
+        place(shell, "sconce", () => sconce(), -W + 0.21, 2.2, z, Math.PI / 2);
+      }
     } else {
       // a café or a bar: the counter along the back, tables and chairs, pendants over them
       const bar = v.kind === "bar";
-      const counterM = mat(bar ? "#1a1418" : "#5c4030", 0.35, 0.1);
-      box(fit, W * 2 - 3, 1.1, 0.8, counterM, 0, 0, -D + 2.2);
+      place(fit, "bar-counter-" + (bar ? "r" : "w") + Math.round(W * 2 - 3), () => barCounter(W * 2 - 3, bar ? "#ff3e8a" : "#f4b728"), 0, 0, -D + 2.2, 0);
       solid(-W + 1.5, -D + 1.7, W - 1.5, -D + 2.7);
+      // the back bar: a cabinet, mirrored shelves of bottles (replaces the plain shelves and the
+      // bottle blocks below in the realistic pass)
+      place(fit, "back-bar-" + Math.round(W * 2 - 2), () => backBar(W * 2 - 2), 0, 0, -D + 0.25, 0);
       for (let x = -W + 2.5; x < W - 2; x += 1.3) put("stool-" + (bar ? "r" : "b"), () => stool(bar ? "#c2304a" : "#2f4a3e"), x, -D + 3.2, 0, 0.4, 0.4);
       // bottles on the back wall (glowing in a bar)
-      const shelfM = mat("#2a2024", 0.5);
-      box(shell, W * 2 - 2, 0.06, 0.3, shelfM, 0, 1.6, -D + 0.2);
-      box(shell, W * 2 - 2, 0.06, 0.3, shelfM, 0, 2.2, -D + 0.2);
-      for (let k = 0; k < 26; k++) {
+      for (let k = 0; k < 0; k++) {
         const bm = bar ? glowMat(pick(goods), 0.9) : mat(pick(goods), 0.3);
         own.push(bm);
         const b = box(fit, 0.1, 0.32, 0.1, bm, -W + 1.2 + r() * (W * 2 - 2.4), r() < 0.5 ? 1.66 : 2.26, -D + 0.25);

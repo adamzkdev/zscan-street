@@ -1,5 +1,6 @@
 // node shots/_keyslook.mjs [URL] [OUT]: looks round the Golden Gate, the tunnel and Orchard Keys (src/scene/keys) in the game's
 // camera; SPOTS='[[x,z,heading,"foot"|"car"|"air", pitch?]]' to choose, THEME=day|night
+// (positions south of the bay moved with the Golden Gate: ACROSS = 380 m, src/scene/city/plan.ts)
 import puppeteer from "puppeteer-core";
 const THEME = process.env.THEME ?? "day";
 const [URL = `http://localhost:3061/?debug&gta=1192&theme=${THEME}&solo`, OUT = "shots/gta/keys/look"] = process.argv.slice(2);
@@ -28,11 +29,11 @@ await p.waitForFunction(() => !street.keys || street.keys.done, { timeout: 12000
 await sleep(1500);
 const SPOTS = process.env.SPOTS ? JSON.parse(process.env.SPOTS) : [
   [158, 150, Math.PI, "foot"],
-  [158, 222, Math.PI, "foot"],
-  [158, 262, Math.PI, "foot"],
-  [158, 300, Math.PI, "foot"],
-  [206, 400, -Math.PI / 2, "foot"],
-  [190, 300, 0, "air"],
+  [158, 602, Math.PI, "foot"],
+  [158, 642, Math.PI, "foot"],
+  [158, 680, Math.PI, "foot"],
+  [206, 780, -Math.PI / 2, "foot"],
+  [190, 680, 0, "air"],
 ];
 let n = 0;
 for (const [x, z, h, mode, pitch] of SPOTS) {

@@ -172,6 +172,7 @@ export const PLACE_STYLE: Record<Interior["key"], { icon: string; color: string 
   cemetery: { icon: "vault", color: "#7dff9a" },
   gamehouse: { icon: "cards", color: "#ff6b35" },
   nu7tower: { icon: "tower", color: "#b07bff" },
+  home: { icon: "home", color: "#3ecf8e" },
 };
 
 /** The strip's readings: icon, label and accent colour (the colour also heads the unfolded section). */
@@ -288,7 +289,7 @@ export class Hud {
         <button data-act="cam" title="Camera and places">${icon("camera")}</button>
         <div class="campop hud hidden"></div>
         <i></i>
-        <button data-act="walk" class="walk" title="Walk the street (first person)">${pix("walker")}</button>
+        <button data-act="walk" class="walk" title="Play ZStreet: the game's menu">${pix("walker")}</button>
       </nav>
       <aside class="panel hud"></aside>
       <section class="sdetails hud hidden"></section>

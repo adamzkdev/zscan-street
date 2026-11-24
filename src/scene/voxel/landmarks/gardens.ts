@@ -34,17 +34,19 @@ export function gardens(seed: number, o: LandmarkOpts): Built {
   m.box(0, 0, 0, W, 1, D, lawn);
   m.box(0, 0, D - 9, W, 1, D, shades(["#d0cabe", "#c8c2b6", "#d6d0c4"], 2, seed));
   for (let x = 0; x < W; x += 8) m.box(x, 0, D - 9, x + 1, 1, D, C("#a8a294"));
-  // a meandering path through the grove
-  for (let x = 70; x < 210; x++) {
-    const zc = Math.round(36 + Math.sin(x * 0.05) * 10);
-    m.box(x, 0, zc - 2, x + 1, 1, zc + 3, C("#c8b89a"));
-    m.set(x, 0, zc - 3, C("#8a7a60"));
-    m.set(x, 0, zc + 3, C("#8a7a60"));
-  }
-  // flower beds in waves along the promenade
+  // (the lot is 51 voxels deep: the domes, the grove and the pond all keep behind the flower bed at
+  // D − 14, the entrances open on to the promenade through it — nothing past the lot's front)
+  const f = { cx: 40, cz: 19, rx: 34, rz: 17, h: 34 };
+  const cf = { cx: W - 40, cz: 19, rx: 32, rz: 17, h: 50 };
+  const entrances: [number, number][] = [
+    [f.cx, Math.round(f.cz + f.rz)],
+    [cf.cx - 18, Math.round(cf.cz + cf.rz * 0.8)],
+  ];
+  // flower beds in waves along the promenade (open in front of the domes' doors)
   const flowerCols = ["#e05a8a", "#f0c040", "#f4f4f4", "#c060e0", "#ff7a4a", "#ff4a6a"];
   for (let x = 4; x < W - 4; x++)
     for (let z = D - 14; z < D - 10; z++) {
+      if (entrances.some(([ex]) => Math.abs(x + 0.5 - ex) < 7)) continue;
       const band = Math.floor((x + Math.sin(z) * 3) / 9) % flowerCols.length;
       if (hash(x >> 1, z >> 1, seed) > 0.25) m.set(x, 1, z, C(flowerCols[band]));
       else m.set(x, 1, z, C("#3d7a3a"));
@@ -81,7 +83,6 @@ export function gardens(seed: number, o: LandmarkOpts): Built {
   };
 
   // Flower Dome (left): terraces of flowers, olive trees, a lawn of tulips
-  const f = { cx: 40, cz: 30, rx: 34, rz: 24, h: 34 };
   for (let ring = 0; ring < 3; ring++) {
     const rr = 0.85 - ring * 0.25;
     for (let z = Math.floor(f.cz - f.rz * rr); z < f.cz + f.rz * rr; z++)
@@ -93,20 +94,19 @@ export function gardens(seed: number, o: LandmarkOpts): Built {
       }
   }
   for (const [tx, tz] of [
-    [24, 26],
-    [56, 24],
-    [40, 18],
+    [24, 16],
+    [56, 15],
+    [40, 11],
   ])
     leafTree(m, tx, 6, tz, k, seed + tx, 6, shades(["#7a8a5a", "#6a7a4a", "#8a9a6a"], 1, tx));
-  leafTree(m, 40, 6, 32, k, seed + 99, 8, shades(["#4a8a3a", "#3f7f34"], 1, 3));
+  leafTree(m, 40, 6, 20, k, seed + 99, 8, shades(["#4a8a3a", "#3f7f34"], 1, 3));
   dome(f.cx, f.cz, f.rx, f.rz, f.h);
   points.flowerDome = [f.cx, 1, f.cz];
 
   // Cloud Forest (right): a green mountain with a waterfall and a ring walk inside a taller dome
-  const cf = { cx: W - 40, cz: 30, rx: 32, rz: 24, h: 50 };
   const mtnH = 44;
   for (let y = 1; y < mtnH; y++) {
-    const rr = 13 - (y / mtnH) * 8;
+    const rr = 11 - (y / mtnH) * 7;
     for (let z = Math.floor(cf.cz - rr); z <= cf.cz + rr; z++)
       for (let x = Math.floor(cf.cx - rr); x <= cf.cx + rr; x++) {
         const d = Math.hypot(x + 0.5 - cf.cx, z + 0.5 - cf.cz);
@@ -116,21 +116,21 @@ export function gardens(seed: number, o: LandmarkOpts): Built {
       }
   }
   // the waterfall on its front face into a pool, mist at the bottom
-  const wfz = Math.round(cf.cz + 9);
+  const wfz = Math.round(cf.cz + 8);
   for (let y = 2; y < mtnH - 6; y++) {
-    const rr = 13 - (y / mtnH) * 8;
+    const rr = 11 - (y / mtnH) * 7;
     const z = Math.round(cf.cz + rr * 0.92);
     m.box(cf.cx - 2, y, z, cf.cx + 2, y + 1, z + 1, (x) => (hash(x, y, 3) > 0.3 ? E("#e8f8ff", 1.05) : E("#9ad8ff", 1.0)));
   }
-  m.cylinder(cf.cx, 1, wfz + 6, 6, 1, G("#3a9ac8"));
-  for (let i = 0; i < 30; i++) m.set(cf.cx - 4 + r() * 8, 2 + r() * 3, wfz + 3 + r() * 6, E("#e8f8ff", 0.8));
-  points.waterfall = [cf.cx, mtnH - 6, Math.round(cf.cz + 13 - ((mtnH - 6) / mtnH) * 8)];
+  m.cylinder(cf.cx, 1, wfz + 4, 4, 1, G("#3a9ac8"));
+  for (let i = 0; i < 30; i++) m.set(cf.cx - 3 + r() * 6, 2 + r() * 3, wfz + 1 + r() * 5, E("#e8f8ff", 0.8));
+  points.waterfall = [cf.cx, mtnH - 6, Math.round(cf.cz + 11 - ((mtnH - 6) / mtnH) * 7)];
   // cloud walk: a ring bridge round the mountain, lit underneath
   for (let i = 0; i < 220; i++) {
     const a = (i / 220) * Math.PI * 2;
     for (let w = 0; w < 3; w++) {
-      const x = cf.cx + Math.cos(a) * (14 + w),
-        z = cf.cz + Math.sin(a) * (14 + w);
+      const x = cf.cx + Math.cos(a) * (11 + w),
+        z = cf.cz + Math.sin(a) * (11 + w);
       m.set(x, 26, z, C("#5a5664"));
       m.set(x, 25, z, w === 1 ? E("#3ef0d0", 1.6) : C("#3a3742"));
       if (w === 2) m.set(x, 27, z, G("#d8ecf4"));
@@ -142,13 +142,14 @@ export function gardens(seed: number, o: LandmarkOpts): Built {
   // ---- the Supertree grove
   const trees: [number, number, number, number, string][] = [
     // x, z, height, crown radius, night colour
-    [92, 22, 54, 12, "#c060ff"],
-    [118, 44, 40, 9, "#3ef0d0"],
-    [140, 20, 75, 15, "#ff4ab8"],
-    [164, 44, 46, 10, "#c060ff"],
-    [186, 22, 66, 13, "#3ef0d0"],
-    [104, 54, 30, 7, "#ff4ab8"],
-    [176, 56, 34, 8, "#c060ff"],
+    // (every crown inside the lot: from z = cr + 1 at the back to the flower bed in front)
+    [92, 14, 54, 12, "#c060ff"],
+    [112, 26, 40, 9, "#3ef0d0"],
+    [140, 16, 75, 15, "#ff4ab8"],
+    [168, 26, 46, 10, "#c060ff"],
+    [186, 15, 66, 13, "#3ef0d0"],
+    [98, 32, 30, 7, "#ff4ab8"],
+    [182, 32, 34, 8, "#c060ff"],
   ];
   const trunkC = C("#3e2236"),
     lattice = C("#6e2a5e"),
@@ -242,17 +243,18 @@ export function gardens(seed: number, o: LandmarkOpts): Built {
   points.skyway1 = [sx1, sy + 1, b[1] + 0.5];
 
   // ---- dragonfly pond in front of the grove, with bronze dragonfly statues
+  // (between the grove and the name sign's plinth)
   const pcx = 140,
-    pcz = 46,
-    prx = 26,
-    prz = 7;
+    pcz = 27,
+    prx = 18,
+    prz = 4;
   for (let z = pcz - prz - 1; z <= pcz + prz + 1; z++)
     for (let x = pcx - prx - 1; x <= pcx + prx + 1; x++) {
       const e = ((x - pcx) / prx) ** 2 + ((z - pcz) / prz) ** 2;
       if (e <= 1) m.set(x, 0, z, hash(x >> 1, z >> 1, 2) > 0.85 ? G("#5ab8d8") : G("#2e7aa0"));
       else if (e < 1.25) m.set(x, 1, z, C("#b8b0a0"));
     }
-  for (let i = 0; i < 9; i++) m.set(pcx - prx + 4 + r() * prx * 1.8, 1, pcz - 4 + r() * 8, C(i % 2 ? "#3d8a4a" : "#f4c8d8"));
+  for (let i = 0; i < 9; i++) m.set(pcx - prx + 4 + r() * prx * 1.6, 1, pcz - 2 + r() * 4, C(i % 2 ? "#3d8a4a" : "#f4c8d8"));
   const dragonfly = (x: number, z: number, h: number, dir: number) => {
     const bronze = C("#8a6a3a"),
       wing = G("#a8d8e0");
@@ -276,32 +278,28 @@ export function gardens(seed: number, o: LandmarkOpts): Built {
 
   // ---- lawn life: trees, palms, benches, lamps along the promenade
   for (const [x, z] of [
-    [78, 50],
-    [204, 52],
-    [124, 10],
-    [160, 10],
-    [80, 8],
-    [200, 8],
+    [82, 34],
+    [80, 6],
+    [116, 6],
+    [162, 6],
   ])
     leafTree(m, x, 1, z, k, seed + x * 3, 6);
-  for (const x of [6, 74, 208, W - 8]) palm(m, x, 1, D - 16, k, seed + x, 6 + r() * 2);
+  for (const x of [6, 74, 214, W - 8]) palm(m, x, 1, D - 12, k, seed + x, 6 + r() * 2);
   for (let x = 20; x < W - 20; x += 36) bench(m, x, 1, D - 8, k);
   for (let x = 12; x < W; x += 44) {
     const p = lampPost(m, x, 1, D - 3, k, "#e8d0ff");
     if (x > 60 && x < W - 60) lights.push([p[0], p[1], p[2], "#e8d0ff"]);
   }
-  // dome entrances: glass porches with gold frames
-  for (const [ex, ez] of [
-    [f.cx, Math.round(f.cz + f.rz)],
-    [cf.cx - 18, Math.round(cf.cz + cf.rz * 0.8)],
-  ]) {
+  // dome entrances: glass porches with gold frames, a paved apron out to the promenade
+  for (const [ex, ez] of entrances) {
+    m.box(ex - 6, 0, ez + 4, ex + 6, 1, D - 9, shades(["#d0cabe", "#c8c2b6", "#d6d0c4"], 2, seed + ex));
     m.box(ex - 6, 1, ez - 2, ex + 6, 12, ez + 4, G("#cfe6ee"));
     m.box(ex - 7, 12, ez - 2, ex + 7, 13, ez + 5, C("#eef0f2"));
     m.box(ex - 3, 1, ez + 3, ex + 3, 10, ez + 4, E("#fff0d0", 1.1));
     m.box(ex - 7, 11, ez + 4, ex + 7, 12, ez + 5, E("#f4b728", 1.6));
   }
   lights.push([140, 50, 30, "#c060ff"]);
-  lights.push([cf.cx, 20, cf.cz + 16, "#3ef0d0"]);
+  lights.push([cf.cx, 20, cf.cz + 12, "#3ef0d0"]);
   lights.push([f.cx, 14, f.cz + 12, "#ffd8f0"]);
 
   const signs: SignSpot[] = [

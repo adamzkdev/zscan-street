@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { box, bodyShape, CHROME, cyl, GLASS, GLASS_CLEAR, Kit, LAMP, LAMPS, paint, profile, rbox, T, TRIM, wheel, WHEEL, wheelGeometry, type Slot } from "./carkit";
+import { box, bodyShape, CHROME, cyl, GLASS, GLASS_CLEAR, GLASS_TINT, Kit, LAMP, LAMPS, paint, profile, rbox, T, TRIM, wheel, WHEEL, wheelGeometry, type Slot } from "./carkit";
 
 /**
  * The street's vehicles, realistic (no more voxels): every car is a body of rounded panels — a tub
@@ -170,7 +170,6 @@ function buildCar(kind: Exclude<CarKind, "truck">, o: CarStyle): Built {
   if (d.form !== "open") {
     const Wc = W - 0.1;
     const cb = 0.09;
-    k.add(cabSlot, profile(cabinProfile(d, cb), Wc, cb, 3), undefined, true, 0.5);
     const yb = d.belt + 0.03,
       yt = top - cb - 0.09;
     const [r0, r1] = d.roof;
@@ -200,6 +199,66 @@ function buildCar(kind: Exclude<CarKind, "truck">, o: CarStyle): Built {
       const g = profile(pane, 0.012, 0, 1);
       for (const side of [-1, 1]) k.add("glass", g.clone().translate(0, 0, side * (Wc / 2 + 0.005)));
     }
+    // ---- the cabin, hollow (the driver shows through the tinted glass): its two sides with the
+    // windows cut out, a dark lining inside them, the roof and its headliner, the pillars round the
+    // windscreen and the rear window, a bulkhead behind the seats; the dashboard, the wheel, the seats
+    {
+      const outline = cabinProfile(d, 0).map(([x, y]) => new THREE.Vector2(x, y));
+      const wall = (t: number) => {
+        const sh = new THREE.Shape(outline);
+        for (const pane of panes) sh.holes.push(new THREE.Path(pane.map(([x, y]) => new THREE.Vector2(x, y))));
+        const g = new THREE.ExtrudeGeometry(sh, { depth: t, bevelEnabled: false, curveSegments: 4 });
+        return g.translate(0, 0, -t / 2);
+      };
+      const tw = 0.05;
+      const sideWall = wall(tw);
+      for (const side of [-1, 1]) k.add(cabSlot, sideWall.clone().translate(0, 0, side * (Wc / 2 - tw / 2)), undefined, true, 0.5);
+      const lining = wall(0.012);
+      for (const side of [-1, 1]) k.add("trim", lining.clone().translate(0, 0, side * (Wc / 2 - tw - 0.008)), T.interior);
+      // the roof (crowned a little) and the headliner under it
+      const [q0, q1] = d.roof;
+      const H = d.H;
+      const roofPts: [number, number][] = [
+        [q1 - 0.05, H - 0.07],
+        [q1, H - 0.012],
+        [(q0 + q1) / 2, H + 0.016],
+        [q0, H - 0.012],
+        [q0 + 0.05, H - 0.07],
+      ];
+      k.add(cabSlot, profile(roofPts, Wc, 0.025, 3), undefined, true, 0.5);
+      k.add("trim", box(q0 - q1 - 0.04, 0.012, Wc - 0.12, (q0 + q1) / 2, H - 0.08, 0), T.interior);
+      // the pillars beside the windscreen and the rear window (the panes stop short of the sides)
+      const pillar = (x0: number, y0: number, x1: number, y1: number) => {
+        const nx = -(y1 - y0),
+          ny = x1 - x0;
+        const l = Math.hypot(nx, ny) || 1;
+        const t = 0.05;
+        const pts: [number, number][] = [
+          [x0, y0],
+          [x1, y1],
+          [x1 - (nx / l) * t * Math.sign(x1 - x0 || 1), y1 - (ny / l) * t * Math.sign(x1 - x0 || 1)],
+          [x0 - (nx / l) * t * Math.sign(x1 - x0 || 1), y0 - (ny / l) * t * Math.sign(x1 - x0 || 1)],
+        ];
+        const g = profile(pts, 0.16, 0, 1);
+        for (const side of [-1, 1]) k.add(cabSlot, g.clone().translate(0, 0, side * (Wc / 2 - 0.08)), undefined, true, 0.5);
+      };
+      pillar(d.cowl + 0.02, d.belt - 0.04, q0, H - 0.012);
+      pillar(d.deck - 0.02, d.belt - 0.04, q1, H - 0.012);
+      // inside: a dark floor at the belt, the dashboard and its glow, the wheel, the seats' backs, a bulkhead
+      const rearX = d.form === "van" ? xf(yb) - 1.1 : xr(yb) + 0.08;
+      k.add("trim", box(d.cowl - rearX, 0.02, Wc - 0.12, (d.cowl + rearX) / 2, d.belt - 0.03, 0), T.interior);
+      k.add("trim", rbox(0.42, 0.16, Wc - 0.16, 0.05, d.cowl - 0.18, d.belt + 0.04, 0), T.plastic);
+      k.add("lamps", box(0.01, 0.025, 0.36, d.cowl - 0.39, d.belt + 0.09, -Wc * 0.22), new THREE.Color(0.25, 0.55, 0.7));
+      k.add("trim", new THREE.TorusGeometry(0.17, 0.022, 6, 18).rotateY(Math.PI / 2).rotateZ(-0.45).translate(d.cowl - 0.42, d.belt + 0.16, -Wc * 0.22), T.black, false);
+      const sc = new THREE.Color(o.seats ?? "#2a2624");
+      const seatX = d.cowl - 0.95;
+      for (const z of [-Wc * 0.22, Wc * 0.22]) {
+        k.add("trim", rbox(0.12, 0.42, 0.44, 0.05, seatX, d.belt + 0.12, z), sc, false);
+        k.add("trim", rbox(0.1, 0.15, 0.24, 0.04, seatX - 0.02, d.belt + 0.42, z), sc, false);
+      }
+      if (rearX < seatX - 0.7) k.add("trim", rbox(0.12, 0.34, Wc - 0.24, 0.05, rearX + 0.18, d.belt + 0.1, 0), sc, false);
+      k.add("trim", box(0.02, H - d.belt - 0.08, Wc - 0.1, rearX, (H + d.belt) / 2 - 0.04, 0), T.liner);
+    }
     // the black seal round the side glass, the chrome line under it
     k.add("trim", box(xf(yb) - xr(yb) + 0.1, 0.025, Wc + 0.016, (xf(yb) + xr(yb)) / 2, yb - 0.02, 0), T.black);
     k.add("chrome", box(xf(yb) - xr(yb), 0.012, Wc + 0.02, (xf(yb) + xr(yb)) / 2, yb - 0.045, 0));
@@ -223,11 +282,9 @@ function buildCar(kind: Exclude<CarKind, "truck">, o: CarStyle): Built {
       return profile(pts, Wc - 2 * (cb + inset), 0, 1);
     };
     k.add("glass", slopePane(d.cowl + 0.02, d.belt - cb + 0.02, r0 + 0.07, top - cb - 0.07, 0.04));
-    if (d.form !== "van" && d.form !== "wagon") k.add("glass", slopePane(r1 - 0.04, top - cb - 0.08, d.deck + 0.03, d.belt - cb + 0.03, 0.06));
-    else {
-      // the tailgate's window, upright
-      k.add("glass", box(0.012, top - d.belt - 0.32, Wc - 0.42, -L + 0.012, (top + d.belt) / 2 - 0.04, 0));
-    }
+    // the rear window along the cabin's back (a wagon's and a van's upright tailgate too: the old
+    // pane stood at the tail, behind the hollow cabin's end, sticking out above the body)
+    k.add("glass", slopePane(r1 - 0.04, top - cb - 0.08, d.deck + 0.03, d.belt - cb + 0.03, 0.06));
     // wipers
     k.add("trim", box(0.02, 0.02, 0.55, d.cowl - 0.02, d.belt + 0.02, -0.25), T.black);
     k.add("trim", box(0.02, 0.02, 0.55, d.cowl - 0.02, d.belt + 0.02, 0.32), T.black);
@@ -326,7 +383,11 @@ function buildCar(kind: Exclude<CarKind, "truck">, o: CarStyle): Built {
   }
   if (d.form === "van") {
     // the livery band along the side (the accent), the roof's light units
-    if (o.accent) for (const z of [-1, 1]) k.add("accent", box(L * 2 - 0.5, 0.18, 0.008, -0.1, d.belt + 0.15, z * (W / 2 + 0.004)), undefined, false);
+    // (on the cargo box's side wall, leaning with it, and stopping short of the cab's window: it ran on
+    // across the glass and out past the windscreen once the cabin was hollow)
+    const bx1 = d.cowl - 1.05,
+      bx0 = -L + 0.25;
+    if (o.accent) for (const z of [-1, 1]) k.add("accent", box(bx1 - bx0, 0.18, 0.008, (bx0 + bx1) / 2, d.belt + 0.15, z * ((W - 0.1) / 2 + 0.006)), undefined, true);
   }
   const shape = bodyShape({ half: W / 2, len: d.L, plan: d.plan, belt: d.belt, top, tumble: d.tumble, clear: d.clear });
   const geos = k.build(shape);
@@ -427,6 +488,8 @@ function slotMaterial(slot: Slot, o: CarStyle, kind: CarKind): THREE.Material {
     case "accent":
       return paint(o.accent ?? "#111216", kind === "police" ? "solid" : "metal");
     case "glass":
+      // (dark and opaque by default — a truck's cab is solid, and far off nobody sees in; the game
+      // opens the cabins of the cars round you to their tinted see-through glass: `cabinOpen`)
       return GLASS;
     case "clear":
       return GLASS_CLEAR;
@@ -452,7 +515,9 @@ export interface CarOpts extends CarStyle {
  * named "wheel" in the group, `userData.wheel = { r, front }`). Geometry and materials shared.
  */
 export function carObject(kind: CarKind, o: CarOpts = {}): THREE.Group {
-  const key = `${kind}|${JSON.stringify(o)}`;
+  // (the shape does not depend on the paint nor its finish — only the materials do: one geometry for
+  // every colour of a kind, so the parked cars and the traffic share it and can be instanced)
+  const key = `${kind}|${JSON.stringify({ ...o, paint: undefined, finish: undefined })}`;
   let b = cache.get(key);
   if (!b) {
     b = kind === "truck" ? buildTruck(o.livery ?? "#5a3a8a", o.label ?? "proof") : buildCar(kind, o);
@@ -495,6 +560,26 @@ export function spinWheels(g: THREE.Object3D, metres: number) {
       c.children[0].rotation.z -= metres / w.r;
     }
 }
+
+/**
+ * A car's cabin seen into (its glass tinted and see-through: the hollow cabin and whoever drives show)
+ * or not (dark opaque glass, no blending, no sorting): the game opens only the cars near you.
+ */
+export function cabinOpen(g: THREE.Object3D, open: boolean) {
+  const rc = g.userData.realCar as { kind?: string } | undefined;
+  if (!rc || rc.kind === "truck") return;
+  let glass = glassOf.get(g);
+  if (glass === undefined) {
+    let found: THREE.Mesh | null = null;
+    g.traverse((o) => {
+      if (!found && (o as THREE.Mesh).isMesh && o.userData.kind === "glass") found = o as THREE.Mesh;
+    });
+    glassOf.set(g, (glass = found));
+  }
+  if (glass) glass.material = open ? GLASS_TINT : GLASS;
+}
+/** Each car's glass mesh, found once (not in userData: a clone would copy it as JSON). */
+const glassOf = new WeakMap<THREE.Object3D, THREE.Mesh | null>();
 
 /** The wheel pivots of a vehicle (for the game's steering). */
 export function wheelsOf(g: THREE.Object3D) {

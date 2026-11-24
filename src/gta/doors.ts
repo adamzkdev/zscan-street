@@ -23,6 +23,8 @@ export interface DoorSpot {
   y: number;
   /** Clear pavement in front of it (m), when known: a grand entrance's carpet fits in it. */
   room?: number;
+  /** Draw a door here (a wall with no entrance of its own); off: the building's own entrance is the door. */
+  drawn?: boolean;
 }
 
 /**
@@ -58,7 +60,7 @@ const GRAND: Record<string, string> = {
 };
 /** A grand entrance's two rope lines (door frame: `half` across, from `from` to `to` out in front), or null. */
 export function ropes(spot: DoorSpot): { half: number; from: number; to: number } | null {
-  if (!GRAND[spot.key] || spot.bare) return null;
+  if (!GRAND[spot.key] || spot.bare || !spot.drawn) return null;
   const len = Math.min(4.2, (spot.room ?? 3) - 0.5);
   if (len < 2.4) return null;
   const Wd = spot.wall !== false ? 3.2 : 3.6;
@@ -210,6 +212,22 @@ class Door {
     g.position.set(spot.x, spot.y, spot.z);
     // its +z is the way out; the wall's face just behind z = 0
     g.rotation.y = Math.atan2(spot.fx, spot.fz);
+    // the realistic city draws its own entrances (a shop's door in its glazing, an apartment's lobby,
+    // a monument's portal): nothing is stuck on over them — only the soft ring where E takes you in
+    // (and the threshold's collision line, GtaMode.shutIn). `drawn` keeps the old door for a wall
+    // that has none of its own.
+    if (!spot.drawn) {
+      this.signMat = new THREE.MeshBasicMaterial();
+      const rg = new THREE.RingGeometry(0.5, 0.62, 48);
+      this.own.push(rg);
+      this.ring = new THREE.Mesh(rg, RING_MAT);
+      this.ring.rotation.x = -Math.PI / 2;
+      this.ring.position.set(0, 0.04, 1.2);
+      this.ring.renderOrder = 2;
+      g.add(this.ring);
+      g.traverse((o) => (o.userData.noField = true));
+      return;
+    }
     const box = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z = 0) => {
       const geo = new THREE.BoxGeometry(w, h, d);
       this.own.push(geo);

@@ -1,4 +1,5 @@
 // node shots/_gtalook.mjs [TAG]: the city at street level, the game's camera, the same spots by day and by night (the look's before/after); fps at each spot
+// (positions south of the bay moved with the Golden Gate: ACROSS = 380 m, src/scene/city/plan.ts)
 import puppeteer from "puppeteer-core";
 const [TAG = "now"] = process.argv.slice(2);
 const OUT = `shots/gta/look/${TAG}`;
@@ -14,7 +15,7 @@ const SPOTS = [
   ["southbank", -110, 99, Math.PI / 2, -0.05],
   ["midtown", 150, -117.5, Math.PI / 2, -0.03],
   ["uptown", 20, -152, Math.PI / 2, -0.03],
-  ["keys", 166, 300, Math.PI, -0.05],
+  ["keys", 166, 680, Math.PI, -0.05],
   ["facade", 20, -150, 0, 0.16],
   ["tower", 210, 40, 0, 0.22],
 ];

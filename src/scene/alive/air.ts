@@ -42,14 +42,36 @@ export class Fleet {
     if ((model as THREE.Object3D).isObject3D) {
       const o = model as THREE.Object3D;
       o.updateMatrixWorld(true);
+      // (its meshes merged by material: a realistic boat is a dozen meshes, a dozen draws a copy-set
+      // each frame — and a dozen more in the shadow map — where three or four will do)
+      const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
       o.traverse((c) => {
         const m = c as THREE.Mesh;
-        if (m.isMesh) pairs.push([m.geometry.clone().applyMatrix4(m.matrixWorld), m.material as THREE.Material]);
+        if (!m.isMesh || Array.isArray(m.material)) return;
+        const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
+        const l = byMat.get(m.material as THREE.Material);
+        if (l) l.push(g);
+        else byMat.set(m.material as THREE.Material, [g]);
       });
+      for (const [mat, gs] of byMat) {
+        const merged = gs.length > 1 ? mergeable(gs) : gs[0];
+        if (merged) pairs.push([merged, mat]);
+        else for (const g of gs) pairs.push([g, mat]);
+      }
     } else for (const [kind, geo] of Object.entries(meshModel(model as VoxelModel)) as [keyof typeof MATERIALS, THREE.BufferGeometry][]) pairs.push([geo, MATERIALS[kind]]);
+    let r = 0;
+    for (const [geo] of pairs) {
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      const bs = geo.boundingSphere!;
+      r = Math.max(r, bs.center.length() + bs.radius);
+    }
+    this.radius = r * scale;
     for (const [geo, mat] of pairs) {
       const im = new THREE.InstancedMesh(geo, mat, count);
-      im.frustumCulled = false;
+      // (culled as a whole by the sphere round its shown copies, made again at each commit: the boats
+      // on the bay are not drawn while you look up Wall Street)
+      im.frustumCulled = true;
+      im.boundingSphere = this.sphere;
       im.castShadow = !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial;
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       for (let i = 0; i < count; i++) im.setMatrixAt(i, _hidden);
@@ -69,11 +91,41 @@ export class Fleet {
     this.m[i].copy(_hidden);
   }
   commit() {
+    // the sphere round the copies shown (hidden ones are scaled to nothing)
+    const b = this.box.makeEmpty();
+    for (let i = 0; i < this.count; i++) {
+      const e = this.m[i].elements;
+      if (e[0] === 0 && e[1] === 0 && e[2] === 0) continue;
+      b.expandByPoint(this.pt.set(e[12], e[13], e[14]));
+    }
+    if (b.isEmpty()) this.sphere.set(this.pt.set(0, -1e5, 0), 0);
+    else {
+      b.getBoundingSphere(this.sphere);
+      this.sphere.radius += this.radius * 1.5;
+    }
     for (const im of this.meshes) {
       for (let i = 0; i < this.count; i++) im.setMatrixAt(i, this.m[i]);
       im.instanceMatrix.needsUpdate = true;
     }
   }
+  private radius = 0;
+  private sphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+  private box = new THREE.Box3();
+  private pt = new THREE.Vector3();
+}
+
+/** Geometries merged when their attributes agree (else null: drawn apart). */
+function mergeable(gs: THREE.BufferGeometry[]) {
+  const key = (g: THREE.BufferGeometry) => Object.keys(g.attributes).sort().join() + (g.index ? "|i" : "|n");
+  const k0 = key(gs[0]);
+  if (!gs.every((g) => key(g) === k0)) {
+    // (indexed and not: all to non-indexed, then they agree on that much)
+    const flat = gs.map((g) => (g.index ? g.toNonIndexed() : g));
+    const k1 = Object.keys(flat[0].attributes).sort().join();
+    if (!flat.every((g) => Object.keys(g.attributes).sort().join() === k1)) return null;
+    return mergeGeometries(flat, false);
+  }
+  return mergeGeometries(gs, false);
 }
 
 /** Heading of a direction (dx, dz) for a model whose front is +x. */

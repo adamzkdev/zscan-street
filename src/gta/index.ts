@@ -4,9 +4,11 @@ import type { WalkControls } from "../interior/walk";
 import type { CityTraffic } from "../scene/citytraffic";
 import type { Nav } from "../scene/nav";
 import { viaductBents } from "../scene/city/plan";
+import { Snark } from "../scene/snark";
 import { CAR_VIEWS, GtaCamera } from "./camera";
 import { StreetSolid } from "./collide";
 import { KEYS } from "../scene/keys/plan";
+import { F as WOODS } from "../scene/forest/land";
 import { DOOR_HALF, Doors, ropes, type DoorSpot } from "./doors";
 import { FootPlayer } from "./foot";
 import { FrontEnd, type StartAt } from "./frontend";
@@ -27,6 +29,8 @@ import { Heat } from "./police";
 import { Roads } from "./roads";
 import { GtaSound, type AudioOut } from "./sound";
 import { CarRadio } from "./radio";
+import { faces } from "./faces";
+import { CARS, TRUCK, cabinOpen } from "../scene/real/cars";
 import { snarkRenderer } from "./snarkmat";
 import { SkyClock, WEATHER_NAME, weatherIcon } from "./skyclock";
 import type { Daylight } from "../scene/daylight";
@@ -34,6 +38,8 @@ import { SwimFx } from "./swim";
 import { Beach } from "./beach";
 import { DriveCar, SPECS, type CarBox, type VehicleKind } from "./vehicle";
 import { MOTO_SEAT } from "./models";
+import { Home } from "./home";
+import { HomeEdit, homeStart } from "./homeedit";
 
 /**
  * ZStreet as an open-world game: you are a zkSNARK, in the third person, in the city as it is
@@ -47,6 +53,15 @@ import { MOTO_SEAT } from "./models";
  *   `gta.front.open` → draw the street with `gta.front.camera` (the title, the menu, the line-up).
  *   Esc → `gta.escape()`.
  */
+
+/** A vehicle of the street's that you can take: where it is, what, how fast, who drives (0: nobody), and taking it out of its traffic. */
+export interface Ride {
+  obj: THREE.Object3D;
+  kind: VehicleKind;
+  v: number;
+  driver: number;
+  take(): THREE.Group | null;
+}
 
 export interface GtaHost {
   scene: THREE.Scene;
@@ -63,7 +78,7 @@ export interface GtaHost {
   doors(): DoorSpot[];
   enter(key: string): void;
   /** The city's buildings' fronts on the streets (the bigger city's included). */
-  facades(): { type: string; face: string; x0: number; x1: number; z: number; out: THREE.Vector3 }[];
+  facades(): { type: string; face: string; x0: number; x1: number; z: number; out: THREE.Vector3; door?: { x: number; z: number } }[];
   /** Into any building of the city (a generic ground floor dressed after it). */
   enterBuilding(v: { x: number; z: number; fx: number; fz: number; type: string; name: string; seed: number }): void;
   /** A lift is carrying the walker (its doors closing, moving, opening). */
@@ -129,6 +144,8 @@ export interface GtaHost {
   thunder?(): void;
   /** A car of some other traffic (the bridge's) knocked out of it: its body and kind, or null. */
   takeCar?(ref: unknown): { group: THREE.Group; kind: VehicleKind } | null;
+  /** The street's other traffic you can take (the avenue's, the bridge's loop). */
+  rides?(): Iterable<Ride>;
   /** People in a car's way react (a shout, a jump): from (x, z) along (fx, fz). */
   react(x: number, z: number, fx: number, fz: number): void;
   /** The street's arrest: a patrol, a night on the rock. */
@@ -153,8 +170,34 @@ export interface GtaHost {
 }
 
 const SETTINGS_KEY = "zstreet.gta.settings";
+/** The delivery scooter's saddle (src/scene/real/cars.ts buildBike). */
+const SCOOTER_SEAT = { x: -0.34, y: 0.72 };
 /** The game's day and night (s). */
 const ACTIVE_KEY = "zstreet.gta.alive";
+
+/** Where a driver (and a passenger, one vehicle in three) sit in a vehicle of `kind` (its frame: +x ahead, +z its right), and how small they are drawn under its roof. */
+function seatsOf(kind: VehicleKind, obj: THREE.Object3D): { at: THREE.Vector3; scale: number }[] {
+  const cached = obj.userData.seats as { at: THREE.Vector3; scale: number }[] | undefined;
+  if (cached) return cached;
+  let x: number, y: number, half: number, scale: number;
+  if (kind === "truck") {
+    x = TRUCK.L / 2 - TRUCK.cab * 0.62;
+    y = 0.95;
+    half = TRUCK.W * 0.24;
+    scale = 0.85;
+  } else {
+    const d = CARS[(kind === "gt" ? "gt" : kind) as keyof typeof CARS] ?? CARS.sedan;
+    x = d.cowl - (kind === "convertible" ? 0.62 : 0.8);
+    y = d.clear + 0.06;
+    half = d.W * 0.22;
+    // (the head under the roof: a lower car, a smaller figure; an open one, the figure as it is)
+    scale = kind === "convertible" ? 0.84 : THREE.MathUtils.clamp((d.H - 0.5) / 1.15, 0.62, 0.86);
+  }
+  const list = [{ at: new THREE.Vector3(x, y, -half), scale }];
+  if ((obj.id * 2654435761) % 3 === 0 && kind !== "police") list.push({ at: new THREE.Vector3(x, y, half), scale });
+  obj.userData.seats = list;
+  return list;
+}
 
 export class GtaMode {
   active = false;
@@ -174,6 +217,8 @@ export class GtaMode {
   readonly missions: Missions;
   readonly sound: GtaSound;
   readonly radio: CarRadio;
+  /** Your home: furnishing it, its radio (homeedit.ts; the flat is interior/home). */
+  readonly homeEdit: HomeEdit;
   readonly swim: SwimFx;
   readonly beach: Beach;
   readonly heat: Heat;
@@ -234,6 +279,7 @@ export class GtaMode {
     this.sound = new GtaSound(() => host.audio());
     this.swim = new SwimFx(host.scene, host.ui, () => host.audio(), (on) => host.underwater?.(on));
     this.radio = new CarRadio(() => host.audio(), host.ui, { height: () => host.height(), mempool: () => host.mempool() });
+    this.homeEdit = new HomeEdit({ ui: host.ui, paused: () => this.paused || !this.active, radio: this.radio, toast: (t, sub) => this.hud.toast(t, sub, "teal"), blip: () => this.sound.blip("door") });
     this.front = new FrontEnd({
       scene: host.scene,
       ui: host.ui,
@@ -262,6 +308,12 @@ export class GtaMode {
           weatherIcon: weatherIcon(g.kind, g.night),
         };
       },
+      // (the store's horn, sounded when you pick one)
+      honk: () => {
+        this.sound.hornOn(false);
+        this.sound.hornOn(true);
+        setTimeout(() => this.sound.hornOn(false), 420);
+      },
     });
     this.hud = new GtaHud(host.ui, {
       // (over the front end, the menu panel is its settings: closing it goes back to the front end)
@@ -274,6 +326,7 @@ export class GtaMode {
       },
       teleport: (x, z) => this.teleport(x, z),
       waypoint: (p) => this.setWaypoint(p),
+      home: () => this.goHome(),
       where: (x, z) => this.roads.where(x, z),
       settings: this.settings,
       apply: (s) => this.apply(s),
@@ -334,7 +387,7 @@ export class GtaMode {
     };
     // the figures' art atlas is written through the street's renderer
     snarkRenderer(host.renderer);
-    this.people = new People3D(host.scene, (x, z, r) => [...this.peds.near(x, z, r), ...this.beach.near(x, z, r), ...host.people3d(x, z, r)]);
+    this.people = new People3D(host.scene, (x, z, r) => [...this.peds.near(x, z, r), ...this.beach.near(x, z, r), ...host.people3d(x, z, r), ...this.drivers(x, z)]);
     this.breakables = new Breakables(this.debris);
     this.props = new StreetProps(host.scene, this.debris);
     host.interiorWalker.mover = () => this.active;
@@ -343,7 +396,8 @@ export class GtaMode {
       scene: host.scene,
       area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
       // (and Orchard Keys, across the bridge, in a picture of its own)
-      extra: [{ x0: KEYS.x0, x1: KEYS.x1, z0: KEYS.z0, z1: KEYS.z1 }],
+      // (across the strait: the woods' road down off the bridge, the tunnel, the town)
+      extra: [{ x0: KEYS.x0, x1: KEYS.x1, z0: Math.min(KEYS.z0, WOODS.z0), z1: KEYS.z1 }],
       movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, this.front.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
       surface: (x, z) => this.roads.surface(x, z),
       road: (x, z) => this.roads.road(x, z),
@@ -436,7 +490,7 @@ export class GtaMode {
 
   // ---- in and out ---------------------------------------------------------------------------------
 
-  /** The title screen (in the street), its menu, then play as the zkSNARK picked there. */
+  /** The main menu (over the street), then play as the zkSNARK picked there. */
   start(): void {
     if (this.active) return this.openGarage();
     if (this.front.open) return;
@@ -446,7 +500,8 @@ export class GtaMode {
     this.people.show(true);
     this.front.show({
       play: (id, at, then) => {
-        this.play(id, at);
+        // (at home, unless Missions asked for the map: then on the street, by your car)
+        this.play(id, at, { home: then !== "map" });
         // Missions: straight to the big map and its list of challenges
         if (then === "map" && this.active) setTimeout(() => this.active && this.hud.toggleMap(true), 700);
       },
@@ -476,11 +531,18 @@ export class GtaMode {
     });
   }
 
-  /** Into the street as zkSNARK #id (from the title: by your car, where it was shot). */
-  play(id = FrontEnd.chosen(), at: StartAt | null = null) {
+  /**
+   * Into the game as zkSNARK #id: at home (src/gta/home.ts) by default — inside your penthouse, your
+   * car parked in front — else (`home: false`) on the street by your car, where the menu shot it.
+   */
+  play(id = FrontEnd.chosen(), at: StartAt | null = null, o: { home?: boolean } = {}) {
     const h = this.host;
     if (!h.walking()) h.setWalking(true);
     if (!h.walking()) return;
+    // you start at home (src/gta/home.ts): by its door, your car in front, then inside, by the lift
+    const site = o.home === false ? null : Home.site;
+    const home = site ? homeStart(site, (x, z) => this.roads.road(x, z), (x, z) => this.roads.nearest(x, z)) : null;
+    if (home) at = home;
     if (at) h.walker.place(new THREE.Vector3(at.x, h.curb, at.z), at.heading, h.curb);
     this.active = true;
     this.paused = false;
@@ -541,10 +603,37 @@ export class GtaMode {
       this.parked.push(car);
     }
     if (!this.parked.some((c) => c.kind === "gt")) this.spawnGt();
+    if (home) this.parkHome(home.car);
     this.scatterBikes();
     if (!GtaHud.coached()) this.hud.coach(0);
     else this.hud.toast(`zkSNARK #${id}`, "in ZStreet · the chain is live", "gold");
     this.alive();
+    if (home) h.enter("home");
+  }
+
+  /** Your GT (and a bike behind it) parked in front of your home, wherever they were. */
+  private parkHome(c: { x: number; z: number; yaw: number }) {
+    const gt = this.parked.find((v) => v.kind === "gt" && v !== this.car);
+    if (!gt) return;
+    gt.place(c.x, c.z, c.yaw);
+    const fx = Math.cos(c.yaw),
+      fz = -Math.sin(c.yaw);
+    const back = gt.spec.len / 2 + 2.2;
+    let bike = this.parked.find((v) => v.kind === "moto" && v !== this.car && Math.hypot(v.group.position.x - c.x, v.group.position.z - c.z) < 30);
+    if (!bike) {
+      bike = new DriveCar("moto");
+      this.host.scene.add(bike.group);
+      this.parked.push(bike);
+    }
+    bike.place(c.x - fx * back, c.z - fz * back, c.yaw);
+  }
+
+  /** Home: a waypoint to your building's door (the map's ⌂, the STORE's HOME tab). */
+  goHome() {
+    const s = Home.site;
+    if (!s) return false;
+    this.setWaypoint({ x: s.door.x + s.out.x * 1.8, z: s.door.z + s.out.z * 1.8 });
+    return true;
   }
 
   /** Out of the game, back to the city view. */
@@ -563,6 +652,7 @@ export class GtaMode {
     this.hud.card(null);
     this.hud.prompt(null);
     this.missions.stop();
+    this.homeEdit.frame(null, 0, 0, 0);
     this.missions.setVisible(false);
     this.doors.show(false);
     this.net.join(false);
@@ -590,6 +680,11 @@ export class GtaMode {
     this.sound.drive(null);
     this.sound.hornOn(false);
     h.blur(0);
+    // (a car you were taking: parked with the rest, and gone with them)
+    if (this.jack) {
+      this.parked.push(this.jack.car);
+      this.jack = null;
+    }
     for (const c of this.parked) c.dispose();
     this.parked = [];
     if (document.pointerLockElement) document.exitPointerLock();
@@ -656,11 +751,22 @@ export class GtaMode {
     const pts = this.roads.midpoints(40);
     let seed = 5;
     const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    // (strangers' bikes in their own paints: only yours wears what you bought at the store)
+    const PAINTS: [string, string][] = [
+      ["#d6262e", "#141418"],
+      ["#1d1d22", "#c8ccd4"],
+      ["#f2f2ee", "#d6262e"],
+      ["#2a62c8", "#f2f2ee"],
+      ["#2f7d4a", "#141418"],
+      ["#ff8a1f", "#141418"],
+    ];
     for (let i = 0; i < 8 && pts.length; i++) {
       const p = pts.splice(Math.floor(rnd() * pts.length), 1)[0];
-      const bike = new DriveCar("moto");
-      // by the kerb, along the street
-      const off = 3.1;
+      const [paint, accent] = PAINTS[Math.floor(rnd() * PAINTS.length)];
+      const bike = new DriveCar("moto", undefined, { paint, accent });
+      // parked at the kerb, along the street (a fixed 3.1 m from the centre stood in a lane of the widened streets)
+      const r = this.roads.rects.find((q) => q.axis === p.axis && p.x >= q.x0 - 0.1 && p.x <= q.x1 + 0.1 && p.z >= q.z0 - 0.1 && p.z <= q.z1 + 0.1);
+      const off = (r ? (p.axis === "x" ? r.z1 - r.z0 : r.x1 - r.x0) / 2 : 7) - 0.9;
       const x = p.axis === "x" ? p.x : p.x + off,
         z = p.axis === "x" ? p.z + off : p.z;
       bike.place(x, z, p.axis === "x" ? 0 : -Math.PI / 2);
@@ -670,37 +776,140 @@ export class GtaMode {
   }
 
   /** The nearest car you could get into, within reach: one of yours, or one of the traffic's. */
-  private reachable(): { car?: DriveCar; mover?: unknown; kind: VehicleKind; name: string; d: number } | null {
+  /**
+   * Who sits in the traffic round you, in 3D: the open cars' drivers (the one you pull out when you
+   * take it) and now and then a passenger, seated, hands on the wheel, behind the tinted glass of the
+   * hollow cabins (scene/real/cars.ts). Only near you. Bikes carry their own riders.
+   */
+  /** The cars whose cabins are open (tinted see-through glass) round you now. */
+  private openCabins = new Set<THREE.Object3D>();
+  private drivers(x: number, z: number): Person3[] {
+    if (!this.active || this.wasIndoors) {
+      for (const o of this.openCabins) cabinOpen(o, false);
+      this.openCabins.clear();
+      return [];
+    }
+    const out: Person3[] = [];
+    // (near you only: the cabins open and their drivers drawn within this; past it the glass is dark
+    // and opaque — no blending, no sorting, nobody to draw)
+    const R = 26;
+    const w = new THREE.Vector3();
+    const open = new Set<THREE.Object3D>();
+    for (const r of this.rides()) {
+      // (every car: their cabins are hollow behind tinted glass; a truck's cab is solid, bikes carry their own riders)
+      if (!r.driver || r.kind === "truck" || SPECS[r.kind]?.bike || r.kind === "scooter") continue;
+      r.obj.getWorldPosition(w);
+      if ((w.x - x) ** 2 + (w.z - z) ** 2 > R * R || !r.obj.visible) continue;
+      const obj = r.obj;
+      open.add(obj);
+      if (!this.openCabins.has(obj)) cabinOpen(obj, true);
+      const seats = seatsOf(r.kind, obj);
+      // (their faces from the collection's atlas at once: the pictures' queue is the passers-by's)
+      faces.quick(seats.map((_, i) => (i === 0 ? r.driver : 1 + ((r.driver * 7919 + 17) % 10000))));
+      seats.forEach((st, i) => {
+        const id = i === 0 ? r.driver : 1 + ((r.driver * 7919 + 17) % 10000);
+        out.push({
+          key: `drv:${obj.uuid}:${i}`,
+          id,
+          fixed: true,
+          scale: () => st.scale,
+          pos: (o) => obj.localToWorld(o.copy(st.at)),
+          down: () => ({ k: 0, side: 0 }),
+          face: () => null,
+          heading: () => obj.rotation.y + Math.PI / 2,
+          seat: () => 0,
+          pose: () => (i === 0 ? "film" : null),
+          hide: () => {},
+          alive: () => !!obj.parent && obj.visible,
+        });
+      });
+    }
+    for (const o of this.openCabins) if (!open.has(o)) cabinOpen(o, false);
+    this.openCabins = open;
+    return out;
+  }
+
+  /** Every vehicle of the street's that can be taken right now (the city's traffic, the avenue's, the bridge's), with who drives it. */
+  private *rides(): Generator<Ride> {
+    for (const m of this.host.traffic.movers) {
+      const mm = m as unknown as { group: THREE.Group; kind: string; v: number; driver: number };
+      yield { obj: mm.group, kind: mm.kind as VehicleKind, v: mm.v, driver: mm.driver, take: () => this.host.traffic.take(m) };
+    }
+    if (this.host.rides) yield* this.host.rides();
+  }
+
+  /** The nearest vehicle you can get into (a parked one of yours, a wreck), or take (anyone's): within reach. */
+  private reachable(): { car?: DriveCar; ride?: Ride; kind: VehicleKind; name: string; d: number } | null {
     const p = this.player.pos;
-    let best: { car?: DriveCar; mover?: unknown; kind: VehicleKind; name: string; d: number } | null = null;
+    let best: { car?: DriveCar; ride?: Ride; kind: VehicleKind; name: string; d: number } | null = null;
     for (const c of this.parked) {
       const d = Math.hypot(c.group.position.x - p.x, c.group.position.z - p.z) - c.spec.wid * 0.5;
       if (d < 3 && (!best || d < best.d)) best = { car: c, kind: c.kind, name: c.spec.name, d };
     }
-    for (const m of this.host.traffic.movers) {
-      const g = m.group.position;
-      const d = Math.hypot(g.x - p.x, g.z - p.z) - 1;
-      if (d < 3 && (!best || d < best.d)) {
-        const kind = m.kind as VehicleKind;
-        best = { mover: m, kind, name: SPECS[kind].name, d };
-      }
+    const w = new THREE.Vector3();
+    for (const r of this.rides()) {
+      if (!SPECS[r.kind]) continue;
+      r.obj.getWorldPosition(w);
+      // (to its nearest side: a long one is reached at its door, not its middle)
+      const sp = SPECS[r.kind];
+      const yaw = r.obj.rotation.y;
+      const ax = Math.cos(yaw),
+        az = -Math.sin(yaw);
+      const along = THREE.MathUtils.clamp((p.x - w.x) * ax + (p.z - w.z) * az, -sp.len / 2, sp.len / 2);
+      const d = Math.hypot(w.x + ax * along - p.x, w.z + az * along - p.z) - sp.wid * 0.5;
+      if (d < 2.6 && (!best || d < best.d)) best = { ride: r, kind: r.kind, name: sp.name, d };
     }
     return best;
   }
 
   private getIn() {
+    if (this.jack) return;
     const r = this.reachable();
     if (!r) return;
-    let car = r.car ?? null;
-    if (!car && r.mover) {
-      const g = this.host.traffic.take(r.mover as Parameters<CityTraffic["take"]>[0]);
-      car = new DriveCar(r.kind, g);
-      this.host.scene.add(car.group);
-      // a car taken from the street keeps going for a moment
-      if (r.kind === "police") this.heat.raise(1.2, "you took a police cruiser");
-      else this.hud.toast(`You took a ${SPECS[r.kind].name.toLowerCase()}`, "its driver steps out");
-    } else if (car) this.parked.splice(this.parked.indexOf(car), 1);
-    if (!car) return;
+    if (r.car) {
+      this.parked.splice(this.parked.indexOf(r.car), 1);
+      return this.enter(r.car);
+    }
+    const ride = r.ride!;
+    // a car going by fast is out of reach (stand in its way: it stops); a slow one you catch, and
+    // its driver brakes as you grab the door
+    if (ride.v > 10) {
+      this.hud.toast("Too fast", "stand in its way: it stops", "bad");
+      return;
+    }
+    const g = ride.take();
+    if (!g) return;
+    const car = new DriveCar(r.kind, g);
+    if (!car.group.parent) this.host.scene.add(car.group);
+    car.vel.set(Math.cos(car.yaw) * ride.v, -Math.sin(car.yaw) * ride.v);
+    car.vF = ride.v;
+    car.vR = 0;
+    if (r.kind === "police") this.heat.raise(1.2, "you took a police cruiser");
+    else if (ride.driver) this.heat.raise(0.35, `you took someone's ${SPECS[r.kind].name.toLowerCase()}`);
+    // nobody in it: straight in
+    if (!ride.driver) return this.enter(car);
+    // its driver: you go to its door (a bike: its side), pull them out, get in
+    const p = car.group.position;
+    const sx = Math.sin(car.yaw),
+      sz = Math.cos(car.yaw);
+    // (the driver's door: the car's left, −z in its frame; a bike either side, the nearest)
+    const side = car.spec.bike ? (((this.player.pos.x - p.x) * sx + (this.player.pos.z - p.z) * sz) > 0 ? 1 : -1) : -1;
+    const off = car.spec.wid / 2 + (car.spec.bike ? 0.55 : 0.6);
+    const fx = Math.cos(car.yaw),
+      fz = -Math.sin(car.yaw);
+    const back = car.spec.bike ? 0 : Math.min(0.5, car.spec.len * 0.08);
+    void p;
+    void fx;
+    void fz;
+    void sx;
+    void sz;
+    // (the door in the car's own frame: it follows the car while it brakes)
+    const door = new THREE.Vector3(-back, 0, side * off);
+    this.jack = { car, driver: ride.driver, door, side, t: 0, at: false, out: false };
+  }
+
+  /** In (a parked car, a taken one once its driver is out). */
+  private enter(car: DriveCar) {
     this.car = car;
     this.radio.car(true);
     this.swim.reset();
@@ -711,6 +920,72 @@ export class GtaMode {
     this.cam.snap(car.group.position.clone().setY(1.15));
     this.sound.blip("door");
     if (this.hud.coaching) this.hud.coach(2);
+  }
+
+  /**
+   * Taking an occupied vehicle, the games' way: you run to its door (or the bike's side), the door
+   * opens, you drag its driver out (a biker goes flying), they land on the road and react — run,
+   * phone the police, or (a fighter) come back at you — and you get in.
+   */
+  private jack: { car: DriveCar; driver: number; door: THREE.Vector3; side: number; t: number; at: boolean; out: boolean } | null = null;
+  private jackStep(dt: number) {
+    const j = this.jack!;
+    const pl = this.player;
+    j.t += dt;
+    this.hud.prompt(null);
+    // the car brakes to a stop (its driver saw you coming), where the door is now
+    j.car.update(dt, { throttle: 0, brake: 1, steer: 0, handbrake: false, nitro: false }, this.carWorld(j.car));
+    const c = j.car.group.position;
+    const cy = Math.cos(j.car.yaw),
+      sy = Math.sin(j.car.yaw);
+    const door = { x: c.x + j.door.x * cy + j.door.z * sy, z: c.z - j.door.x * sy + j.door.z * cy };
+    if (!j.at) {
+      // to the door, at a run (round the car's nose or tail if you came from the other side)
+      const dx = door.x - pl.pos.x,
+        dz = door.z - pl.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 0.12 && j.t < 1.6) {
+        const st = Math.min(d, 5.6 * dt);
+        const nx = pl.pos.x + (dx / d) * st,
+          nz = pl.pos.z + (dz / d) * st;
+        pl.place(nx, this.host.ground(nx, nz) ?? (this.roads.road(nx, nz) ? 0 : this.host.curb), nz, Math.atan2(-dx, -dz));
+        pl.speed = 4.6;
+      } else {
+        j.at = true;
+        j.t = 0;
+        // facing the car
+        pl.place(door.x, pl.pos.y, door.z, Math.atan2(-(c.x - door.x), -(c.z - door.z)));
+        pl.speed = 0;
+        this.sound.blip("door");
+      }
+    } else {
+      pl.speed = 0;
+      // (held at the door while the car settles)
+      pl.place(door.x, pl.pos.y, door.z, Math.atan2(-(c.x - door.x), -(c.z - door.z)));
+      if (!j.out && j.t > 0.22) {
+        // the driver out: on the road at the door, thrown clear (off a bike: further)
+        j.out = true;
+        pl.punch();
+        const sx = Math.sin(j.car.yaw) * j.side,
+          sz = Math.cos(j.car.yaw) * j.side;
+        const at = { x: c.x + sx * (j.car.spec.wid / 2 + 0.35), z: c.z + sz * (j.car.spec.wid / 2 + 0.35) };
+        const fl = this.host.ground(at.x, at.z) ?? (this.roads.road(at.x, at.z) ? 0 : this.host.curb);
+        // (out past you: the way from the car, a little behind you)
+        const out = this.peds.eject(j.driver, at.x + sx * 0.3, at.z + sz * 0.3, sx, sz, fl, !!j.car.spec.bike);
+        if (out && j.car.kind === "police") this.heat.raise(0.8, "you dragged an officer out of the cruiser");
+        this.sound.crash(j.car.spec.bike ? 0.25 : 0.12);
+        this.cam.shake(0.2);
+      }
+      if (j.t > 0.62) {
+        this.jack = null;
+        return this.enter(j.car);
+      }
+    }
+    pl.poseOnly(dt);
+    const h = this.host;
+    const solid = this.solid;
+    this.cam.follow(dt, pl.facing, pl.speed);
+    this.cam.foot(dt, pl.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z) && (solid.topAt(x, z) ?? 0) > 3.6 && !solid.thinAt(x, z)) || (!h.beyond(x, z) && h.nav.wall(x, z)) || this.crown(x, z) });
   }
 
   /** Out of the car: on the driver's side if there is room, else the other. */
@@ -751,11 +1026,13 @@ export class GtaMode {
   private mount(car: DriveCar) {
     const b = this.player.body;
     if (!b) return;
-    const pivot = car.group.children.find((c) => c.type === "Group" && c !== b.root) ?? car.group;
+    const pivot = car.pivot ?? car.group;
     const seat = new THREE.Group();
     seat.name = "gta:seat";
-    // (the hips on the saddle: the riding pose sits them 0.1 m over the feet's origin)
-    seat.position.set(MOTO_SEAT.x - 0.08, MOTO_SEAT.y - 0.1, 0);
+    // (the hips on the saddle: the riding pose sits them 0.1 m over the feet's origin; a scooter's
+    // saddle is further back and a little lower)
+    const sd = car.kind === "scooter" ? SCOOTER_SEAT : MOTO_SEAT;
+    seat.position.set(sd.x - 0.08, sd.y - 0.1, 0);
     // facing along the bike (its +x): the body's own front is +z
     seat.rotation.y = Math.PI / 2;
     seat.add(b.root);
@@ -845,6 +1122,7 @@ export class GtaMode {
     if (inside) return this.inside(dt, inside);
     if (this.wasIndoors) {
       this.wasIndoors = false;
+      this.homeEdit.frame(null, 0, 0, 0);
       this.hud.inside(false);
       this.breakables.restore();
       this.people.source = null;
@@ -880,6 +1158,7 @@ export class GtaMode {
     if (!this.paused) this.keys();
     else if (this.hud.mapOpen && inp.hit("Tab", "KeyM", "pad:back", "pad:b")) this.hud.toggleMap(false);
     if (this.car) this.drive(dt);
+    else if (this.jack) this.jackStep(dt);
     else this.walk(dt);
     this.loose(dt);
     // the walker stands where you are: doors, talk, traffic, sound all follow
@@ -1278,7 +1557,24 @@ export class GtaMode {
   trafficBlockers(): { x: number; z: number }[] {
     if (!this.active || this.wasIndoors) return [];
     const out = [...this.peds.inRoad(this.pedWorld())];
-    if (!this.car && this.roads.road(this.player.pos.x, this.player.pos.z)) out.push({ x: this.player.pos.x, z: this.player.pos.z });
+    const pl = this.player.pos;
+    // you in the road (the city's, the bridge's deck, Orchard Keys' streets): the traffic stops for you
+    if (!this.car && (this.roads.road(pl.x, pl.z) || this.host.beyond(pl.x, pl.z))) out.push({ x: pl.x, z: pl.z });
+    // and a slow one you stand right beside (at its door) waits for you: a stop just ahead of its nose
+    if (!this.car && !this.jack) {
+      const w = new THREE.Vector3();
+      for (const r of this.rides()) {
+        if (r.v > 6 || !SPECS[r.kind]) continue;
+        r.obj.getWorldPosition(w);
+        const yaw = r.obj.rotation.y,
+          fx = Math.cos(yaw),
+          fz = -Math.sin(yaw);
+        const sp = SPECS[r.kind];
+        const along = (pl.x - w.x) * fx + (pl.z - w.z) * fz,
+          across = Math.abs(-(pl.x - w.x) * fz + (pl.z - w.z) * fx);
+        if (Math.abs(along) < sp.len / 2 + 0.5 && across < sp.wid / 2 + 1.6) out.push({ x: w.x + fx * (sp.len / 2 + 1.2), z: w.z + fz * (sp.len / 2 + 1.2) });
+      }
+    }
     // a wreck in the road: the traffic stops behind it (it drove through them) until it is towed
     for (const c of this.wrecks.keys()) {
       const p = c.group.position;
@@ -1507,6 +1803,16 @@ export class GtaMode {
             if (o.userData.snarkRef && o.visible) found.push(o);
           });
         }
+        // (the cut-outs that came in since the last look round: at once, not up to 2 s later as a flat figure)
+        const seen = new Set(found);
+        for (const sn of Snark.live) {
+          if (seen.has(sn.root) || !sn.root.visible) continue;
+          let q: THREE.Object3D | null = sn.root;
+          while (q && q !== inn.scene) q = q.parent;
+          if (!q) continue;
+          if (!sn.root.userData.snarkRef) sn.root.userData.snarkRef = sn;
+          found.push(sn.root);
+        }
         const out: Person3[] = [];
         const at = new THREE.Vector3();
         for (const root of found) {
@@ -1614,6 +1920,8 @@ export class GtaMode {
       else if (useAt) this.host.useAt(useAt.x, useAt.y);
     }
     this.hud.indoor(dt, { speed: pl.speed });
+    // at home: furnishing, the hi-fi (homeedit.ts)
+    this.homeEdit.frame(inn.scene, pl.pos.x, pl.pos.z, pl.facing);
   }
 
   /**
@@ -1931,8 +2239,8 @@ export class GtaMode {
    * solid shape has (a facade a few metres behind a forecourt), or out of one it stands in.
    */
   private snapDoor(d: DoorSpot): DoorSpot | null {
-    // (the MEMPOOL HQ and the GAME HOUSE have grand entrances of their own)
-    if (d.key === "mempool" || d.key === "gamehouse") return { ...d, bare: true };
+    // (the MEMPOOL HQ and the GAME HOUSE have grand entrances of their own; your home, its tower's own front door)
+    if (d.key === "mempool" || d.key === "gamehouse" || d.key === "home") return { ...d, bare: true };
     const s = this.solid;
     if (!s.ready) return d;
     const wall = (k: number) => {
@@ -2189,7 +2497,8 @@ export class GtaMode {
       const along = m.line.axis === "x";
       const half = m.len / 2;
       const yaw = m.group.rotation.y;
-      yield { x: p.x, z: p.z, hx: along ? half : 0.95, hz: along ? 0.95 : half, ref: { t: "mover", m }, vx: Math.cos(yaw) * m.v, vz: -Math.sin(yaw) * m.v, mass: SPECS[m.kind as VehicleKind]?.mass ?? 1.35 };
+      const hw = m.kind === "moto" ? 0.42 : 0.95;
+      yield { x: p.x, z: p.z, hx: along ? half : hw, hz: along ? hw : half, ref: { t: "mover", m }, vx: Math.cos(yaw) * m.v, vz: -Math.sin(yaw) * m.v, mass: SPECS[m.kind as VehicleKind]?.mass ?? 1.35 };
     }
     yield* this.host.vehicles();
     // the other players' cars

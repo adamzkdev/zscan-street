@@ -84,6 +84,8 @@ export interface MenuHost {
   teleport(x: number, z: number): void;
   /** A waypoint set on the map (null: cleared). */
   waypoint(p: { x: number; z: number } | null): void;
+  /** A waypoint to your home (false: you have none). */
+  home?(): boolean;
   /** The street and the district at a point (for the map's pointer). */
   where(x: number, z: number): { street: string; district: string };
   settings: Settings;
@@ -156,7 +158,7 @@ export class GtaHud {
   private mapDrag: { x: number; y: number; moved: number } | null = null;
   private shown = new Set<Kind>(["run", "ride", "board", "trap"]);
   /** The kinds of places shown on the big map. */
-  private cats = new Set<Cat>(["hq", "sight", "fun", "shop", "food", "bar", "work", "metro", "ferry", "car"]);
+  private cats = new Set<Cat>(["hq", "home", "sight", "fun", "shop", "food", "bar", "work", "metro", "ferry", "car"]);
   /** The map's fixed knowledge (from the game, once its streets are in). */
   mapData: () => MapData | null = () => null;
   private hoverAt: { x: number; z: number } | null = null;
@@ -206,7 +208,7 @@ export class GtaHud {
         <canvas></canvas>
         <header><h2>Map</h2><span class="gh-msub"></span></header>
         <aside class="gh-legend"></aside>
-        <div class="gh-mctl"><button data-act="zin" title="Zoom in">+</button><button data-act="zout" title="Zoom out">−</button><button data-act="me" title="On me">◎</button><button data-act="mclose" title="Close (M)">×</button></div>
+        <div class="gh-mctl"><button data-act="zin" title="Zoom in">+</button><button data-act="zout" title="Zoom out">−</button><button data-act="me" title="On me">◎</button><button data-act="home" title="Waypoint home">⌂</button><button data-act="mclose" title="Close (M)">×</button></div>
         <footer><span class="gh-mhover"></span><span class="gh-mway"></span><span class="gh-mhelp">Scroll to zoom · drag to move · click to set a waypoint · <kbd>M</kbd> close</span></footer>
       </div>
       <div class="gh-pause" role="dialog" aria-modal="true" aria-label="Menu"><div class="gh-pcard">
@@ -240,6 +242,7 @@ export class GtaHud {
       else if (a === "zout") this.zoomMap(1 / 1.4);
       else if (a === "me" && this.last) (this.mapAt = { x: this.last.x, z: this.last.z }), this.drawMap();
       else if (a === "mclose") this.toggleMap(false);
+      else if (a === "home" && this.menu.home?.()) setTimeout(() => this.drawMap(), 30);
       else if (a === "travel" && this.last?.waypoint) {
         const w = this.last.waypoint;
         this.menu.waypoint(null);

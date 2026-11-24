@@ -220,7 +220,9 @@ export function buildShell(): Shell {
   const object = new THREE.Group();
   const geos = meshModel(m);
   for (const [kd, geo] of Object.entries(geos) as [Kind, THREE.BufferGeometry][]) {
-    const mesh = new THREE.Mesh(geo, kd === "emit" ? new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }) : MATERIALS[kd]);
+    // (the lit cells through the tone mapping: right up against the crown's windows and the torch's
+    // glass, untone-mapped they blew the whole picture out to white)
+    const mesh = new THREE.Mesh(geo, kd === "emit" ? new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: true }) : MATERIALS[kd]);
     mesh.receiveShadow = mesh.castShadow = false;
     object.add(mesh);
   }

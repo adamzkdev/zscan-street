@@ -1,4 +1,4 @@
-/* The game's front end (src/gta/frontend.ts): the title over the street, the main menu, the line-up.
+/* The game's front end (src/gta/frontend.ts): the main menu over the street, the store, the line-up.
  * The HUD's own language: Archivo wide for names, the menu's dark surface, Zcash gold for what matters. */
 
 /* while it is up, nothing else of the street's or the game's HUD shows (the settings panel aside) */
@@ -47,27 +47,7 @@
   cursor: grab;
 }
 
-/* ---- the frame: letterbox bars on the title, a shade under the menus ---- */
-.gf-bars i {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 10.5vh;
-  background: #000;
-  transition: transform 0.9s cubic-bezier(0.6, 0, 0.2, 1);
-}
-.gf-bars i:first-child {
-  top: 0;
-}
-.gf-bars i:last-child {
-  bottom: 0;
-}
-.gta-front:not([data-mode="title"]) .gf-bars i:first-child {
-  transform: translateY(-100%);
-}
-.gta-front:not([data-mode="title"]) .gf-bars i:last-child {
-  transform: translateY(100%);
-}
+/* ---- a shade under the menus ---- */
 .gf-shade {
   position: absolute;
   inset: 0;
@@ -87,7 +67,6 @@
 }
 
 /* the modes: one shows at a time, cross-faded */
-.gf-title,
 .gf-menu,
 .gf-select {
   position: absolute;
@@ -99,7 +78,6 @@
     opacity 0.4s,
     visibility 0s 0.4s;
 }
-.gta-front[data-mode="title"] .gf-title,
 .gta-front[data-mode="menu"] .gf-menu,
 .gta-front[data-mode="select"] .gf-select {
   opacity: 1;
@@ -141,39 +119,6 @@
   text-transform: none;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
   color: var(--g-ink2);
-}
-
-/* ---- the title ---- */
-.gf-title .gf-mark {
-  position: absolute;
-  left: 6vw;
-  bottom: calc(10.5vh + 6vh);
-  font-size: clamp(52px, 7.4vw, 124px);
-}
-.gf-press {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 10.5vh;
-  margin: 0;
-  display: grid;
-  place-items: center;
-}
-.gf-press b {
-  font: 600 15px var(--g-disp);
-  letter-spacing: 0.02em;
-  color: var(--g-ink);
-  animation: gf-pulse 2.4s ease-in-out infinite;
-}
-@keyframes gf-pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
-  }
 }
 
 /* ---- the main menu ---- */
@@ -227,58 +172,7 @@
 .gf-item.on small {
   color: rgba(11, 12, 16, 0.6);
 }
-/* ---- the city now: chips top right, the chain's card bottom right ---- */
-.gf-chips {
-  position: absolute;
-  right: 6vw;
-  top: 7vh;
-  display: flex;
-  gap: 10px;
-}
-.gf-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 14px;
-  border-radius: 10px;
-  background: var(--g-panel);
-  border: 1px solid var(--g-line);
-  box-shadow: var(--g-shadow);
-  font-family: var(--g-disp);
-}
-.gf-chip b {
-  font: 700 17px var(--g-disp);
-  color: var(--g-ink);
-  font-variant-numeric: tabular-nums;
-}
-.gf-chip small {
-  font: 500 12px var(--g-disp);
-  color: var(--g-ink3);
-}
-.gf-pip {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.gf-pip.gold {
-  background: var(--g-gold);
-  box-shadow: 0 0 0 3px rgba(244, 183, 40, 0.18);
-}
-.gf-pip.teal {
-  background: var(--g-teal);
-  box-shadow: 0 0 0 3px rgba(63, 214, 198, 0.18);
-}
-.gf-wx {
-  display: inline-flex;
-  width: 18px;
-  height: 18px;
-  color: var(--g-gold2);
-}
-.gf-wx svg {
-  width: 100%;
-  height: 100%;
-}
+/* ---- the chain's card bottom right (restyled below, after ZK CARDS) ---- */
 .gf-live {
   position: absolute;
   right: 6vw;
@@ -356,20 +250,6 @@
   right: -8px;
   top: -8px;
   font-style: normal;
-}
-.gf-pic {
-  width: 52px;
-  height: 52px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #000;
-}
-.gf-pic img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  image-rendering: pixelated;
-  display: block;
 }
 
 /* ---- the line-up ---- */
@@ -646,7 +526,8 @@
   .gf-card {
     width: min(360px, 44vw);
   }
-  .gf-tools {
+  /* (on a phone the tools go, but Zilk Road stays: buying a zkSNARK is not a desktop-only thing) */
+  .gf-tools > *:not(.gf-zilk) {
     display: none;
   }
 }
@@ -674,8 +555,7 @@
   .gf-item small {
     font-size: 12px;
   }
-  /* (on a phone: the chips and the chain's card would sit on the menu) */
-  .gf-chips,
+  /* (on a phone: the chain's card would sit on the menu) */
   .gf-live {
     display: none;
   }
@@ -745,5 +625,1322 @@
     left: auto;
     right: 4vw;
     width: 52vw;
+  }
+}
+
+/* =====================================================================================================
+ * The hub after ZK CARDS (zkcards/src/game/menus.css): dark plates with a brass top edge, Archivo
+ * condensed UPPERCASE for the menu, the labels, the buttons; the wordmark wide; gold for what
+ * matters. Overrides the first menu's look above.
+ * ===================================================================================================== */
+.gta-front {
+  --zb-hi: rgba(222, 170, 60, 0.55);
+  --zb-dk: rgba(0, 0, 0, 0.55);
+  --zg: #f4b728;
+  --zg-hi: #ffe08a;
+  --zg-lo: #9a6a08;
+  --zpad: clamp(16px, 3vw, 56px);
+  --zink: #f3efe6;
+  --zink2: rgba(243, 239, 230, 0.66);
+  --zink3: rgba(243, 239, 230, 0.42);
+}
+.gta-front kbd {
+  font: 800 11px/1 var(--g-disp);
+  font-stretch: 75%;
+}
+.gf-plate {
+  border-radius: 5px;
+  background: linear-gradient(180deg, #231e18 0%, #1a1611 100%);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 var(--zb-dk),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* the shade: warm and dark on the menu's side, under the store's shelf, over the pages */
+.gta-front[data-mode="menu"] .gf-shade {
+  background:
+    linear-gradient(90deg, rgba(10, 8, 6, 0.86) 0%, rgba(10, 8, 6, 0.55) 30%, rgba(10, 8, 6, 0) 52%),
+    linear-gradient(0deg, rgba(10, 8, 6, 0.6) 0%, rgba(10, 8, 6, 0) 26%),
+    linear-gradient(180deg, rgba(10, 8, 6, 0.45) 0%, rgba(10, 8, 6, 0) 16%);
+}
+.gta-front[data-mode="store"] .gf-shade {
+  background:
+    linear-gradient(0deg, rgba(10, 8, 6, 0.86) 0%, rgba(10, 8, 6, 0.3) 34%, rgba(10, 8, 6, 0) 50%),
+    linear-gradient(180deg, rgba(10, 8, 6, 0.6) 0%, rgba(10, 8, 6, 0) 18%);
+}
+.gta-front[data-mode="howto"] .gf-shade {
+  background: rgba(12, 10, 8, 0.86);
+}
+.gta-front[data-mode="select"] .gf-shade {
+  background:
+    linear-gradient(0deg, rgba(10, 8, 6, 0.82) 0%, rgba(10, 8, 6, 0.35) 26%, rgba(10, 8, 6, 0) 46%),
+    linear-gradient(180deg, rgba(10, 8, 6, 0.6) 0%, rgba(10, 8, 6, 0) 18%);
+}
+
+/* the new modes, like the others: one at a time, cross-faded */
+.gf-store,
+.gf-howto {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.4s,
+    visibility 0s 0.4s;
+}
+.gta-front[data-mode="store"] .gf-store,
+.gta-front[data-mode="howto"] .gf-howto {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.45s 0.1s;
+}
+.gf-store button,
+.gf-howto button,
+.gf-store .gf-shelf,
+.gf-howto .gf-pbody,
+.gf-wallet,
+.gf-wallet button,
+.gf-me {
+  pointer-events: auto;
+}
+
+/* ---- the wordmark, top left ---- */
+.gf-menu .gf-mark {
+  position: absolute;
+  left: var(--zpad);
+  top: 8.5vh;
+}
+.gf-mark.small {
+  font: 900 clamp(46px, min(5.2vw, 9vh), 96px) / 0.86 var(--g-disp);
+  font-stretch: 125%;
+  letter-spacing: -0.035em;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
+}
+.gf-mark small {
+  display: block;
+  margin-top: 14px;
+  font: 800 14px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-shadow: none;
+  color: var(--zink2);
+}
+
+/* ---- the menu: big condensed uppercase, a gold bar on the one picked ---- */
+.gf-items {
+  position: absolute;
+  left: calc(var(--zpad) - 22px);
+  top: 52%;
+  width: auto;
+  transform: translateY(-44%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.gf-item {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 18px 7px 22px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  text-align: left;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  color: rgba(243, 239, 230, 0.84);
+  transition:
+    color 0.12s,
+    transform 0.16s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.gf-item b {
+  font: 800 clamp(28px, min(2.9vw, 5.4vh), 46px) / 1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+.gf-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 6px;
+  height: 0;
+  border-radius: 1px;
+  background: var(--zg);
+  box-shadow: inset 0 1px 0 var(--zg-hi);
+  transform: translateY(-50%);
+  transition: height 0.16s;
+}
+.gf-item.on {
+  background: none;
+  box-shadow: none;
+  color: #fff;
+  transform: translateX(10px);
+}
+.gf-item.on::before {
+  height: 74%;
+}
+.gf-badge {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  font: 800 14px/1 var(--g-disp);
+  font-stretch: 75%;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: none;
+  color: var(--zink);
+  background: #2c251d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.gf-badge.hot {
+  color: #1d1405;
+  background: var(--zg);
+  box-shadow:
+    inset 0 1px 0 var(--zg-hi),
+    inset 0 -2px 0 var(--zg-lo),
+    0 0 0 1px #4a3104;
+}
+
+/* ---- top right: the purse and the wallet ---- */
+.gf-wallet {
+  position: absolute;
+  top: 28px;
+  right: var(--zpad);
+  z-index: 4;
+  display: none;
+  gap: 8px;
+}
+.gta-front[data-mode="menu"] .gf-wallet,
+.gta-front[data-mode="store"] .gf-wallet,
+.gta-front[data-mode="howto"] .gf-wallet,
+.gta-front[data-mode="select"]:not(.ingame) .gf-wallet {
+  display: flex;
+}
+.gf-purse {
+  height: 44px;
+  display: flex;
+  align-items: stretch;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #2a231c, #1d1813);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 var(--zb-dk),
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+}
+.gf-purse > span {
+  padding: 0 14px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gf-purse > span + span {
+  box-shadow:
+    inset 1px 0 0 rgba(0, 0, 0, 0.55),
+    inset 2px 0 0 rgba(255, 255, 255, 0.05);
+}
+.gf-purse b {
+  font: 800 19px/1 var(--g-disp);
+  font-stretch: 75%;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+.gf-coin {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 900 15px/1 var(--g-disp);
+  font-style: normal;
+  color: #3a2702;
+  background: radial-gradient(circle at 35% 30%, #fff0b8 0%, #f6c443 38%, #c88c0e 100%);
+  box-shadow:
+    inset 0 -2px 0 rgba(120, 76, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+.gf-cube {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: linear-gradient(135deg, #8ad8ff 0%, #2e7cd8 55%, #1a3f8a 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 0 1px rgba(0, 0, 0, 0.55);
+  transform: rotate(45deg) scale(0.82);
+}
+.gf-dotp {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #3fd6c6;
+  box-shadow:
+    0 0 0 3px rgba(63, 214, 198, 0.2),
+    0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+.gf-connect {
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #312920 0%, #241e18 100%);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+  transition: transform 0.08s;
+}
+.gf-connect:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.14);
+}
+.gf-connect b {
+  font: 800 13px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--zg);
+}
+.gf-connect.on b {
+  color: var(--zink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+.gf-connect i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6ee07a;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- bottom: who you play (left), the chain (right) ---- */
+.gf-face {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #14100c;
+  box-shadow:
+    inset 0 0 0 2px #0d0a07,
+    inset 0 0 0 3px rgba(222, 170, 60, 0.6),
+    0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.gf-face img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+.gf-who {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.gf-who small {
+  font: 800 11px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--zink3);
+}
+.gf-who b {
+  font: 800 20px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: #fff;
+  white-space: nowrap;
+}
+.gf-who em {
+  font: 700 13px/1 var(--g-disp);
+  font-stretch: 75%;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--zg);
+}
+.gf-who em.dim {
+  color: var(--zink3);
+}
+.gf-me,
+.gf-live {
+  position: absolute;
+  bottom: 5.5vh;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px 10px 14px;
+  border: 0;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #231e18, #1a1611);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 var(--zb-dk),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.gf-me {
+  left: var(--zpad);
+  max-width: 340px;
+  cursor: pointer;
+  box-shadow:
+    inset 4px 0 0 var(--zg),
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 var(--zb-dk),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.gf-me:hover {
+  filter: brightness(1.1);
+}
+.gf-live {
+  right: var(--zpad);
+  padding: 10px 10px 10px 18px;
+  text-align: right;
+}
+.gf-live .gf-who {
+  align-items: flex-end;
+}
+.gf-live .gf-zec {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  font: 900 26px/1 var(--g-disp);
+  color: #1d1405;
+  background: linear-gradient(180deg, #ffd45e 0%, #f4b728 48%, #dc9c10 100%);
+  box-shadow:
+    inset 0 1px 0 #fff1b8,
+    inset 0 -3px 0 var(--zg-lo),
+    0 0 0 1px #4a3104;
+}
+
+/* ---- buttons: dark slabs with a brass edge; gold for the step that matters ---- */
+.gf-btn {
+  height: 52px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font: 800 18px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--zink);
+  background: linear-gradient(180deg, #312920 0%, #241e18 100%);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+  transition:
+    transform 0.08s,
+    filter 0.12s;
+}
+.gf-btn:hover:not([disabled]) {
+  transform: translateY(-1px);
+  filter: brightness(1.14);
+}
+.gf-btn:active:not([disabled]) {
+  transform: translateY(1px);
+}
+.gf-btn.gold {
+  color: #1d1405;
+  background: linear-gradient(180deg, #ffd45e 0%, #f4b728 48%, #dc9c10 100%);
+  box-shadow:
+    inset 0 1px 0 #fff1b8,
+    inset 0 -3px 0 var(--zg-lo),
+    0 0 0 1px #4a3104,
+    0 6px 14px rgba(0, 0, 0, 0.4);
+}
+.gf-btn[disabled] {
+  cursor: default;
+  filter: grayscale(0.7) brightness(0.72);
+}
+.gf-btn small {
+  font: 800 14px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
+/* ---- the pages' head: the back slab and the title ---- */
+.gf-phead,
+.gf-shead {
+  position: absolute;
+  left: var(--zpad);
+  right: auto;
+  top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 3;
+}
+.gf-phead h2,
+.gf-shead h2 {
+  margin: 0;
+  font: 800 30px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.gf-shead {
+  right: var(--zpad);
+}
+.gf-shead .gf-count {
+  margin-left: 8px;
+  font: 700 18px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.06em;
+  color: var(--zink2);
+}
+.gf-back {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-size: 0;
+  background: linear-gradient(180deg, #312920, #241e18);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+  transition: transform 0.08s;
+}
+.gf-back:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.15);
+  background: linear-gradient(180deg, #312920, #241e18);
+}
+.gf-back i {
+  width: 12px;
+  height: 12px;
+  margin-left: 4px;
+  border-left: 3px solid var(--zink);
+  border-bottom: 3px solid var(--zink);
+  transform: rotate(45deg);
+}
+
+/* ---- the store ---- */
+.gf-stabs {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #231e18, #1a1611);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 var(--zb-dk),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 10px 24px rgba(0, 0, 0, 0.4);
+}
+.gf-stabs button {
+  height: 42px;
+  min-width: 96px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  font: 800 15px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--zink3);
+}
+.gf-stabs button:hover {
+  color: var(--zink);
+}
+.gf-stabs button.on {
+  color: #1d1405;
+  background: linear-gradient(180deg, #ffd45e 0%, #f4b728 48%, #dc9c10 100%);
+  box-shadow:
+    inset 0 1px 0 #fff1b8,
+    inset 0 -2px 0 var(--zg-lo);
+}
+.gf-shelf {
+  position: absolute;
+  left: var(--zpad);
+  right: var(--zpad);
+  bottom: calc(5vh + 92px);
+  display: flex;
+  justify-content: flex-start;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 6px 2px 8px;
+}
+/* (centred while they fit, scrolled from the first when they don't) */
+.gf-shelf > :first-child {
+  margin-left: auto;
+}
+.gf-shelf > :last-child {
+  margin-right: auto;
+}
+.gf-tile {
+  flex: none;
+  width: 128px;
+  padding: 12px 10px 10px;
+  border: 0;
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #231e18, #1a1611);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 var(--zb-dk),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 8px 18px rgba(0, 0, 0, 0.4);
+  color: var(--zink);
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
+}
+.gf-tile:hover {
+  transform: translateY(-2px);
+}
+.gf-tile.on {
+  transform: translateY(-6px);
+  box-shadow:
+    inset 0 0 0 2px var(--zg),
+    inset 0 1px 0 var(--zg-hi),
+    0 0 0 1px #4a3104,
+    0 14px 28px rgba(0, 0, 0, 0.5);
+}
+.gf-tile b {
+  font: 800 15px/1.05 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  min-height: 2.1em;
+  display: flex;
+  align-items: center;
+}
+.gf-price {
+  font: 800 14px/1 var(--g-disp);
+  font-stretch: 75%;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: var(--zg);
+}
+.gf-tag {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  font: 800 12px/1 var(--g-disp);
+  font-stretch: 75%;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--zink);
+  background: #2c251d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.gf-tag.gold {
+  color: #1d1405;
+  background: var(--zg);
+}
+.gf-sw {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 0 0 2px #0d0a07,
+    0 0 0 3px rgba(222, 170, 60, 0.5),
+    0 4px 10px rgba(0, 0, 0, 0.5);
+}
+/* paint: the colour with a clear-coat shine, the accent as a stripe */
+.gf-sw.paint {
+  background:
+    linear-gradient(115deg, transparent 0 58%, var(--a) 58% 66%, transparent 66%),
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.75) 0 6%, rgba(255, 255, 255, 0) 30%),
+    radial-gradient(circle at 50% 50%, var(--c) 0 55%, color-mix(in srgb, var(--c) 70%, #000) 100%);
+}
+.gf-sw.paint.matte {
+  background:
+    linear-gradient(115deg, transparent 0 58%, var(--a) 58% 66%, transparent 66%),
+    var(--c);
+}
+.gf-sw.neon {
+  background: #0d0c12;
+  box-shadow:
+    0 0 0 2px #0d0a07,
+    0 0 0 3px rgba(222, 170, 60, 0.5),
+    inset 0 -12px 18px -6px var(--c),
+    0 10px 22px -6px var(--c);
+}
+.gf-sw.neon::after {
+  content: "";
+  width: 70%;
+  height: 4px;
+  margin-top: 26px;
+  border-radius: 2px;
+  background: var(--c);
+  box-shadow: 0 0 10px var(--c);
+}
+.gf-sw.off {
+  background:
+    linear-gradient(135deg, transparent 47%, #6a6058 47% 53%, transparent 53%),
+    #0d0c12;
+}
+.gf-sw.rim {
+  /* the hub, the rim's lip in its colour, the tyre; the spokes under */
+  background:
+    radial-gradient(circle, #15151a 0 15%, transparent 16%),
+    radial-gradient(circle, transparent 0 57%, var(--c) 58% 64%, #111114 65%),
+    repeating-conic-gradient(var(--c) 0 11deg, #1a1a20 11deg 36deg);
+}
+.gf-sw.horn {
+  color: var(--zg);
+  background: radial-gradient(circle at 50% 40%, #2c251d, #15110d);
+}
+.gf-sw.horn svg {
+  width: 32px;
+  height: 32px;
+}
+.gf-sbar,
+.gf-pbar {
+  position: absolute;
+  left: 50%;
+  bottom: 5vh;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #231e18, #1a1611);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 var(--zb-dk),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+.gf-bal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 8px;
+}
+.gf-bal b {
+  font: 900 32px/1 var(--g-disp);
+  font-stretch: 75%;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+.gf-bal small {
+  max-width: 64px;
+  font: 800 12px/1.05 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: normal;
+  color: var(--zink3);
+}
+.gf-snote {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  transform: translateX(-50%);
+  margin: 0;
+  font: 600 13px/1.3 var(--g-disp);
+  letter-spacing: 0.01em;
+  color: var(--zink2);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* the tab bar is the STORE's (its tabs: the line-up, VEHICLES, HOME, GET ⓩ), not the game's line-up */
+.gta-front:not([data-mode="store"]):not([data-mode="select"]) .gf-stabs,
+.gta-front.ingame .gf-stabs {
+  display: none;
+}
+/* VEHICLES' own tabs: lighter, a gold line under the one up */
+.gf-vtabs {
+  position: absolute;
+  left: 50%;
+  top: 94px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(20, 16, 12, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(222, 170, 60, 0.3),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 8px 18px rgba(0, 0, 0, 0.35);
+}
+.gf-vtabs button {
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  font: 800 14px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--zink2);
+}
+.gf-vtabs button:hover {
+  color: var(--zink);
+}
+.gf-vtabs button.on {
+  color: #fff;
+  box-shadow: inset 0 -3px 0 var(--zg);
+}
+/* HOME, GET ⓩ: their module's own content (economy.ts StoreTab), at the bottom over the street */
+.gf-ext {
+  position: absolute;
+  left: var(--zpad);
+  right: var(--zpad);
+  top: 150px;
+  bottom: 5vh;
+  display: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+}
+.gf-ext > * {
+  pointer-events: auto;
+}
+.gf-ext-body {
+  width: 100%;
+  max-height: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+}
+.gf-ext .gf-snote {
+  position: static;
+  transform: none;
+}
+.gta-front[data-tab="home"] .gf-ext,
+.gta-front[data-tab="getz"] .gf-ext {
+  display: flex;
+}
+.gta-front[data-tab="home"] :is(.gf-vtabs, .gf-shelf, .gf-sbar),
+.gta-front[data-tab="getz"] :is(.gf-vtabs, .gf-shelf, .gf-sbar) {
+  display: none;
+}
+.gf-soon {
+  width: min(560px, 100%);
+  padding: 22px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gf-soon small {
+  font: 800 12px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--zg);
+}
+.gf-soon b {
+  font: 800 30px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.gf-soon p {
+  margin: 4px 0 0;
+  font: 400 15px/1.5 var(--g-disp);
+  color: var(--zink2);
+}
+.gf-soon kbd {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #2c251d;
+  color: var(--zink);
+}
+/* the line-up as the STORE's first tab: its card and strip a little lower under the tabs */
+.gta-front .gf-tools .gta-btn.ghost.gf-zilk {
+  color: #1d1405;
+  background: linear-gradient(180deg, #ffd45e 0%, #f4b728 48%, #dc9c10 100%);
+  box-shadow:
+    inset 0 1px 0 #fff1b8,
+    inset 0 -2px 0 var(--zg-lo),
+    0 0 0 1px #4a3104;
+}
+.gta-front.ingame .gf-zilk {
+  display: none;
+}
+/* Zilk Road's market (zilk.ts) in a wide sheet */
+.gfw.wide .gfw-panel {
+  width: min(1100px, 100%);
+  max-height: calc(100% - 32px);
+  overflow: auto;
+}
+
+/* ---- how to play: cards on the dark ---- */
+.gf-pbody {
+  position: absolute;
+  left: var(--zpad);
+  right: var(--zpad);
+  top: 104px;
+  bottom: 0;
+  overflow: auto;
+  padding-bottom: calc(5vh + 100px);
+  scrollbar-width: thin;
+  scrollbar-color: #3a3026 transparent;
+}
+.gf-steps {
+  max-width: 1240px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.gf-steps {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.gf-step {
+  position: relative;
+  padding: 22px 24px 20px 76px;
+  min-height: 150px;
+}
+.gf-step > i {
+  position: absolute;
+  left: 24px;
+  top: 20px;
+  font: 900 42px/1 var(--g-disp);
+  font-stretch: 125%;
+  font-style: normal;
+  color: var(--c, var(--zg));
+}
+.gf-step h4 {
+  margin: 0 0 10px;
+  font: 800 22px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.gf-step p {
+  margin: 0;
+  font: 400 15px/1.5 var(--g-disp);
+  color: var(--zink2);
+}
+.gf-step p kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  margin: 0 2px;
+  padding: 0 5px;
+  border-radius: 3px;
+  color: var(--zink);
+  background: #2c251d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.gf-pbar {
+  position: fixed;
+}
+.gf-pbar .gf-bal small {
+  max-width: 110px;
+}
+
+/* ---- the garage (the line-up) in the hub's language ---- */
+.gf-traits {
+  border-radius: 5px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.gf-traits div {
+  background: linear-gradient(180deg, #231e18, #1a1611);
+}
+.gf-traits dt {
+  font: 800 11px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.gf-traits dd {
+  font: 800 16px/1.1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.gf-cname {
+  text-transform: uppercase;
+}
+.gf-nav {
+  border: 0;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #231e18, #1a1611);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 var(--zb-dk),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.gf-dot {
+  border-radius: 4px;
+}
+.gf-dot.on {
+  border-color: var(--zg);
+}
+.gf-num input {
+  height: 42px;
+  border: 0;
+  border-radius: 4px;
+  background: #120e0a;
+  box-shadow:
+    inset 0 2px 0 rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(222, 170, 60, 0.3);
+  font: 800 15px var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.04em;
+}
+.gta-front .gf-tools .gta-btn,
+.gta-front .gf-tools .gta-btn.ghost {
+  height: 42px;
+  border: 0;
+  border-radius: 4px;
+  font: 800 14px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--zink);
+  background: linear-gradient(180deg, #312920 0%, #241e18 100%);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.gta-front .gf-tools .gta-btn:hover {
+  filter: brightness(1.14);
+  background: linear-gradient(180deg, #312920 0%, #241e18 100%);
+}
+.gta-front .gf-play.gta-btn,
+.gta-front .gf-play.gta-btn:hover {
+  border: 0;
+  border-radius: 4px;
+  font: 800 20px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #1d1405;
+  background: linear-gradient(180deg, #ffd45e 0%, #f4b728 48%, #dc9c10 100%);
+  box-shadow:
+    inset 0 1px 0 #fff1b8,
+    inset 0 -3px 0 var(--zg-lo),
+    0 0 0 1px #4a3104,
+    0 6px 14px rgba(0, 0, 0, 0.4);
+}
+.gf-play small {
+  font: 800 12px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.06em;
+  color: rgba(29, 20, 5, 0.6);
+}
+
+/* ---- the hints ---- */
+.gf-hints span {
+  font: 700 13px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.gta-front[data-mode="store"] .gf-hints {
+  display: none;
+}
+
+/* ---- the wallet sheet (wallet.ts) ---- */
+.gfw {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(8, 6, 4, 0.82);
+  animation: gfw-in 0.18s ease-out;
+  color: var(--zink);
+  pointer-events: auto;
+}
+@keyframes gfw-in {
+  from {
+    opacity: 0;
+  }
+}
+.gfw-panel {
+  position: relative;
+  width: min(540px, 100%);
+  padding: 26px 28px 24px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #221b14, #17120d);
+  border-top: 2px solid #c89a2a;
+  border-bottom: 2px solid #0a0805;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+}
+.gfw h2 {
+  margin: 0 0 18px;
+  font: 900 34px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #ffe28a;
+}
+.gfw-x {
+  position: absolute;
+  right: 12px;
+  top: 10px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 4px;
+  background: #2a2119;
+  color: #e8dcc4;
+  font-size: 16px;
+}
+.gfw-btn {
+  height: 50px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 4px;
+  font: 800 17px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--zink);
+  background: linear-gradient(180deg, #312920, #241e18);
+  box-shadow:
+    inset 0 1px 0 var(--zb-hi),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.gfw-btn.gold {
+  color: #1d1405;
+  background: linear-gradient(180deg, #ffd45e 0%, #f4b728 48%, #dc9c10 100%);
+  box-shadow:
+    inset 0 1px 0 #fff1b8,
+    inset 0 -3px 0 var(--zg-lo),
+    0 0 0 1px #4a3104;
+}
+.gfw-btn.wide {
+  width: 100%;
+}
+.gfw-btn[disabled] {
+  filter: brightness(0.75);
+}
+.gfw-row {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+}
+.gfw-note {
+  margin: 16px 0 0;
+  font: 400 15px/1.5 var(--g-disp);
+  color: rgba(243, 239, 230, 0.7);
+}
+.gfw-note.bad {
+  color: #ff9a7a;
+}
+.gfw-note a {
+  color: #ffd45e;
+}
+.gfw-acct {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 4px;
+  background: #120e0a;
+  box-shadow: inset 4px 0 0 #6ee07a;
+}
+.gfw-acct b {
+  font: 800 22px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.03em;
+  color: #fff;
+}
+.gfw-acct small {
+  font: 800 12px/1 var(--g-disp);
+  font-stretch: 75%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(243, 239, 230, 0.5);
+}
+
+/* (not wide enough for the tabs between the title and the purse: after the title) */
+@media (max-width: 1500px) and (min-width: 761px) {
+  .gf-stabs {
+    left: calc(var(--zpad) + 250px);
+    transform: none;
+  }
+  .gf-stabs button {
+    min-width: 0;
+  }
+}
+
+/* ---- narrow screens, phones ---- */
+@media (max-width: 760px), (max-height: 520px) {
+  .gf-mark.small {
+    font-size: 34px;
+  }
+  .gf-mark small {
+    margin-top: 8px;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+  }
+  .gf-item b {
+    font-size: 26px;
+  }
+  .gf-badge {
+    height: 20px;
+    font-size: 12px;
+  }
+  .gf-wallet {
+    top: 12px;
+    right: 12px;
+  }
+  .gf-purse > span:nth-child(n + 2) {
+    display: none;
+  }
+  .gf-purse,
+  .gf-connect {
+    height: 38px;
+  }
+  .gf-connect b {
+    font-size: 12px;
+  }
+  .gf-menu .gf-mark {
+    top: 74px;
+  }
+  .gf-live {
+    display: none;
+  }
+  .gf-me {
+    left: 12px;
+    right: 12px;
+    max-width: none;
+  }
+  .gf-phead,
+  .gf-shead {
+    top: 64px;
+  }
+  .gf-stabs {
+    top: 116px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    overflow-x: auto;
+  }
+  .gf-stabs button {
+    min-width: 0;
+    flex: 1;
+    padding: 0 8px;
+    font-size: 14px;
+  }
+  .gf-vtabs {
+    top: 168px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    justify-content: space-between;
+  }
+  .gf-vtabs button {
+    padding: 0 6px;
+    font-size: 13px;
+  }
+  .gf-ext {
+    left: 12px;
+    right: 12px;
+    top: 170px;
+    bottom: 3vh;
+  }
+  .gf-shelf {
+    justify-content: flex-start;
+    left: 0;
+    right: 0;
+    padding-left: 12px;
+    bottom: calc(4vh + 84px);
+  }
+  .gf-tile {
+    width: 108px;
+  }
+  .gf-sw {
+    width: 52px;
+    height: 52px;
+  }
+  .gf-sbar,
+  .gf-pbar {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    bottom: 3vh;
+    flex-wrap: wrap;
+    justify-content: center;
+    white-space: normal;
+  }
+  .gf-sbar .gf-btn,
+  .gf-pbar .gf-btn {
+    height: 46px;
+    padding: 0 16px;
+    font-size: 16px;
+  }
+  .gf-snote {
+    display: none;
+  }
+  .gf-pbody {
+    left: 12px;
+    right: 12px;
+    top: 118px;
+  }
+  .gf-steps {
+    grid-template-columns: 1fr;
   }
 }

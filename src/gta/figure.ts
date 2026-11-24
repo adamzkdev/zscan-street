@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { faces, type Look } from "./faces";
-import { partGeo, type PartKind } from "./snarkgeo";
+import { lowDetail, partGeo, type PartKind } from "./snarkgeo";
 import { flushArt, snarkMaterial } from "./snarkmat";
 
 /**
@@ -68,6 +68,17 @@ export function partShape(kind: PartKind) {
     g = partGeo(kind);
     g.userData.shared = true;
     partGeos.set(kind, g);
+  }
+  return g;
+}
+const partFar = new Map<PartKind, THREE.BufferGeometry>();
+/** The same, far off (snarkgeo.ts lowDetail). */
+export function partShapeFar(kind: PartKind) {
+  let g = partFar.get(kind);
+  if (!g) {
+    g = lowDetail(() => partGeo(kind));
+    g.userData.shared = true;
+    partFar.set(kind, g);
   }
   return g;
 }

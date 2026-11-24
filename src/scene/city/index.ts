@@ -18,7 +18,8 @@ import { SEA_RECT } from "../keys/sea";
 import type { Geos } from "./worker";
 import { CUT_VOX } from "./plan";
 import { tunnels } from "./tunnel";
-import { isSlot, NO_FIELD } from "../real/buildings";
+import { isSlot, NO_FIELD, REAL_TYPES, realDoorX } from "../real/buildings";
+import type { Built } from "../voxel/buildings";
 import { realMat } from "../real/mats";
 
 /** `?real=0`: the voxel city as it was (the realistic buildings off: a kill switch, and a baseline). */
@@ -141,6 +142,8 @@ export interface Facade {
   extras: THREE.Object3D;
   /** On the bigger city round the heart (fewer screens there). */
   ext?: boolean;
+  /** The street door its realistic building draws (world, at the front wall): the game's E goes there. */
+  door?: { x: number; z: number };
   /** Apartments: where someone could stand on each balcony (world), and which way is out. */
   balconies?: THREE.Vector3[];
   out?: THREE.Vector3;
@@ -179,6 +182,13 @@ const ROT = { s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 };
 const AVENUE_CORE = 64;
 
 /** Balcony standing spots of an apartment block (same layout as voxel/buildings.ts apartment()). */
+/** A realistic building's own street door (world), or none (voxel buildings: the game finds one). */
+function realDoor(j: BuildingJob, m: { body: [number, number, number, number]; door: number[] }, toWorld: (x: number, y: number, z: number) => THREE.Vector3) {
+  if (!REAL_ON || !REAL_TYPES.has(j.type)) return undefined;
+  const p = toWorld(realDoorX(j, { body: m.body, door: m.door } as unknown as Built), 0, m.body[3]);
+  return { x: p.x, z: p.z };
+}
+
 function balconySpots(j: BuildingJob, body: [number, number, number, number], toWorld: (x: number, y: number, z: number) => THREE.Vector3) {
   if (j.type !== "apartment") return undefined;
   const floors = (j.opts as { floors?: number }).floors ?? 5;
@@ -214,6 +224,8 @@ function half(a: Uint16Array) {
   return at;
 }
 
+/** A phone: every JS copy dropped (memory first). */
+const COARSE_GEO = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 /** Buildings that are the same variant share their geometry. */
 const geoCache = new WeakMap<object, THREE.BufferGeometry>();
 /**
@@ -229,7 +241,7 @@ function dropOnUpload(a: THREE.BufferAttribute) {
   });
 }
 
-function geometry(d: NonNullable<Geos[Kind]>) {
+function geometry(d: NonNullable<Geos[Kind]>, keep = false) {
   const hit = geoCache.get(d);
   if (hit) return hit;
   const g = new THREE.BufferGeometry();
@@ -242,9 +254,14 @@ function geometry(d: NonNullable<Geos[Kind]>) {
   if (d.uv) g.setAttribute("uv", new THREE.BufferAttribute(d.uv, 2));
   g.setIndex(new THREE.BufferAttribute(d.idx, 1));
   g.computeBoundingSphere();
-  // (positions and indices stay: clicks, the walk and the bridges' decks raycast these meshes)
-  dropOnUpload(g.getAttribute("normal") as THREE.BufferAttribute);
-  dropOnUpload(g.getAttribute("color") as THREE.BufferAttribute);
+  // (positions and indices stay: clicks, the walk and the bridges' decks raycast these meshes;
+  // a building with materials of its own — walls down clips them — keeps the rest on a desktop too:
+  // the draw-saver merges such buildings' same-looking slots a tile at a time, which needs them —
+  // a landmark was sixty draws a frame, one per slot)
+  if (!keep) {
+    dropOnUpload(g.getAttribute("normal") as THREE.BufferAttribute);
+    dropOnUpload(g.getAttribute("color") as THREE.BufferAttribute);
+  }
   return g;
 }
 
@@ -277,7 +294,7 @@ function objectFrom(geos: Geos, own: boolean) {
   for (const [kind, d] of Object.entries(geos) as [Kind, NonNullable<Geos[Kind]>][]) {
     // a realistic building's slot: its shared material (or its own clone: walls down clips it)
     const mat = isSlot(kind) ? realMat(kind, own) : own ? ownMaterial(kind) : MATERIALS[kind];
-    const mesh = new THREE.Mesh(geometry(d), mat);
+    const mesh = new THREE.Mesh(geometry(d, own && !COARSE_GEO), mat);
     mesh.raycast = raycastOnPositions;
     if (NO_FIELD.has(kind)) mesh.userData.noField = true;
     const lit = kind === "emit" || (kind as string) === "neon";
@@ -561,7 +578,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     occluders.push(occ);
     const fa = toWorld(bx0, 0, bz1),
       fb = toWorld(bx1, 0, bz1);
-    facades.push({ type: j.type, face: j.face, x0: Math.min(fa.x, fb.x), x1: Math.max(fa.x, fb.x), z: fa.z, height: (m.h - 26) * VOX, frontRow: j.frontRow, extras, balconies: balconySpots(j, m.body, toWorld), out: new THREE.Vector3(0, 0, 1).applyAxisAngle(Y, ROT[j.face]) });
+    facades.push({ type: j.type, face: j.face, x0: Math.min(fa.x, fb.x), x1: Math.max(fa.x, fb.x), z: fa.z, height: (m.h - 26) * VOX, frontRow: j.frontRow, extras, balconies: balconySpots(j, m.body, toWorld), out: new THREE.Vector3(0, 0, 1).applyAxisAngle(Y, ROT[j.face]), door: realDoor(j, m, toWorld) });
     for (const s of m.signs) {
       // (a landmark's sign can face its back: `back`)
       signPlane(s.y > CUT_VOX ? extras : g, s, toWorld, ROT[j.face] + ((s as { back?: boolean }).back ? Math.PI : 0), flicker);
@@ -719,7 +736,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
       farExtras.push({ group: extras, at: new THREE.Vector3().setFromMatrixPosition(mx) });
       const fa = toWorld(bx0, 0, bz1),
         fb = toWorld(bx1, 0, bz1);
-      facades.push({ type: j.type, face: j.face, x0: Math.min(fa.x, fb.x), x1: Math.max(fa.x, fb.x), z: fa.z, height: (m.h - 26) * VOX, frontRow: j.frontRow, extras, ext: true, balconies: balconySpots(j, m.body, toWorld), out: new THREE.Vector3(0, 0, 1).applyAxisAngle(Y, ROT[j.face]) });
+      facades.push({ type: j.type, face: j.face, x0: Math.min(fa.x, fb.x), x1: Math.max(fa.x, fb.x), z: fa.z, height: (m.h - 26) * VOX, frontRow: j.frontRow, extras, ext: true, balconies: balconySpots(j, m.body, toWorld), out: new THREE.Vector3(0, 0, 1).applyAxisAngle(Y, ROT[j.face]), door: realDoor(j, m, toWorld) });
       // the big signs only (vertical shop signs, rooftop billboards): the city's neon
       for (const s of m.signs) if (s.vertical || s.y > 60) signPlane(s.y > CUT_VOX ? extras : g, s, toWorld, ROT[j.face], flicker);
     });

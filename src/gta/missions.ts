@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { profile } from "../game/profile";
+import { Economy } from "./economy";
 import { faces } from "./faces";
 import { SnarkFigure } from "./figure";
 import { ST } from "../scene/city/plan";
@@ -162,38 +162,51 @@ interface Debris {
 }
 
 function boardTexture(word: string, i: number) {
+  // (the panel's own proportions, 4.6 × 1.5 m: the 512 × 300 canvas it had was stretched to nearly
+  // twice its width on it)
+  const W = 768,
+    H = 250;
   const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 300;
+  c.width = W;
+  c.height = H;
   const g = c.getContext("2d")!;
-  g.fillStyle = "#0b0c12";
-  g.fillRect(0, 0, 512, 300);
-  const grad = g.createLinearGradient(0, 0, 512, 300);
-  grad.addColorStop(0, "rgba(196,91,255,0.35)");
-  grad.addColorStop(1, "rgba(244,183,40,0.25)");
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 512, 300);
-  g.strokeStyle = "#f4b728";
-  g.lineWidth = 10;
-  g.strokeRect(10, 10, 492, 280);
-  g.fillStyle = "#f4b728";
-  g.font = "700 22px 'JetBrains Mono', monospace";
-  g.textAlign = "left";
-  g.fillText(`PROOF BOARD  ${String(i + 1).padStart(2, "0")}/12`, 34, 52);
-  g.textAlign = "right";
-  g.fillText("ⓩ", 478, 52);
-  g.fillStyle = "#ffffff";
-  g.textAlign = "center";
-  let size = 108;
-  g.font = `900 ${size}px Archivo, 'Roboto', sans-serif`;
-  while (g.measureText(word).width > 440 && size > 40) g.font = `900 ${(size -= 6)}px Archivo, 'Roboto', sans-serif`;
-  g.fillText(word, 256, 185);
-  g.fillStyle = "rgba(255,255,255,0.7)";
-  g.font = "500 20px 'JetBrains Mono', monospace";
-  g.fillText("DRIVE THROUGH TO SMASH", 256, 250);
+  const draw = () => {
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = "#0b0c12";
+    g.fillRect(0, 0, W, H);
+    const grad = g.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, "rgba(196,91,255,0.35)");
+    grad.addColorStop(1, "rgba(244,183,40,0.25)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, W, H);
+    g.strokeStyle = "#f4b728";
+    g.lineWidth = 10;
+    g.strokeRect(10, 10, W - 20, H - 20);
+    g.fillStyle = "#f4b728";
+    g.font = "700 22px 'JetBrains Mono', monospace";
+    g.textAlign = "left";
+    g.fillText(`PROOF BOARD  ${String(i + 1).padStart(2, "0")}/12`, 34, 50);
+    g.textAlign = "right";
+    g.fillText("ⓩ", W - 34, 50);
+    g.fillStyle = "#ffffff";
+    g.textAlign = "center";
+    let size = 104;
+    g.font = `900 ${size}px Archivo, 'Roboto', sans-serif`;
+    while (g.measureText(word).width > W - 120 && size > 40) g.font = `900 ${(size -= 6)}px Archivo, 'Roboto', sans-serif`;
+    g.fillText(word, W / 2, 162);
+    g.fillStyle = "rgba(255,255,255,0.7)";
+    g.font = "500 20px 'JetBrains Mono', monospace";
+    g.fillText("DRIVE THROUGH TO SMASH", W / 2, 214);
+  };
+  draw();
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
+  // (drawn again once the page's fonts are in: the first draw may have had the fallback's)
+  document.fonts?.ready.then(() => {
+    draw();
+    t.needsUpdate = true;
+  });
   return t;
 }
 
@@ -232,7 +245,8 @@ export class Missions {
   }
 
   private pay(n: number, why: string) {
-    profile.pay(n, why);
+    // (into the game's one ⓩ purse: economy.ts)
+    Economy.earn(n, why);
     this.prog.earned += n;
     this.save();
   }
@@ -266,23 +280,48 @@ export class Missions {
     long.forEach((p, i) => this.traps.push(this.trap(`t${i}`, p.x, p.z, p.axis, p.name)));
   }
 
+  /** Half the asphalt's width of the street at (x, z) on `axis` (m). */
+  private halfWidth(x: number, z: number, axis: "x" | "z") {
+    const r = this.host.roads.rects.find((q) => q.axis === axis && x >= q.x0 - 0.1 && x <= q.x1 + 0.1 && z >= q.z0 - 0.1 && z <= q.z1 + 0.1);
+    return r ? (axis === "x" ? r.z1 - r.z0 : r.x1 - r.x0) / 2 : 7;
+  }
+
+  /**
+   * A board: a gantry over the street (a leg on each pavement, a beam across) with the word's
+   * panel hanging under it, high over the traffic — nothing in the road (the boards on two posts in
+   * the lanes were obstacles that made no sense). Drive under it to smash the panel.
+   */
   private board(i: number, x: number, z: number, axis: "x" | "z", street: string): Board {
     const group = new THREE.Group();
     group.position.set(x, 0, z);
-    // facing along the street: you drive through its face
+    // its face to the traffic: you drive under it
     group.rotation.y = axis === "x" ? Math.PI / 2 : 0;
     const word = WORDS[i % WORDS.length];
+    const half = this.halfWidth(x, z, axis);
+    const span = half + 0.75;
     const mat = new THREE.MeshBasicMaterial({ map: boardTexture(word, i), toneMapped: false, side: THREE.DoubleSide });
     mat.color.setScalar(1.25);
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.4, 0.12), [POST, POST, POST, POST, mat, mat]);
-    panel.position.y = 2.9;
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.5, 0.14), [POST, POST, POST, POST, mat, mat]);
+    panel.position.y = 6.05;
     group.add(panel);
+    // the gantry: round legs on the pavements, a box beam across, the panel's hangers
+    const legGeo = new THREE.CylinderGeometry(0.16, 0.2, 7.4, 12);
     for (const side of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.1, 0.14), POST);
-      post.position.set(side * 2.2, 2.05, 0);
-      post.castShadow = true;
-      group.add(post);
+      const leg = new THREE.Mesh(legGeo, POST);
+      leg.position.set(side * span, 3.7 + 0.2, 0);
+      leg.castShadow = true;
+      group.add(leg);
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.25, 0.7), POST);
+      foot.position.set(side * span, 0.32, 0);
+      group.add(foot);
+      const hanger = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.55, 6), POST);
+      hanger.position.set(side * 1.9, 7.05, 0);
+      group.add(hanger);
     }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(span * 2 + 0.4, 0.38, 0.3), POST);
+    beam.position.y = 7.45;
+    beam.castShadow = true;
+    group.add(beam);
     const done = this.prog.boards.includes(i);
     panel.visible = !done;
     this.group.add(group);
@@ -291,8 +330,8 @@ export class Missions {
 
   private trap(key: string, x: number, z: number, axis: "x" | "z", street: string): Trap {
     const group = new THREE.Group();
-    // on the kerb beside the road
-    const off = 6.2;
+    // on the pavement just past the kerb (a fixed 6.2 m stood in the lanes of the widened streets)
+    const off = this.halfWidth(x, z, axis) + 0.8;
     const px = axis === "x" ? x : x + off,
       pz = axis === "x" ? z + off : z;
     group.position.set(px, 0, pz);
@@ -525,7 +564,10 @@ export class Missions {
     if (!me.inCar || me.speed < 3) return;
     for (const b of this.boards) {
       if (b.done) continue;
-      if (Math.abs(me.x - b.x) < 2.6 && Math.abs(me.z - b.z) < 2.6) this.smash(b, me.speed);
+      // under its beam: anywhere across the street, within a few metres along it
+      const along = b.axis === "x" ? Math.abs(me.x - b.x) : Math.abs(me.z - b.z),
+        across = b.axis === "x" ? Math.abs(me.z - b.z) : Math.abs(me.x - b.x);
+      if (along < 2.6 && across < 10) this.smash(b, me.speed);
     }
   }
 

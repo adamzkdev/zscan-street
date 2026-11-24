@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { faces, type Look } from "./faces";
-import { bodyMatrix, figureMaterials, headMatrix, JOINTS, newAct, NPARTS, PART_KINDS, PARTS, partColor, partMatrix, partShape, pose, stride, type Act } from "./figure";
+import { bodyMatrix, figureMaterials, headMatrix, JOINTS, newAct, NPARTS, PART_KINDS, PARTS, partColor, partMatrix, partShape, partShapeFar, pose, stride, type Act } from "./figure";
+import type { PartKind } from "./snarkgeo";
 import { flushArt } from "./snarkmat";
 
 /**
@@ -33,6 +34,10 @@ export interface Person3 {
   act?(a: Act): void;
   /** Its heading, if it has one of its own (else from where it goes). */
   heading?(): number | null;
+  /** Seated in a vehicle: never stepped aside for you (it would leave the car). */
+  fixed?: boolean;
+  /** Drawn a little smaller (a driver under a car's roof), else 1. */
+  scale?(): number;
   /** Its flat figure hidden (true) or shown. */
   hide(on: boolean): void;
   /** Still in the street (not gone, not on a bus). */
@@ -56,7 +61,28 @@ interface Slot {
   /** Not posed yet (posed the first frame whatever its distance). */
   fresh: boolean;
   look: Look;
+  /** Its bust's geometries in the batch (near and far). */
+  g: Geo;
+  /** Drawn with the far shapes (past FAR_IN, back near under FAR_OUT). */
+  far: boolean;
+  /** Hidden right by the camera (its visibility last set). */
+  hidden: boolean | null;
 }
+
+interface Geo {
+  body: number;
+  head: number;
+  bodyFar: number;
+  headFar: number;
+  users: number;
+  used: number;
+}
+/**
+ * The far shapes from this far off (m from the camera), the near ones again under FAR_OUT: at 20 m a
+ * figure is ~60 px tall, the fifth of the triangles reads the same (snarkgeo.ts lowDetail).
+ */
+const FAR_IN = 21,
+  FAR_OUT = 17;
 
 export class People3D {
   readonly group = new THREE.Group();
@@ -65,7 +91,10 @@ export class People3D {
   private parts: THREE.BatchedMesh;
   private slots = new Map<string, Slot>();
   /** Busts in the batch, by zkSNARK: their geometries there, how many wear them, when last used. */
-  private geos = new Map<number, { body: number; head: number; users: number; used: number }>();
+  private geos = new Map<number, Geo>();
+  /** The limbs' shapes in the batch, near and far, by kind. */
+  private kindGeo = new Map<PartKind, number>();
+  private kindFar = new Map<PartKind, number>();
   /** Flat figures hidden (in the ring round you), by key. */
   private flat = new Map<string, Person3>();
   private free: number[] = [];
@@ -110,25 +139,32 @@ export class People3D {
     const mats = figureMaterials();
     // (indexed busts: the smooth ones share their corners)
     // (a bust is about 1.7k vertices and 9k indices: room for all of them at once, no regrowth while playing)
-    this.busts = new THREE.BatchedMesh(this.max * 2, (this.max + 30) * 1800, (this.max + 30) * 9600, mats.bust);
+    // (and its far version: about a fifth more)
+    this.busts = new THREE.BatchedMesh(this.max * 2, (this.max + 30) * 2200, (this.max + 30) * 11600, mats.bust);
     this.busts.castShadow = true;
     this.busts.frustumCulled = false;
     this.busts.perObjectFrustumCulled = true;
+    // (opaque: the depth test sorts them; sorting 800 instances by depth every pass was CPU for nothing)
+    this.busts.sortObjects = false;
     let pv = 0,
       pi = 0;
-    for (const k of PART_KINDS) {
-      pv += partShape(k).getAttribute("position").count;
-      pi += partShape(k).getIndex()!.count;
-    }
+    for (const k of PART_KINDS)
+      for (const g of [partShape(k), partShapeFar(k)]) {
+        pv += g.getAttribute("position").count;
+        pi += g.getIndex()!.count;
+      }
     this.parts = new THREE.BatchedMesh(this.max * NPARTS, pv, pi, mats.part);
     this.parts.castShadow = true;
     this.parts.frustumCulled = false;
     this.parts.perObjectFrustumCulled = true;
     this.parts.sortObjects = false;
-    const kindGeo = new Map(PART_KINDS.map((k) => [k, this.parts.addGeometry(partShape(k))] as const));
+    for (const k of PART_KINDS) {
+      this.kindGeo.set(k, this.parts.addGeometry(partShape(k)));
+      this.kindFar.set(k, this.parts.addGeometry(partShapeFar(k)));
+    }
     // (instance ids in order: slot i's limb k is i × NPARTS + k)
     for (let i = 0; i < this.max * NPARTS; i++) {
-      const id = this.parts.addInstance(kindGeo.get(PARTS[i % NPARTS].kind)!);
+      const id = this.parts.addInstance(this.kindGeo.get(PARTS[i % NPARTS].kind)!);
       this.parts.setVisibleAt(id, false);
     }
     this.group.add(this.busts, this.parts);
@@ -241,7 +277,7 @@ export class People3D {
           continue;
         }
         try {
-          g = { body: this.add(look.body), head: this.add(look.head), users: 0, used: 0 };
+          g = { body: this.add(look.body), head: this.add(look.head), bodyFar: this.add(look.bodyFar), headFar: this.add(look.headFar), users: 0, used: 0 };
           this.geos.set(p.id, g);
           // (its picture's slot in the atlas stays its own while its bust is in the batch)
           faces.pin(p.id);
@@ -264,7 +300,9 @@ export class People3D {
       const look = faces.lookNow(p.id);
       const was = this.gone.get(p.key);
       if (was !== undefined && performance.now() - was < 2500) this.churn++;
-      const sl: Slot = { p, inst, body, head, id: p.id, heading: p.heading?.() ?? Math.random() * Math.PI * 2, last: at, act: newAct(), aside: new THREE.Vector3(), skip: 0, fresh: true, look };
+      const sl: Slot = { p, inst, body, head, id: p.id, heading: p.heading?.() ?? Math.random() * Math.PI * 2, last: at, act: newAct(), aside: new THREE.Vector3(), skip: 0, fresh: true, look, g, far: false, hidden: null };
+      // (its limbs may still wear the far shapes of the last one in this slot)
+      for (let k = 0; k < NPARTS; k++) this.parts.setGeometryIdAt(inst * NPARTS + k, this.kindGeo.get(PARTS[k].kind)!);
       this.slots.set(p.key, sl);
       for (let k = 0; k < NPARTS; k++) this.parts.setColorAt(inst * NPARTS + k, this.c.setHex(partColor(look, k), THREE.SRGBColorSpace));
     }
@@ -319,6 +357,8 @@ export class People3D {
       if (this.geos.size <= this.max + 12) break;
       this.busts.deleteGeometry(g.body);
       this.busts.deleteGeometry(g.head);
+      this.busts.deleteGeometry(g.bodyFar);
+      this.busts.deleteGeometry(g.headFar);
       this.geos.delete(id);
       faces.unpin(id);
     }
@@ -385,6 +425,14 @@ export class People3D {
       sl.last.copy(at);
       // far off: posed one frame in three (the walk carries on between)
       const camD = this.eye ? Math.hypot(at.x - this.eye.x, at.z - this.eye.z) : 9;
+      // its level of detail (a little hysteresis: no flicker on the line)
+      const far = camD > (sl.far ? FAR_OUT : FAR_IN);
+      if (far !== sl.far) {
+        sl.far = far;
+        this.busts.setGeometryIdAt(sl.body, far ? sl.g.bodyFar : sl.g.body);
+        this.busts.setGeometryIdAt(sl.head, far ? sl.g.headFar : sl.g.head);
+        for (let k = 0; k < NPARTS; k++) this.parts.setGeometryIdAt(sl.inst * NPARTS + k, (far ? this.kindFar : this.kindGeo).get(PARTS[k].kind)!);
+      }
       if (camD > 55 && (this.frame + sl.inst) % 3 !== 0 && !sl.fresh) continue;
       sl.fresh = false;
       // you are in the way: it steps round you (drawn aside; the crowd's own loop carries on)
@@ -394,7 +442,7 @@ export class People3D {
         const ox = at.x - this.me.x,
           oz = at.z - this.me.z;
         const d = Math.hypot(ox, oz);
-        if (d < 1.1 && !sl.p.own) {
+        if (d < 1.1 && !sl.p.own && !sl.p.fixed) {
           const push = (1.1 - d) * 1.1;
           if (d > 1e-3) want.set((ox / d) * push, 0, (oz / d) * push);
           else want.set(push, 0, 0);
@@ -420,10 +468,14 @@ export class People3D {
       const close = camD < 0.9;
       const lk = sl.look;
       this.q.setFromAxisAngle(this.up, sl.heading);
-      this.root.compose(this.v.set(at.x, at.y, at.z), this.q, this.s.setScalar(lk.bh));
-      this.busts.setVisibleAt(sl.body, !close);
-      this.busts.setVisibleAt(sl.head, !close);
-      for (let k = 0; k < NPARTS; k++) this.parts.setVisibleAt(sl.inst * NPARTS + k, !close);
+      this.root.compose(this.v.set(at.x, at.y, at.z), this.q, this.s.setScalar(lk.bh * (sl.p.scale?.() ?? 1)));
+      // (only when it changes: 20 visibility calls a body a frame, 8,000 for the crowd, for nothing)
+      if (close !== sl.hidden) {
+        sl.hidden = close;
+        this.busts.setVisibleAt(sl.body, !close);
+        this.busts.setVisibleAt(sl.head, !close);
+        for (let k = 0; k < NPARTS; k++) this.parts.setVisibleAt(sl.inst * NPARTS + k, !close);
+      }
       if (!close) {
         pose(a, lk, this.joints);
         for (let k = 0; k < JOINTS; k++) this.joints[k].premultiply(this.root);

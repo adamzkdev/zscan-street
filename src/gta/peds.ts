@@ -80,6 +80,8 @@ export interface Ped {
   barked: number;
   /** In the queue at this place's door (it faces the door), or null. */
   queue: { key: string; fx: number; fz: number } | null;
+  /** Pulled out of its car: back on its feet, it comes for you (a fighter) instead of running. */
+  revenge?: boolean;
 }
 
 export interface PedWorld {
@@ -160,6 +162,9 @@ const LINES_FLEE = ["AAH!", "Run!", "Watch out!", "Not again!", "Call the police
 const LINES_PHONE = ["Yeah, I'm on Mempool Avenue.", "No, the shielded one.", "Send it to my unified address.", "I'll call you back."];
 const LINES_HURT = ["Ow!", "Hey!", "Ugh!", "What the—", "Ouch!"];
 const LINES_SQUARE = ["You want some?!", "Come on then!", "Big mistake.", "Oh, it's on!", "Wrong zkSNARK, pal."];
+/** Pulled out of their car (or off their bike). */
+const LINES_JACKED = ["Hey! My car!", "That's MY ride!", "Thief!", "Get out of my car!", "Not the car!", "Somebody stop them!", "I just paid that off!", "Are you serious?!"];
+const LINES_UNSEATED = ["My bike!", "Hey! Give it back!", "Ow! My bike!", "Thief!"];
 const LINES_GUARD = ["Whoa, easy!", "Put those away!", "I don't want trouble.", "Relax, friend."];
 const LINES_BUMP = ["Hey, watch it!", "Excuse you!", "Rude.", "Look where you're going!"];
 const LINES_CALL = ["Police? Someone's beating people up!", "Hello? There's a fight on the street!", "Yes, a zkSNARK just punched me!"];
@@ -378,48 +383,7 @@ export class Peds {
       if (!who) continue;
       p.y = world.floor(p.x, p.z);
       const r = Math.random();
-      const make = (mode: Mode, ps: THREE.Vector3, ss: number, id = who): Ped => {
-        const t = Math.random();
-        return {
-          key: `g${++this.n}`,
-          id,
-          pos: ps,
-          heading: 0,
-          line: l,
-          s: ss,
-          dir: Math.random() < 0.5 ? 1 : -1,
-          speed: mode === "jog" ? 2.8 + Math.random() * 0.8 : 1.1 + Math.random() * 0.5,
-          mode,
-          modeT: mode === "walk" || mode === "jog" ? 20 + Math.random() * 30 : 8 + Math.random() * 18,
-          mate: null,
-          face: null,
-          knockT: -1,
-          knockV: new THREE.Vector3(),
-          knockSide: 1,
-          downFor: 3.6,
-          floor: ps.y,
-          greeted: 0,
-          cross: null,
-          side: 0,
-          sideT: 0,
-          hp: 100,
-          temper: t < 0.3 ? "fighter" : t < 0.45 ? "caller" : "coward",
-          foe: null,
-          guard: 0,
-          punchT: -1,
-          punchSide: 1,
-          nextPunch: 0,
-          hitT: 9,
-          push: new THREE.Vector3(),
-          watch: null,
-          callT: 0,
-          convo: null,
-          convoI: 0,
-          convoT: 0,
-          barked: 0,
-          queue: null,
-        };
-      };
+      const make = (mode: Mode, ps: THREE.Vector3, ss: number, id = who): Ped => this.newPed(mode, ps, l, ss, id);
       // (a pair needs a second face from here: none, and the first goes on alone)
       const mate = r < 0.18 ? this.face(p.x, p.z) : 0;
       if (mate && mate !== who) {
@@ -608,6 +572,12 @@ export class Peds {
         p.modeT = 3;
         p.face = null;
         p.guard = 0;
+        // (pulled out of its car, and a fighter: it comes for you)
+        if (p.revenge) {
+          p.revenge = false;
+          this.fight(p, "me");
+          this.say(p, pick(LINES_SQUARE), "shout");
+        }
       }
       return;
     }
@@ -1105,6 +1075,74 @@ export class Peds {
     p.modeT = 2.5 + Math.random() * 2;
     p.face = null;
     if (shout) this.say(p, pick(LINES_FLEE), "shout");
+  }
+
+  /** A passer-by in `mode` at `ps`, on line `l` at `s` along it, wearing zkSNARK #id. */
+  private newPed(mode: Mode, ps: THREE.Vector3, l: Line, ss: number, id: number): Ped {
+    const t = Math.random();
+    return {
+      key: `g${++this.n}`,
+      id,
+      pos: ps,
+      heading: 0,
+      line: l,
+      s: ss,
+      dir: Math.random() < 0.5 ? 1 : -1,
+      speed: mode === "jog" ? 2.8 + Math.random() * 0.8 : 1.1 + Math.random() * 0.5,
+      mode,
+      modeT: mode === "walk" || mode === "jog" ? 20 + Math.random() * 30 : 8 + Math.random() * 18,
+      mate: null,
+      face: null,
+      knockT: -1,
+      knockV: new THREE.Vector3(),
+      knockSide: 1,
+      downFor: 3.6,
+      floor: ps.y,
+      greeted: 0,
+      cross: null,
+      side: 0,
+      sideT: 0,
+      hp: 100,
+      temper: t < 0.3 ? "fighter" : t < 0.45 ? "caller" : "coward",
+      foe: null,
+      guard: 0,
+      punchT: -1,
+      punchSide: 1,
+      nextPunch: 0,
+      hitT: 9,
+      push: new THREE.Vector3(),
+      watch: null,
+      callT: 0,
+      convo: null,
+      convoI: 0,
+      convoT: 0,
+      barked: 0,
+      queue: null,
+    };
+  }
+
+  /**
+   * Someone pulled out of a vehicle (a car you take, a bike you knock them off): down at the door
+   * (`fx`, `fz` the way out), up again a moment later and then off — at a run, on the phone to the
+   * police, or (a fighter) back at you. Its line: the pavement nearest.
+   */
+  eject(id: number, x: number, z: number, fx: number, fz: number, floor: number, bike: boolean) {
+    if (!this.lines.length) return null;
+    const p = this.newPed("idle", new THREE.Vector3(x, floor, z), this.lines[0], 0, id);
+    this.snap(p);
+    if (p.cross) ((p.line = p.cross.line), (p.s = p.cross.s), (p.cross = null));
+    const power = bike ? 3.4 : 1.6;
+    p.knockV.set(fx * power, 0, fz * power);
+    p.knockT = 0;
+    p.knockSide = Math.random() < 0.5 ? -1 : 1;
+    p.downFor = bike ? 2.4 : 1.1;
+    p.hp = 80;
+    p.revenge = p.temper === "fighter";
+    if (p.temper === "caller") p.callT = 3 + Math.random() * 2;
+    this.peds.push(p);
+    this.say(p, pick(bike ? LINES_UNSEATED : LINES_JACKED), "shout");
+    this.panic(x, z, 10);
+    return p;
   }
 
   /** Trouble at (x, z): everyone within `r` runs from it. */

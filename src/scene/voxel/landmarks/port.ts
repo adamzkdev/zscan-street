@@ -409,11 +409,12 @@ export function port(seed: number, o: LandmarkOpts): Built {
   // ---- the power station ----
   const steam: [number, number, number][] = [];
   {
-    // cooling tower: a hyperboloid shell, ribbed, on slanted legs
-    const cx = 240,
+    // cooling tower: a hyperboloid shell, ribbed, on slanted legs (its foot inside the lot: clear of
+    // the data centre to the west, the fence on the east edge, the ring road behind)
+    const cx = 229,
       cz = 32;
     const CT = 78;
-    const rAt = (y: number) => 20 * Math.sqrt(1 + ((y - 58) / 30) ** 2);
+    const rAt = (y: number) => 16 * Math.sqrt(1 + ((y - 58) / 40.6) ** 2);
     for (let y = 6; y < CT; y++) {
       const R = rAt(y);
       for (let z = Math.floor(cz - R - 1); z <= cz + R + 1; z++)
@@ -461,44 +462,45 @@ export function port(seed: number, o: LandmarkOpts): Built {
     m.box(hx0 - 1, 1, hz0 + 10, hx0, 26, hz0 + 26, (_x, y) => (y % 2 ? C("#8a8692") : C("#76727e")));
     // boiler house: taller, darker, between the hall and the chimneys
     const bx0 = PS + 4,
-      bx1 = 248,
+      bx1 = 240,
       bz0 = hz1,
       bz1 = 132,
       bh = 70;
     m.box(bx0, 1, bz0, bx1, bh, bz1, (x, y, z) => (y % 12 === 0 ? C("#3a3842") : (x + z) % 2 ? C("#4e4a56") : C("#544f5c")));
     for (let x = bx0 + 3; x < bx1 - 3; x += 6) for (let y = 14; y < bh - 6; y += 12) m.box(x, y, bz1 - 1, x + 3, y + 4, bz1, hash(x, y, 2, seed) > 0.5 ? E("#ffb46b", 1.0) : G("#2a3448"));
     // a steel stair tower on the side, ducts to the chimneys
-    m.box(bx1, 1, bz0 + 4, bx1 + 6, bh - 4, bz0 + 10, (x, y) => (y % 4 === 0 ? C("#c0392b") : (x + y) % 4 === 0 ? C("#a8352a") : 0));
-    m.box(bx1, 40, bz0 + 14, 266, 48, bz0 + 20, C("#7a7882"));
-    // the chimneys: tall, red-and-white bands, a gallery, aviation lights
+    m.box(bx1, 1, bz0 + 4, bx1 + 4, bh - 4, bz0 + 10, (x, y) => (y % 4 === 0 ? C("#c0392b") : (x + y) % 4 === 0 ? C("#a8352a") : 0));
+    m.box(bx1, 40, bz0 + 14, 251, 48, bz0 + 20, C("#7a7882"));
+    // the chimneys: tall, red-and-white bands, a gallery, aviation lights (in a row east of the
+    // boiler house, inside the lot's east edge)
     for (const [sx, sz, sh] of [
-      [256, 122, 110],
-      [268, 108, 96],
+      [251, 127, 110],
+      [251, 114, 96],
     ]) {
       for (let y = 1; y < sh; y++) {
-        const R = 5.5 - (y / sh) * 1.5;
+        const R = 4.8 - (y / sh) * 1.3;
         const band = Math.floor((sh - y) / 9) % 2 === 0 && y > sh - 45;
         m.cylinder(sx, y, sz, R, 1, band ? C("#c0392b") : C(y % 9 === 0 ? "#b8b4ae" : "#d8d4cc"));
       }
-      m.cylinder(sx, 1, sz, 7, 6, C("#8c8892"));
-      m.cylinder(sx, sh - 14, sz, 6, 1, C("#3a3842"));
+      m.cylinder(sx, 1, sz, 6, 6, C("#8c8892"));
+      m.cylinder(sx, sh - 14, sz, 5.4, 1, C("#3a3842"));
       for (let a = 0; a < 12; a++) {
         const ang = (a / 12) * Math.PI * 2;
-        m.box(sx + Math.cos(ang) * 5.6, sh - 13, sz + Math.sin(ang) * 5.6, sx + Math.cos(ang) * 5.6 + 1, sh - 11, sz + Math.sin(ang) * 5.6 + 1, C("#3a3842"));
+        m.box(sx + Math.cos(ang) * 5, sh - 13, sz + Math.sin(ang) * 5, sx + Math.cos(ang) * 5 + 1, sh - 11, sz + Math.sin(ang) * 5 + 1, C("#3a3842"));
       }
-      m.cylinder(sx, sh - 1, sz, 4.2, 1, C("#2a2830"));
-      m.cylinder(sx, sh - 1, sz, 2.6, 1, C("#121014"));
+      m.cylinder(sx, sh - 1, sz, 3.6, 1, C("#2a2830"));
+      m.cylinder(sx, sh - 1, sz, 2.2, 1, C("#121014"));
       for (const [a, b] of [
-        [-4, 0],
-        [4, 0],
-        [0, -4],
-        [0, 4],
+        [-3, 0],
+        [3, 0],
+        [0, -3],
+        [0, 3],
       ])
         m.set(sx + a, sh, sz + b, E("#ff2a2a", 2.4));
       steam.push([sx, sh + 2, sz]);
     }
     // the switchyard on the quay: transformers, gantries, insulators
-    const sx0 = 252,
+    const sx0 = 238,
       sx1 = W - 2,
       sz0 = 136,
       sz1 = D - 4;
@@ -727,7 +729,8 @@ export function port(seed: number, o: LandmarkOpts): Built {
   mast(236, QUAY + 10, 60);
 
   const signs: SignSpot[] = [
-    { text: "EQUIHASH POWER", color: "#f4b728", x: (PS + 2 + W - 2) / 2, y: 44, z: 108.6, w: 56, h: 5, vertical: false, facing: "front" },
+    // (on the boiler house's face to the river, over its windows)
+    { text: "EQUIHASH POWER", color: "#f4b728", x: (PS + 4 + 240) / 2, y: 67.6, z: 132.6, w: 28, h: 2.5, vertical: false, facing: "front" },
     // the big ones face the court and the ring road (-z): the city turns them round
     Object.assign({ text: "PROOF FACTORY · 証明工場", color: "#c89bff", x: (HALL.x0 + HALL.x1) / 2, y: 36.5, z: HALL.z0 - 2.2, w: HALL.x1 - HALL.x0 - 20, h: 11, vertical: false, facing: "front" } as SignSpot, { back: true }),
     Object.assign({ text: "TRANSPARENT DEPOT · 透明", color: "#e8f6ff", x: (DEP.x0 + DEP.x1) / 2, y: 24.5, z: DEP.z0 - 1.2, w: DEP.x1 - DEP.x0 - 4, h: 8, vertical: false, facing: "front" } as SignSpot, { back: true }),

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { ACROSS } from "../city/plan";
 import { toObject } from "../voxel/mesher";
 import { C, VoxelModel } from "../voxel/model";
 import { realBird, realDeer } from "../real/animals";
@@ -139,10 +140,10 @@ export class Wildlife {
     const R = rnd(77);
     // deer: a few small herds, one with a buck
     const herds: [number, number, number][] = [
-      [204, 204, 3],
-      [130, 228, 2],
-      [222, 224, 2],
-      [190, 222, 2],
+      [204, 204 + ACROSS, 3],
+      [130, 228 + ACROSS, 2],
+      [222, 224 + ACROSS, 2],
+      [190, 222 + ACROSS, 2],
     ];
     herds.forEach(([hx, hz, n], hi) => {
       for (let i = 0; i < n; i++) {
@@ -168,7 +169,7 @@ export class Wildlife {
       frames.forEach((f) => root.add(f));
       root.scale.setScalar(1.6);
       this.group.add(root);
-      const b: Bird = { root, frames, kind: "raven", cx: rand(150, 220), cz: rand(200, 228), r: rand(14, 26), y: rand(32, 44), a: rand(0, 6.28), w: rand(0.18, 0.3) * (i % 2 ? 1 : -1), from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, dur: 1 };
+      const b: Bird = { root, frames, kind: "raven", cx: rand(150, 220), cz: rand(200, 228) + ACROSS, r: rand(14, 26), y: rand(32, 44), a: rand(0, 6.28), w: rand(0.18, 0.3) * (i % 2 ? 1 : -1), from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, dur: 1 };
       // on its circle over the forest from the start: the forest's life only runs near it, and an
       // unplaced raven sat at the city's origin, on the avenue's zebra crossing
       root.position.set(b.cx + Math.cos(b.a) * b.r, b.y, b.cz + Math.sin(b.a) * b.r);
@@ -219,7 +220,7 @@ export class Wildlife {
       s.scale.set(size * 1.6, size * 0.55, 1);
       s.userData.v = rand(0.35, 0.8);
       s.userData.hy = rand(2.5, 9);
-      s.position.set(rand(F.x0 + 12, F.x1 - 12), 0, rand(204, 228));
+      s.position.set(rand(F.x0 + 12, F.x1 - 12), 0, rand(204, 228) + ACROSS);
       s.renderOrder = 3;
       this.fog.push(s);
       this.fogMat.push(mat);
@@ -287,11 +288,11 @@ export class Wildlife {
   private perch() {
     for (let k = 0; k < 40; k++) {
       const x = rand(110, 232),
-        z = rand(200, 234);
+        z = rand(200, 234) + ACROSS;
       if (!this.land.inside(x, z)) continue;
       return new THREE.Vector3(x, this.land.raw(x, z) + rand(9, 20), z);
     }
-    return new THREE.Vector3(190, 25, 220);
+    return new THREE.Vector3(190, 25, 220 + ACROSS);
   }
 
   private resetSpark(i: number, age = 0) {
@@ -314,7 +315,7 @@ export class Wildlife {
     this.fallsTex.offset.y += dt * 1.6;
     this.mist.forEach((m, i) => {
       const k = (t * 0.4 + m.userData.ph) % 1;
-      m.position.set(212.9 + Math.sin(i * 2.1) * 0.9, FALLS.foot[1] + 0.2 + k * 1.6, 222.8 + Math.cos(i * 1.7) * 0.7);
+      m.position.set(212.9 + Math.sin(i * 2.1) * 0.9, FALLS.foot[1] + 0.2 + k * 1.6, 222.8 + ACROSS + Math.cos(i * 1.7) * 0.7);
       m.scale.setScalar(1.2 + k * 2.2);
       m.material.opacity = 0.45 * (1 - k);
     });

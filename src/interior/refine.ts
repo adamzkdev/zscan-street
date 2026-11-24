@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { addDetail, guessDetail } from "../scene/detail";
 import { groundMat } from "../scene/real/ground";
+import { maps, TILE } from "../scene/real/tex";
 
 /**
  * The finish of a place: every plain standard material gets its surface (plaster, polished stone,
@@ -75,6 +76,58 @@ function realSurface(mesh: THREE.Mesh): boolean {
   return true;
 }
 
+/**
+ * A floor drawn on a canvas (a place's own tiles, parquet, marble pattern): its drawing kept, the
+ * relief and the sheen of the real thing under it — the normal and roughness maps of a photographed
+ * set (marble for the pale ones, parquet for the brown ones, tiles else) repeated at their real size
+ * over the floor (copies of the shared textures with their own repeat: a 40 m floor no longer reads
+ * as a flat printed sheet).
+ */
+function grainFloor(mesh: THREE.Mesh) {
+  const m = mesh.material as THREE.MeshStandardMaterial;
+  if (Array.isArray(mesh.material) || !m?.isMeshStandardMaterial || !m.map || m.normalMap || m.transparent || m.userData.grained || m.userData.noReal) return;
+  const geo = mesh.geometry;
+  if (!geo?.getAttribute("uv")) return;
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  box.copy(geo.boundingBox!).applyMatrix4(mesh.matrixWorld).getSize(size);
+  if (size.y > 0.4 || size.x * size.z < 12 || Math.min(size.x, size.z) < 2.5) return;
+  // its average colour, from a few pixels of the drawing
+  const img = (m.map as THREE.Texture).image as HTMLCanvasElement | HTMLImageElement | undefined;
+  let r = 0.6,
+    g = 0.6,
+    b = 0.6;
+  try {
+    if (img && "getContext" in img) {
+      const d = img.getContext("2d")!.getImageData(0, 0, Math.min(64, img.width), Math.min(64, img.height)).data;
+      let n = 0;
+      r = g = b = 0;
+      for (let i = 0; i < d.length; i += 16) ((r += d[i]), (g += d[i + 1]), (b += d[i + 2]), n++);
+      ((r /= n * 255), (g /= n * 255), (b /= n * 255));
+    }
+  } catch {
+    /* a texture without its pixels at hand: the default */
+  }
+  new THREE.Color(r, g, b).getHSL(hsl);
+  const hue = hsl.h * 360;
+  const set = hue > 15 && hue < 48 && hsl.s > 0.25 && hsl.l < 0.6 ? "WoodFloor051" : hsl.l > 0.6 ? "Marble012" : "Tiles074";
+  const tile = TILE[set]?.[0] ?? 2;
+  const mp = maps(set);
+  const rep = new THREE.Vector2(Math.max(1, size.x / tile), Math.max(1, size.z / tile));
+  const copy = (t: THREE.Texture) => {
+    const c = t.clone();
+    c.repeat.copy(rep);
+    c.wrapS = c.wrapT = THREE.RepeatWrapping;
+    c.needsUpdate = true;
+    return c;
+  };
+  m.normalMap = copy(mp.normalMap);
+  m.normalScale.setScalar(set === "Marble012" ? 0.35 : 0.6);
+  m.roughnessMap = copy(mp.roughnessMap);
+  m.roughness = Math.max(0.35, m.roughness * 1.4);
+  m.userData.grained = true;
+  m.needsUpdate = true;
+}
+
 export function refine(root: THREE.Object3D) {
   root.updateMatrixWorld();
   root.traverse((o) => {
@@ -84,6 +137,7 @@ export function refine(root: THREE.Object3D) {
     if (!seen.has(o) && mesh.isMesh && !(mesh as THREE.InstancedMesh).isInstancedMesh) {
       seen.add(o);
       if (realSurface(mesh)) return;
+      grainFloor(mesh);
       if (!done.has(mats as THREE.Material)) polishFloor(mesh);
     }
     for (const m of Array.isArray(mats) ? mats : [mats]) {

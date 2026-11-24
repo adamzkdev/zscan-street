@@ -2608,63 +2608,60 @@ def("gardens", (c) => {
   // ground: the lawn, a paved promenade in front, the curving path, a long flower bed
   K.box("lm.Grass004", -c.W / 2, 0, -c.D / 2, c.W / 2, 0.12, Z(md - 9), hex("#5a9a42"), { skip: "-y" });
   K.box("lm.PavingStones128", -c.W / 2, 0, Z(md - 9), c.W / 2, 0.13, c.D / 2, hex("#d0cabe"), { skip: "-y" });
+  // (as the voxel builder: the lot is 51 voxels deep — the domes, the grove and the pond keep behind
+  // the flower bed, the entrances open on to the promenade through it; nothing past the lot's front)
+  const f = { cx: X(40), cz: Z(19), rx: 34 * u, rz: 17 * u, h: 34 * u };
+  const cf = { cx: X(mw - 40), cz: Z(19), rx: 32 * u, rz: 17 * u, h: 50 * u };
+  const doors: [number, number][] = [
+    [f.cx, f.cz + f.rz],
+    [cf.cx - 18 * u, cf.cz + cf.rz * 0.8],
+  ];
   {
-    const N = c.far ? 16 : 48;
-    for (let i = 0; i < N; i++) {
-      const x0 = X(70 + (140 * i) / N),
-        x1 = X(70 + (140 * (i + 1)) / N);
-      const z0 = Z(36 + Math.sin((70 + (140 * i) / N) * 0.05) * 10),
-        z1 = Z(36 + Math.sin((70 + (140 * (i + 1)) / N) * 0.05) * 10);
-      K.quad("lm.Gravel022", [x0, 0.13, z0 - 0.8], [x0, 0.13, z0 + 0.8], [x1, 0.13, z1 + 0.8], [x1, 0.13, z1 - 0.8], [0, 1, 0], (p) => [p[0] * 0.5, p[2] * 0.5], hex("#c8b89a"));
-    }
-    // the flower bed along the promenade: drifts of colour
+    // the flower bed along the promenade: drifts of colour (open in front of the doors)
     for (let x = X(4); x < X(mw - 4); x += 3 * u) {
+      if (doors.some(([ex]) => Math.abs(x + 1.5 * u - ex) < 7 * u)) continue;
       const band = Math.floor(((x + c.W / 2) / u + Math.sin(x) * 3) / 9) % flowerCols.length;
       K.box("lm.Grass004", x, 0.12, Z(md - 14), x + 3 * u, 0.42, Z(md - 10), flowerCols[band]);
     }
   }
   // the Flower Dome (left): terraced beds and olive trees inside
-  const f = { cx: X(40), cz: Z(30), rx: 34 * u, rz: 24 * u, h: 34 * u };
   for (let ring = 0; ring < 3; ring++) {
     const rr = 0.85 - ring * 0.25;
     const pts = circle(0, 0, 1, 32).map(([a, b2]) => [f.cx + a * f.rx * rr, f.cz + b2 * f.rz * rr] as V2);
     K.prism("lm.Marble021", pts, 0.12, 0.12 + (ring + 1) * 0.66, hex("#b8b0a0"), { lid: "lm.Grass004", lidCol: flowerCols[ring * 2] });
   }
   for (const [tx, tz] of [
-    [24, 26],
-    [56, 24],
-    [40, 18],
-    [40, 32],
+    [24, 16],
+    [56, 15],
+    [40, 11],
+    [40, 20],
   ])
-    c.ex.trees.push([X(tx), tz === 32 ? 2.1 : 1.45, Z(tz), tz === 32 ? "broad" : "maple", tx]);
+    c.ex.trees.push([X(tx), tz === 20 ? 2.1 : 1.45, Z(tz), tz === 20 ? "broad" : "maple", tx]);
   conservatory(c, f.cx, f.cz, f.rx, f.rz, f.h, 0.12);
   // the Cloud Forest (right): a green mountain with a waterfall inside a taller dome
-  const cf = { cx: X(mw - 40), cz: Z(30), rx: 32 * u, rz: 24 * u, h: 50 * u };
   {
     const rings: { y: number; pts: V2[] }[] = [];
     for (let i = 0; i <= 8; i++) {
       const y = 0.12 + (i / 8) * 44 * u;
-      const rr = (13 - (i / 8) * 8) * u;
+      const rr = (11 - (i / 8) * 7) * u;
       rings.push({ y, pts: circle(0, 0, 1, 20).map(([a, b2], j) => [cf.cx + a * rr * (0.9 + 0.1 * Math.sin(j * 2.3 + i)), cf.cz + b2 * rr * (0.9 + 0.1 * Math.cos(j * 1.7 + i))] as V2) });
     }
     K.loft("lm.Grass004", rings, hex("#2f6b3c"), { smooth: true, lid: "lm.Grass004", lidCol: hex("#3d8a4a") });
     if (!c.far) {
       for (let y = 2; y < 44 * u - 2; y += 2.2) {
-        const rr = (13 - ((y - 0.12) / (44 * u)) * 8) * u;
+        const rr = (11 - ((y - 0.12) / (44 * u)) * 7) * u;
         c.ex.trees.push([cf.cx + Math.cos(y) * rr * 0.8, y, cf.cz + Math.sin(y) * rr * 0.8, "bush", Math.floor(y * 7)]);
       }
       // the waterfall down its front
-      const wz = (y: number) => cf.cz + (13 - (y / (44 * u)) * 8) * u * 0.95 + 0.1;
+      const wz = (y: number) => cf.cz + (11 - (y / (44 * u)) * 7) * u * 0.95 + 0.1;
       for (let y = 0.6; y < 38 * u; y += 1.2) K.quad("lm.glow", [cf.cx - 0.66, y, wz(y)], [cf.cx + 0.66, y, wz(y)], [cf.cx + 0.66, y + 1.2, wz(y + 1.2)], [cf.cx - 0.66, y + 1.2, wz(y + 1.2)], [0, 0.2, 1], (p) => [p[0], p[1]], hex("#cfeeff", 0.8));
-      K.cyl("lm.glass", cf.cx, cf.cz + 15 * u, 2, 2, 0.12, 0.3, hex("#3a9ac8"), { sides: 20 });
+      K.cyl("lm.glass", cf.cx, cf.cz + 12 * u, 4 * u, 4 * u, 0.12, 0.3, hex("#3a9ac8"), { sides: 20 });
     }
   }
   conservatory(c, cf.cx, cf.cz, cf.rx, cf.rz, cf.h, 0.12);
-  // the domes' entrances: glass vestibules with white canopies
-  for (const [ex, ez] of [
-    [f.cx, f.cz + f.rz],
-    [cf.cx - 18 * u, cf.cz + cf.rz * 0.8],
-  ]) {
+  // the domes' entrances: glass vestibules with white canopies, a paved apron out to the promenade
+  for (const [ex, ez] of doors) {
+    K.box("lm.PavingStones128", ex - 6 * u, 0, ez + 1.33, ex + 6 * u, 0.13, Z(md - 9), hex("#d0cabe"), { skip: "-y" });
     K.box("lm.glass", ex - 2, 0.12, ez - 0.66, ex + 2, 4, ez + 1.33, hex("#cfe6ee"), { skip: "-y" });
     lit(c, "lobby", ex - 1, ex + 1, 0.12, 3.3, ez + 1.35);
     K.box("lm.paint", ex - 2.33, 4, ez - 0.66, ex + 2.33, 4.33, ez + 1.66, hex("#eef0f2"));
@@ -2672,13 +2669,13 @@ def("gardens", (c) => {
   }
   // the Supertree grove: funnels of purple steel lattice wrapped in vertical gardens under flared crowns
   const trees: [number, number, number, number, string][] = [
-    [92, 22, 54, 12, "#c060ff"],
-    [118, 44, 40, 9, "#3ef0d0"],
-    [140, 20, 75, 15, "#ff4ab8"],
-    [164, 44, 46, 10, "#c060ff"],
-    [186, 22, 66, 13, "#3ef0d0"],
-    [104, 54, 30, 7, "#ff4ab8"],
-    [176, 56, 34, 8, "#c060ff"],
+    [92, 14, 54, 12, "#c060ff"],
+    [112, 26, 40, 9, "#3ef0d0"],
+    [140, 16, 75, 15, "#ff4ab8"],
+    [168, 26, 46, 10, "#c060ff"],
+    [186, 15, 66, 13, "#3ef0d0"],
+    [98, 32, 30, 7, "#ff4ab8"],
+    [182, 32, 34, 8, "#c060ff"],
   ];
   const latt = hex("#6e2a5e");
   for (const [tvx, tvz, th, cr, glow] of trees) {
@@ -2779,8 +2776,8 @@ def("gardens", (c) => {
   // the dragonfly pond in front of the grove, bronze dragonflies on poles
   {
     const pcx = X(140),
-      pcz = Z(46);
-    const pts = circle(0, 0, 1, 40).map(([a, b2]) => [pcx + a * 26 * u, pcz + b2 * 7 * u] as V2);
+      pcz = Z(27);
+    const pts = circle(0, 0, 1, 40).map(([a, b2]) => [pcx + a * 18 * u, pcz + b2 * 4 * u] as V2);
     K.prism("lm.Marble021", pts.map(([x, z]) => [pcx + (x - pcx) * 1.08, pcz + (z - pcz) * 1.25] as V2), 0.12, 0.45, hex("#b8b0a0"), { lid: "lm.Marble021", lidCol: hex("#c8c0b0") });
     K.prism("lm.glass", pts, 0.12, 0.47, hex("#2e7aa0"), { lid: "lm.glass", lidCol: hex("#2e7aa0") });
     if (!c.far)
@@ -2804,15 +2801,13 @@ def("gardens", (c) => {
   K.box("lm.Marble021", X(109), 0.12, Z(md - 18), X(171), 0.45, Z(md - 15), hex("#8a8478"));
   // lawn life: trees, palms, benches, lamps along the promenade
   for (const [x, z] of [
-    [78, 50],
-    [204, 52],
-    [124, 10],
-    [160, 10],
-    [80, 8],
-    [200, 8],
+    [82, 34],
+    [80, 6],
+    [116, 6],
+    [162, 6],
   ])
     c.ex.trees.push([X(x), 0.12, Z(z), "broad", x]);
-  for (const x of [6, 74, 208, mw - 8]) c.ex.trees.push([X(x), 0.42, Z(md - 16), "palm", x]);
+  for (const x of [6, 74, 214, mw - 8]) c.ex.trees.push([X(x), 0.42, Z(md - 12), "palm", x]);
   for (let x = 20; x < mw - 20; x += 36) c.ex.props.push(["bench", X(x), 0.13, Z(md - 8), 0]);
   for (let x = 12; x < mw; x += 44) c.ex.props.push(["lamp", X(x), 0.13, Z(md - 3), 0, "#e8d0ff"]);
 });
@@ -2842,6 +2837,43 @@ function container(c: LmCtx, x: number, y: number, z: number, len: number, col: 
     if (!alongZ) for (const t of [0.35, 0.6, 1.9, 2.15]) K.box("lm.Metal032", x + w, y + 0.2, z + t, x + w + 0.04, y + s - 0.2, z + t + 0.05, dk);
     else for (const t of [0.35, 0.6, 1.9, 2.15]) K.box("lm.Metal032", x + t, y + 0.2, z + d, x + t + 0.05, y + s - 0.2, z + d + 0.04, dk);
   }
+}
+
+/** hcyl's twin lying along z (from z0 to z1), its axis at height y over x. */
+function zcyl(c: LmCtx, s: Slot, z0: number, z1: number, y: number, x: number, r: number, col: V3, o: { sides?: number } = {}) {
+  const n = o.sides ?? 16,
+    da = (Math.PI * 2) / n;
+  const P = (a: number, z: number): V3 => [x + Math.cos(a) * r, y + Math.sin(a) * r, z];
+  for (let i = 0; i < n; i++) {
+    const a = i * da,
+      b2 = a + da;
+    const na: V3 = [Math.cos(a), Math.sin(a), 0],
+      nb: V3 = [Math.cos(b2), Math.sin(b2), 0];
+    c.K.quad(s, P(a, z0), P(b2, z0), P(b2, z1), P(a, z1), [Math.cos(a + da / 2), Math.sin(a + da / 2), 0], (p) => [p[2] * 0.5, Math.atan2(p[1] - y, p[0] - x) * r * 0.5], col, [na, nb, nb, na]);
+    for (const [z, sz] of [
+      [z0, -1],
+      [z1, 1],
+    ] as const)
+      c.K.tri(s, [x, y, z], P(a, z), P(b2, z), [0, 0, sz], (p) => [p[0] * 0.5, p[1] * 0.5], col);
+  }
+}
+
+/** The same lorry lying along x: the trailer's tail at x = tail, the cab out toward +x, centred on z. */
+function lorryX(c: LmCtx, tail: number, z: number, cab: V3, cargo: V3) {
+  const K = c.K;
+  const w = 2.5,
+    z0 = z - w / 2,
+    z1 = z + w / 2;
+  const nose = tail + 16;
+  K.box("lm.dark", tail, 0.6, z0 + 0.3, nose - 3, 0.9, z1 - 0.3, hex("#2a2a30"));
+  K.box("lm.Metal032", tail, 1.0, z0, tail + 12.5, 4.0, z1, cargo);
+  K.loft("lm.chrome", [
+    { y: 0.6, pts: roundRect(nose - 1.6, z, 1.55, w / 2, 0.3, 2) },
+    { y: 2.0, pts: roundRect(nose - 1.6, z, 1.55, w / 2, 0.3, 2) },
+    { y: 3.2, pts: roundRect(nose - 1.75, z, 1.4, w / 2 - 0.08, 0.35, 2) },
+  ], cab, { lid: "lm.chrome", lidCol: cab });
+  K.quad("lm.glass", [nose - 0.06, 2.05, z0 + 0.15], [nose - 0.06, 2.05, z1 - 0.15], [nose - 0.36, 3.0, z1 - 0.2], [nose - 0.36, 3.0, z0 + 0.2], [1, 0.3, 0], (p) => [p[2], p[1]], hex("#20262c"));
+  for (const xx of [nose - 1.2, tail + 3.2, tail + 1.8]) zcyl(c, "lm.dark", z0 - 0.05, z1 + 0.05, 0.5, xx, 0.5, hex("#151517"), { sides: 10 });
 }
 
 /** A tractor unit and its box trailer, backed onto a dock: the trailer's tail at z = tail, the cab out toward −z. */
@@ -3002,7 +3034,8 @@ def("port", (c) => {
       { y: 14 * u, pts: roundRect(X(BELT + 0.5), Z(12), 0.6, 0.6, 0.1, 1) },
       { y: 24 * u, pts: roundRect(X(BELT + 0.5), Z(12), 1.6, 1.6, 0.1, 1) },
     ], hex("#3a3744"), { lid: null });
-    lorry(c, X(x0 - 1), Z(16), hex("#7a52b0"), BOX[11]);
+    // (the flatbed lies along x under the chute, as the voxel model's: its cab out east, all of it in the court)
+    lorryX(c, X(x1 + 9) - 16, Z(12), hex("#7a52b0"), BOX[11]);
   }
   // ---- the transparent DEPOT: clear panels, a curved roof, its docks ----
   {
@@ -3068,10 +3101,11 @@ def("port", (c) => {
   B("lm.glow", HALL.x1, 23, 98, DCB.x0, 23.4, 98.2, hex("#59e3ff"));
   // ---- the power station: the cooling tower, the turbine hall, the boiler house, two striped chimneys ----
   {
-    const ccx = 240,
+    // (as the voxel builder: its foot clear of the data centre, the east fence and the ring road)
+    const ccx = 229,
       ccz = 32,
       CT = 78;
-    const rAt = (y: number) => 20 * Math.sqrt(1 + ((y - 58) / 30) ** 2);
+    const rAt = (y: number) => 16 * Math.sqrt(1 + ((y - 58) / 40.6) ** 2);
     const rings: { y: number; pts: V2[] }[] = [];
     const NC = c.far ? 8 : 18;
     for (let i = 0; i <= NC; i++) {
@@ -3108,7 +3142,7 @@ def("port", (c) => {
     B("lm.Metal032", hx0 - 0.33, 0.36, hz0 + 10, hx0, 26, hz0 + 26, hex("#8a8692"));
     // the boiler house, its stair tower in red, the duct to the chimneys
     const bx0 = PS + 4,
-      bx1 = 248,
+      bx1 = 240,
       bz0 = hz1,
       bz1 = 132,
       bh = 70;
@@ -3116,35 +3150,35 @@ def("port", (c) => {
     if (!c.far)
       for (let x = bx0 + 3; x < bx1 - 3; x += 6)
         for (let y = 14; y < bh - 6; y += 12) B(c.r() > 0.5 ? "lm.glow.night" : "lm.glass", x, y, bz1 - 0.05, x + 3, y + 4, bz1 + 0.05, c.r() > 0.5 ? hex("#ffb46b") : hex("#2a3448"));
-    B("lm.Metal032", bx1, 0.36, bz0 + 4, bx1 + 6, bh - 4, bz0 + 10, hex("#c0392b"));
-    B("lm.Metal032", bx1, 40, bz0 + 14, 266, 48, bz0 + 20, hex("#7a7882"));
+    B("lm.Metal032", bx1, 0.36, bz0 + 4, bx1 + 4, bh - 4, bz0 + 10, hex("#c0392b"));
+    B("lm.Metal032", bx1, 40, bz0 + 14, 251, 48, bz0 + 20, hex("#7a7882"));
     for (const [sx, sz, sh] of [
-      [256, 122, 110],
-      [268, 108, 96],
+      [251, 127, 110],
+      [251, 114, 96],
     ]) {
       const cxs = X(sx + 0.5),
         czs = Z(sz + 0.5);
-      K.cyl("lm.Concrete031", cxs, czs, 7 * u, 7 * u, 0.36 * u, 6 * u, hex("#8c8892"), { sides: 24 });
+      K.cyl("lm.Concrete031", cxs, czs, 6 * u, 6 * u, 0.36 * u, 6 * u, hex("#8c8892"), { sides: 24 });
       const bands = 10;
       for (let i = 0; i < bands; i++) {
         const y0 = 6 + ((sh - 6) * i) / bands,
           y1 = 6 + ((sh - 6) * (i + 1)) / bands;
-        const r0 = (5.5 - (y0 / sh) * 1.5) * u,
-          r1 = (5.5 - (y1 / sh) * 1.5) * u;
+        const r0 = (4.8 - (y0 / sh) * 1.3) * u,
+          r1 = (4.8 - (y1 / sh) * 1.3) * u;
         K.cyl("lm.paint", cxs, czs, r0, r1, y0 * u, y1 * u, i >= bands - 4 && i % 2 === 0 ? hex("#c0392b") : hex("#e0dcd6"), { sides: 20, caps: i === bands - 1 ? "top" : "none" });
       }
-      K.cyl("lm.dark", cxs, czs, 2.6 * u, 2.6 * u, sh * u - 0.02, sh * u + 0.01, hex("#121014"), { sides: 16 });
-      K.cyl("lm.Metal032.metal", cxs, czs, 6 * u, 6 * u, (sh - 14) * u, (sh - 13.6) * u, hex("#3a3842"), { sides: 20 });
+      K.cyl("lm.dark", cxs, czs, 2.2 * u, 2.2 * u, sh * u - 0.02, sh * u + 0.01, hex("#121014"), { sides: 16 });
+      K.cyl("lm.Metal032.metal", cxs, czs, 5.4 * u, 5.4 * u, (sh - 14) * u, (sh - 13.6) * u, hex("#3a3842"), { sides: 20 });
       for (const [a, b2] of [
-        [-4, 0],
-        [4, 0],
-        [0, -4],
-        [0, 4],
+        [-3, 0],
+        [3, 0],
+        [0, -3],
+        [0, 3],
       ])
         K.sphere("lm.glow", cxs + a * u, sh * u + 0.15, czs + b2 * u, 0.2, hex("#ff2a2a"), { segs: 4 });
     }
     // the switchyard on the quay: transformers, gantries, insulators
-    const sx0 = 252,
+    const sx0 = 238,
       sx1 = mw - 2,
       sz0 = 136,
       sz1 = Dv - 4;

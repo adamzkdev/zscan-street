@@ -60,11 +60,14 @@ export class Beach {
   static walks(): [number, number, number, number][] {
     const S = KSHORE.south;
     const out: [number, number, number, number][] = [];
-    for (const z of [S - 2.6, S - 15, 428]) {
+    for (const z of [S - 2.6, S - 15, KGRID.south + 12]) {
       out.push([KGRID.west + 4, z, KPIER.x - KPIER.half - 2.5, z]);
       out.push([KPIER.x + KPIER.half + 2.5, z, KGRID.east - 4, z]);
     }
-    out.push([KSHORE.west + 3, 290, KSHORE.west + 3, 404], [KSHORE.east - 3, 290, KSHORE.east - 3, 404]);
+    // (the west and east beaches, from the second street to the fourth)
+    const za = KGRID.zs[0] + 22,
+      zb = KGRID.zs[3];
+    out.push([KSHORE.west + 3, za, KSHORE.west + 3, zb], [KSHORE.east - 3, za, KSHORE.east - 3, zb]);
     return out;
   }
 

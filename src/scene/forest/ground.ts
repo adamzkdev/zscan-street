@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { BAY } from "../city/plan";
-import { BX, CREEK, creekAt, F, fbm, goldAt, Land, shoreZ, SITES, trailDist, vnoise, WATER } from "./land";
+import { ACROSS, BAY } from "../city/plan";
+import { BX, CREEK, creekAt, F, FALLS, fbm, goldAt, Land, shoreZ, SITES, trailDist, vnoise, WATER } from "./land";
 import { KTUNNEL } from "../keys/plan";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { heightfield, natureMat } from "../real/terrain";
@@ -184,7 +184,7 @@ function paint(c: THREE.Color, land: Land, x: number, z: number, h: number, step
   const n = fbm(x * 0.12, z * 0.12, 9);
   const fine = vnoise(x * 0.9, z * 0.9, 2);
   // the road and the plaza
-  if (Math.abs(x - BX) < 6.2 && z > 224.5 && z < 229.5) return c.set(Math.abs(x - BX) < 0.3 ? "#d8b030" : "#34323c");
+  if (Math.abs(x - BX) < 6.2 && z > 224.5 + ACROSS && z < 229.5 + ACROSS) return c.set(Math.abs(x - BX) < 0.3 ? "#d8b030" : "#34323c");
   const pz = Math.hypot((x - SITES.plaza.x) / 6, (z - SITES.plaza.z) / 3.8);
   if (pz < 1) return c.set(fine > 0.5 ? "#a8a094" : "#9c9488");
   if (h < WATER + 0.5) return c.set(fine > 0.5 ? "#6a6470" : "#5e5a64");
@@ -247,7 +247,7 @@ export function creekWater(land: Land, tex: THREE.Texture) {
   // the plunge pool
   const pool = new THREE.Mesh(new THREE.CircleGeometry(2.1, 20), water);
   pool.rotation.x = -Math.PI / 2;
-  pool.position.set(212.4, land.raw(212.4, 221.8) + 0.3, 221.8);
+  pool.position.set(FALLS.pool[0], land.raw(FALLS.pool[0], FALLS.pool[1]) + 0.3, FALLS.pool[1]);
   g.add(pool);
   return g;
 }
