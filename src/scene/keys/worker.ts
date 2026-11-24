@@ -4,8 +4,8 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { CURB } from "../city/plan";
 import { meshModel } from "../voxel/mesher";
 import { VOX, type Kind, type VoxelModel } from "../voxel/model";
-import { tree } from "../voxel/props";
-import { beachBar, beachSet, buildLot, bush, hillLetter, keysLamp, lifeguard, parkedCar, pier, rock, sandcastle, saplingPark, streetPalm, towel, tunnel, volleyNet } from "./models";
+// (the trees are drawn realistic on the main thread now)
+import { beachBar, beachSet, buildLot, hillLetter, lifeguard, pier, rock, sandcastle, saplingPark, towel, tunnel, volleyNet } from "./models";
 import { beachSpots, faceOut, faceYaw, KBED, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, sandAt } from "./plan";
 
 /**
@@ -47,6 +47,12 @@ export interface KOut {
   lights: [number, number, number, string][];
   facades: KFacade[];
   palms: [number, number][];
+  /** The trees, drawn realistic on the main thread (src/scene/real/trees.ts): x, y, z, species, seed. */
+  trees: [number, number, number, string, number][];
+  /** The street lamps (x, y, z, yaw), drawn realistic on the main thread. */
+  lamps: [number, number, number, number][];
+  /** The parked cars (x, z, yaw, paint index; the last index a taxi): placed on the main thread, realistic. */
+  cars: [number, number, number, number][];
   /** What stops a body or a car out there: trunks, posts, rocks, the letters (x, z, radius). */
   circles: [number, number, number][];
   ms: number;
@@ -109,7 +115,10 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
   const lights: KOut["lights"] = [];
   const facades: KFacade[] = [];
   const palms: [number, number][] = [];
+  const trees: [number, number, number, string, number][] = [];
+  const lampSpots: [number, number, number, number][] = [];
   const circles: [number, number, number][] = [];
+  const cars: [number, number, number, number][] = [];
   /** A model in place: centred on (x, z) at height y, turned by yaw; `key` shares the meshing of copies. */
   const put = (model: VoxelModel | (() => VoxelModel), x: number, y: number, z: number, yaw: number, key?: string, scale = 1) => {
     let geos = key ? meshed.get(key) : undefined;
@@ -162,14 +171,16 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
   const palmKeys = [0, 1, 2, 3].map((k) => `palm${k}`);
   const palmAt = (x: number, z: number, big = false) => {
     const k = Math.floor(R() * 4);
-    put(() => streetPalm(900 + k * 17, (big ? 56 : 46) + k * 4), x, CURB, z, R() * Math.PI * 2, palmKeys[k] + (big ? "b" : ""));
+    void palmKeys;
+    trees.push([x, CURB, z, "palm", k + (big ? 4 : 0)]);
     palms.push([x, z]);
     circles.push([x, z, 0.4]);
   };
   const lampAt = (x: number, z: number, yaw: number) => {
-    put(keysLamp, x, CURB, z, yaw, "lamp");
+    // (drawn realistic on the main thread: src/scene/real/props.ts lamp, its head 7.2 m up, 1.55 m out)
+    lampSpots.push([x, CURB, z, yaw]);
     circles.push([x, z, 0.3]);
-    const p = new THREE.Vector3(0, 27 * VOX, 4 * VOX).applyAxisAngle(Y, yaw);
+    const p = new THREE.Vector3(0, 7.2, 1.55).applyAxisAngle(Y, yaw);
     lights.push([x + p.x, CURB + p.y, z + p.z, "#ffd9a0"]);
   };
   for (const s of kStreets()) {
@@ -215,7 +226,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
         if (junction(x, z, 6)) continue;
         const k = Math.floor(R() * (paints.length + 1));
         const yaw = s.axis === "x" ? (side > 0 ? 0 : Math.PI) : side > 0 ? -Math.PI / 2 : Math.PI / 2;
-        put(() => (k === paints.length ? parkedCar("", "", true) : parkedCar(...paints[k])), x, 0.02, z, yaw, `car${k}`);
+        cars.push([x, z, yaw, k]);
         t += 4;
       }
   }
@@ -252,7 +263,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
       put(volleyNet, b.x, y, b.z, b.yaw, "net");
       for (const dx of [-4.9, 4.9]) circles.push([b.x + dx, b.z, 0.2]);
     } else if (b.kind === "palm") {
-      put(() => streetPalm(820 + b.seed, 50 + b.seed * 4), b.x, y - 0.1, b.z, b.yaw, `spalm${b.seed}`);
+      trees.push([b.x, y - 0.1, b.z, "palm", b.seed]);
       palms.push([b.x, b.z]);
       circles.push([b.x, b.z, 0.4]);
     } else if (b.kind === "bar") {
@@ -301,14 +312,15 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
         const k = R();
         const yaw = R() * Math.PI * 2;
         if (k < 0.22) {
-          put(() => streetPalm(700 + (seed % 5), 42 + (seed % 5) * 5), jx, g - 0.15, jz, yaw, `hpalm${seed % 5}`);
+          void yaw;
+          trees.push([jx, g - 0.15, jz, "palm", seed]);
           palms.push([jx, jz]);
           circles.push([jx, jz, 0.4]);
         } else if (k < 0.62) {
-          put(() => bush(seed % 7), jx, g - 0.2, jz, yaw, `bush${seed % 7}`);
+          trees.push([jx, g - 0.1, jz, "bush", seed]);
           circles.push([jx, jz, 0.9]);
         } else if (k < 0.8) {
-          put(() => tree(R() > 0.5 ? "pine" : "round", 40 + (seed % 4)).model, jx, g - 0.3, jz, yaw, `htree${seed % 4}${k < 0.71 ? "p" : "r"}`);
+          trees.push([jx, g - 0.2, jz, R() > 0.5 ? "pine" : "broad", seed]);
           circles.push([jx, jz, 0.45]);
         } else {
           put(() => rock(seed % 5), jx, g - 0.4, jz, yaw, `rock${seed % 5}`);
@@ -322,7 +334,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
         if (R() < 0.35 || Math.abs(z - 330) < 6) continue;
         const px = x + (R() - 0.5) * 2,
           pz = z + (R() - 0.5) * 4;
-        put(() => streetPalm(800 + (seed % 4), 48 + (seed % 4) * 4), px, sandAt(px, pz) - 0.1, pz, R() * 6.28, `bpalm${seed % 4}`);
+        trees.push([px, sandAt(px, pz) - 0.1, pz, "palm", seed]);
         palms.push([px, pz]);
         circles.push([px, pz, 0.4]);
         seed++;
@@ -352,6 +364,6 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
     }
     chunks.push({ centre: s.centre, geos });
   }
-  const out: KOut = { chunks, signs, lights, facades, palms, circles, ms: Math.round(performance.now() - t0) };
+  const out: KOut = { chunks, signs, lights, facades, palms, trees, lamps: lampSpots, cars, circles, ms: Math.round(performance.now() - t0) };
   (self as unknown as Worker).postMessage(out, transfer);
 };

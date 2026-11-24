@@ -37,8 +37,10 @@ export interface FrontHost {
   startSound(): void;
   /** The golden-hour look while the front end is up (false: the street's own sky again). */
   look(on: boolean): void;
-  /** The settings (the game's menu panel) over the front end. */
-  settings(): void;
+  /** The settings (the game's menu panel) over the front end, at a tab ("controls": how to play). */
+  settings(tab?: string): void;
+  /** The city now, for the menu's chips and its card: the chain, the hour and the weather, who is in town. */
+  live?(): { block: number; nextIn: number | null; mempool: number; online: number; clock: string; weather: string; weatherIcon: string };
 }
 
 /** Where it is all set: a point on the kerb, and the way out from the pavement to the road (yaw). */
@@ -131,7 +133,7 @@ export class FrontEnd {
   private wantPos = new THREE.Vector3();
   private wantAim = new THREE.Vector3();
   private cut = true;
-  private onPlay: ((id: number, at: StartAt | null) => void) | null = null;
+  private onPlay: ((id: number, at: StartAt | null, then?: "map") => void) | null = null;
   private onClose: (() => void) | null = null;
   private rare: { id: number; rank: number }[] = [];
   private picks: number[] = [];
@@ -162,9 +164,11 @@ export class FrontEnd {
         <p class="gf-press"><b>${TOUCH ? "Tap to start" : "Press any key"}</b></p>
       </section>
       <section class="gf-menu" aria-label="Main menu">
-        <h1 class="gf-mark small" aria-hidden="true"><span>Z</span>STREET</h1>
+        <h1 class="gf-mark small" aria-hidden="true"><span>Z</span>STREET<small>The zkSNARK city · the chain, live</small></h1>
         <nav class="gf-items" role="menu"></nav>
+        <div class="gf-chips" aria-label="The city now"></div>
         <div class="gf-me"></div>
+        <div class="gf-live"></div>
       </section>
       <section class="gf-select" aria-label="Choose your zkSNARK">
         <header class="gf-shead"><button class="gf-back" type="button" aria-label="Back">‹</button><h2>Choose your zkSNARK</h2><span class="gf-count"></span></header>
@@ -220,7 +224,7 @@ export class FrontEnd {
    * Up: the title (from the map), or straight to the line-up (from the game). `play` gets the
    * zkSNARK picked and, from the title, where to start; `close` is called on the way out without.
    */
-  show(o: { select?: boolean; inGame?: boolean; play: (id: number, at: StartAt | null) => void; close: () => void }) {
+  show(o: { select?: boolean; inGame?: boolean; play: (id: number, at: StartAt | null, then?: "map") => void; close: () => void }) {
     this.onPlay = o.play;
     this.onClose = o.close;
     this.inGame = !!o.inGame;
@@ -480,12 +484,31 @@ export class FrontEnd {
   }
 
   private items(): { k: string; label: string; sub?: string }[] {
+    const l = this.host.live?.();
     return [
-      { k: "play", label: "Play", sub: `as zkSNARK #${this.id}` },
-      { k: "select", label: "Choose your zkSNARK" },
-      { k: "settings", label: "Settings" },
+      { k: "play", label: "Play", sub: `as zkSNARK #${this.id}${l ? ` · ${l.clock} · ${l.weather}` : ""}` },
+      { k: "select", label: "Choose your zkSNARK", sub: "1 of 10,000 · yours, the rarest, any number" },
+      { k: "missions", label: "Missions", sub: "Block Run · Shielded Ride · Proof Boards · Speed Traps" },
+      { k: "howto", label: "How to play", sub: "Drive, fight, swim, the car radio" },
+      { k: "settings", label: "Settings", sub: "Camera, display, day and weather, sound" },
       { k: "map", label: "Back to the map" },
     ];
+  }
+
+  /** The chips top right and the card bottom right: the live chain, the hour, who is in town. */
+  private renderLive() {
+    const l = this.host.live?.();
+    const chips = this.el.querySelector(".gf-chips");
+    const card = this.el.querySelector(".gf-live");
+    if (!chips || !card) return;
+    if (!l) {
+      chips.innerHTML = card.innerHTML = "";
+      return;
+    }
+    const n = (v: number) => v.toLocaleString("en-US");
+    chips.innerHTML = `<span class="gf-chip"><i class="gf-pip gold"></i><b>${l.block ? n(l.block) : "—"}</b><small>block</small></span><span class="gf-chip"><i class="gf-wx">${l.weatherIcon}</i><b>${esc(l.clock)}</b><small>${esc(l.weather.toLowerCase())}</small></span><span class="gf-chip"><i class="gf-pip teal"></i><b>${n(l.online)}</b><small>in town</small></span>`;
+    const eta = l.nextIn === null ? "any second" : l.nextIn <= 1 ? "any second" : `in ~${Math.round(l.nextIn)} s`;
+    card.innerHTML = `<span><small>Live on the chain</small><b class="gta-disp">Block ${l.block ? n(l.block + 1) : "—"}</b><em>${eta} · ${n(l.mempool)} tx waiting</em></span><span class="gf-zec" aria-hidden="true">ⓩ</span>`;
   }
 
   private renderMenu() {
@@ -501,12 +524,15 @@ export class FrontEnd {
       });
       b.addEventListener("click", () => this.settled() && this.pick(b.dataset.k!));
     }
+    this.renderLive();
     const mine = this.id === profile.p.avatar;
     this.el.querySelector(".gf-me")!.innerHTML = `<span class="gf-pic"><img src="${esc(ZScan.zkSnarkImage(this.id))}" alt=""/></span><span><small>Playing as</small><b class="gta-disp">#${this.id}</b>${mine ? `<i class="gta-tag gold">Yours</i>` : ""}</span>`;
   }
 
   private pick(k: string) {
     if (k === "play") this.play();
+    else if (k === "missions") this.play("map");
+    else if (k === "howto") this.host.settings("controls");
     else if (k === "select") this.go("select");
     else if (k === "settings") this.host.settings();
     else if (k === "map") this.close();
@@ -652,7 +678,7 @@ export class FrontEnd {
 
   // ---- play ---------------------------------------------------------------------------------------
 
-  private play() {
+  private play(then?: "map") {
     if (this.fading || !this.open) return;
     const id = this.mode === "select" ? (this.line[this.sel]?.id ?? this.id) : this.id;
     try {
@@ -678,17 +704,23 @@ export class FrontEnd {
     this.el.classList.add("fade");
     setTimeout(() => {
       this.down_();
-      this.onPlay?.(id, at);
+      this.onPlay?.(id, at, then);
       this.fading = false;
     }, 420);
   }
 
   // ---- every frame --------------------------------------------------------------------------------
 
+  private liveT = 0;
   update(dt: number) {
     if (!this.open) return;
     this.t += dt;
     const t = this.t;
+    // the chips and the chain's card tick on (the next block's countdown, the hour)
+    if (this.mode === "menu" && (this.liveT -= dt) <= 0) {
+      this.liveT = 1;
+      this.renderLive();
+    }
     // the crew: the pair talking in turns, you waving now and then
     for (const c of this.crew) {
       if (c.pair !== undefined) {

@@ -933,6 +933,12 @@ export class GtaHud {
   }
 
   /** The menu panel alone, as the front end's settings (nothing else of the HUD shows). */
+  /** The menu panel at this tab (the front end's "How to play" opens the controls). */
+  openTab(tab: string) {
+    this.tab = tab;
+    this.renderMenu();
+  }
+
   front(on: boolean) {
     this.root.classList.toggle("front", on);
     this.$(".gh-pcard nav h2").innerHTML = on ? "Settings<small>ZStreet</small>" : "Menu<small>Paused</small>";

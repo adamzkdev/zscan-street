@@ -1,7 +1,8 @@
 import * as THREE from "three";
-import { freeObject, sharedObject } from "../scene/voxel/mesher";
+import { freeObject } from "../scene/voxel/mesher";
 import { VOX } from "../scene/voxel/model";
-import { GT_SPEC, MOTO_SPEC, gtModel, motoModel } from "./models";
+import { GT_SPEC, MOTO_SPEC } from "./models";
+import { bikeObject, carObject, type CarKind } from "../scene/real/cars";
 
 /**
  * A car you drive (src/gta): an arcade model, tuned for feel rather than truth, as the open-world
@@ -145,7 +146,7 @@ export class DriveCar {
   private steerNow = 0;
   /** The body (pitch and roll on the springs) inside the group, and the wheels. */
   private body: THREE.Object3D;
-  private wheels: { m: THREE.Object3D; front: boolean }[] = [];
+  private wheels: { m: THREE.Object3D; front: boolean; r: number }[] = [];
   private beam: THREE.Mesh;
   private y = 0;
   private vy = 0;
@@ -183,18 +184,34 @@ export class DriveCar {
       this.group = from;
       this.body = from;
       this.yaw = from.rotation.y;
-      // its body goes in a pivot of its own so it can lean
+      // its body goes in a pivot of its own so it can lean (its wheels stay on the road, they steer)
       const pivot = new THREE.Group();
-      for (const c of [...from.children]) pivot.add(c);
+      for (const c of [...from.children]) if (c.name !== "wheel") pivot.add(c);
       from.add(pivot);
       this.body = pivot;
-    } else {
+    } else if (kind === "moto") {
+      // the ZK-R: body and wheels lean together
       this.group = new THREE.Group();
       this.body = new THREE.Group();
-      this.body.add(kind === "moto" ? sharedObject(`gta:moto`, () => motoModel()) : sharedObject(`gta:gt`, () => gtModel()));
+      const bike = bikeObject("moto", { paint: "#e8a91c", accent: "#141418" });
+      for (const c of [...bike.children]) this.body.add(c);
+      this.group.add(this.body);
+    } else {
+      // your own car: the realistic model, its body in the leaning pivot, its wheels on the road
+      this.group = new THREE.Group();
+      this.body = new THREE.Group();
+      const car = carObject(kind === "gt" ? "gt" : (kind as CarKind), kind === "gt" ? { paint: "#e8a91c", accent: "#141418", glow: "#f4b728" } : {});
+      for (const c of [...car.children]) (c.name === "wheel" ? this.group : this.body).add(c);
       this.group.add(this.body);
     }
     const s = this.spec;
+    // the model's own wheels (a realistic car brings them), else wheels made here
+    for (const c of [...this.group.children, ...(s.bike ? this.body.children : [])])
+      if (c.name === "wheel") {
+        const w = c.userData.wheel as { r: number; front: boolean };
+        this.wheels.push({ m: c, front: w.front, r: w.r });
+      }
+    if (!this.wheels.length)
     for (const wx of s.wheels)
       for (const side of s.bike ? [0] : [-1, 1]) {
         const pivot = new THREE.Group();
@@ -209,7 +226,7 @@ export class DriveCar {
         spin.add(tyre);
         pivot.add(spin);
         (s.bike ? this.body : this.group).add(pivot);
-        this.wheels.push({ m: pivot, front: wx > s.vox / 2 });
+        this.wheels.push({ m: pivot, front: wx > s.vox / 2, r: s.wheelR });
       }
     // the headlamps' pool on the road ahead
     this.beam = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 9), BEAM_MAT.clone());
@@ -474,7 +491,7 @@ export class DriveCar {
     this.body.rotation.set(this.roll, 0, this.pitch);
     for (const w of this.wheels) {
       const spin = w.m.children[0];
-      spin.rotation.z -= (this.vF * dt) / s.wheelR;
+      spin.rotation.z -= (this.vF * dt) / w.r;
       if (w.front) w.m.rotation.y = -this.steerNow * 0.45;
     }
     // the gearbox: up at the top of the rev range, down at the bottom

@@ -1,9 +1,7 @@
 import * as THREE from "three";
 import { faces } from "./faces";
 import { SnarkFigure } from "./figure";
-import { sharedObject } from "../scene/voxel/mesher";
-import { policeModel, sedanModel, taxiModel, truckModel } from "../scene/voxel/vehicles";
-import { gtModel, motoModel } from "./models";
+import { bikeObject, carObject } from "../scene/real/cars";
 
 /**
  * The shared city (src/gta): everyone playing ZStreet at once, in one world (worker/world.ts).
@@ -77,12 +75,13 @@ function tagSprite(text: string) {
 }
 
 function carOf(kind: string) {
-  if (kind === "gt") return sharedObject("gta:gt", () => gtModel());
-  if (kind === "moto") return sharedObject("gta:moto", () => motoModel());
-  if (kind === "taxi") return sharedObject("traffic:taxi", () => taxiModel());
-  if (kind === "police") return sharedObject("traffic:police", () => policeModel());
-  if (kind === "truck") return sharedObject("traffic:truck:0:proof", () => truckModel("#e8e4dc", "proof"));
-  return sharedObject("traffic:sedan:0", () => sedanModel("#c8ccd4", "#3ef0ff"));
+  if (kind === "moto") return bikeObject("moto", { paint: "#e8a91c", accent: "#141418" });
+  if (kind === "gt") return carObject("gt", { paint: "#e8a91c", accent: "#141418", glow: "#f4b728" });
+  if (kind === "taxi") return carObject("taxi", { paint: "#f2c230" });
+  if (kind === "police") return carObject("police", { paint: "#141418", accent: "#f2f2ee" });
+  if (kind === "truck") return carObject("truck", { livery: "#e8e4dc", label: "proof" });
+  if (kind === "sports" || kind === "suv" || kind === "pickup" || kind === "van" || kind === "convertible") return carObject(kind, { paint: "#c8ccd4" });
+  return carObject("sedan", { paint: "#c8ccd4" });
 }
 
 export class WorldNet {

@@ -633,3 +633,52 @@ export function bothWays<T extends THREE.Material>(m: T): T {
   m.customProgramCacheKey = () => "bothWays";
   return m;
 }
+
+/**
+ * The road's paint alone (the realistic look, src/scene/real/ground.ts lays it over photographed
+ * asphalt): the same layout as `roadTexture` — the double yellow and the dashed lanes on a 4-lane
+ * street, the centre dashes on a 2-lane one, the yellow edge lines, the zebras at `crossAt` —
+ * on a transparent canvas, premultiplied (no dark fringe round the lines). Repeats along `len`.
+ */
+const markCache = new Map<string, THREE.CanvasTexture>();
+export function markingsTexture(len: number, width: number, crossAt: number[], lanes = 2) {
+  const key = `${len}|${width}|${crossAt.join(",")}|${lanes}`;
+  const had = markCache.get(key);
+  if (had) return had;
+  const P = 40;
+  const [c, ctx] = canvas(Math.round(len * P), Math.round(width * P));
+  ctx.clearRect(0, 0, c.width, c.height);
+  const white = "rgba(236,236,230,0.96)",
+    yellow = "rgba(232,180,46,0.94)";
+  const h = c.height;
+  const line = P * 0.12;
+  if (lanes === 4) {
+    ctx.fillStyle = yellow;
+    ctx.fillRect(0, h / 2 - line * 1.6, c.width, line);
+    ctx.fillRect(0, h / 2 + line * 0.6, c.width, line);
+    ctx.fillStyle = white;
+    // dashed lane lines: 3 m of paint, 6 m gap (a 16 m tile holds whole periods only roughly; fine at speed)
+    for (const k of [0.25, 0.75]) for (let x = P * 0.5; x < c.width; x += P * 8) ctx.fillRect(x, h * k - line / 2, P * 3, line);
+  } else {
+    ctx.fillStyle = white;
+    for (let x = P * 0.5; x < c.width; x += P * 8) ctx.fillRect(x, h / 2 - line / 2, P * 3, line);
+  }
+  // the edge lines, a little in from the kerbs
+  ctx.fillStyle = white;
+  ctx.fillRect(0, P * 0.35, c.width, line * 0.8);
+  ctx.fillRect(0, h - P * 0.35 - line * 0.8, c.width, line * 0.8);
+  // zebras: bars across the street, 0.5 m wide, 0.5 m apart
+  ctx.fillStyle = "rgba(240,240,236,0.97)";
+  for (const cx of crossAt) {
+    const px = cx * P;
+    for (let y = P * 0.6; y < h - P * 0.6; y += P) ctx.fillRect(px - P * 1.6, y, P * 3.2, P * 0.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.premultiplyAlpha = true;
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  t.userData.shared = true;
+  markCache.set(key, t);
+  return t;
+}

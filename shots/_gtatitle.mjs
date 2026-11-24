@@ -89,14 +89,14 @@ if (!PHONE) {
   await p.keyboard.press("ArrowDown");
   await sleep(300);
   await shot("menu-down");
-  // settings over the front end, and back
-  await p.keyboard.press("ArrowDown");
+  // settings over the front end, and back (Play, Choose, Missions, How to play, Settings: the fifth)
+  for (let i = 0; i < 3; i++) await p.keyboard.press("ArrowDown");
   await p.keyboard.press("Enter");
   await sleep(700);
   await shot("settings");
   await p.click(".gta-hud.front .gh-pcard nav [data-act=resume]");
   await sleep(500);
-  await p.keyboard.press("ArrowUp");
+  for (let i = 0; i < 4; i++) await p.keyboard.press("ArrowUp");
 }
 // the line-up
 await p.evaluate(() => document.querySelector('.gf-item[data-k="select"]').click());

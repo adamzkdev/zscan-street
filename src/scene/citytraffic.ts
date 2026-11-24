@@ -2,9 +2,8 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CITY, CURB, GRID, RIVER, ST, streetSegments } from "./city/plan";
 import type { Traffic } from "./traffic";
-import { freeObject, sharedObject } from "./voxel/mesher";
-import { VOX } from "./voxel/model";
-import { convertibleModel, pickupModel, policeModel, sedanModel, sportsModel, suvModel, taxiModel, truckModel, vanModel } from "./voxel/vehicles";
+import { freeObject } from "./voxel/mesher";
+import { carObject, POLICE_BAR, spinWheels } from "./real/cars";
 import { busSign, canvasTexture } from "./textures";
 
 /**
@@ -81,34 +80,30 @@ class Mover {
   ) {
     this.kind = kind;
     this.len = LEN[kind];
-    // (each body meshed once, shared by every car of its kind and paint: a car every few seconds was
-    // meshed again, and left on the GPU once it had driven off)
+    // (a realistic body per kind and paint, built once and shared by every car that wears it; its
+    // wheels in the group too, they roll as it drives)
     let body: THREE.Group;
     if (kind === "truck") {
       const l = Math.floor(Math.random() * LIVERIES.length);
-      const label = Math.random() < 0.5 ? "proof" : "depot";
-      body = sharedObject(`traffic:truck:${l}:${label}`, () => truckModel(LIVERIES[l], label));
-    } else if (kind === "sedan") {
-      const p = Math.floor(Math.random() * PAINTS.length);
-      body = sharedObject(`traffic:sedan:${p}`, () => sedanModel(...PAINTS[p]));
-    } else if (kind === "taxi" || kind === "police") body = sharedObject(`traffic:${kind}`, () => (kind === "taxi" ? taxiModel() : policeModel()));
+      body = carObject("truck", { livery: LIVERIES[l], label: Math.random() < 0.5 ? "proof" : "depot" });
+    } else if (kind === "taxi") body = carObject("taxi", { paint: "#f2c230" });
+    else if (kind === "police") body = carObject("police", { paint: "#141418", accent: "#f2f2ee" });
     else {
-      // (a dozen paints per model, each meshed once)
       const p = Math.floor(Math.random() * VICE.length),
         g = Math.floor(Math.random() * GLOW.length);
-      const paint = VICE[p];
+      const paint = kind === "sedan" ? PAINTS[Math.floor(Math.random() * PAINTS.length)][0] : VICE[p];
       body =
         kind === "sports"
-          ? sharedObject(`traffic:sports:${p}:${g}`, () => sportsModel(paint, GLOW[g]))
-          : kind === "suv"
-            ? sharedObject(`traffic:suv:${p}`, () => suvModel(paint))
-            : kind === "pickup"
-              ? sharedObject(`traffic:pickup:${p}:${g & 1}`, () => pickupModel(paint, (g & 1) === 1))
-              : kind === "van"
-                ? sharedObject(`traffic:van:${p}:${g}`, () => vanModel(paint, GLOW[g]))
-                : sharedObject(`traffic:convertible:${p}`, () => convertibleModel(paint, p % 2 ? "#e8dcc8" : "#5a2a22"));
+          ? carObject("sports", { paint, glow: GLOW[g] })
+          : kind === "pickup"
+            ? carObject("pickup", { paint, load: (g & 1) === 1 })
+            : kind === "van"
+              ? carObject("van", { paint, accent: GLOW[g] })
+              : kind === "convertible"
+                ? carObject("convertible", { paint, seats: p % 2 ? "#e8dcc8" : "#5a2a22" })
+                : carObject(kind, { paint });
     }
-    this.group.add(body);
+    for (const c of [...body.children]) this.group.add(c);
     if (kind === "police") {
       // the light bar: red on the left, blue on the right, flashing in turn
       for (const [z, c] of [
@@ -116,7 +111,8 @@ class Mover {
         [0.32, "#2a6aff"],
       ] as const) {
         const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.18, 0.5), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(3.2), toneMapped: false }));
-        lamp.position.set(0.17, 11.5 * VOX, z);
+        lamp.position.set(POLICE_BAR.x, POLICE_BAR.y, z);
+        lamp.scale.set(0.45, 0.6, 1.1);
         this.group.add(lamp);
         this.bar.push(lamp);
       }
@@ -124,7 +120,7 @@ class Mover {
       const tex = canvasTexture(busSign("POLICE 警察"));
       for (const side of [-1, 1]) {
         const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.28), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
-        plate.position.set(-0.2, 0.62, side * (5.5 * VOX + 0.02));
+        plate.position.set(-0.2, 0.62, side * (0.9 + 0.025));
         if (side < 0) plate.rotation.y = Math.PI;
         this.group.add(plate);
       }
@@ -259,18 +255,25 @@ export class CityTraffic {
       [x + hx, z + hz, "x"],
       [x - hx, z - hz, "z"],
     ] as const) {
-      this.poleGeos.push(new THREE.BoxGeometry(0.14, 3.4, 0.14).translate(cx, CURB + 1.7, cz));
+      // (realistic: a round steel pole on its base, a signal head in its housing with a backplate)
+      this.poleGeos.push(new THREE.CylinderGeometry(0.07, 0.09, 3.2, 12).translate(cx, CURB + 1.6, cz));
+      this.poleGeos.push(new THREE.CylinderGeometry(0.16, 0.18, 0.14, 12).translate(cx, CURB + 0.07, cz));
       this.nav?.addCircle(cx, cz, 0.2);
-      this.poleGeos.push(new THREE.BoxGeometry(0.34, 0.8, 0.34).translate(cx, CURB + 3.3, cz));
+      this.poleGeos.push(new THREE.BoxGeometry(0.3, 0.92, 0.3).translate(cx, CURB + 3.3, cz));
+      this.poleGeos.push(new THREE.BoxGeometry(0.46, 1.08, 0.46).scale(axis === "x" ? 0.06 : 1, 1, axis === "x" ? 1 : 0.06).translate(cx, CURB + 3.3, cz));
       this.lensSpots.push({ pos: new THREE.Vector3(cx, CURB + 3.5, cz), axis, col: "red", scr }, { pos: new THREE.Vector3(cx, CURB + 3.1, cz), axis, col: "green", scr });
     }
   }
 
   private buildLights() {
-    const pole = new THREE.MeshStandardMaterial({ color: "#2a2832", roughness: 0.6 });
-    this.group.add(new THREE.Mesh(mergeGeometries(this.poleGeos, false), pole));
-    const m = new THREE.InstancedMesh(new THREE.BoxGeometry(0.36, 0.24, 0.36), new THREE.MeshBasicMaterial({ toneMapped: false }), this.lensSpots.length);
-    this.lensSpots.forEach((l, i) => m.setMatrixAt(i, new THREE.Matrix4().setPosition(l.pos)));
+    const pole = new THREE.MeshStandardMaterial({ color: "#2b2e33", roughness: 0.45, metalness: 0.7 });
+    const poles = new THREE.Mesh(mergeGeometries(this.poleGeos, false), pole);
+    poles.castShadow = poles.receiveShadow = true;
+    this.group.add(poles);
+    // the lenses: round lamps showing on both faces of the head
+    const m = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.1, 0.34, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ toneMapped: false }), this.lensSpots.length);
+    // (each faces the traffic it governs: along x or along z)
+    this.lensSpots.forEach((l, i) => m.setMatrixAt(i, new THREE.Matrix4().makeRotationY(l.axis === "x" ? Math.PI / 2 : 0).setPosition(l.pos)));
     m.setColorAt(0, new THREE.Color());
     this.lenses = m;
     this.group.add(m);
@@ -375,6 +378,7 @@ export class CityTraffic {
         c.v = c.v < target ? Math.min(target, c.v + 3 * dt) : Math.max(target, c.v - 7 * dt);
         c.s += c.dir * c.v * dt;
         c.place();
+        spinWheels(c.group, c.v * dt);
       });
     }
     // the police light bar: red and blue in turn

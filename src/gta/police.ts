@@ -1,7 +1,5 @@
 import * as THREE from "three";
-import { sharedObject } from "../scene/voxel/mesher";
-import { VOX } from "../scene/voxel/model";
-import { policeModel } from "../scene/voxel/vehicles";
+import { carObject, POLICE_BAR } from "../scene/real/cars";
 import type { Roads } from "./roads";
 import { DriveCar, type CarWorld } from "./vehicle";
 
@@ -142,14 +140,15 @@ export class Heat {
     const list = back.length ? back : pts;
     const p = list[Math.floor(Math.random() * list.length)];
     const group = new THREE.Group();
-    group.add(sharedObject("traffic:police", () => policeModel()));
+    for (const c of [...carObject("police", { paint: "#141418", accent: "#f2f2ee" }).children]) group.add(c);
     const bar: THREE.Mesh[] = [];
     for (const [z, c] of [
       [-0.32, "#ff2a2a"],
       [0.32, "#2a6aff"],
     ] as const) {
       const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.18, 0.5), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(3.4), toneMapped: false }));
-      lamp.position.set(0.17, 11.5 * VOX, z);
+      lamp.position.set(POLICE_BAR.x, POLICE_BAR.y, z);
+      lamp.scale.set(0.45, 0.6, 1.1);
       group.add(lamp);
       bar.push(lamp);
     }

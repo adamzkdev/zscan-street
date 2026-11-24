@@ -27,7 +27,7 @@ import { Heat } from "./police";
 import { Roads } from "./roads";
 import { GtaSound, type AudioOut } from "./sound";
 import { CarRadio } from "./radio";
-import { SkyClock, weatherIcon } from "./skyclock";
+import { SkyClock, WEATHER_NAME, weatherIcon } from "./skyclock";
 import type { Daylight } from "../scene/daylight";
 import { SwimFx } from "./swim";
 import { Beach } from "./beach";
@@ -241,7 +241,26 @@ export class GtaMode {
       blocked: (x, z) => host.footBlocked(x, z),
       startSound: () => host.startSound(),
       look: (on) => host.menuLook(on),
-      settings: () => this.hud.front(true),
+      settings: (tab) => {
+        if (tab) this.hud.openTab(tab);
+        this.hud.front(true);
+      },
+      live: () => {
+        const at = host.lastBlockAt();
+        const g = this.clock.glyph;
+        let online = 1;
+        for (const _ of this.net.others()) online++;
+        return {
+          block: host.height(),
+          // (a block every 75 s on average)
+          nextIn: at ? Math.max(0, 75 - (Date.now() - at) / 1000) : null,
+          mempool: host.mempool(),
+          online,
+          clock: this.clock.time,
+          weather: WEATHER_NAME[g.kind],
+          weatherIcon: weatherIcon(g.kind, g.night),
+        };
+      },
     });
     this.hud = new GtaHud(host.ui, {
       // (over the front end, the menu panel is its settings: closing it goes back to the front end)
@@ -423,7 +442,11 @@ export class GtaMode {
     useAtlasCells(true);
     this.people.show(true);
     this.front.show({
-      play: (id, at) => this.play(id, at),
+      play: (id, at, then) => {
+        this.play(id, at);
+        // Missions: straight to the big map and its list of challenges
+        if (then === "map" && this.active) setTimeout(() => this.active && this.hud.toggleMap(true), 700);
+      },
       close: () => {
         if (!this.active) this.people.show(false);
       },

@@ -1,11 +1,12 @@
 import * as THREE from "three";
-import { neonTexture, roadTexture } from "../textures";
+import { markingsTexture, neonTexture } from "../textures";
+import { GROUND } from "../real/ground";
 import { toObject } from "../voxel/mesher";
 import { streetLamp } from "../voxel/props";
 import { C, E, hash, shades, VOX, VoxelModel } from "../voxel/model";
 import { mat } from "./kit";
 import { CITY, TUNNEL } from "./plan";
-import { strataTexture, wet } from "./index";
+import { strataTexture } from "./index";
 
 /** Tunnel model, in voxels: across the road, height, depth into the hill. */
 const W = 84;
@@ -113,7 +114,7 @@ export function tunnels(g: THREE.Group) {
     const len = run + TUNNEL.depth;
     const road = new THREE.Mesh(
       new THREE.PlaneGeometry(len, roadW),
-      wet(new THREE.MeshStandardMaterial({ map: roadTexture(len, roadW, [], 4), roughness: 0.34, metalness: 0.22 }), () => roadTexture(len, roadW, [], 4, true)),
+      GROUND.asphalt(markingsTexture(len, roadW, [], 4)),
     );
     road.rotation.x = -Math.PI / 2;
     road.position.set(side * (edge + len / 2), 0.011, cz);

@@ -2,7 +2,10 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Nav } from "../nav";
 import { addDetail } from "../detail";
-import { blobTexture, concreteTexture, grassTexture, neonTexture, pavingTexture, releaseAfterUpload, roadTexture, waterTexture } from "../textures";
+import { blobTexture, markingsTexture, neonTexture, releaseAfterUpload, waterTexture } from "../textures";
+import { GROUND, terrainMat } from "../real/ground";
+import { plantTrees, speciesOf, treeLod, type TreeSpot } from "../real/trees";
+import { placeProps, REAL_PROPS } from "../real/props";
 import { MATERIALS, ownMaterial, propDepthMaterial, sharedFor, toObject } from "../voxel/mesher";
 import { C, E, G, VOX, VoxelModel, type Kind } from "../voxel/model";
 import type { SignSpot } from "../voxel/parts";
@@ -12,6 +15,11 @@ import { SEA_RECT } from "../keys/sea";
 import type { Geos } from "./worker";
 import { CUT_VOX } from "./plan";
 import { tunnels } from "./tunnel";
+import { isSlot, NO_FIELD } from "../real/buildings";
+import { realMat } from "../real/mats";
+
+/** `?real=0`: the voxel city as it was (the realistic buildings off: a kill switch, and a baseline). */
+const REAL_ON = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
 import { CityCache } from "./cache";
 
 export { AREAS, CITY, CURB, DISTRICTS, CUT_VOX };
@@ -223,6 +231,8 @@ function geometry(d: NonNullable<Geos[Kind]>) {
   // compact arrays from the worker (see GeoData): byte normals, half-float colours
   g.setAttribute("normal", new THREE.BufferAttribute(d.nor, 3, true));
   g.setAttribute("color", half(d.col));
+  // (the realistic buildings' texture coordinates)
+  if (d.uv) g.setAttribute("uv", new THREE.BufferAttribute(d.uv, 2));
   g.setIndex(new THREE.BufferAttribute(d.idx, 1));
   g.computeBoundingSphere();
   // (positions and indices stay: clicks, the walk and the bridges' decks raycast these meshes)
@@ -258,10 +268,14 @@ function raycastOnPositions(this: THREE.Mesh, raycaster: THREE.Raycaster, out: T
 function objectFrom(geos: Geos, own: boolean) {
   const o = new THREE.Group();
   for (const [kind, d] of Object.entries(geos) as [Kind, NonNullable<Geos[Kind]>][]) {
-    const mesh = new THREE.Mesh(geometry(d), own ? ownMaterial(kind) : MATERIALS[kind]);
+    // a realistic building's slot: its shared material (or its own clone: walls down clips it)
+    const mat = isSlot(kind) ? realMat(kind, own) : own ? ownMaterial(kind) : MATERIALS[kind];
+    const mesh = new THREE.Mesh(geometry(d), mat);
     mesh.raycast = raycastOnPositions;
-    mesh.castShadow = kind !== "emit";
-    mesh.receiveShadow = kind !== "emit";
+    if (NO_FIELD.has(kind)) mesh.userData.noField = true;
+    const lit = kind === "emit" || (kind as string) === "neon";
+    mesh.castShadow = !lit;
+    mesh.receiveShadow = !lit;
     o.add(mesh);
   }
   return o;
@@ -321,14 +335,15 @@ function extBatch(g: THREE.Group, lods: LodSet[], shadows = false, use: "batched
         s.i += d.idx.length;
       }
   for (const [kind, s] of size) {
-    const mesh = new THREE.BatchedMesh(s.n, s.v, s.i, sharedFor(kind, use));
+    const mesh = new THREE.BatchedMesh(s.n, s.v, s.i, isSlot(kind) ? realMat(kind) : sharedFor(kind, use));
+    if (NO_FIELD.has(kind)) mesh.userData.noField = true;
     if (use === "props") {
       mesh.customDepthMaterial = propDepthMaterial();
       mesh.name = "props";
     }
     // (the far level never casts: shadows are drawn round the focus only, where the near one is)
-    mesh.castShadow = shadows && kind !== "emit";
-    mesh.receiveShadow = kind !== "emit";
+    mesh.castShadow = shadows && kind !== "emit" && (kind as string) !== "neon";
+    mesh.receiveShadow = kind !== "emit" && (kind as string) !== "neon";
     // opaque, and drawn from above: depth sorting would only cost time
     mesh.sortObjects = false;
     const geoIds = new Map<object, number>();
@@ -342,6 +357,7 @@ function extBatch(g: THREE.Group, lods: LodSet[], shadows = false, use: "batched
           geo.setAttribute("position", new THREE.BufferAttribute(d.pos, 3));
           geo.setAttribute("normal", new THREE.BufferAttribute(d.nor, 3, true));
           geo.setAttribute("color", half(d.col));
+          if (d.uv) geo.setAttribute("uv", new THREE.BufferAttribute(d.uv, 2));
           geo.setIndex(new THREE.BufferAttribute(d.idx, 1));
           gid = mesh.addGeometry(geo);
           geoIds.set(d, gid);
@@ -400,12 +416,31 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   tunnels(g);
   wires(g, animated);
 
-  const { jobs, props, rects, circles } = planCity();
+  const { jobs, props: planned, rects, circles } = planCity();
+  // the trees are realistic (src/scene/real/trees.ts: bark, leaf cards, palms' fronds), instanced
+  // here; the rest of the street's furniture goes to the props worker as before
+  const props = planned.filter((p) => p.type !== "tree" && p.type !== "maple" && !REAL_PROPS.has(p.type));
+  // the street furniture too: lamps, benches, bollards, bins, signs… (src/scene/real/props.ts)
+  {
+    const real = placeProps(g, planned.filter((p) => REAL_PROPS.has(p.type)));
+    for (const [x, z, r] of real.circles) nav.addCircle(x, z, r);
+    for (const [x, y, z, color] of real.lights) lamps.push({ pos: new THREE.Vector3(x, y, z), color });
+  }
+  {
+    const trees = planned.filter((p) => p.type === "tree" || p.type === "maple");
+    const spots: TreeSpot[] = trees.map((p) => {
+      const a = p.args as [string, number];
+      return { x: p.x, z: p.z, y: p.y ?? CURB, rot: p.rot, species: speciesOf(p.type, String(a[0])), seed: Number(p.type === "maple" ? a[0] : a[1]) || 0 };
+    });
+    for (const c of plantTrees(g, spots)) canopies.push(c);
+    // (their trunks: what the props worker gave them)
+    for (const t of spots) nav.addCircle(t.x, t.z, t.species === "bush" ? 0.8 : t.species === "pine" ? 0.4 : 0.3);
+  }
   for (const [x0, z0, x1, z1] of rects) nav.addRect(x0, z0, x1, z1);
   for (const [x, z, r] of circles) nav.addCircle(x, z, r);
   const byId = new Map(jobs.map((j) => [j.id, j]));
   // one worker job per distinct variant; the copies are placed from the same result
-  const variantKey = (j: BuildingJob) => `${j.type}|${j.seed}|${j.width}|${JSON.stringify(j.opts)}${LITE ? "|lite" : ""}`;
+  const variantKey = (j: BuildingJob) => `${j.type}|${j.seed}|${j.width}|${JSON.stringify(j.opts)}${LITE ? "|lite" : ""}${REAL_ON ? "|real" : ""}`;
   const copies = new Map<string, BuildingJob[]>();
   for (const j of jobs) {
     const k = variantKey(j);
@@ -727,7 +762,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
             w.terminate();
             resolve();
           };
-          w.postMessage({ kind: "buildings", jobs: queues[i], lite: LITE, keys: cache.on ? Object.fromEntries(queues[i].map((j) => [j.id, variantKey(j)])) : undefined });
+          w.postMessage({ kind: "buildings", jobs: queues[i], lite: LITE, real: REAL_ON, keys: cache.on ? Object.fromEntries(queues[i].map((j) => [j.id, variantKey(j)])) : undefined });
         }),
     ),
     new Promise<void>((resolve) => {
@@ -892,6 +927,8 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     landmarks,
     boats,
     lod(focus: THREE.Vector3, near: number, mid: number) {
+      // (the realistic trees: whole and shadowed near the focus, light beyond)
+      treeLod(focus);
       if (!lodDirty && focus.distanceToSquared(lodFocus) < 12 * 12 && near === lodNear) return;
       lodNear = near;
       lodDirty = false;
@@ -954,11 +991,12 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   box(g, W + 0.6, 3.2 + BAY.bed, C.maxZ - BAY.z0 + 0.3, strata, 0, -3.2, (BAY.z0 + C.maxZ + 0.3) / 2);
   box(g, W + 1.0, 0.2, depth + 1.0, mat("#141219"), 0, -3.4, cz);
   const B = CORE;
-  const roadMat = (len: number, width: number, cross: number[]) => wet(new THREE.MeshStandardMaterial({ map: roadTexture(len, width, cross), roughness: 0.92, metalness: 0 }), () => roadTexture(len, width, cross, 2, true));
+  // (realistic: photographed asphalt in the world's metres, the paint laid over it: src/scene/real/ground.ts)
+  const roadMat = (len: number, width: number, cross: number[]) => GROUND.asphalt(markingsTexture(len, width, cross, 2));
   const avW = C.road.z1 - C.road.z0;
   // the heart's stretch of the avenue, with its zebra (the rest is tiled, in extension())
   const AW = AVENUE_CORE * 2;
-  flat(g, AW, avW, wet(new THREE.MeshStandardMaterial({ map: roadTexture(AW, avW, [DISTRICTS[0].crossX + AVENUE_CORE], 4), roughness: 0.92, metalness: 0 }), () => roadTexture(AW, avW, [DISTRICTS[0].crossX + AVENUE_CORE], 4, true)), 0, 0.01, (C.road.z0 + C.road.z1) / 2, 0);
+  flat(g, AW, avW, GROUND.asphalt(markingsTexture(AW, avW, [DISTRICTS[0].crossX + AVENUE_CORE], 4)), 0, 0.01, (C.road.z0 + C.road.z1) / 2, 0);
   for (const x of C.cross)
     for (const [z0, z1] of [
       [B.minZ, C.road.z0],
@@ -991,17 +1029,11 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
     [B.minZ, C.road.z0],
     [C.road.z1, B.maxZ],
   ];
-  const curbM = mat("#6d6876");
-  curbM.userData.dayColor = "#bdb9b3";
+  const curbM = GROUND.kerb();
   xs.forEach(([x0, x1], i) =>
     zs.forEach(([z0, z1], j) => {
-      const t = pavingTexture(11 + i * 2 + j, 4);
-      t.repeat.set((x1 - x0) / 2, (z1 - z0) / 2);
-      const pm = dayAlt(new THREE.MeshStandardMaterial({ map: t, roughness: 0.62, metalness: 0.05, color: j ? "#ffffff" : "#e8e4ee" }), () => {
-        const d = pavingTexture(11 + i * 2 + j, 4, true);
-        d.repeat.copy(t.repeat);
-        return d;
-      });
+      void i;
+      const pm = GROUND.slabs();
       box(g, x1 - x0, CURB, z1 - z0, pm, (x0 + x1) / 2, 0, (z0 + z1) / 2);
       box(g, x1 - x0, CURB + 0.03, 0.18, curbM, (x0 + x1) / 2, 0, j === 0 ? z1 - 0.09 : z0 + 0.09);
       if (i > 0) box(g, 0.18, CURB + 0.03, z1 - z0, curbM, x0 + 0.09, 0, (z0 + z1) / 2);
@@ -1010,21 +1042,9 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   );
   for (const z of [C.north.z1 - 0.8, C.south.z0 + 0.8]) for (const [x0, x1] of xs) box(g, x1 - x0 - 1, 0.02, 0.3, mat("#b8902a", 0.6), (x0 + x1) / 2, CURB, z);
   // plaza between the stop and the square
-  const plazaT = pavingTexture(14, 3);
-  plazaT.repeat.set(20, 2);
-  box(g, 43.6, 0.15, 4, dayAlt(new THREE.MeshStandardMaterial({ map: plazaT, color: "#a9a2b3", roughness: 0.75 }), () => {
-    const d = pavingTexture(14, 3, true);
-    d.repeat.set(20, 2);
-    return d;
-  }), 0, CURB, 9);
+  box(g, 43.6, 0.15, 4, GROUND.stone(), 0, CURB, 9);
   // Transparent square: paving, the fountain's water and jet
-  const sq = pavingTexture(31, 2);
-  sq.repeat.set(14, 7);
-  box(g, 40, 0.06, 19, dayAlt(new THREE.MeshStandardMaterial({ map: sq, color: "#d8d2c8", roughness: 0.6 }), () => {
-    const d = pavingTexture(31, 2, true);
-    d.repeat.set(14, 7);
-    return d;
-  }), 0, CURB, 21.5);
+  box(g, 40, 0.06, 19, GROUND.plaza(), 0, CURB, 21.5);
   const waterMat = addDetail(new THREE.MeshStandardMaterial({ map: waterTexture(), color: "#5aaac0", roughness: 0.04, metalness: 0.35, emissive: "#0a4a5a", emissiveIntensity: 0.9 }), "water");
   for (const [r, y] of [
     [3.35, 0.68],
@@ -1040,12 +1060,8 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   g.add(jet);
   animated.push((t) => (jet.scale.y = 1 + Math.sin(t * 2.2) * 0.12));
   // Orchard: grass under the orchard and the park, a path, the pond
-  const grass = grassTexture(4);
-  grass.repeat.set(10, 6);
-  flat(g, 22, 13, addDetail(new THREE.MeshStandardMaterial({ map: grass, roughness: 0.95 }), "grass"), -38.5, CURB + 0.004, nz(-27.5), 0);
-  const parkGrass = grassTexture(5);
-  parkGrass.repeat.set(10, 10);
-  flat(g, 20.5, 23, addDetail(new THREE.MeshStandardMaterial({ map: parkGrass, roughness: 0.95 }), "grass"), -38.6, CURB + 0.004, 19.5, 0);
+  flat(g, 22, 13, GROUND.lawn(), -38.5, CURB + 0.004, nz(-27.5), 0);
+  flat(g, 20.5, 23, GROUND.lawn(), -38.6, CURB + 0.004, 19.5, 0);
   // the koi pond: a stone rim, dark water, lily pads; the koi themselves swim in decor.ts
   const rim = new THREE.Mesh(new THREE.RingGeometry(2.45, 2.75, 40), mat("#7a766e"));
   rim.rotation.x = -Math.PI / 2;
@@ -1071,9 +1087,7 @@ function ground(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
     g.add(p);
   }
   // Ironwood yard
-  const yard = concreteTexture(17, "#2a2832");
-  yard.repeat.set(8, 8);
-  flat(g, 20.5, 23, addDetail(new THREE.MeshStandardMaterial({ map: yard, roughness: 0.55, metalness: 0.12 }), "concrete"), 38.6, CURB + 0.004, 19.5, 0);
+  flat(g, 20.5, 23, GROUND.concrete(), 38.6, CURB + 0.004, 19.5, 0);
 }
 
 /** Geometry gathered per material and merged into one mesh each at the end (one draw call). */
@@ -1110,13 +1124,8 @@ function tarmacMat(width: number) {
   let m = tarmacCache.get(width);
   if (m) return m;
   const lanes = width >= 12 ? 4 : 2;
-  const t = roadTexture(16, width, [], lanes);
-  t.wrapS = THREE.RepeatWrapping;
-  m = wet(new THREE.MeshStandardMaterial({ map: t, roughness: 0.92, metalness: 0 }), () => {
-    const d = roadTexture(16, width, [], lanes, true);
-    d.wrapS = THREE.RepeatWrapping;
-    return d;
-  });
+  // (realistic: photographed asphalt in the world's metres, the paint over it, 16 m a repeat along)
+  m = GROUND.asphalt(markingsTexture(16, width, [], lanes));
   tarmacCache.set(width, m);
   return m;
 }
@@ -1136,7 +1145,8 @@ function streetGeo(axis: "x" | "z", at: number, from: number, to: number, width:
 let pavings: THREE.MeshStandardMaterial[] | null = null;
 function pavingMats() {
   if (pavings) return pavings;
-  pavings = [40, 41, 42, 43, 44].map((seed) => dayAlt(new THREE.MeshStandardMaterial({ map: pavingTexture(seed, 4), roughness: 0.72, metalness: 0.02, color: "#ffffff" }), () => pavingTexture(seed, 4, true)));
+  // (one realistic slab paving for every block: in the world's metres, no seam between blocks)
+  pavings = [GROUND.pavement()];
   return pavings;
 }
 
@@ -1167,15 +1177,9 @@ function extension(g: THREE.Group, nav: Nav) {
     av.add(streetGeo("x", (C.road.z0 + C.road.z1) / 2, a, b, avW, 0.01), avMat);
   av.flush(g);
   // raised blocks, paved, with kerbs; grass on the strips outside the ring and the pocket parks
-  const curbM = mat("#6d6876");
-  curbM.userData.dayColor = "#bdb9b3";
-  const lawnT = grassTexture(12);
-  lawnT.wrapS = lawnT.wrapT = THREE.RepeatWrapping;
-  const lawn = addDetail(new THREE.MeshStandardMaterial({ map: lawnT, roughness: 0.95 }), "grass");
-  const slab = concreteTexture(23, "#4a4652");
-  slab.wrapS = slab.wrapT = THREE.RepeatWrapping;
-  const concrete = addDetail(new THREE.MeshStandardMaterial({ map: slab, roughness: 0.6, metalness: 0.1 }), "concrete");
-  concrete.userData.dayColor = "#cfcad6";
+  const curbM = GROUND.kerb();
+  const lawn = GROUND.lawn();
+  const concrete = GROUND.concrete();
   const blocks = new Batch();
   const P = pavingMats();
   let k = 0;
@@ -1435,8 +1439,8 @@ function coast(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
   geo.computeVertexNormals();
-  const sand = addDetail(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 }), "paving");
-  const beach = new THREE.Mesh(geo, sand);
+  // (realistic: the vertex colours' tints over photographed sand and grass, src/scene/real/ground.ts)
+  const beach = new THREE.Mesh(geo, terrainMat());
   beach.receiveShadow = true;
   beach.name = "beach";
   g.add(beach);
@@ -1553,13 +1557,8 @@ function arcade(g: THREE.Group, flicker: Flicker[], nav: Nav) {
   const A = SHOTENGAI;
   const len = A.z1 - A.z0;
   // pedestrian paving over the tarmac
-  const t = pavingTexture(61, 3);
-  t.repeat.set(A.half, len / 2);
-  const pave = dayAlt(new THREE.MeshStandardMaterial({ map: t, color: "#d8d0c8", roughness: 0.7 }), () => {
-    const d = pavingTexture(61, 3, true);
-    d.repeat.copy(t.repeat);
-    return d;
-  });
+  void len;
+  const pave = GROUND.setts();
   // (the avenue crosses it at grade: no paving and no rib in its lanes — a kerb and two posts stood
   // across Mempool Avenue)
   const R0 = CITY.road.z0 - 0.4,
@@ -1639,12 +1638,9 @@ function park(g: THREE.Group, nav: Nav, c: { x0: number; x1: number; z0: number;
     d = c.z1 - c.z0 - inset * 2;
   const cx = (c.x0 + c.x1) / 2,
     cz = (c.z0 + c.z1) / 2;
-  const lawn = grassTexture(9);
-  lawn.repeat.set(w / 4, d / 4);
-  flat(g, w, d, new THREE.MeshStandardMaterial({ map: lawn, roughness: 0.95 }), cx, CURB + 0.004, cz, 0);
+  flat(g, w, d, GROUND.lawn(), cx, CURB + 0.004, cz, 0);
   // gravel paths: a ribbon along each polyline
-  const gravel = new THREE.MeshStandardMaterial({ color: "#cbbf9f", roughness: 0.95 });
-  gravel.userData.dayColor = "#e2d8bc";
+  const gravel = GROUND.gravel();
   for (const pl of PARK.paths) {
     const width = pl === PARK.paths[0] ? 3.6 : 2.4;
     const pos: number[] = [];
@@ -1667,7 +1663,7 @@ function park(g: THREE.Group, nav: Nav, c: { x0: number; x1: number; z0: number;
     g.add(m);
   }
   // the fountain terrace: a paved round
-  const terrace = new THREE.Mesh(new THREE.CircleGeometry(8, 40), new THREE.MeshStandardMaterial({ map: pavingTexture(52, 3), color: "#d8d0c4", roughness: 0.7 }));
+  const terrace = new THREE.Mesh(new THREE.CircleGeometry(8, 40), GROUND.plaza());
   terrace.rotation.x = -Math.PI / 2;
   terrace.position.set(PARK.fountain.x, CURB + 0.014, PARK.fountain.z);
   terrace.receiveShadow = true;
@@ -1684,13 +1680,12 @@ function park(g: THREE.Group, nav: Nav, c: { x0: number; x1: number; z0: number;
   water.scale.set(L.rx, L.rz, 1);
   water.position.set(L.x, CURB + 0.02, L.z);
   g.add(water);
-  const isle = new THREE.Mesh(new THREE.CylinderGeometry(PARK.island.r, PARK.island.r + 0.4, 0.3, 24), new THREE.MeshStandardMaterial({ map: grassTexture(11), roughness: 0.95 }));
+  const isle = new THREE.Mesh(new THREE.CylinderGeometry(PARK.island.r, PARK.island.r + 0.4, 0.3, 24), GROUND.lawn());
   isle.position.set(PARK.island.x, CURB + 0.08, PARK.island.z);
   g.add(isle);
   // a low wall round the park, open where the paths come in
   const gates = PARK.paths.flatMap((pl) => [pl[0], pl[pl.length - 1]]).filter(([x, z]) => x <= c.x0 + 2 || x >= c.x1 - 2 || z <= c.z0 + 2 || z >= c.z1 - 2);
-  const wallM = mat("#7a7480");
-  wallM.userData.dayColor = "#cfc9c0";
+  const wallM = GROUND.stone();
   const run = (x0: number, z0: number, x1: number, z1: number) => {
     const horiz = Math.abs(z1 - z0) < 0.01;
     const len = horiz ? x1 - x0 : z1 - z0;

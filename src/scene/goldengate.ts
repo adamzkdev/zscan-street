@@ -2,8 +2,7 @@ import * as THREE from "three";
 import type { City } from "./city";
 import { BAY, CURB, ST } from "./city/plan";
 import { corridor, KGRID, KTUNNEL, KX } from "./keys/plan";
-import { sharedObject } from "./voxel/mesher";
-import { sedanModel, taxiModel, truckModel } from "./voxel/vehicles";
+import { carObject, spinWheels } from "./real/cars";
 
 /**
  * The Golden Gate comes alive: cars and trucks cross it both ways (four lanes, up the ramps and over
@@ -216,7 +215,7 @@ export class GoldenGate {
   }
 
   /** A car knocked out of the bridge's traffic by the game: its body (out of the traffic's group) and kind, or null. */
-  take(ref: unknown): { group: THREE.Group; kind: "sedan" | "taxi" | "truck" } | null {
+  take(ref: unknown): { group: THREE.Group; kind: "sedan" | "taxi" | "truck" | "suv" | "sports" | "convertible" } | null {
     const i = this.cars.indexOf(ref as Car);
     if (i < 0) return null;
     const c = this.cars[i];
@@ -225,11 +224,10 @@ export class GoldenGate {
     const g = new THREE.Group();
     g.position.copy(c.obj.position);
     g.rotation.set(0, c.yaw, 0);
-    c.obj.position.set(0, 0, 0);
-    c.obj.rotation.set(0, 0, 0);
-    g.add(c.obj);
+    // (its body and its wheels straight in the group: the game's car steers the wheels)
+    for (const ch of [...c.obj.children]) g.add(ch);
     const key = (c.obj.userData.kind as string) ?? "";
-    return { group: g, kind: c.len > 6 ? "truck" : key === "taxi" ? "taxi" : "sedan" };
+    return { group: g, kind: c.len > 6 ? "truck" : key === "taxi" ? "taxi" : key === "suv" || key === "sports" || key === "convertible" ? key : "sedan" };
   }
 
   private spawn(anywhere = false) {
@@ -239,15 +237,16 @@ export class GoldenGate {
     // and left on the GPU once it had crossed)
     let obj: THREE.Group;
     let len = 4;
-    if (r < 0.15) (obj = sharedObject("gg:taxi", taxiModel)), (obj.userData.kind = "taxi");
+    if (r < 0.15) (obj = carObject("taxi", { paint: "#f2c230" })), (obj.userData.kind = "taxi");
     else if (r < 0.27) {
       const livery = ["#e8e4dc", "#2e5ab8", "#c0302e"][Math.floor(Math.random() * 3)];
-      const label = Math.random() < 0.5 ? "proof" : "depot";
-      obj = sharedObject(`gg:truck:${livery}:${label}`, () => truckModel(livery, label));
+      obj = carObject("truck", { livery, label: Math.random() < 0.5 ? "proof" : "depot" });
       len = 7;
     } else {
       const p = Math.floor(Math.random() * PAINTS.length);
-      obj = sharedObject(`gg:sedan:${p}`, () => sedanModel(...PAINTS[p]));
+      const kind = (["sedan", "sedan", "suv", "sports", "convertible", "sedan"] as const)[Math.floor(Math.random() * 6)];
+      obj = carObject(kind, { paint: PAINTS[p][0], glow: kind === "sports" ? PAINTS[p][1] : undefined });
+      obj.userData.kind = kind;
     }
     const s = anywhere ? Math.random() * path.length : 0;
     const p = path.at(s);
@@ -306,6 +305,7 @@ export class GoldenGate {
       const want = ahead < 2.5 ? 0 : ahead < 9 ? cruise * ((ahead - 2.5) / 6.5) : cruise;
       c.s += want * dt;
       this.place(c);
+      spinWheels(c.obj, want * dt);
       // the city end: they come in from (and go out to) the ring road, growing in/out of view
       const fade = Math.min(1, c.s / 4, (c.path.length - c.s) / 4);
       c.obj.scale.setScalar(Math.max(0.01, fade));

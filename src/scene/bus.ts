@@ -2,9 +2,10 @@ import * as THREE from "three";
 import { CITY } from "./city";
 import { trackLight } from "./lights";
 import { busSign, canvasTexture, updateCanvasTexture, zcashBadge } from "./textures";
-import { freeObject, sharedObject } from "./voxel/mesher";
+import { freeObject } from "./voxel/mesher";
 import { VOX } from "./voxel/model";
-import { BUS, BUS_SEATS, BUS_STANDING, busModel } from "./voxel/vehicles";
+import { BUS, BUS_SEATS, BUS_STANDING } from "./voxel/vehicles";
+import { busObject, spinWheels } from "./real/cars";
 
 const LEN = BUS.w * VOX;
 const WID = BUS.d * VOX;
@@ -32,14 +33,15 @@ export class BlockBus {
   private doors: { leaf: THREE.Mesh; closedX: number; dir: number; width: number }[] = [];
   private doorOpen = 0;
   private doorTarget = 0;
-  private wheels: THREE.Mesh[] = [];
   private headlight: THREE.SpotLight;
   private taken = 0;
 
   constructor() {
     const g = this.group;
     // (the body meshed once for every bus: a bus a block, each one meshed again)
-    g.add(sharedObject("bus", busModel));
+    // (the realistic coach, built once; its wheels roll: `spin`)
+    const coach = busObject(BUS, BUS_SEATS);
+    for (const c of [...coach.children]) g.add(c);
 
     // glass panes over the window openings (both sides) and the windscreen
     const glass = new THREE.MeshPhysicalMaterial({ color: "#ffe2b8", transparent: true, opacity: 0.12, roughness: 0.05, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
@@ -54,21 +56,6 @@ export class BlockBus {
     ws.position.set(LEN / 2 - 0.01, ((BUS.floor + 4 + BUS.h - 4) / 2) * VOX, 0);
     ws.rotation.y = Math.PI / 2;
     g.add(ws);
-
-    // wheels with hubs
-    const wheelGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.34, 18);
-    const wheelMat = new THREE.MeshStandardMaterial({ color: "#121216", roughness: 0.9 });
-    const hubMat = new THREE.MeshStandardMaterial({ color: "#8a8a94", roughness: 0.4, metalness: 0.6 });
-    for (const vx of [10, 41])
-      for (const z of [-WID / 2 + 0.17, WID / 2 - 0.17]) {
-        const w = new THREE.Mesh(wheelGeo, wheelMat);
-        w.rotation.x = Math.PI / 2;
-        w.position.set((vx - BUS.w / 2) * VOX, 0.46, z);
-        w.castShadow = true;
-        w.add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.36, 8), hubMat));
-        g.add(w);
-        this.wheels.push(w);
-      }
 
     // sliding doors: two glass leaves per opening
     const doorMat = new THREE.MeshPhysicalMaterial({ color: "#3a4054", metalness: 0.4, roughness: 0.3, transparent: true, opacity: 0.88 });
@@ -133,7 +120,7 @@ export class BlockBus {
   }
 
   spin(distance: number) {
-    for (const w of this.wheels) w.rotation.y -= distance / 0.46;
+    spinWheels(this.group, distance);
   }
 
   /**

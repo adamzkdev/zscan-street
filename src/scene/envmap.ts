@@ -47,7 +47,45 @@ function build(day: boolean) {
   return s;
 }
 
+/**
+ * A real sky for the reflections (public/hdr, Poly Haven CC0): the photographed sky of a clear
+ * afternoon, and a sunset for the golden hour, prefiltered once each when they have arrived. Until
+ * then (and by night) the studio room above. `skyEnv` is the one to use for the sun's elevation (°).
+ */
+const hdr = new Map<string, THREE.Texture>();
+/** The prefiltered skies (to tell them from the rooms). */
+export const SKY_ENVS = new Set<THREE.Texture>();
+const asked = new Set<string>();
+export const SKIES = { noon: "kloofendal_48d_partly_cloudy_puresky", sunset: "venice_sunset" } as const;
+export function loadSkies(renderer: THREE.WebGLRenderer, done?: () => void) {
+  for (const name of Object.values(SKIES)) {
+    if (asked.has(name)) continue;
+    asked.add(name);
+    void import("three/examples/jsm/loaders/HDRLoader.js").then(({ HDRLoader }) =>
+      new HDRLoader().load(`${import.meta.env?.BASE_URL ?? "/"}hdr/${name}.hdr`, (eq) => {
+        eq.mapping = THREE.EquirectangularReflectionMapping;
+        const pm = new THREE.PMREMGenerator(renderer);
+        const tx = pm.fromEquirectangular(eq).texture;
+        hdr.set(name, tx);
+        SKY_ENVS.add(tx);
+        pm.dispose();
+        eq.dispose();
+        done?.();
+      }),
+    );
+  }
+}
+/** The sky to reflect at this elevation of the sun (null while not loaded: keep the room). */
+export function skyEnv(elevation: number): THREE.Texture | null {
+  if (elevation < -4) return null;
+  return (elevation < 12 ? hdr.get(SKIES.sunset) : hdr.get(SKIES.noon)) ?? hdr.get(SKIES.noon) ?? null;
+}
+
 export function cityEnvironment(renderer: THREE.WebGLRenderer, day: boolean) {
+  if (day) {
+    const sky = hdr.get(SKIES.noon);
+    if (sky) return sky;
+  }
   const key = day ? "day" : "night";
   let t = cache.get(key);
   if (!t) {

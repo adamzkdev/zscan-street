@@ -5,6 +5,7 @@ import type { LampLights } from "./post";
 import { MATERIALS } from "./voxel/mesher";
 import { GLASS_NIGHT } from "./voxel/surface";
 import { DETAIL_WET } from "./detail";
+import { cityEnvironment, SKY_ENVS, skyEnv } from "./envmap";
 
 /**
  * The game's light (src/gta): a continuous day — dawn, morning, noon, the long afternoon, the golden
@@ -457,12 +458,25 @@ export function applyDaylight(t: DaylightTargets, d: Daylight) {
     [4, 0.98],
     [20, 0.93],
   ], el) * (1 - 0.06 * d.rain) * (1 - 0.12 * d.storm);
-  scene.environmentIntensity = num([
-    [-10, 0.24],
-    [0, 0.3],
-    [10, 0.36],
-    [30, 0.45],
-  ], el);
+  // the reflections: a real photographed sky by day (a sunset's at the golden hour), the neon room by night
+  const sky = skyEnv(el);
+  if (sky) {
+    if (scene.environment !== sky) scene.environment = sky;
+    scene.environmentIntensity = num([
+      [-4, 0.18],
+      [4, 0.26],
+      [14, 0.34],
+      [30, 0.42],
+    ], el) * (1 - 0.35 * c);
+  } else {
+    if (el <= -4 && scene.environment && SKY_ENVS.has(scene.environment)) scene.environment = cityEnvironment(renderer, false);
+    scene.environmentIntensity = num([
+      [-10, 0.24],
+      [0, 0.3],
+      [10, 0.36],
+      [30, 0.45],
+    ], el);
+  }
   bloom.strength = num([
     [-8, 0.38],
     [-1, 0.3],

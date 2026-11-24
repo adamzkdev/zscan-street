@@ -1,0 +1,32 @@
+// node shots/_cartake.mjs: take a car of the traffic (src/gta getIn): it keeps its own four wheels (no second set), they steer and roll; a shot from behind
+import puppeteer from "puppeteer-core";
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage();
+await p.evaluateOnNewDocument(() => { const W = window.WebSocket; const F = function (u, pr) { if (pr === "vite-hmr" || String(u).includes("token=")) return { addEventListener() {}, removeEventListener() {}, send() {}, close() {}, readyState: 0 }; return pr === undefined ? new W(u) : new W(u, pr); }; F.prototype = W.prototype; Object.assign(F, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 }); window.WebSocket = F; });
+const errs = [];
+p.on("pageerror", (e) => errs.push(e.message));
+await p.goto("http://localhost:3061/?debug&gta=1192&theme=day");
+await p.waitForFunction(() => window.__streetUp && window.street?.gta?.solid?.ready, { timeout: 300000, polling: 300 });
+await p.evaluate(() => { const g = street.gta; g.hud.coach(-1); g.heat.raise = () => {}; });
+const r = await p.evaluate(() => {
+  const g = street.gta;
+  const m = [...g.host.traffic.movers][0];
+  const q = m.group.position;
+  g.player.place(q.x, 0.2, q.z + 1.6, 0);
+  g.getIn();
+  const car = g.car;
+  if (!car) return { took: false };
+  let wheels = 0, cylinders = 0;
+  car.group.traverse((o) => { if (o.name === "wheel") wheels++; if (o.isMesh && o.geometry.type === "CylinderGeometry") cylinders++; });
+  return { took: true, kind: car.kind, wheels, cylinders };
+});
+console.log(JSON.stringify(r));
+await p.keyboard.down("KeyW");
+await new Promise((res) => setTimeout(res, 2500));
+await p.keyboard.down("KeyD");
+await new Promise((res) => setTimeout(res, 600));
+await p.screenshot({ path: "shots/gta/cars/take.png" });
+await p.keyboard.up("KeyD");
+await p.keyboard.up("KeyW");
+console.log("errors", errs.length, errs.slice(0, 3).join("\n"));
+await b.close();

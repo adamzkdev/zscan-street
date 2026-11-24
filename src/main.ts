@@ -22,6 +22,8 @@ import { GtaMode } from "./gta";
 import { goldenHour } from "./gta/frontend";
 import type { Person3 } from "./gta/people3d";
 import { FinishPass, GradePass, ScenePass } from "./scene/finish";
+import { cityEnvironment, loadSkies, SKY_ENVS } from "./scene/envmap";
+import { texSetup } from "./scene/real/tex";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { applyTheme, ATMOS, setRainWanted, type Theme } from "./scene/theme";
 import { applyDaylight, GameSky, type Daylight } from "./scene/daylight";
@@ -78,8 +80,8 @@ import { Agents } from "./game/agents";
 import { Npcs } from "./game/npcs";
 import { Horns } from "./scene/horns";
 import { Prison, PRISON } from "./scene/prison";
-import { policeModel } from "./scene/voxel/vehicles";
-import { toObject } from "./scene/voxel/mesher";
+import { carObject, POLICE_BAR } from "./scene/real/cars";
+import { carLamps } from "./scene/real/carkit";
 import { storeInfo } from "./ui/stores";
 import type { PickInfo } from "./interior/types";
 import { Critters } from "./scene/critters";
@@ -172,6 +174,7 @@ const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.22;
+texSetup(renderer);
 
 // ---- lights -----------------------------------------------------------------------------------
 const hemi = new THREE.HemisphereLight("#6a64a8", "#1a1420", 1.5);
@@ -290,9 +293,14 @@ const clockTheme = (): Theme => {
   return h >= 19 || h < 7 ? "night" : "day";
 };
 let theme: Theme = themePref === "auto" ? clockTheme() : themePref;
+// the real skies for the reflections (public/hdr), in when they have loaded (by day at once)
+loadSkies(renderer, () => {
+  if (theme === "day" && !SKY_ENVS.has(scene.environment!)) scene.environment = cityEnvironment(renderer, true);
+});
 function setTheme(t: Theme) {
   theme = t;
   applyTheme({ renderer, scene, hemi, sun: moon, bloom, lamps: lampLights, decor, city: city.group }, t);
+  carLamps(t === "night" ? 1 : 0);
   grade.setTheme(t === "day");
   bloomThreshold = bloom.threshold;
   hud?.setNight(t === "night");
@@ -331,6 +339,8 @@ function paintDay(d: Daylight | null) {
   // the sky is the game's dome (the theme painted its panorama as the background)
   scene.background = null;
   gameSky.set(d);
+  // the cars' lamps carry as the light goes
+  carLamps(d.night);
   moonShadow = applyDaylight({ renderer, scene, hemi, sun: moon, bloom, lamps: lampLights, grade, offset: MOON_OFFSET }, d);
   bloomThreshold = bloom.threshold;
   const f = scene.fog as THREE.Fog;
@@ -592,11 +602,10 @@ async function arrest() {
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const me = onFoot.camera.position.clone().setY(CURB);
   // a patrol car pulls up beside you, lights going
-  const car = new THREE.Group();
-  car.add(toObject(policeModel()));
+  const car = carObject("police", { paint: "#141418", accent: "#f2f2ee" });
   const lamps = (["#ff2a2a", "#2a6aff"] as const).map((c, i) => {
-    const l = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.18, 0.5), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(3.2), toneMapped: false }));
-    l.position.set(0.17, 11.5 / 6, i ? 0.32 : -0.32);
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.11, 0.55), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(3.2), toneMapped: false }));
+    l.position.set(POLICE_BAR.x, POLICE_BAR.y, i ? 0.32 : -0.32);
     car.add(l);
     return l;
   });

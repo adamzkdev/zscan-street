@@ -106,4 +106,4 @@ export function motoModel(paint = "#e8a91c", accent = "#15151b") {
   return m;
 }
 /** The rider's seat over the ground (m) and along the bike (m from its middle, + forward). */
-export const MOTO_SEAT = { y: 0.62, x: -0.12 };
+export const MOTO_SEAT = { y: 0.74, x: -0.22 };

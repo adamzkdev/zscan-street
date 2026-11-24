@@ -6,7 +6,7 @@ import { CURB, GRID, gridCells, PARK, RIVER, ST } from "../city/plan";
 import { sayAt } from "../speech";
 import { toObject } from "../voxel/mesher";
 import { C, E, G, VoxelModel } from "../voxel/model";
-import { busShelter } from "../voxel/props";
+import { realShelter } from "../real/props";
 import { Crowd, Kind, PORTRAITS, type Person } from "./crowd";
 import type { AliveCtx, AliveFrame, AlivePart } from "./types";
 
@@ -249,7 +249,8 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
 
   // ---- 4. bus stops on the boulevards and the ring ----
   const cellAt = (x: number, z: number) => cells.find((c) => x > c.x0 && x < c.x1 && z > c.z0 && z < c.z1);
-  const shelterProto = toObject(busShelter().model);
+  // (realistic: steel, glass, a lit roof strip, a slatted bench: src/scene/real/props.ts)
+  const shelterProto = realShelter();
   /** A stop on the pavement beside the street on axis `axis` at `at`, on `side`, `along` it. */
   const busStop = (axis: "x" | "z", at: number, side: 1 | -1, along: number) => {
     const half = (axis === "z" ? xw(at) : zw(at)) / 2;

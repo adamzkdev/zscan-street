@@ -1,10 +1,13 @@
 import * as THREE from "three";
+import { carObject } from "../real/cars";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { City } from "../city";
 import { BAY, CURB } from "../city/plan";
-import { addDetail } from "../detail";
 import { F, type Land } from "../forest/land";
-import { grassTexture, neonTexture, pavingTexture, releaseAfterUpload, roadTexture } from "../textures";
+import { markingsTexture, neonTexture, releaseAfterUpload } from "../textures";
+import { GROUND, terrainMat } from "../real/ground";
+import { plantTrees, type Species } from "../real/trees";
+import { placeProps } from "../real/props";
 import { MATERIALS } from "../voxel/mesher";
 import type { Kind } from "../voxel/model";
 import { beachY, corridor, inKeys, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, shoreDist } from "./plan";
@@ -188,7 +191,7 @@ export class Keys {
     geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, addDetail(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93 }), "paving"));
+    const mesh = new THREE.Mesh(geo, terrainMat());
     mesh.receiveShadow = true;
     mesh.name = "keys:ground";
     return mesh;
@@ -199,22 +202,12 @@ export class Keys {
   private streets() {
     const day = this.day();
     const roadMats = new Map<number, THREE.MeshStandardMaterial>();
+    // (realistic: photographed asphalt in the world's metres and the paint over it, src/scene/real/ground.ts)
+    void day;
     const roadMat = (width: number) => {
       let m = roadMats.get(width);
       if (m) return m;
-      const lanes = width >= 12 ? 4 : 2;
-      const night = roadTexture(16, width, [], lanes);
-      night.wrapS = THREE.RepeatWrapping;
-      const dayMap = () => {
-        const t = roadTexture(16, width, [], lanes, true);
-        t.wrapS = THREE.RepeatWrapping;
-        return t;
-      };
-      m = addDetail(new THREE.MeshStandardMaterial({ map: night, roughness: 0.92, metalness: 0 }), "asphalt");
-      m.userData.wet = true;
-      m.userData.nightMap = night;
-      m.userData.dayMap = dayMap;
-      if (day) m.map = m.userData.dayTex = dayMap();
+      m = GROUND.asphalt(markingsTexture(16, width, [], width >= 12 ? 4 : 2));
       roadMats.set(width, m);
       return m;
     };
@@ -236,28 +229,11 @@ export class Keys {
     add(roadMat(KTUNNEL.half * 2 - 2), strip("z", KX, KTUNNEL.z0 - 0.4, KTUNNEL.z1 + 0.2, KTUNNEL.half * 2 - 2, 0.03));
     // under it all, a floor the colour of the asphalt (no glimpse of the sea through a seam)
     const under = new THREE.PlaneGeometry(TOWN.x1 - TOWN.x0, TOWN.z1 - TOWN.z0).rotateX(-Math.PI / 2).translate((TOWN.x0 + TOWN.x1) / 2, -0.02, (TOWN.z0 + TOWN.z1) / 2);
-    add(new THREE.MeshStandardMaterial({ color: "#3a3842", roughness: 0.95 }), under);
+    add(GROUND.asphalt(), under);
     // the blocks: raised, paved, their kerbs (world-space UVs: a 2 m slab grid)
-    const paving = [44, 45, 46].map((seed) => {
-      const night = pavingTexture(seed, 4);
-      night.wrapS = night.wrapT = THREE.RepeatWrapping;
-      const m = addDetail(new THREE.MeshStandardMaterial({ map: night, roughness: 0.72, metalness: 0.02, color: "#ffffff" }), "paving");
-      const dayMap = () => {
-        const t = pavingTexture(seed, 4, true);
-        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        return t;
-      };
-      m.userData.nightMap = night;
-      m.userData.dayMap = dayMap;
-      if (day) m.map = m.userData.dayTex = dayMap();
-      return m;
-    });
-    const curbM = new THREE.MeshStandardMaterial({ color: day ? "#bdb9b3" : "#6d6876", roughness: 0.85 });
-    curbM.userData.dayColor = "#bdb9b3";
-    curbM.userData.nightColor = "#6d6876";
-    const lawnT = grassTexture(14);
-    lawnT.wrapS = lawnT.wrapT = THREE.RepeatWrapping;
-    const lawn = addDetail(new THREE.MeshStandardMaterial({ map: lawnT, roughness: 0.95 }), "grass");
+    const paving = [GROUND.plaza(), GROUND.pavement(), GROUND.pavement()];
+    const curbM = GROUND.kerb();
+    const lawn = GROUND.lawn();
     const slab = (x0: number, x1: number, z0: number, z1: number, m: THREE.Material, top = CURB) => {
       const g = new THREE.BoxGeometry(x1 - x0, top + 0.4, z1 - z0);
       // world-space UVs on the top: a slab every 2 m
@@ -374,6 +350,18 @@ export class Keys {
       door: { x: f.door[0], z: f.door[1] },
     }));
     this.palms = out.palms.map(([x, z]) => ({ x, z }));
+    // the palms, pines and bushes, realistic and instanced (src/scene/real/trees.ts)
+    plantTrees(this.group, out.trees.map(([x, y, z, sp, seed]) => ({ x, y, z, species: sp as Species, seed })));
+    placeProps(this.group, out.lamps.map(([x, y, z, yaw]) => ({ type: "lamp", args: ["#ffd9a0"], x, y, z, rot: yaw })));
+    // the parked cars, realistic (shared bodies: a few kinds and paints)
+    const PARKED = ["#ff7fb0", "#46c8e0", "#f4b728", "#2a2a34", "#d8333f", "#9fe0c8"];
+    for (const [x, z, yaw, k] of out.cars) {
+      const kinds = ["sedan", "convertible", "suv", "sports", "sedan", "pickup"] as const;
+      const car = k >= PARKED.length ? carObject("taxi", { paint: "#f2c230" }) : carObject(kinds[k % kinds.length], { paint: PARKED[k] });
+      car.position.set(x, 0.02, z);
+      car.rotation.y = yaw;
+      this.group.add(car);
+    }
     for (const c of out.circles) {
       const k = cellKey(c[0], c[1]);
       (this.circles.get(k) ?? this.circles.set(k, []).get(k)!).push(c);

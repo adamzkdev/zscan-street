@@ -2,9 +2,8 @@ import * as THREE from "three";
 import { streetSegments } from "../city/plan";
 import { sayAt } from "../speech";
 import { busSign, canvasTexture } from "../textures";
-import { toObject } from "../voxel/mesher";
-import { C, E, G, VOX, VoxelModel } from "../voxel/model";
-import { policeModel, sedanModel } from "../voxel/vehicles";
+import { VOX } from "../voxel/model";
+import { carObject, POLICE_BAR } from "../real/cars";
 import type { AliveCtx, AliveFrame, AlivePart } from "./types";
 
 /**
@@ -81,45 +80,6 @@ class Route {
 
 // ---- the vehicles --------------------------------------------------------------------------------
 
-function ambulanceModel() {
-  const w = 32,
-    d = 12,
-    h = 17;
-  const m = new VoxelModel(w, h, d);
-  const white = C("#f4f2f6"),
-    red = C("#d0202a"),
-    dark = C("#1a1a20"),
-    glass = G("#1e2638");
-  m.box(1, 1, 0, w - 1, 4, d, dark);
-  // the box body at the back, the cab in front
-  m.box(1, 3, 0, 22, h - 1, d, white);
-  m.box(22, 3, 0, w - 1, 11, d, white);
-  m.box(w - 1, 3, 1, w, 9, d - 1, white);
-  m.box(23, 7, 0, w - 3, 11, 1, glass);
-  m.box(23, 7, d - 1, w - 3, 11, d, glass);
-  m.box(w - 2, 7, 1, w - 1, 11, d - 1, glass);
-  // stripes and the cross on both sides
-  m.paint(1, 6, 0, w, 8, d, red);
-  for (const z of [0, d - 1]) {
-    m.box(9, 9, z, 13, 15, z + 1, red);
-    m.box(8, 10, z, 14, 14, z + 1, red);
-    m.box(10, 10, z, 12, 14, z + 1, white);
-    m.box(9, 11, z, 13, 13, z + 1, white);
-    m.box(10, 11, z, 12, 13, z + 1, red);
-    m.box(9, 12, z, 13, 12, z + 1, red);
-  }
-  m.box(0, 4, 2, 1, 15, d - 2, C("#d8d4dc"));
-  m.box(0, 6, 3, 1, 14, d - 3, glass);
-  m.box(w - 1, 4, 2, w, 5, 4, E("#fff6e0", 3));
-  m.box(w - 1, 4, d - 4, w, 5, d - 2, E("#fff6e0", 3));
-  m.box(0, 4, 1, 1, 6, 2, E("#ff2a1a", 2.4));
-  m.box(0, 4, d - 2, 1, 6, d - 1, E("#ff2a1a", 2.4));
-  for (const x of [6, w - 7]) {
-    m.clear(x - 2, 0, 0, x + 3, 2, 1);
-    m.clear(x - 2, 0, d - 1, x + 3, 2, d);
-  }
-  return m;
-}
 
 function glowTexture() {
   const c = document.createElement("canvas");
@@ -151,19 +111,19 @@ const LAMP_RED = new THREE.Color("#ff2a2a").multiplyScalar(3.2),
 
 function vehicle(kind: "police" | "flee" | "amb", glowTex: THREE.Texture): Car {
   const group = new THREE.Group();
-  const model = kind === "police" ? policeModel() : kind === "amb" ? ambulanceModel() : sedanModel("#c0182a", "#ff3e8a");
-  group.add(toObject(model));
+  const car = kind === "police" ? carObject("police", { paint: "#141418", accent: "#f2f2ee" }) : kind === "amb" ? carObject("ambulance", { paint: "#f4f2f6", accent: "#d0202a" }) : carObject("sports", { paint: "#c0182a", glow: "#ff3e8a" });
+  for (const c of [...car.children]) group.add(c);
   const bar: THREE.MeshBasicMaterial[] = [];
   let glow: THREE.Mesh | null = null;
   if (kind !== "flee") {
-    const y = kind === "police" ? 11.5 * VOX : 17.4 * VOX;
-    const x = kind === "police" ? 0.17 : -0.9;
+    const y = kind === "police" ? POLICE_BAR.y : 2.82;
+    const x = kind === "police" ? POLICE_BAR.x : -0.9;
     for (const [z, c] of [
       [-0.32, LAMP_RED],
       [0.32, LAMP_BLUE],
     ] as const) {
       const mat = new THREE.MeshBasicMaterial({ color: c.clone(), toneMapped: false });
-      const lamp = new THREE.Mesh(new THREE.BoxGeometry(kind === "amb" ? 0.4 : 0.62, 0.18, 0.5), mat);
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(kind === "amb" ? 0.4 : 0.28, kind === "amb" ? 0.18 : 0.11, 0.55), mat);
       lamp.position.set(x, y, z);
       group.add(lamp);
       bar.push(mat);
@@ -175,7 +135,7 @@ function vehicle(kind: "police" | "flee" | "amb", glowTex: THREE.Texture): Car {
         [0.5, 1],
       ] as const) {
         const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.16, 0.3), bar[i]);
-        lamp.position.set(1.6, 11.4 * VOX, z);
+        lamp.position.set(1.3, 2.8, z);
         group.add(lamp);
       }
       const tex = canvasTexture(busSign("AMBULANCE"));

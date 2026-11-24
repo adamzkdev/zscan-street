@@ -6,6 +6,7 @@ import { C, half, palette, VOX, type Kind } from "../voxel/model";
 import type { Prop } from "../voxel/props";
 import { buildJob, propModel } from "./build";
 import { workerCache } from "./cache";
+import { realBuilding, REAL_TYPES, type RGeo, type Slot } from "../real/buildings";
 import type { BuildingJob, PropJob } from "./plan";
 
 /**
@@ -25,8 +26,11 @@ export interface GeoData {
   /** Half floats (IEEE 754 binary16). */
   col: Uint16Array;
   idx: Uint32Array | Uint16Array;
+  /** The realistic buildings' texture coordinates (src/scene/real). */
+  uv?: Float32Array;
 }
-export type Geos = Partial<Record<Kind, GeoData>>;
+/** By the voxels' kind, or by a realistic slot (src/scene/real/buildings.ts). */
+export type Geos = Partial<Record<Kind | Slot, GeoData>>;
 
 // (in plan.ts, which the main thread loads anyway: importing it from here pulled every builder into the main bundle)
 export { CUT_VOX } from "./plan";
@@ -47,6 +51,22 @@ function pack(geos: Partial<Record<Kind, THREE.BufferGeometry>>, out: Transferab
     const idx = pos.length / 3 <= 65535 ? Uint16Array.from(src) : Uint32Array.from(src);
     const d: GeoData = { pos, nor, col, idx };
     out.push(d.pos.buffer, d.nor.buffer, d.col.buffer, d.idx.buffer);
+    r[k] = d;
+  }
+  return r;
+}
+
+/** A realistic building's slots, compact the same way (byte normals, half-float colours). */
+function packReal(geos: Partial<Record<Slot, RGeo>>, out: Transferable[]): Geos {
+  const r: Geos = {};
+  for (const [k, g] of Object.entries(geos) as [Slot, RGeo][]) {
+    const nor = new Int8Array(g.nor.length);
+    for (let i = 0; i < g.nor.length; i++) nor[i] = Math.round(g.nor[i] * 127);
+    const col = new Uint16Array(g.col.length);
+    for (let i = 0; i < g.col.length; i++) col[i] = toHalf(g.col[i]);
+    const idx = g.pos.length / 3 <= 65535 ? Uint16Array.from(g.idx) : Uint32Array.from(g.idx);
+    const d: GeoData = { pos: g.pos, nor, col, idx, uv: g.uv };
+    out.push(d.pos.buffer, d.nor.buffer, d.col.buffer, d.idx.buffer, g.uv.buffer);
     r[k] = d;
   }
   return r;
@@ -76,12 +96,13 @@ function scaled(geos: Partial<Record<Kind, THREE.BufferGeometry>>, k: number) {
 const SOLID = new Set(["bench", "shelter", "stall", "container", "greenhouse", "vending", "bicycle", "crates", "trashBags", "planter", "fence", "mailbox", "barrel"]);
 
 self.onmessage = async (e: MessageEvent) => {
-  const msg = e.data as { kind: "buildings"; jobs: BuildingJob[]; lite?: boolean; keys?: Record<number, string> } | { kind: "props"; props: PropJob[] } | { kind: "hello" };
+  const msg = e.data as { kind: "buildings"; jobs: BuildingJob[]; lite?: boolean; real?: boolean; keys?: Record<number, string> } | { kind: "props"; props: PropJob[] } | { kind: "hello" };
   // the main thread asks which bundle this is: its hashed name versions the city cache
   if (msg.kind === "hello") return void (self as unknown as Worker).postMessage({ url: self.location.pathname });
   const transfer: Transferable[] = [];
   if (msg.kind === "buildings") {
     const lite = !!msg.lite;
+    const realOn = msg.real !== false;
     // the city cache (`keys`: the variants' cache keys, when it is on)
     const cache = msg.keys ? await workerCache() : null;
     // each building posted as soon as it is meshed, so the main thread places it while the next one
@@ -132,6 +153,20 @@ self.onmessage = async (e: MessageEvent) => {
             walls: b.walls?.map((w) => w.map(v)),
             points: b.points && Object.fromEntries(Object.entries(b.points).map(([n, p]) => [n, p.map(v)])),
           },
+        };
+      }
+      // the ordinary buildings, realistic (src/scene/real): the voxel model only for its layout
+      if (realOn && REAL_TYPES.has(j.type)) {
+        const meta = { w: m.w, h: m.h, d: m.d, signs: b.signs, door: b.door, body: b.body, lights: b.lights, walls: b.walls, points: b.points };
+        if (!j.ext) return { id: j.id, real: true, full: packReal(realBuilding(j, b, { lod: lite ? 1 : 0 }), transfer), cut: packReal(realBuilding(j, b, { lod: 1, clipY: CUT_VOX }), transfer), meta };
+        return {
+          id: j.id,
+          real: true,
+          full: packReal(realBuilding(j, b, { lod: lite ? 1 : 0 }), transfer),
+          cut: {},
+          lod: packReal(realBuilding(j, b, { lod: lite ? 2 : 1 }), transfer),
+          lod2: packReal(realBuilding(j, b, { lod: 2 }), transfer),
+          meta,
         };
       }
       if (lite && j.ext)
