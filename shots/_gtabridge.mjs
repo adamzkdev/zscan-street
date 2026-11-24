@@ -78,9 +78,23 @@ const leg = async (name, lane, z0, z1, ms) => {
       const want = south ? -Math.PI / 2 : Math.PI / 2;
       let dh = c.yaw - want;
       dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-      // (south: right is −x; north: right is +x) — steer right (+) when left of the lane or turned left
-      const err = south ? pos.x - lane : lane - pos.x;
+      // (south: right is −x; north: right is +x) — steer right (+) when left of the lane or turned left;
+      // on the bridge and through the tunnel, the traffic's own inner lane (the deck's is wider)
+      const lx = pos.z > 138 && pos.z < 262 ? street.goldenGate.laneX(pos.z, south, 0) : lane;
+      const err = south ? pos.x - lx : lx - pos.x;
       st.x = Math.max(-1, Math.min(1, err * 0.25 + dh * 2.2));
+      // (a driver, not a ram: off the throttle and braking behind the bridge's traffic in the lane ahead)
+      if (!stopAt) {
+        let ahead = Infinity;
+        const look = 12 + c.speed * 2;
+        for (const b of street.goldenGate.boxes()) {
+          const dz = south ? b.z - pos.z : pos.z - b.z;
+          if (dz > 1.5 && dz < look && Math.abs(b.x - pos.x) < 1.5) ahead = Math.min(ahead, dz);
+        }
+        // (held up more than 4 s by a car that is not moving: nose on past it, as a driver would)
+        window.__held = ahead < look && c.speed < 0.5 ? (window.__held ?? 0) + 0.1 : 0;
+        st.y = window.__held > 4 ? 0.6 : ahead < look ? (c.speed > Math.max(2.5, (ahead - 6) / 1.6) ? -0.8 : 0.3) : 1;
+      }
       const deck = street.goldenGate.onDeck(pos.x, pos.z) ? street.goldenGate.deckAt(pos.z) : null;
       window.__log.push({ x: +pos.x.toFixed(2), y: +pos.y.toFixed(2), z: +pos.z.toFixed(2), v: +c.speed.toFixed(1), deck: deck === null ? null : +deck.toFixed(2), street: g.roads.where(pos.x, pos.z).street, s: +st.x.toFixed(2) });
       if (!stopAt && ((south && pos.z > z1) || (!south && pos.z < z1))) {
@@ -127,7 +141,10 @@ const leg = async (name, lane, z0, z1, ms) => {
   console.log("  near:", JSON.stringify(await p.evaluate(() => { const c = street.gta.car.group.position; return [...street.goldenGate.boxes()].filter((b) => Math.hypot(b.x - c.x, b.z - c.z) < 14).map((b) => [b.x.toFixed(1), b.z.toFixed(1)]); })), "hit:", JSON.stringify(await p.evaluate(() => street.gta.car.hit)));
   return log;
 };
-await leg("south", 156.4, 131, 398, 60000);
-await leg("north", 159.6, 398, 128, 60000);
+// (SOUTH=0 skips the south leg; NORTH0=250 starts the north one in the tunnel, past Orchard Keys' own traffic)
+// (two minutes a leg: behind the traffic, a driver keeps its pace)
+const MS = +(process.env.LEGMS ?? 120000);
+if (process.env.SOUTH !== "0") await leg("south", 156.4, 131, 398, MS);
+await leg("north", 159.6, +(process.env.NORTH0 ?? 398), 128, MS);
 console.log("errors", errs.length, errs.slice(0, 5).join("\n"));
 await b.close();

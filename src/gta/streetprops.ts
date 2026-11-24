@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { colorsOf, type Debris } from "./debris";
 import type { Roads } from "./roads";
 
@@ -21,17 +22,24 @@ interface Spec {
   mat: THREE.Material;
 }
 
-function cone() {
-  const g = new THREE.ConeGeometry(0.2, 0.62, 12).translate(0, 0.31 + 0.04, 0);
-  const b = new THREE.BoxGeometry(0.42, 0.04, 0.42).translate(0, 0.02, 0);
-  return merge([g, b]);
+// ---- the models: real shapes, coloured per part (vertex colours: one material, one draw a kind) ----------
+
+/** A part in its colour (sRGB hex), ready to merge. */
+function part(g: THREE.BufferGeometry, hex: string) {
+  const geo = g.index ? g.toNonIndexed() : g;
+  geo.deleteAttribute("uv");
+  const c = new THREE.Color(hex);
+  const n = geo.getAttribute("position").count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  return geo;
 }
 function merge(gs: THREE.BufferGeometry[]) {
-  // (one draw: the parts' positions and normals end to end)
-  const parts = gs.map((g) => (g.index ? g.toNonIndexed() : g));
+  // (one draw: the parts' positions, normals and colours end to end)
   const out = new THREE.BufferGeometry();
-  for (const k of ["position", "normal"]) {
-    const arrs = parts.map((g) => g.getAttribute(k).array as Float32Array);
+  for (const k of ["position", "normal", "color"]) {
+    const arrs = gs.map((g) => g.getAttribute(k).array as Float32Array);
     const a = new Float32Array(arrs.reduce((n, x) => n + x.length, 0));
     let o = 0;
     for (const x of arrs) (a.set(x, o), (o += x.length));
@@ -39,13 +47,93 @@ function merge(gs: THREE.BufferGeometry[]) {
   }
   return out;
 }
+const rbox = (w: number, h: number, d: number, r: number, x = 0, y = 0, z = 0) => new RoundedBoxGeometry(w, h, d, 2, r).translate(x, y + h / 2, z);
+const cylY = (r0: number, r1: number, h: number, x = 0, y = 0, z = 0, seg = 16) => new THREE.CylinderGeometry(r1, r0, h, seg).translate(x, y + h / 2, z);
 
+/** A traffic cone: its square rubber foot, the cone, two reflective white bands. */
+function cone() {
+  return merge([
+    part(rbox(0.42, 0.035, 0.42, 0.012), "#1c1c20"),
+    part(cylY(0.17, 0.035, 0.6, 0, 0.035, 0, 20), "#ff5a12"),
+    part(cylY(0.13, 0.105, 0.1, 0, 0.27, 0, 20), "#f4f4f0"),
+    part(cylY(0.088, 0.068, 0.08, 0, 0.44, 0, 20), "#f4f4f0"),
+  ]);
+}
+/** A wheelie bin: the tapered body, its lid with the hinge and the handle bar, two wheels. */
+function bin() {
+  const body = rbox(0.56, 0.9, 0.62, 0.04, 0, 0.06, 0);
+  const p = body.getAttribute("position");
+  // (narrower at its foot)
+  for (let i = 0; i < p.count; i++) {
+    const k = 0.88 + 0.12 * Math.min(1, Math.max(0, (p.getY(i) - 0.06) / 0.9));
+    p.setX(i, p.getX(i) * k);
+    p.setZ(i, p.getZ(i) * k);
+  }
+  body.computeVertexNormals();
+  return merge([
+    part(body, "#2f6b3e"),
+    part(rbox(0.62, 0.06, 0.7, 0.025, 0, 0.96, 0.01), "#285c35"),
+    part(new THREE.CylinderGeometry(0.025, 0.025, 0.56, 10).rotateZ(Math.PI / 2).translate(0, 0.98, -0.36), "#1c2a20"),
+    part(new THREE.CylinderGeometry(0.018, 0.018, 0.44, 8).rotateZ(Math.PI / 2).translate(0, 0.9, -0.38), "#1c1c20"),
+    ...[-0.24, 0.24].map((x) => part(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 14).rotateZ(Math.PI / 2).translate(x, 0.1, -0.27), "#141416")),
+    part(rbox(0.3, 0.12, 0.02, 0.008, 0, 0.62, 0.3), "#f2f2ee"),
+  ]);
+}
+/** A wooden crate: its planks, the frame's battens on every edge. */
+function crate() {
+  const parts: THREE.BufferGeometry[] = [part(new THREE.BoxGeometry(0.76, 0.76, 0.76).translate(0, 0.4, 0), "#b07c48")];
+  const dark = "#80562e";
+  for (const [x, z] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ])
+    parts.push(part(new THREE.BoxGeometry(0.07, 0.8, 0.07).translate(x * 0.37, 0.4, z * 0.37), dark));
+  for (const y of [0.035, 0.765]) {
+    for (const z of [-0.37, 0.37]) parts.push(part(new THREE.BoxGeometry(0.8, 0.07, 0.07).translate(0, y, z), dark));
+    for (const x of [-0.37, 0.37]) parts.push(part(new THREE.BoxGeometry(0.07, 0.07, 0.8).translate(x, y, 0), dark));
+  }
+  // the gaps between the planks
+  for (const y of [0.27, 0.53]) for (const z of [-0.385, 0.385]) parts.push(part(new THREE.BoxGeometry(0.7, 0.015, 0.01).translate(0, y, z), "#5a3a1e"));
+  return merge(parts);
+}
+/** A road barrier: two red-and-white striped boards on A-frame feet. */
+function barrier() {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const y of [0.78, 0.46])
+    for (let i = 0; i < 6; i++) parts.push(part(new THREE.BoxGeometry(0.25, 0.2, 0.035).translate(-0.625 + i * 0.25, y, 0), i % 2 ? "#d8262a" : "#f4f2ec"));
+  for (const x of [-0.66, 0.66]) {
+    for (const s of [-1, 1]) parts.push(part(new THREE.BoxGeometry(0.05, 1.0, 0.05).rotateX(s * 0.22).translate(x, 0.47, s * 0.1), "#e8e6e0"));
+    parts.push(part(rbox(0.12, 0.05, 0.42, 0.015, x, 0, 0), "#1c1c20"));
+  }
+  return merge(parts);
+}
+/** A newspaper box: the steel cabinet on its legs, the window onto today's paper, the coin box, the lid's handle. */
+function newsbox() {
+  return merge([
+    ...[
+      [-0.2, -0.17],
+      [0.2, -0.17],
+      [-0.2, 0.17],
+      [0.2, 0.17],
+    ].map(([x, z]) => part(new THREE.BoxGeometry(0.04, 0.3, 0.04).translate(x, 0.15, z), "#2a2a30")),
+    part(rbox(0.5, 0.74, 0.44, 0.03, 0, 0.3, 0), "#2a4fa8"),
+    part(new THREE.BoxGeometry(0.4, 0.32, 0.01).translate(0, 0.78, 0.222), "#1c2630"),
+    part(new THREE.BoxGeometry(0.34, 0.2, 0.004).translate(0, 0.8, 0.228), "#e8e4d8"),
+    part(rbox(0.16, 0.14, 0.06, 0.012, 0.14, 1.04, 0.0), "#9a9ca4"),
+    part(new THREE.BoxGeometry(0.2, 0.03, 0.03).translate(0, 0.6, 0.235), "#9a9ca4"),
+    part(new THREE.BoxGeometry(0.4, 0.06, 0.01).translate(0, 0.52, 0.222), "#f2f2ee"),
+  ]);
+}
+
+const paint = (rough: number, metal = 0) => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: rough, metalness: metal });
 const SPECS: Record<Kind, Spec> = {
-  cone: { size: [0.42, 0.66, 0.42], r: 0.25, mass: 0.6, breaks: Infinity, make: cone, mat: new THREE.MeshStandardMaterial({ color: "#ff6a1a", roughness: 0.5 }) },
-  bin: { size: [0.6, 1.05, 0.7], r: 0.4, mass: 2, breaks: Infinity, make: () => new THREE.BoxGeometry(0.6, 1.05, 0.7).translate(0, 0.525, 0), mat: new THREE.MeshStandardMaterial({ color: "#2f6b3e", roughness: 0.6 }) },
-  crate: { size: [0.8, 0.8, 0.8], r: 0.45, mass: 2.5, breaks: 5, make: () => new THREE.BoxGeometry(0.8, 0.8, 0.8).translate(0, 0.4, 0), mat: new THREE.MeshStandardMaterial({ color: "#a8743f", roughness: 0.85 }) },
-  barrier: { size: [1.5, 0.95, 0.3], r: 0.55, mass: 1.6, breaks: 9, make: () => merge([new THREE.BoxGeometry(1.5, 0.28, 0.06).translate(0, 0.78, 0), new THREE.BoxGeometry(0.08, 0.95, 0.3).translate(-0.62, 0.475, 0), new THREE.BoxGeometry(0.08, 0.95, 0.3).translate(0.62, 0.475, 0)]), mat: new THREE.MeshStandardMaterial({ color: "#f2f2ee", roughness: 0.5 }) },
-  newsbox: { size: [0.5, 1.1, 0.45], r: 0.35, mass: 3, breaks: 11, make: () => new THREE.BoxGeometry(0.5, 1.1, 0.45).translate(0, 0.55, 0), mat: new THREE.MeshStandardMaterial({ color: "#2a4fa8", roughness: 0.4, metalness: 0.3 }) },
+  cone: { size: [0.42, 0.66, 0.42], r: 0.25, mass: 0.6, breaks: Infinity, make: cone, mat: paint(0.5) },
+  bin: { size: [0.6, 1.05, 0.7], r: 0.4, mass: 2, breaks: Infinity, make: bin, mat: paint(0.55) },
+  crate: { size: [0.8, 0.8, 0.8], r: 0.45, mass: 2.5, breaks: 5, make: crate, mat: paint(0.85) },
+  barrier: { size: [1.5, 0.95, 0.3], r: 0.55, mass: 1.6, breaks: 9, make: barrier, mat: paint(0.5) },
+  newsbox: { size: [0.5, 1.1, 0.45], r: 0.35, mass: 3, breaks: 11, make: newsbox, mat: paint(0.4, 0.3) },
 };
 
 interface Prop {

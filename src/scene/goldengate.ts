@@ -1,8 +1,10 @@
 import * as THREE from "three";
 import type { City } from "./city";
-import { BAY, CURB, ST } from "./city/plan";
+import { BAY, CURB } from "./city/plan";
 import { corridor, KGRID, KTUNNEL, KX } from "./keys/plan";
 import { carObject, spinWheels } from "./real/cars";
+import { bridgeNight, buildBridge, deckY, GG, laneAt, roadHalf, walkHalf } from "./real/bridge";
+import { GLASS_NIGHT } from "./voxel/surface";
 
 /**
  * The Golden Gate comes alive: cars and trucks cross it both ways (four lanes, up the ramps and over
@@ -107,10 +109,11 @@ interface Car {
 export class GoldenGate {
   readonly ok: boolean;
   private x = BAY.bridge.x;
-  /** City end and headland end of the deck (z), and the deck's height every metre between. */
-  private z0 = ST.ringS + 5;
-  private z1 = BAY.headland.z0 + 4;
-  private h: Float32Array = new Float32Array(0);
+  /** City end and headland end of the deck (z): the realistic bridge's (src/scene/real/bridge.ts). */
+  private z0 = GG.z0;
+  private z1 = GG.z1;
+  /** The bridge itself (drawn here, not by the city's workers). */
+  readonly bridge: THREE.Group | null = null;
   private cars: Car[] = [];
   readonly group = new THREE.Group();
   private spawnIn = 0;
@@ -124,30 +127,10 @@ export class GoldenGate {
     if (!lm) return;
     this.group.name = "goldengate:traffic";
     scene.add(this.group);
-    // the deck's height along its centre line, measured once on the bridge's own model
-    const ray = new THREE.Raycaster();
-    const n = Math.ceil(this.z1 - this.z0) + 1;
-    this.h = new Float32Array(n);
-    const target = lm.occluder.full;
-    target.updateMatrixWorld(true);
-    // (the highest surface no more than a ramp's climb above the last metre: a gantry or a portal
-    // beam over the road is not the deck, and walking into it would wall the walker in)
-    let prev = CURB;
-    for (let i = 0; i < n; i++) {
-      let best = CURB;
-      for (const lx of [-2.2, 2.2]) {
-        ray.set(new THREE.Vector3(this.x + lx, 40, this.z0 + i), new THREE.Vector3(0, -1, 0));
-        for (const hit of ray.intersectObject(target, true)) if (hit.point.y < 13 && hit.point.y > best && hit.point.y < prev + 1.6) best = hit.point.y;
-      }
-      this.h[i] = prev = best;
-    }
-    // smooth out the voxel steps of the ramps, until no metre climbs more than the walker can step
-    for (let pass = 0; pass < 40; pass++) {
-      for (let i = 1; i < n - 1; i++) this.h[i] = (this.h[i - 1] + this.h[i] * 2 + this.h[i + 1]) / 4;
-      let steep = false;
-      for (let i = 1; i < n; i++) if (Math.abs(this.h[i] - this.h[i - 1]) > 0.5) steep = true;
-      if (pass >= 2 && !steep) break;
-    }
+    // the bridge: the deck's heights are its profile's (deckY), no voxel model to measure any more
+    (this as { bridge: THREE.Group | null }).bridge = buildBridge();
+    this.bridge!.name = "goldengate:bridge";
+    scene.add(this.bridge!);
     // the loops round Orchard Keys: over the bridge, through the tunnel, round a few blocks, back
     const X = KX,
       [xW, , xV, xP, xS] = KGRID.xs,
@@ -164,25 +147,39 @@ export class GoldenGate {
     for (let i = 0; i < 16; i++) this.spawn(true);
   }
 
-  /** Deck height at z (null off the deck's length). */
+  /** The road's height on the deck at z (Bay Road's asphalt at its city end, CURB off its length). */
   deckAt(z: number) {
-    if (z > this.z1 || z < this.z0 - 1 || !this.h.length) return CURB;
-    // the last metre before the deck eases up onto it (no kerb to trip on), metres in between blend
-    if (z < this.z0) return CURB + (this.h[0] - CURB) * (z - this.z0 + 1);
-    const u = Math.min(this.h.length - 1, z - this.z0);
-    const i = Math.floor(u);
-    const j = Math.min(this.h.length - 1, i + 1);
-    return this.h[i] + (this.h[j] - this.h[i]) * (u - i);
+    if (z > this.z1 || z < this.z0 - 1 || !this.ok) return CURB;
+    return deckY(z);
   }
 
-  /** Is (x, z) on the deck (between the railings)? */
+  /** Is (x, z) on the deck (between the railings: the walkways, the cycle lanes, the road)? */
   onDeck(x: number, z: number) {
-    return this.ok && Math.abs(x - this.x) < 5.6 && z > this.z0 - 1 && z < this.z1;
+    return this.ok && Math.abs(x - this.x) < walkHalf(z) && z > this.z0 - 1 && z < this.z1;
   }
 
-  /** On foot: the deck's height there, or null. */
+  /** On foot: the deck's height there (the walkways a kerb up), or null. */
   groundAt(x: number, z: number) {
-    return this.onDeck(x, z) ? this.deckAt(z) : null;
+    if (!this.onDeck(x, z)) return null;
+    const dx = Math.abs(x - this.x);
+    // (the walkways a kerb up from the quay's kerb on; over the quay's pavement never under the kerb)
+    const y = deckY(z) + (dx > GG.kerb && z >= GG.quay && z < GG.walkEnd ? 0.15 : 0);
+    return z >= GG.quay && dx > GG.barrier ? Math.max(CURB, y) : y;
+  }
+
+  /** A traffic lane's centre (world x) at z along the bridge and the tunnel: lane 0 the inner, 1 the outer of the two the traffic uses. */
+  laneX(z: number, south: boolean, lane: 0 | 1) {
+    const off = laneAt(z, lane);
+    return this.x + (south ? -off : off);
+  }
+
+  /** On foot on the deck: the road's barriers and the median stop a body (you go round by the ends). */
+  footBlocked(x: number, z: number) {
+    const dx = Math.abs(x - this.x);
+    const rh = roadHalf(z);
+    if (z > GG.quay + 0.5 && z < this.z1 - 1 && dx > rh - 0.05 && dx < rh + 0.6) return true;
+    if (z > GG.quay + 8 && z < GG.narrowFrom - 1 && dx < GG.med + 0.25) return true;
+    return false;
   }
 
   /** The road's height under a wheel on the way over: the deck, the headland's road, the tunnel, the town. */
@@ -197,10 +194,12 @@ export class GoldenGate {
    * shape sees: under it, the bay). True when (p) was the deck's to hold.
    */
   holdCar(p: THREE.Vector3, r: number) {
-    if (!this.ok || Math.abs(p.x - this.x) > 7 || p.z < this.z0 - 1 || p.z > this.z1 + 0.5) return false;
-    const lim = 5.35 - r;
-    if (p.x > this.x + lim) p.x = this.x + lim;
-    else if (p.x < this.x - lim) p.x = this.x - lim;
+    if (!this.ok || Math.abs(p.x - this.x) > GG.edge + 2 || p.z < GG.quay || p.z > this.z1 + 0.5) return false;
+    // between the carriageway's barriers, and either side of the median over the water
+    const half = roadHalf(p.z) - r;
+    let dx = Math.max(-half, Math.min(half, p.x - this.x));
+    if (p.z > GG.quay + 8 && p.z < GG.narrowFrom - 1 && Math.abs(dx) < GG.med + r) dx = Math.sign(dx || 1) * (GG.med + r);
+    p.x = this.x + dx;
     return true;
   }
 
@@ -264,7 +263,10 @@ export class GoldenGate {
     const p = c.path.at(c.s);
     // (the lane follows the road: on the two-lane streets the outer lane eases in)
     const wide = Math.abs(p.x - KX) < 8 || Math.abs(p.z - KGRID.zs[3]) < 8 || p.z < KTUNNEL.z1;
-    const lane = wide ? c.lane : Math.min(c.lane, 1.9);
+    let lane = wide ? c.lane : Math.min(c.lane, 1.9);
+    // over the bridge: the deck's own lanes (its inner two of three each way), easing into the tunnel's
+    // (and through the headland's cut and the tunnel, out to Orchard Boulevard)
+    if (Math.abs(p.x - this.x) < 3 && p.z > this.z0 - 2 && p.z < GG.tunnelEnd + 9) lane = laneAt(p.z, c.lane < 2 ? 0 : 1);
     c.x = p.x - p.tz * lane;
     c.z = p.z + p.tx * lane;
     c.yaw = Math.atan2(-p.tz, p.tx);
@@ -274,6 +276,8 @@ export class GoldenGate {
 
   update(dt: number) {
     if (!this.ok) return;
+    // the deck's lamps, the cables' necklace, the aviation lights: by the evening's light
+    bridgeNight(GLASS_NIGHT.value);
     this.spawnIn -= dt;
     if (this.spawnIn <= 0 && this.cars.length < 26) {
       this.spawnIn = 1.1 + Math.random() * 1.8;

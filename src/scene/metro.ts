@@ -8,6 +8,7 @@ import type { Nav } from "./nav";
 import { KIND_COLOR } from "./snark";
 import { busSign, canvasTexture } from "./textures";
 import { freeObject, sharedObject } from "./voxel/mesher";
+import { realCarObject } from "./real/metrocar";
 import { C, E, G, VOX, VoxelModel } from "./voxel/model";
 
 /**
@@ -19,6 +20,8 @@ import { C, E, G, VOX, VoxelModel } from "./voxel/model";
  */
 
 const CAR = { w: 54, d: 16, h: 20 };
+/** The cars realistic (src/scene/real/metrocar.ts) unless the city is the voxel one (`?real=0`). */
+const REAL_CARS = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
 const CAR_LEN = CAR.w * VOX;
 const GAP = 0.35;
 /** Window slots per car side (each a transaction when lit). */
@@ -298,7 +301,7 @@ export class Train {
     for (let i = 0; i < n; i++) {
       const car = new THREE.Group();
       // (each car's body meshed once per line and end: a train a block, each meshed again before)
-      car.add(sharedObject(`metro:${line.stripe}:${i === 0 ? "head" : "car"}`, () => carModel(i === 0, line.stripe)));
+      car.add(REAL_CARS ? realCarObject(i === 0, line.stripe) : sharedObject(`metro:${line.stripe}:${i === 0 ? "head" : "car"}`, () => carModel(i === 0, line.stripe)));
       for (const z of [0.02, CAR.d - 0.02]) {
         const pane = new THREE.Mesh(new THREE.PlaneGeometry(CAR_LEN - 6 * VOX, band), glass);
         pane.position.copy(carLocal(CAR.w / 2, (WIN[0] + WIN[1]) / 2, z));
@@ -478,10 +481,10 @@ export class Metro {
       const beamY = this.deck - 1.1;
       const legH = beamY;
       for (const [lx, lz] of b.legs) {
-        collect(concrete, new THREE.BoxGeometry(0.9, legH, 0.9).translate(lx, legH / 2, lz));
-        // a plinth and a cap where it meets the beam
-        collect(under, new THREE.BoxGeometry(1.2, 0.35, 1.2).translate(lx, CURB + 0.17, lz));
-        collect(concrete, new THREE.BoxGeometry(1.3, 0.5, 1.3).translate(lx, beamY - 0.25, lz));
+        // (round columns, a flared head under the beam, a plinth: cast concrete, not blocks)
+        collect(concrete, new THREE.CylinderGeometry(0.46, 0.5, legH, 20).translate(lx, legH / 2, lz));
+        collect(under, new THREE.CylinderGeometry(0.62, 0.66, 0.35, 20).translate(lx, CURB + 0.17, lz));
+        collect(concrete, new THREE.CylinderGeometry(0.72, 0.46, 0.6, 20).translate(lx, beamY - 0.3, lz));
         nav.addCircle(lx, lz, 0.6);
       }
       const span = b.reach * 2 + 1.3;
@@ -527,6 +530,7 @@ export class Metro {
     platformM.userData.dayColor = "#dedae4";
     const roofM = new THREE.MeshStandardMaterial({ color: "#2e2c38", roughness: 0.5, metalness: 0.3 });
     const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.7, 0.6), toneMapped: false });
+    const stationGlass = new THREE.MeshPhysicalMaterial({ color: "#cfe6f0", transparent: true, opacity: 0.28, roughness: 0.08, metalness: 0.1, depthWrite: false });
     for (const [name, kanji, x, z] of defs) {
       // which way the track runs here
       const sAt = this.route.nearest(x, z);
@@ -569,9 +573,19 @@ export class Metro {
       // platforms either side of the track, a canopy over all
       for (const side of [-1, 1]) {
         box(L, 0.5, 2.2, platformM, 0, this.deck - 0.15, side * 3.3);
-        box(L, 0.9, 0.15, platformM, 0, this.deck + 0.55, side * 4.4);
+        // (a glass balustrade on a steel kerb with its handrail, round steel columns: no blocks)
+        box(L, 0.12, 0.18, roofM, 0, this.deck + 0.16, side * 4.4);
+        box(L, 0.78, 0.15, stationGlass, 0, this.deck + 0.61, side * 4.4).castShadow = false;
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, L, 8).rotateZ(Math.PI / 2), roofM);
+        rail.position.set(0, this.deck + 1.02, side * 4.4);
+        g.add(rail);
         box(L, 0.04, 0.12, glow, 0, this.deck + 0.12, side * 2.3);
-        for (let px = -L / 2 + 2; px <= L / 2 - 2; px += 6) box(0.25, 3.4, 0.25, roofM, px, this.deck + 1.8, side * 4.1);
+        for (let px = -L / 2 + 2; px <= L / 2 - 2; px += 6) {
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 3.4, 12), roofM);
+          col.position.set(px, this.deck + 1.8, side * 4.1);
+          col.castShadow = col.receiveShadow = true;
+          g.add(col);
+        }
       }
       box(L + 1, 0.25, 9.6, roofM, 0, this.deck + 3.6, 0);
       box(L, 0.06, 0.3, glow, 0, this.deck + 3.45, 0);

@@ -1,12 +1,15 @@
 import * as THREE from "three";
 import { toObject } from "../scene/voxel/mesher";
+import { grandPianoReal, type Realizable, withReal } from "./realfurn";
+import { realOn } from "./realvox";
 import { C, E, G, hash, shades, VoxelModel, type Paint } from "../scene/voxel/model";
 
 /**
  * Voxel furniture for the walk-in places, in the city's own voxel style (greedy-meshed, ambient
  * occlusion in the corners) but twice as fine: 12 voxels a metre. Every model faces +z, stands on
  * y = 0 and is centred on x and z. Models are built once per variant and shared; `place` drops a
- * copy into a group.
+ * copy into a group. (In the realistic pass `toObject` draws them real while a place is built:
+ * src/scene/real/remesh.ts.)
  */
 export const FINE = 12;
 const S = 1 / 2; // a 6-per-metre mesher, so a 12-per-metre model is drawn at half size
@@ -15,8 +18,13 @@ const cache = new Map<string, THREE.Object3D>();
 function made(key: string, build: () => VoxelModel) {
   let o = cache.get(key);
   if (!o) {
-    o = toObject(build(), { shadows: false });
-    o.scale.setScalar(S);
+    const v = build() as Realizable;
+    // (a piece modelled for real is used as it is, in metres; the rest is drawn from its voxels)
+    if (realOn() && v.realize) o = v.realize();
+    else {
+      o = toObject(v, { shadows: false });
+      o.scale.setScalar(S);
+    }
     cache.set(key, o);
   }
   return o;
@@ -312,8 +320,13 @@ export function rug(w: number, d: number, color: string, accent: string) {
   const W = Math.round(w * FINE),
     D = Math.round(d * FINE),
     v = m(W, 1, D);
+  // a plain field inside a border and a fine inner line (a checker of 4-voxel squares read as pixels)
   v.box(0, 0, 0, W, 1, D, C(accent));
-  v.box(1, 0, 1, W - 1, 1, D - 1, (x, _y, z) => C(((x >> 2) + (z >> 2)) % 3 === 0 ? shadeOf(color, 0.06) : color));
+  v.box(1, 0, 1, W - 1, 1, D - 1, C(color));
+  if (W > 10 && D > 10) {
+    v.box(3, 0, 3, W - 3, 1, D - 3, C(accent));
+    v.box(4, 0, 4, W - 4, 1, D - 4, C(color));
+  }
   return v;
 }
 
@@ -713,7 +726,7 @@ export function grandPiano() {
   v.box(2, 10, 10, 3, 16, 11, C("#c9a227"));
   for (const [x, z] of [[1, 2], [15, 2], [5, 20]]) v.box(x, 0, z, x + 2, 7, z + 2, k);
   v.box(6, 3, 4, 10, 4, 6, C("#c9a227"));
-  return v;
+  return withReal(v, grandPianoReal);
 }
 
 export function pianoBench() {

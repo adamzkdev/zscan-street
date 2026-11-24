@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { toObject } from "../voxel/mesher";
-import { C, E, G, hash, shades, VoxelModel } from "../voxel/model";
+import { maps } from "../real/tex";
 import { BOARDWALKS, CREEK, F, Land, SITES, TRAILS } from "./land";
 
 /**
@@ -185,96 +184,191 @@ function signPlane(tex: THREE.Texture, w: number, h: number) {
   return m;
 }
 
-/** The ranger station: a log cabin, stone chimney, shingled roof, porch, flag. Front faces +z. */
-function cabinModel() {
-  const m = new VoxelModel(52, 44, 44);
-  const logs = (x: number, y: number, z: number) => C(["#7a4a2e", "#8a5634", "#6e4228"][(Math.floor(y / 2) + (hash(x, Math.floor(y / 2), z, 3) > 0.7 ? 1 : 0)) % 3]);
-  const x0 = 4,
-    x1 = 46,
-    z0 = 4,
-    z1 = 30;
-  // stone foundation
-  m.box(x0 - 1, 0, z0 - 1, x1 + 1, 3, z1 + 1, shades(["#7a7680", "#6a6670", "#86828c"], 2, 4));
-  // log walls with the ends crossing at the corners
-  m.box(x0, 3, z0, x1, 22, z1, logs);
-  m.clear(x0 + 1, 3, z0 + 1, x1 - 1, 22, z1 - 1);
-  for (let y = 3; y < 22; y += 2)
-    for (const [x, z] of [
-      [x0 - 1, z0 - 1],
-      [x1, z0 - 1],
-      [x0 - 1, z1],
-      [x1, z1],
-    ])
-      m.box(x, y, z, x + 1, y + 1, z + 1, C("#9a6a44"));
-  // door and windows on the front, windows on the sides
-  m.box(22, 3, z1 - 1, 29, 16, z1, C("#4a2e1c"));
-  m.box(28, 9, z1, 29, 10, z1 + 1, C("#d8b030"));
-  for (const x of [9, 35]) {
-    m.box(x, 9, z1 - 1, x + 7, 16, z1, G("#2a3440"));
-    m.box(x - 1, 8, z1, x + 8, 9, z1 + 1, C("#5a3a24"));
-    m.box(x + 3, 9, z1 - 1, x + 4, 16, z1, C("#5a3a24"));
-  }
-  for (const z of [10, 20]) for (const x of [x0, x1 - 1]) m.box(x, 9, z, x + 1, 16, z + 6, G("#2a3440"));
-  // roof: shingles, a steep gable along x
-  const roof = shades(["#3a4a3a", "#344234", "#40503e"], 1, 7);
-  for (let k = 0; k < 18; k++) m.box(x0 - 3, 22 + k, z0 - 3 + k, x1 + 3, 23 + k, z1 + 3 - k, roof);
-  m.box(x0 - 3, 40, 16, x1 + 3, 41, 18, C("#2a3428"));
-  // gable ends: logs
-  for (let k = 0; k < 17; k++) {
-    m.box(x0, 22 + k, z0 + k, x0 + 1, 23 + k, z1 - k, logs);
-    m.box(x1 - 1, 22 + k, z0 + k, x1, 23 + k, z1 - k, logs);
-  }
-  // stone chimney on the east end
-  m.box(x1, 0, 13, x1 + 5, 44, 20, shades(["#7a7680", "#6a6670", "#8c8892", "#5e5a64"], 1, 9));
-  // the porch: a deck, posts, a lean-to roof, a bench
-  m.box(x0, 3, z1, x1, 4, z1 + 11, shades(["#9a6e48", "#8a6040"], 1, 2));
-  for (const x of [x0, 15, 34, x1 - 2]) m.box(x, 4, z1 + 9, x + 2, 20, z1 + 11, C("#6e4a30"));
-  for (let k = 0; k < 4; k++) m.box(x0 - 1, 20 + k, z1 + 12 - k * 3, x1 + 1, 21 + k, z1 + 12 - k * 3 + 3, roof);
-  m.box(x0 + 2, 4, z1 + 1, x0 + 14, 7, z1 + 3, C("#8a6040"));
-  m.box(x0 + 2, 7, z1 + 1, x0 + 14, 9, z1 + 2, C("#8a6040"));
-  // steps
-  m.box(22, 0, z1 + 11, 30, 1, z1 + 14, C("#7a7680"));
-  m.box(22, 1, z1 + 11, 30, 3, z1 + 12, C("#8a6040"));
-  // firewood stacked by the chimney
-  for (let y = 0; y < 8; y++) for (let z = 22; z < 30; z++) m.set(x1 + 1 + (y % 2), y, z, C((y + z) % 3 ? "#9a6a40" : "#c8925a"));
+// ---- the cabin, the tents, the campfire, the viewers: real shapes (branch gta-real) ------------------------
+
+const pmats = new Map<string, THREE.Material>();
+function pm(key: string, make: () => THREE.Material) {
+  let m = pmats.get(key);
+  if (!m) pmats.set(key, (m = make()));
   return m;
 }
-
-/** A dome tent, front +z. */
-function tentModel(color: string, trim: string) {
-  const m = new VoxelModel(18, 10, 16);
-  for (let y = 0; y < 10; y++) {
-    const r = 8 * Math.sqrt(1 - (y / 10) ** 2);
-    m.box(9 - r, y, 2, 9 + r, y + 1, 14, y % 3 === 2 ? C(trim) : C(color));
+const logMat = () =>
+  pm("log", () => {
+    const mp = maps("Wood049");
+    return new THREE.MeshStandardMaterial({ map: mp.map, normalMap: mp.normalMap, roughnessMap: mp.roughnessMap, color: "#9a6a48", roughness: 1 });
+  });
+const stoneMat = () =>
+  pm("stone", () => {
+    const mp = maps("Rock030");
+    return new THREE.MeshStandardMaterial({ map: mp.map, normalMap: mp.normalMap, roughnessMap: mp.roughnessMap, color: new THREE.Color(1.9, 1.85, 1.8), roughness: 1 });
+  });
+const plankMat = () =>
+  pm("plank", () => {
+    const mp = maps("Planks021");
+    return new THREE.MeshStandardMaterial({ map: mp.map, normalMap: mp.normalMap, roughnessMap: mp.roughnessMap, color: "#a88060", roughness: 1 });
+  });
+const shingleMat = () =>
+  pm("shingle", () => {
+    const mp = maps("RoofingTiles006");
+    return new THREE.MeshStandardMaterial({ map: mp.map, normalMap: mp.normalMap, roughnessMap: mp.roughnessMap, color: "#7a8a76", roughness: 1, side: THREE.DoubleSide });
+  });
+const plain = (hex: string, rough = 0.7, metal = 0) => pm(`p:${hex}:${rough}:${metal}`, () => new THREE.MeshStandardMaterial({ color: hex, roughness: rough, metalness: metal }));
+const glowM = (hex: string, k: number) => pm(`g:${hex}:${k}`, () => new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k), toneMapped: false }));
+/** Parts by material, merged into a group of meshes. */
+class Parts {
+  private m = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  add(mat: THREE.Material, g: THREE.BufferGeometry, uvScale = 0) {
+    const gg = g.index ? g.toNonIndexed() : g;
+    if (!gg.getAttribute("uv")) gg.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(gg.getAttribute("position").count * 2), 2));
+    if (uvScale) {
+      const p = gg.getAttribute("position"),
+        n = gg.getAttribute("normal"),
+        uv = gg.getAttribute("uv");
+      for (let i = 0; i < p.count; i++) {
+        const ax = Math.abs(n.getX(i)),
+          ay = Math.abs(n.getY(i));
+        uv.setXY(i, (ax > 0.5 ? p.getZ(i) : p.getX(i)) / uvScale, (ay > 0.5 ? p.getZ(i) : p.getY(i)) / uvScale);
+      }
+    }
+    const l = this.m.get(mat);
+    if (l) l.push(gg);
+    else this.m.set(mat, [gg]);
   }
-  m.box(7, 0, 13, 11, 5, 14, C("#2a2420"));
-  m.box(8, 9, 2, 10, 10, 14, C(trim));
-  return m;
+  group() {
+    const g = new THREE.Group();
+    for (const [mat, geos] of this.m) {
+      const mesh = new THREE.Mesh(mergeGeometries(geos, false)!, mat);
+      mesh.castShadow = !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial;
+      mesh.receiveShadow = true;
+      g.add(mesh);
+    }
+    return g;
+  }
+}
+const bx = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z);
+/** A log along x (or z) from a to b at height y, radius r: its bark-less peeled surface, wood grain along it. */
+function logX(P: Parts, x0: number, x1: number, y: number, z: number, r: number) {
+  const g = new THREE.CylinderGeometry(r, r, x1 - x0, 12, 1, false).rotateZ(Math.PI / 2).translate((x0 + x1) / 2, y, z);
+  const uv = g.getAttribute("uv");
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getY(i) * ((x1 - x0) / 1.5), uv.getX(i) * 0.6);
+  P.add(logMat(), g);
+}
+function logZ(P: Parts, z0: number, z1: number, y: number, x: number, r: number) {
+  const g = new THREE.CylinderGeometry(r, r, z1 - z0, 12, 1, false).rotateX(Math.PI / 2).translate(x, y, (z0 + z1) / 2);
+  const uv = g.getAttribute("uv");
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getY(i) * ((z1 - z0) / 1.5), uv.getX(i) * 0.6);
+  P.add(logMat(), g);
 }
 
-/** Campfire ring: stones, crossed logs, embers. */
-function fireRing() {
-  const m = new VoxelModel(14, 5, 14);
-  for (let a = 0; a < 16; a++) {
-    const x = 7 + Math.cos((a / 16) * Math.PI * 2) * 5.6,
-      z = 7 + Math.sin((a / 16) * Math.PI * 2) * 5.6;
-    m.box(x - 0.5, 0, z - 0.5, x + 1, 2, z + 1, C(a % 2 ? "#7a7680" : "#5e5a64"));
+/** The ranger station: a log cabin (round logs crossing at the corners), stone footing and chimney, a shingled gable roof, the porch with its posts, bench and steps, the firewood. Front faces +z (as the voxel cabin: 8.7 × 7.3 m, centred). */
+function cabinObject() {
+  const P = new Parts();
+  const V = (v: number) => v / 6;
+  const x0 = V(4 - 26),
+    x1 = V(46 - 26),
+    z0 = V(4 - 22),
+    z1 = V(30 - 22);
+  const r = 0.17;
+  P.add(stoneMat(), bx(x1 - x0 + 0.3, 0.5, z1 - z0 + 0.3, (x0 + x1) / 2, 0, (z0 + z1) / 2), 1.6);
+  // the walls: logs stacked, the ends running past the corners
+  for (let y = 0.5 + r; y < V(22); y += 2 * r) {
+    const odd = Math.round((y - 0.5) / (2 * r)) % 2;
+    logX(P, x0 - 0.35, x1 + 0.35, y + (odd ? r : 0) * 0, z1 - r, r);
+    logX(P, x0 - 0.35, x1 + 0.35, y, z0 + r, r);
+    logZ(P, z0 - 0.35, z1 + 0.35, y + r * 0.5, x0 + r, r);
+    logZ(P, z0 - 0.35, z1 + 0.35, y + r * 0.5, x1 - r, r);
   }
-  m.box(4, 0, 4, 10, 1, 10, E("#ff6a1a", 2.4));
-  m.box(5, 1, 6, 10, 2, 8, C("#4a2e1c"));
-  m.box(6, 1, 5, 8, 3, 10, C("#3a2418"));
-  m.box(6, 2, 6, 8, 3, 8, E("#ffb03a", 3));
-  return m;
+  // the gable ends: logs shortening to the ridge
+  const top = V(40);
+  for (let y = V(22) + r; y < top - 0.2; y += 2 * r) {
+    const k = (y - V(22)) / (top - V(22));
+    const hz = ((z1 - z0) / 2 + 0.2) * (1 - k);
+    const zc = (z0 + z1) / 2;
+    for (const x of [x0 + r, x1 - r]) logZ(P, zc - hz, zc + hz, y, x, r);
+  }
+  // the door and the windows' frames (the panes are the street's lit glass), shutters
+  const trim = plain("#5a3a24", 0.8);
+  P.add(plain("#4a2e1c", 0.7), bx(1.15, 2.15, 0.08, V(25.5 - 26), 0.5, z1 + 0.02));
+  P.add(plain("#d8b030", 0.3, 0.9), new THREE.SphereGeometry(0.05, 8, 6).translate(V(28 - 26), 1.55, z1 + 0.1));
+  for (const wx of [V(12.5 - 26), V(38.5 - 26)]) {
+    P.add(trim, bx(1.4, 0.1, 0.12, wx, 1.42, z1 + 0.02));
+    P.add(trim, bx(1.4, 0.1, 0.12, wx, 2.62, z1 + 0.02));
+    for (const s of [-1, 1]) P.add(trim, bx(0.1, 1.3, 0.12, wx + s * 0.65, 1.42, z1 + 0.02));
+    P.add(trim, bx(0.06, 1.2, 0.1, wx, 1.47, z1 + 0.04));
+  }
+  for (const zz of [V(13 - 22), V(23 - 22)]) for (const x of [x0 - 0.01, x1 + 0.01]) P.add(plain("#2a3440", 0.1, 0.5), bx(0.04, 1.1, 1.0, x, 1.5, zz));
+  // the roof: two shingled slopes over the gables, the ridge
+  const zc = (z0 + z1) / 2;
+  const eave = V(22),
+    over = 0.5;
+  for (const s of [-1, 1]) {
+    const zo = s > 0 ? z1 + over : z0 - over;
+    const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x0 - over, eave - 0.15, zo), new THREE.Vector3(x1 + over, eave - 0.15, zo), new THREE.Vector3(x1 + over, top + 0.2, zc), new THREE.Vector3(x0 - over, eave - 0.15, zo), new THREE.Vector3(x1 + over, top + 0.2, zc), new THREE.Vector3(x0 - over, top + 0.2, zc)]);
+    const uv: number[] = [];
+    const p = g.getAttribute("position");
+    for (let i = 0; i < p.count; i++) uv.push(p.getX(i) / 2, Math.hypot(p.getY(i) - eave, p.getZ(i) - zo) / 2);
+    g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    g.computeVertexNormals();
+    P.add(shingleMat(), g);
+  }
+  P.add(plain("#2a3428", 0.8), bx(x1 - x0 + 2 * over + 0.1, 0.16, 0.36, (x0 + x1) / 2, top + 0.12, zc));
+  // the chimney on the east end
+  P.add(stoneMat(), bx(0.9, V(44), 1.2, x1 + 0.4, 0, V(16.5 - 22)), 1.4);
+  P.add(stoneMat(), bx(1.05, 0.15, 1.35, x1 + 0.4, V(44), V(16.5 - 22)), 1.4);
+  // the porch: its deck, posts, lean-to roof, a bench, the steps
+  const pz1 = z1 + V(11);
+  P.add(plankMat(), bx(x1 - x0, 0.12, pz1 - z1, (x0 + x1) / 2, 0.5, (z1 + pz1) / 2), 1.6);
+  for (const px of [x0 + 0.17, V(16 - 26), V(35 - 26), x1 - 0.17]) P.add(logMat(), new THREE.CylinderGeometry(0.11, 0.12, V(20) - 0.62, 10).translate(px, 0.62 + (V(20) - 0.62) / 2, pz1 - 0.2));
+  {
+    const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x0 - 0.2, V(23), z1), new THREE.Vector3(x1 + 0.2, V(23), z1), new THREE.Vector3(x1 + 0.2, V(20), pz1 + 0.3), new THREE.Vector3(x0 - 0.2, V(23), z1), new THREE.Vector3(x1 + 0.2, V(20), pz1 + 0.3), new THREE.Vector3(x0 - 0.2, V(20), pz1 + 0.3)]);
+    const p = g.getAttribute("position");
+    const uv: number[] = [];
+    for (let i = 0; i < p.count; i++) uv.push(p.getX(i) / 2, p.getZ(i) / 2);
+    g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    g.computeVertexNormals();
+    P.add(shingleMat(), g);
+  }
+  P.add(plankMat(), bx(2, 0.06, 0.4, x0 + 1.3, 0.95, z1 + 0.35), 1.2);
+  P.add(plankMat(), bx(2, 0.4, 0.06, x0 + 1.3, 1.0, z1 + 0.15), 1.2);
+  for (let i = 0; i < 3; i++) P.add(plankMat(), bx(1.35, 0.17, 0.3, V(26 - 26), i * 0.17, pz1 + 0.45 - i * 0.3), 1.2);
+  // firewood stacked by the chimney: round ends showing
+  for (let y = 0; y < 5; y++) for (let k = 0; k < 6; k++) P.add(k % 2 ? logMat() : plain("#c8925a", 0.9), new THREE.CylinderGeometry(0.08, 0.08, 0.5, 8).rotateZ(Math.PI / 2).translate(x1 + 0.35, 0.09 + y * 0.16, V(23 - 22) + k * 0.17));
+  return P.group();
 }
 
-function binoculars() {
-  const m = new VoxelModel(6, 14, 6);
-  m.box(2, 0, 2, 4, 9, 4, C("#2e5a3a"));
-  m.box(0, 9, 1, 6, 12, 5, C("#3a6a44"));
-  m.box(0, 10, 0, 2, 12, 1, C("#1a1a20"));
-  m.box(4, 10, 0, 6, 12, 1, C("#1a1a20"));
-  m.box(1, 12, 2, 5, 13, 4, C("#d8b030"));
-  return m;
+/** A dome tent, front +z: its nylon shell in `color`, the poles crossing over it in `trim`, the door. */
+function tentObject(color: string, trim: string) {
+  const P = new Parts();
+  const shell = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.35, 1.6, 1.0);
+  P.add(pm(`nylon:${color}`, () => new THREE.MeshStandardMaterial({ color, roughness: 0.55, side: THREE.DoubleSide })), shell);
+  for (const a of [Math.PI / 4, -Math.PI / 4]) P.add(plain(trim, 0.4, 0.3), new THREE.TorusGeometry(1, 0.022, 6, 24, Math.PI).scale(1.36, 1.62, 1.01).rotateY(a));
+  P.add(plain("#2a2420", 0.8), new THREE.CircleGeometry(0.55, 16, 0, Math.PI).translate(0, 0, 1.005));
+  return P.group();
+}
+
+/** The campfire: a ring of stones, crossed logs, the embers glowing between them. */
+function fireObject() {
+  const P = new Parts();
+  for (let a = 0; a < 14; a++) {
+    const ang = (a / 14) * Math.PI * 2;
+    const g = new THREE.DodecahedronGeometry(0.17, 0).scale(1.2, 0.8, 1).rotateY(a).translate(Math.cos(ang) * 0.95, 0.1, Math.sin(ang) * 0.95);
+    P.add(stoneMat(), g, 0.8);
+  }
+  P.add(glowM("#ff6a1a", 1.6), new THREE.CircleGeometry(0.7, 18).rotateX(-Math.PI / 2).translate(0, 0.03, 0));
+  for (const a of [0.3, 1.9, 3.4]) P.add(plain("#3a2418", 0.95), new THREE.CylinderGeometry(0.07, 0.08, 1.1, 8).rotateZ(Math.PI / 2 - 0.35).rotateY(a).translate(0, 0.25, 0));
+  P.add(glowM("#ffb03a", 2.4), new THREE.ConeGeometry(0.2, 0.45, 8).translate(0, 0.32, 0));
+  return P.group();
+}
+
+/** A coin-op viewer on its post: the green body, the eyepieces, the brass cap. */
+function viewerObject() {
+  const P = new Parts();
+  const green = plain("#2e5a3a", 0.4, 0.5);
+  P.add(green, new THREE.CylinderGeometry(0.06, 0.09, 1.45, 12).translate(0, 0.725, 0));
+  P.add(green, new THREE.CapsuleGeometry(0.17, 0.32, 4, 12).rotateZ(Math.PI / 2).translate(0, 1.65, 0));
+  for (const s of [-1, 1]) P.add(plain("#1a1a20", 0.4, 0.3), new THREE.CylinderGeometry(0.06, 0.06, 0.12, 10).rotateX(Math.PI / 2).translate(s * 0.11, 1.68, -0.22));
+  P.add(plain("#d8b030", 0.3, 0.9), new THREE.CylinderGeometry(0.1, 0.12, 0.05, 12).translate(0, 1.84, 0));
+  return P.group();
 }
 
 export function buildProps(land: Land): Built {
@@ -349,9 +443,8 @@ export function buildProps(land: Land): Built {
   const L = land.decks[0];
   deck(L, ["n", "e", "w"]);
   for (const x of [L.x0 + 1.4, L.x1 - 1.4]) {
-    const b = toObject(binoculars());
+    const b = viewerObject();
     b.position.set(x, L.y, L.z0 + 0.7);
-    b.scale.setScalar(0.55);
     b.rotation.y = Math.PI;
     group.add(b);
     circles.push([x, L.z0 + 0.7, 0.35]);
@@ -448,7 +541,7 @@ export function buildProps(land: Land): Built {
   // ---- the ranger cabin -----------------------------------------------------------------------------
   const CB = SITES.cabin;
   const cabinY = at(CB.x, CB.z) - 0.05;
-  const cabin = toObject(cabinModel());
+  const cabin = cabinObject();
   cabin.position.set(CB.x, cabinY, CB.z);
   cabin.rotation.y = -Math.PI / 2; // the porch faces the trail, west
   group.add(cabin);
@@ -490,7 +583,7 @@ export function buildProps(land: Land): Built {
   // ---- campfire, log benches, tents ----------------------------------------------------------------
   const CP = SITES.camp;
   const fy = at(CP.x, CP.z);
-  const ring = toObject(fireRing());
+  const ring = fireObject();
   ring.position.set(CP.x, fy - 0.05, CP.z);
   group.add(ring);
   circles.push([CP.x, CP.z, 1.25]);
@@ -510,7 +603,7 @@ export function buildProps(land: Land): Built {
     [4.8, -4.4, -0.5, "#3a7a4a", "#e8d06a"],
     [-1.5, -6.2, 0.05, "#c83a3a", "#e8e4dc"],
   ] as const) {
-    const t = toObject(tentModel(col, trim));
+    const t = tentObject(col, trim);
     t.position.set(CP.x + dx, at(CP.x + dx, CP.z + dz) - 0.05, CP.z + dz);
     t.rotation.y = yaw;
     group.add(t);

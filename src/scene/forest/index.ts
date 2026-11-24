@@ -3,7 +3,8 @@ import type { City } from "../city";
 import type { Director } from "../director";
 import { loadArt, Snark } from "../snark";
 import { waterTexture } from "../textures";
-import { creekWater, groundMesh } from "./ground";
+import { creekWater, groundMesh, smoothGroundMesh } from "./ground";
+const REAL_GROUND = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
 import { BOARDWALKS, BX, creekAt, F, fbm, goldAt, Land, lineDist, rnd, shoreZ, SITES, smooth, trailDist, TRAILS, WATER } from "./land";
 import { Wildlife } from "./life";
 import { buildProps, type Built } from "./props";
@@ -63,7 +64,8 @@ export class Forest {
     const land = this.land;
     this.group.name = "forest";
     scene.add(this.group);
-    this.group.add(groundMesh(land));
+    // (realistic: a smooth heightfield in photographed ground; ?real=0 the voxel columns)
+    this.group.add(REAL_GROUND ? smoothGroundMesh(land) : groundMesh(land));
     this.water = waterTexture();
     this.water.wrapS = this.water.wrapT = THREE.RepeatWrapping;
     this.group.add(creekWater(land, this.water));

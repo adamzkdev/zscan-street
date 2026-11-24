@@ -418,7 +418,16 @@ export function propDepthMaterial() {
 }
 
 /** A model as a group of up to three meshes (solid, glass, light). */
-export function toObject(m: VoxelModel, opts: { shadows?: boolean; own?: boolean } = {}) {
+/**
+ * The realistic pass (branch gta-real): while `on` (the walk-in places being built, or you inside
+ * one), `toObject` meshes a model for real — rounded boxes in photographed materials, leaves as leaf
+ * cards (src/scene/real/remesh.ts, set as `mesh` by main) — instead of voxels. `?inside=voxel` keeps
+ * the voxels. `voxel: true` in the options asks for them anyway (a player's voxel build).
+ */
+export const REAL_MESH: { on: number; mesh: ((m: VoxelModel, opts: { shadows?: boolean }) => THREE.Group) | null } = { on: 0, mesh: null };
+
+export function toObject(m: VoxelModel, opts: { shadows?: boolean; own?: boolean; voxel?: boolean } = {}) {
+  if (REAL_MESH.on > 0 && REAL_MESH.mesh && !opts.voxel) return REAL_MESH.mesh(m, opts);
   return objectOf(meshModel(m), opts);
 }
 

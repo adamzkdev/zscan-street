@@ -8,6 +8,7 @@ import { toObject } from "../scene/voxel/mesher";
 import { C, E, G, shades, VoxelModel } from "../scene/voxel/model";
 import { box, glowMat, makeScene, room, std, textPlane } from "./kit";
 import { buildArchive } from "./archive";
+import { realOn, stanchions } from "./realvox";
 import type { Interior, InteriorContext, PickInfo, Rect } from "./types";
 import { memePoster } from "../scene/memes";
 import { nextMeme } from "../scene/memewalls";
@@ -165,9 +166,20 @@ export function buildMempool(ctx: InteriorContext): Interior {
   sign.position.set(TABLE_X, 3.1, TABLE_Z + 0.1);
   scene.add(sign);
   for (const x of [-1.4, 1.4]) box(scene, 0.02, ROOF - 3.25, 0.02, mullion, TABLE_X + x, 3.25, TABLE_Z + 0.1);
-  const hall = toObject(hallModel());
+  const real = realOn();
+  const hall = toObject(hallModel(real));
   hall.position.set((X0 + PART_X) / 2, 0, Z0 / 2);
   scene.add(hall);
+  if (real) {
+    // the queue in front of the table: brass stanchions, velvet ropes (where the voxel posts stood)
+    const pts: [number, number][] = [];
+    for (let vxi = Math.round((-7.4 + 10) * 6); vxi <= Math.round((-0.4 + 10) * 6); vxi += 7) {
+      const wx = (X0 + PART_X) / 2 + (vxi + 0.5 - 78 / 2) / 6,
+        wz = Z0 / 2 + (Math.round((-3.4 + 14) * 6) + 0.5 - 84 / 2) / 6;
+      pts.push([wx, wz]);
+    }
+    stanchions(scene, pts);
+  }
   // the lockers on the back wall, the stanchions, the ATM and the bench by the window
   rects.push([X0, Z0, -4.6, Z0 + 0.7], [X0, -3.2, X0 + 0.7, -1.2], [X0, -1.0, X0 + 2.4, -0.4]);
   const parcels = new Parcels(ctx, scene, tableSlot);
@@ -686,7 +698,7 @@ function dockModel() {
 }
 
 /** The hall's furniture (x −10…3, z −14…0): lockers, a queue line, the ATM, a bench, plants. */
-function hallModel() {
+function hallModel(real = false) {
   const W = 78,
     D = 84;
   const m = new VoxelModel(W, 31, D);
@@ -702,7 +714,8 @@ function hallModel() {
   m.box(0, 18, 0, vx(-4.6), 20, 5, C("#3ec9b0"));
   for (let x = 2; x < vx(-4.6); x += 8) m.box(x, 15, 4, x + 3, 16, 4.6, E("#9ff0e0", 1.2));
   // the queue: brass posts, red ropes, in front of the table
-  for (let x = vx(-7.4); x <= vx(-0.4); x += 7) {
+  // (the realistic pass draws them as real stanchions: buildMempool)
+  for (let x = vx(-7.4); x <= vx(-0.4) && !real; x += 7) {
     m.box(x, 0, vz(-3.4), x + 1, 6, vz(-3.4) + 1, C("#c9a227"));
     m.box(x - 0.5, 0, vz(-3.4) - 0.5, x + 1.5, 0.5, vz(-3.4) + 1.5, C("#3a3842"));
     m.set(x, 6, vz(-3.4), C("#e8c050"));

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { addDetail, guessDetail } from "../scene/detail";
+import { groundMat } from "../scene/real/ground";
 
 /**
  * The finish of a place: every plain standard material gets its surface (plaster, polished stone,
@@ -32,6 +33,48 @@ function polishFloor(o: THREE.Mesh) {
   m.userData.polished = true;
 }
 
+/**
+ * The realistic pass (branch gta-real): the big plain surfaces of a place — its floors and its walls —
+ * in photographed materials (public/tex) instead of a flat colour with a grain: a pale floor is
+ * polished marble, a brown one parquet, a saturated one carpet, a grey one polished concrete, the
+ * rest tiles; a wall is plaster in its own colour, a brown one wood panelling. Mapped in world
+ * metres (real/ground.ts's shader: every face, no stretching), tinted by the colour the place chose
+ * so its palette stays. Small things keep their grain (the furniture, the fittings).
+ */
+function realSurface(mesh: THREE.Mesh): boolean {
+  const m = mesh.material as THREE.MeshStandardMaterial;
+  if (Array.isArray(mesh.material) || !m?.isMeshStandardMaterial || m.map || m.transparent || m.userData.realGround || m.userData.noReal) return false;
+  if (m.metalness > 0.5 || m.emissiveIntensity > 0.5 && m.emissive && m.emissive.getHex() !== 0) return false;
+  if ((mesh as THREE.InstancedMesh).isInstancedMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return false;
+  const geo = mesh.geometry;
+  if (!geo?.getAttribute("position") || geo.getAttribute("color")) return false;
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  box.copy(geo.boundingBox!).applyMatrix4(mesh.matrixWorld).getSize(size);
+  m.color.getHSL(hsl, THREE.SRGBColorSpace);
+  const hue = hsl.h * 360;
+  const woody = hue > 15 && hue < 48 && hsl.s > 0.22 && hsl.l < 0.55 && hsl.l > 0.12;
+  const tint = "#" + m.color.getHexString(THREE.SRGBColorSpace);
+  const floor = size.y < 0.4 && size.x * size.z > 12 && Math.min(size.x, size.z) > 2.5;
+  const wall = !floor && size.y > 2.2 && Math.max(size.x, size.z) > 2.5 && Math.min(size.x, size.z) < 0.8;
+  if (!floor && !wall) return false;
+  let set: string,
+    rough = 1,
+    t = tint;
+  if (floor) {
+    if (woody) set = "WoodFloor051";
+    else if (hsl.s > 0.35 && hsl.l < 0.55) set = "Carpet016";
+    else if (hsl.l > 0.62) ((set = "Marble012"), (rough = 0.55));
+    else if (hsl.s < 0.12 && hsl.l < 0.4) ((set = "Concrete019"), (rough = 0.7));
+    else set = "Tiles074";
+    // (the photograph carries its own colour: the tint only leans it toward the place's)
+    if (set === "WoodFloor051" || set === "Marble012") t = new THREE.Color(tint).lerp(new THREE.Color("#ffffff"), 0.55).getStyle();
+  } else {
+    set = woody ? "Wood049" : "Plaster001";
+  }
+  mesh.material = groundMat({ set, tint: t, rough, anti: 0.5, patches: 0.2 });
+  return true;
+}
+
 export function refine(root: THREE.Object3D) {
   root.updateMatrixWorld();
   root.traverse((o) => {
@@ -40,6 +83,7 @@ export function refine(root: THREE.Object3D) {
     if (!mats) return;
     if (!seen.has(o) && mesh.isMesh && !(mesh as THREE.InstancedMesh).isInstancedMesh) {
       seen.add(o);
+      if (realSurface(mesh)) return;
       if (!done.has(mats as THREE.Material)) polishFloor(mesh);
     }
     for (const m of Array.isArray(mats) ? mats : [mats]) {

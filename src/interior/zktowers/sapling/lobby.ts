@@ -59,7 +59,8 @@ export function lobby(k: SkyKit) {
     k.box(f, 0.8, 1.1, 5.2, x, 0, -10.5, SAP.oak, "matte");
     k.box(f, 1.0, 0.06, 5.4, x, 1.1, -10.5, "#f4f0e8", "polish");
     k.box(f, 0.04, 0.8, 5.0, x + 0.42, 0.18, -10.5, "#3d7a34", "matte");
-    for (let z = -12.8; z <= -8.2; z += 0.25) k.box(f, 0.06, 0.12, 0.12, x + 0.45, 0.2 + ((z * 7) % 0.6 + 0.6) % 0.6, z, "#5cb84e", "matte");
+    // (the desk's planted front: a strip of leaves, not little cubes)
+    k.leaves(f, x + 0.48, 0.55, -10.5, 0.12, 0.34, 2.4, 1.6, [0.14, 0.24]);
     k.box(f, 0.02, 0.05, 5.0, x + 0.42, 0.12, -10.5, GREEN, "glow");
     k.solid(f, x - 0.5, -13.2, x + 0.5, -7.8);
     // the desk screen: ZEC price

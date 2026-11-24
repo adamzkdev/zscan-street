@@ -5,7 +5,8 @@ import { Market } from "../../data/market";
 import { ZScan } from "../../data/zscan";
 import { loadArt, Snark } from "../../scene/snark";
 import type { Tone } from "../../scene/speech";
-import { meshModel, MATERIALS } from "../../scene/voxel/mesher";
+import { meshModel, MATERIALS, REAL_MESH } from "../../scene/voxel/mesher";
+import { RealBatch } from "../../scene/real/remesh";
 import { hash, type Kind, type VoxelModel } from "../../scene/voxel/model";
 import { textPlane } from "../kit";
 import type { InteriorContext, PickInfo, Rect } from "../types";
@@ -156,7 +157,10 @@ class Batch {
 class Voxels {
   private static cache = new Map<string, Partial<Record<Kind, THREE.BufferGeometry>>>();
   private parts: Record<Kind, THREE.BufferGeometry[]> = { solid: [], glass: [], emit: [] };
+  /** (the realistic pass: rounded boxes in photographed materials, leaves as leaf cards) */
+  private real = REAL_MESH.mesh ? new RealBatch() : null;
   add(key: string, make: () => VoxelModel, m: THREE.Matrix4) {
+    if (this.real) return this.real.add(key, make, m);
     let g = Voxels.cache.get(key);
     if (!g) Voxels.cache.set(key, (g = meshModel(make())));
     const box = new THREE.Box3();
@@ -171,6 +175,14 @@ class Voxels {
     return box;
   }
   build(parent: THREE.Object3D) {
+    if (this.real) {
+      const g = new THREE.Group();
+      this.real.build(g);
+      for (const c of [...g.children]) {
+        c.raycast = () => {};
+        parent.add(c);
+      }
+    }
     for (const kind of ["solid", "glass", "emit"] as Kind[]) {
       if (!this.parts[kind].length) continue;
       const geo = mergeGeometries(this.parts[kind]);

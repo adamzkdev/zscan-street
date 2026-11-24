@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { BAY } from "../city/plan";
 import { BX, CREEK, creekAt, F, fbm, goldAt, Land, shoreZ, SITES, trailDist, vnoise, WATER } from "./land";
 import { KTUNNEL } from "../keys/plan";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { heightfield, natureMat } from "../real/terrain";
 
 /** Over the tunnel's shell (its inside and the concrete either side). */
 const overTunnel = (x: number, z: number) => Math.abs(x - KTUNNEL.x) < KTUNNEL.half + 4.2 && z > KTUNNEL.z0 - 0.2;
@@ -146,6 +148,34 @@ export function groundMesh(land: Land) {
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
   mesh.receiveShadow = true;
   mesh.castShadow = true;
+  return mesh;
+}
+
+/**
+ * The forest floor, realistic (branch gta-real): one smooth heightfield every half metre from the
+ * land's own heights (the walker's floor, so feet meet the ground), painted as before (duff, moss,
+ * clover, golden grass, trails, wet stone, rock) and drawn in photographed grass, earth and rock
+ * (real/terrain.ts), cliffs where it is steep; the board's edge dropped in rock to the bay's floor.
+ */
+export function smoothGroundMesh(land: Land) {
+  const base = BAY.bed;
+  const parts = heightfield({
+    x0: F.x0,
+    x1: F.x1,
+    z0: F.z0,
+    z1: F.z1,
+    step: 0.5,
+    height: (x, z) => land.raw(x, z),
+    keep: (x, z, h) => z > shoreZ(x) - 6 && h > base + 0.1,
+    paint: (c, x, z, h, slope) => paint(c, land, x, z, h, slope),
+    skirtTo: base - 0.4,
+    skirts: { x1: true, z1: true },
+  });
+  const geo = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)), false)!;
+  const mesh = new THREE.Mesh(geo, natureMat());
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  mesh.name = "forest:ground";
   return mesh;
 }
 

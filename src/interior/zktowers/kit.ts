@@ -7,6 +7,8 @@ import { get, ZScan } from "../../data/zscan";
 import { loadArt, Snark } from "../../scene/snark";
 import type { Tone } from "../../scene/speech";
 import { meshModel, MATERIALS } from "../../scene/voxel/mesher";
+import { RealVoxels, realOn } from "../realvox";
+import { foliageCards } from "../../scene/real/trees";
 import { hash, type Kind, type VoxelModel } from "../../scene/voxel/model";
 import { makeScene, textPlane } from "../kit";
 import type { Interior, InteriorContext, PickInfo, Rect } from "../types";
@@ -146,7 +148,10 @@ class Batch {
 class Voxels {
   private static cache = new Map<string, Partial<Record<Kind, THREE.BufferGeometry>>>();
   private parts: Record<Kind, THREE.BufferGeometry[]> = { solid: [], glass: [], emit: [] };
+  /** (the realistic pass: the floor's pieces drawn real, src/interior/realvox.ts) */
+  private real = new RealVoxels("zktowers");
   add(key: string, make: () => VoxelModel, m: THREE.Matrix4) {
+    if (realOn()) return this.real.add(key, make, m);
     let g = Voxels.cache.get(key);
     if (!g) Voxels.cache.set(key, (g = meshModel(make())));
     const box = new THREE.Box3();
@@ -161,6 +166,7 @@ class Voxels {
     return box;
   }
   build(parent: THREE.Object3D) {
+    this.real.build(parent);
     for (const kind of ["solid", "glass", "emit"] as Kind[]) {
       if (!this.parts[kind].length) continue;
       const geo = mergeGeometries(this.parts[kind]);
@@ -413,9 +419,31 @@ export class SkyKit {
     return o;
   }
 
+  /**
+   * Leaves (the realistic pass): a mass of foliage at (x, y, z) on floor f, an ellipsoid of radii
+   * (rx, ry, rz) filled with leaf cards (src/scene/real/trees.ts), merged per floor at `flush`.
+   */
+  private leafBlobs = new Map<number, { c: THREE.Vector3; rad: THREE.Vector3; n: number; size: [number, number] }[]>();
+  leaves(f: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, density = 1, size: [number, number] = [0.32, 0.55]) {
+    const vol = rx * ry * rz;
+    const n = Math.max(3, Math.min(140, Math.round(vol * 60 * density + (rx + ry + rz) * 3)));
+    const list = this.leafBlobs.get(f) ?? [];
+    list.push({ c: new THREE.Vector3(x, this.levels[f].y + y, z), rad: new THREE.Vector3(rx, ry, rz), n, size });
+    this.leafBlobs.set(f, list);
+  }
+
   flush() {
     this.batches.forEach((b, f) => b.build(this.groups[f]));
     this.voxels.forEach((v, f) => v.build(this.groups[f]));
+    for (const [f, blobs] of this.leafBlobs) {
+      const leaf = foliageCards(blobs, 11 + f);
+      const m = new THREE.Mesh(leaf.geometry, leaf.mat);
+      m.customDepthMaterial = leaf.depth;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      this.groups[f].add(m);
+    }
+    this.leafBlobs.clear();
   }
 
   // ---- light ----

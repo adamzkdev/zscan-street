@@ -48,6 +48,8 @@ export class Cemetery {
   readonly group = new THREE.Group();
   private zGroup = new THREE.Group();
   private ok = false;
+  /** The layout's voxels to the landmark's (src/scene/voxel/landmarks/cemetery.ts `k`). */
+  private k = 1;
   private O = new THREE.Vector3();
   private center = new THREE.Vector3();
   private zombies: Zombie[] = [];
@@ -90,6 +92,8 @@ export class Cemetery {
     const lm = city.landmarks.get("cemetery");
     if (!lm) return;
     this.ok = true;
+    // the lot's scale: the layout is drawn smaller on a lot smaller than its 61 × 27 m (its keeper stands at the crypt's door)
+    this.k = lm.raw.keeper ? lm.raw.keeper[0] / CRYPT.door : 1;
     this.O.copy(lm.toWorld(0, 0, 0));
     this.center.copy(lm.toWorld(CW / 2, 0, CD / 2));
     this.nodes = this.graph.nodes.map(([x, z]) => this.W(x, 0, z).setY(this.groundAt(this.W(x, 0, z).x, this.W(x, 0, z).z) ?? this.O.y));
@@ -99,25 +103,25 @@ export class Cemetery {
 
   /** Model voxels → world. */
   private W(x: number, y: number, z: number) {
-    return this.city.landmarks.get("cemetery")!.toWorld(x, y, z);
+    return this.city.landmarks.get("cemetery")!.toWorld(x * this.k, y * this.k, z * this.k);
   }
 
   /** Is (x, z) inside the walls (the walker's hill)? */
   owns(x: number, z: number) {
     if (!this.ok) return false;
-    const vx = (x - this.O.x) / VOX,
-      vz = (z - this.O.z) / VOX;
+    const vx = (x - this.O.x) / (VOX * this.k),
+      vz = (z - this.O.z) / (VOX * this.k);
     return vx > FX0 + 0.5 && vx < FX1 - 0.5 && vz > FZ0 + 0.5 && vz < FZ1 + 0.5;
   }
 
   /** Ground height on the hill inside the fence (and in the gateway), or null outside. */
   groundAt(x: number, z: number): number | null {
     if (!this.ok) return null;
-    const vx = (x - this.O.x) / VOX,
-      vz = (z - this.O.z) / VOX;
-    if (vx > FX0 + 0.5 && vx < FX1 - 0.5 && vz > FZ0 + 0.5 && vz < FZ1 - 0.5) return this.O.y + groundY(vz) * VOX;
+    const vx = (x - this.O.x) / (VOX * this.k),
+      vz = (z - this.O.z) / (VOX * this.k);
+    if (vx > FX0 + 0.5 && vx < FX1 - 0.5 && vz > FZ0 + 0.5 && vz < FZ1 - 0.5) return this.O.y + groundY(vz) * VOX * this.k;
     // the gateway: the gravel ramps from the pavement up to the hill
-    if (vx > GATE.x0 && vx < GATE.x1 && vz >= FZ1 - 0.5 && vz < CD) return this.O.y + VOX + (groundY(FZ1 - 1) - 1) * VOX * Math.max(0, Math.min(1, (CD - 4 - vz) / (CD - 4 - FZ1)));
+    if (vx > GATE.x0 && vx < GATE.x1 && vz >= FZ1 - 0.5 && vz < CD) return this.O.y + VOX * this.k + (groundY(FZ1 - 1) - 1) * VOX * this.k * Math.max(0, Math.min(1, (CD - 4 - vz) / (CD - 4 - FZ1)));
     return null;
   }
 
@@ -352,8 +356,8 @@ export class Cemetery {
       cz = (a.z + b.z) / 2;
     for (let i = 0; i < p.count; i++) {
       const wz = cz + p.getZ(i);
-      const vz = Math.min(FZ1 - 1, (wz - this.O.z) / VOX);
-      p.setY(i, groundY(vz) * VOX);
+      const vz = Math.min(FZ1 - 1, (wz - this.O.z) / (VOX * this.k));
+      p.setY(i, groundY(vz) * VOX * this.k);
     }
     geo.translate(cx, this.O.y, cz);
     this.mist = new THREE.ShaderMaterial({

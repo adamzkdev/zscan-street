@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import { CURB, NU7Q } from "../scene/city/plan";
-import { C, E, G, VOX, VoxelModel, hash } from "../scene/voxel/model";
-import { toObject } from "../scene/voxel/mesher";
-import { geos, merge, type Geos } from "./design";
+import { VOX } from "../scene/voxel/model";
+import { hex, Kit, roundRect, type V2 } from "../scene/real/lmkit";
+import { kitGeos, kitMeshes, mergeKit, type KitGeos } from "../scene/real/kitobj";
 import type { GameHud } from "./ui";
-import { Crane, canvasTex, dispose, latticeMat, meshes, net, worker } from "./works";
+import { Crane, canvasTex, dispose, latticeMat, net, worker } from "./works";
 
 /** Work began on the quarter: the percentage runs from here to NU7. */
 const START = Date.parse("2026-10-01T00:00:00Z");
@@ -37,107 +37,153 @@ export interface Nu7QuarterHooks {
 
 // ---- the NU7 Tower ----
 
-const PAL = {
-  fin: C("#d9a63a"),
-  slab: C("#2a2838"),
-  glass: G("#5b45b0"),
-  lit: E("#ffe3a3", 1.6),
-  neon: E(VIOLET, 2.4),
-  gold: E("#f4b728", 2.2),
-  door: G("#1c2433"),
-  concrete: C("#9a958c"),
-  /** The lobby's glass, lit from inside. */
-  lobby: E("#ffd89a", 1.25),
-};
 
 /** Half the tower's side (voxels) at floor `f`: it steps back three times on the way up. */
 function halfAt(f: number) {
   const t = f / FLOORS;
   return t < 0.45 ? 46 : t < 0.72 ? 40 : t < 0.9 ? 34 : 28;
 }
-/** Inside the floor plan: a square with its corners cut (the violet neon runs up the cuts). */
-function inFoot(h: number, x: number, z: number) {
-  const lx = Math.abs(x + 0.5 - MID),
-    lz = Math.abs(z + 0.5 - MID);
-  return lx <= h && lz <= h && lx + lz <= h * 1.62;
-}
 
-function floorModel(f: number) {
-  const m = new VoxelModel(N, FH, N);
+// ---- the tower, realistic (branch gta-real): glass and gold in metres, no voxels ----
+/** The floor plan's outline (metres): the square of half side h (voxels) with its corners cut. */
+function footPts(h: number): V2[] {
+  const a = h * VOX,
+    b = 0.62 * h * VOX;
+  return [
+    [a, -b],
+    [a, b],
+    [b, a],
+    [-b, a],
+    [-a, b],
+    [-a, -b],
+    [-b, -a],
+    [b, -a],
+  ].reverse() as V2[];
+}
+/** One floor: the slab, the violet glass curtain wall (its rooms lit at night), gold fins, the violet neon up the cut corners. */
+function realFloor(f: number): KitGeos {
+  const K = new Kit({ lod: 0 });
   const h = halfAt(f);
+  const pts = footPts(h);
   const ledge = f + 1 < FLOORS && halfAt(f + 1) < h;
-  for (let z = 0; z < N; z++)
-    for (let x = 0; x < N; x++) {
-      if (!inFoot(h, x, z)) continue;
-      const ex = !inFoot(h, x - 1, z) || !inFoot(h, x + 1, z);
-      const ez = !inFoot(h, x, z - 1) || !inFoot(h, x, z + 1);
-      if (!ex && !ez) {
-        m.box(x, 0, z, x + 1, FH, z + 1, PAL.slab);
-        continue;
-      }
-      const cut = Math.abs(x + 0.5 - MID) + Math.abs(z + 0.5 - MID) > h * 1.62 - 1.5;
-      const col = ez ? x : z;
-      const side = ez ? (z < MID ? 0 : 1) : x < MID ? 2 : 3;
-      for (let y = 0; y < FH; y++) {
-        let c: number;
-        if (y < 2) c = PAL.slab;
-        else if (cut) c = y >= 3 && y <= 17 ? PAL.neon : PAL.fin;
-        else if (col % 6 === 0) c = PAL.fin;
-        else if (y > 3 && y < 17) c = hash(Math.floor(col / 6), f, side, 7) < 0.3 ? PAL.lit : PAL.glass;
-        else c = PAL.slab;
-        if (ledge && y === FH - 1) c = PAL.gold;
-        m.set(x, y, z, c);
-      }
+  K.prism("lm.Concrete034", pts, 0, 2 * VOX, hex("#2a2838"), { lid: null });
+  K.prism("f005", pts.map(([x, z]) => [x * 0.995, z * 0.995] as V2), 2 * VOX, FLOOR_M, hex("#8a78d8"), { fh: FLOOR_M, lid: null });
+  // gold fins every metre along the straight sides; neon up the cut corners
+  for (let i = 0; i < 8; i++) {
+    const [ax, az] = pts[i],
+      [bx, bz] = pts[(i + 1) % 8];
+    const len = Math.hypot(bx - ax, bz - az);
+    const nx = (bz - az) / len,
+      nz = -(bx - ax) / len;
+    const cut = Math.abs(Math.abs(ax) - Math.abs(az)) > 0.01 && Math.abs(Math.abs(bx) - Math.abs(bz)) > 0.01 && Math.abs(ax) !== Math.abs(bx) && i % 2 === 1;
+    if (cut) {
+      K.quad("lm.glow", [ax + nx * 0.03, 3 * VOX, az + nz * 0.03], [bx + nx * 0.03, 3 * VOX, bz + nz * 0.03], [bx + nx * 0.03, 17 * VOX, bz + nz * 0.03], [ax + nx * 0.03, 17 * VOX, az + nz * 0.03], [nx, 0, nz], (p) => [p[0], p[1]], hex(VIOLET));
+      continue;
     }
-  // the lobby: its hall lit behind a wall of glass, the doors in gold, violet neon up the frame,
-  // a gold canopy over them (the NU7 TOWER is a walk-in place: interior/nu7tower)
-  if (f === 0) {
-    const front = MID + h - 1;
-    // the hall seen through the glass, warm; the doors darker in the middle, gold mullions, a transom
-    m.box(MID - 11, 2, front - 1, MID + 11, 15, front, PAL.lit);
-    m.box(MID - 11, 2, front, MID + 11, 15, front + 1, PAL.lobby);
-    m.box(MID - 4, 2, front, MID + 4, 12, front + 1, PAL.door);
-    for (const x of [MID - 11, MID - 8, MID - 5, MID - 1, MID, MID + 4, MID + 7, MID + 10]) m.box(x, 2, front, x + 1, 15, front + 1, PAL.fin);
-    m.box(MID - 11, 12, front, MID + 11, 13, front + 1, PAL.fin);
-    m.box(MID - 11, 2, front, MID + 11, 3, front + 1, PAL.slab);
-    for (const x of [MID - 13, MID + 12]) m.box(x, 2, front, x + 1, 15, front + 1, PAL.neon);
-    m.box(MID - 11, 15, front - 1, MID + 11, 17, N, PAL.gold);
+    const n = Math.round(len / 1);
+    for (let k = 0; k <= n; k++) {
+      const t = k / n;
+      const x = ax + (bx - ax) * t,
+        z = az + (bz - az) * t;
+      K.bar("lm.Metal032.metal", [x + nx * 0.08, 0, z + nz * 0.08], [x + nx * 0.08, FLOOR_M, z + nz * 0.08], 0.1, hex("#d9a63a"));
+    }
   }
-  return m;
+  if (ledge) K.prism("lm.glow", pts.map(([x, z]) => [x * 1.01, z * 1.01] as V2), FLOOR_M - 0.12, FLOOR_M, hex("#f4b728"), { lid: null });
+  // the lobby: its hall lit behind a wall of glass, gold doors, violet neon either side, a gold canopy
+  if (f === 0) {
+    const front = (h - 1) * VOX;
+    K.quad("lm.glow", [-11 * VOX, 2 * VOX, front + 0.08], [11 * VOX, 2 * VOX, front + 0.08], [11 * VOX, 15 * VOX, front + 0.08], [-11 * VOX, 15 * VOX, front + 0.08], [0, 0, 1], (p) => [p[0], p[1]], hex("#ffd89a", 0.8));
+    K.box("lm.glass", -4 * VOX, 2 * VOX, front + 0.1, 4 * VOX, 12 * VOX, front + 0.14, hex("#1c2433"));
+    for (const x of [-11, -8, -5, -1, 0, 4, 7, 10]) K.box("lm.Metal032.metal", x * VOX, 2 * VOX, front + 0.08, (x + 0.6) * VOX, 15 * VOX, front + 0.2, hex("#d9a63a"));
+    for (const x of [-13, 12]) K.box("lm.glow", x * VOX, 2 * VOX, front + 0.08, (x + 0.8) * VOX, 15 * VOX, front + 0.2, hex(VIOLET));
+    K.box("lm.Metal032.metal", -11 * VOX, 15 * VOX, front, 11 * VOX, 17 * VOX, (N - MID) * VOX, hex("#f4b728"));
+    K.box("lm.glow", -11 * VOX, 15 * VOX - 0.03, front + 0.2, 11 * VOX, 15 * VOX, (N - MID) * VOX - 0.2, hex("#fff0d0"));
+  }
+  return kitGeos(K.out(), f * FLOOR_M);
 }
-
-/** The crown: three gold tiers banded in violet neon, then the spire. */
-function crownModel() {
-  const m = new VoxelModel(N, 130, N);
+/** The crown: three gold-and-glass tiers banded in violet, the spire with its gold rings, the neon tip. */
+function realCrown(): KitGeos {
+  const K = new Kit({ lod: 0 });
   for (let t = 0; t < 3; t++) {
     const h = 25 - t * 6;
-    const y0 = t * 10;
-    for (let z = 0; z < N; z++)
-      for (let x = 0; x < N; x++) {
-        if (!inFoot(h, x, z)) continue;
-        const edge = !inFoot(h, x - 1, z) || !inFoot(h, x + 1, z) || !inFoot(h, x, z - 1) || !inFoot(h, x, z + 1);
-        for (let y = y0; y < y0 + 10; y++) m.set(x, y, z, !edge ? PAL.slab : y === y0 + 8 ? PAL.neon : (x + z) % 4 === 0 ? PAL.fin : PAL.glass);
-      }
+    const y0 = t * 10 * VOX;
+    const pts = footPts(h);
+    K.prism("lm.glass", pts, y0, y0 + 10 * VOX, hex("#6a58c8"), { lid: "lm.Concrete034", lidCol: hex("#2a2838") });
+    K.prism("lm.glow", pts.map(([x, z]) => [x * 1.01, z * 1.01] as V2), y0 + 8 * VOX, y0 + 8.6 * VOX, hex(VIOLET), { lid: null });
+    for (const [x, z] of pts) K.bar("lm.Metal032.metal", [x, y0, z], [x, y0 + 10 * VOX, z], 0.14, hex("#d9a63a"));
   }
-  m.cylinder(MID, 30, MID, 3.2, 24, PAL.fin);
-  m.cylinder(MID, 54, MID, 1.6, 64, PAL.fin);
-  for (const y of [62, 78, 94]) m.cylinder(MID, y, MID, 3, 1, PAL.gold);
-  m.box(MID - 1, 118, MID - 1, MID + 1, 126, MID + 1, PAL.neon);
-  return m;
+  K.cyl("lm.Metal032.metal", 0, 0, 3.2 * VOX, 2.6 * VOX, 30 * VOX, 54 * VOX, hex("#d9a63a"), { sides: 16 });
+  K.cyl("lm.Metal032.metal", 0, 0, 1.6 * VOX, 0.5 * VOX, 54 * VOX, 118 * VOX, hex("#d9a63a"), { sides: 12 });
+  for (const y of [62, 78, 94]) K.cyl("lm.glow", 0, 0, 3 * VOX * (1 - (y - 54) / 90), 3 * VOX * (1 - (y - 54) / 90), y * VOX, (y + 1) * VOX, hex("#f4b728"), { sides: 16 });
+  K.sphere("lm.glow", 0, 120 * VOX, 0, 1.2 * VOX, hex(VIOLET), { segs: 8 });
+  return kitGeos(K.out(), FLOORS * FLOOR_M);
 }
-
-/** The floor going up: bare slab and columns. */
-function frameModel(f: number) {
-  const m = new VoxelModel(N, FH, N);
+/** The floor going up: a bare concrete slab, round columns, formwork and rebar at their tops. */
+function realFrame(f: number) {
+  const K = new Kit({ lod: 0 });
   const h = halfAt(f);
-  for (let z = 0; z < N; z++)
-    for (let x = 0; x < N; x++) {
-      if (!inFoot(h, x, z)) continue;
-      m.set(x, 0, z, PAL.concrete);
-      m.set(x, 1, z, PAL.concrete);
-      if ((x - MID) % 12 === 0 && (z - MID) % 12 === 0) m.box(x, 2, z, x + 2, FH, z + 2, PAL.concrete);
+  K.prism("lm.Concrete034", footPts(h), 0, 2 * VOX, hex("#9a958c"), { lid: "lm.Concrete034", lidCol: hex("#a8a398") });
+  for (let x = -h; x <= h; x += 12)
+    for (let z = -h; z <= h; z += 12) {
+      if (Math.abs(x) + Math.abs(z) > h * 1.62 - 2) continue;
+      K.cyl("lm.Concrete034", x * VOX, z * VOX, 0.22, 0.22, 2 * VOX, FLOOR_M, hex("#9a958c"), { sides: 10 });
+      for (const [dx, dz] of [
+        [0.1, 0.1],
+        [-0.1, 0.1],
+        [0.1, -0.1],
+        [-0.1, -0.1],
+      ])
+        K.bar("lm.dark", [x * VOX + dx, FLOOR_M, z * VOX + dz], [x * VOX + dx, FLOOR_M + 0.6, z * VOX + dz], 0.02, hex("#6a4a3a"));
     }
-  return m;
+  return kitMeshes(kitGeos(K.out()));
+}
+/** A road roller (drum in front) or a tar sprayer, realistic, along +x. */
+function realMachine(col: string, drum: boolean) {
+  const K = new Kit({ lod: 0 });
+  const body = hex(col);
+  const s = VOX;
+  if (drum) {
+    // the drum
+    for (let i = 0; i < 16; i++) {
+      const a0 = (i / 16) * Math.PI * 2,
+        a1 = ((i + 1) / 16) * Math.PI * 2;
+      const P = (a: number, z: number): [number, number, number] => [15 * s + Math.cos(a) * 3.5 * s, 3.5 * s + Math.sin(a) * 3.5 * s, z];
+      K.quad("lm.Metal032.metal", P(a0, 0.1), P(a1, 0.1), P(a1, 11 * s - 0.1), P(a0, 11 * s - 0.1), [Math.cos((a0 + a1) / 2), Math.sin((a0 + a1) / 2), 0], (p) => [p[0], p[2]], hex("#6a6a72"));
+    }
+    K.box("lm.paint", 0, 2 * s, s, 12 * s, 8 * s, 10 * s, body);
+    K.box("lm.glass", 3 * s, 8 * s, 2 * s, 9 * s, 13 * s, 9 * s, hex("#9fd8ff"));
+    K.box("lm.paint", 2 * s, 13 * s, s, 10 * s, 14 * s, 10 * s, body);
+    for (const z of [s, 8 * s]) K.cyl("lm.dark", 3 * s, z + s, 1.5 * s, 1.5 * s, 0, 3 * s, hex("#1e1e24"), { sides: 12 });
+  } else {
+    K.box("lm.dark", 0, 2 * s, s, 18 * s, 4 * s, 10 * s, hex("#2a2838"));
+    K.loft("lm.Metal032", [
+      { y: 4 * s, pts: roundRect(5.5 * s, 5.5 * s, 5.5 * s, 3.5 * s, 1.2 * s, 3) },
+      { y: 10 * s, pts: roundRect(5.5 * s, 5.5 * s, 5.5 * s, 3.5 * s, 1.2 * s, 3) },
+    ], body, { lid: "lm.Metal032", lidCol: body, smooth: true });
+    K.box("lm.paint", 12 * s, 4 * s, s, 18 * s, 11 * s, 10 * s, body);
+    K.box("lm.glass", 13 * s, 7 * s, 0.9 * s, 18.1 * s, 10 * s, 10.1 * s, hex("#9fd8ff"));
+    for (const x of [3.5, 14.5]) for (const z of [0.5, 10.5]) K.cyl("lm.dark", x * s, z * s, 1.5 * s, 1.5 * s, 0, 3 * s, hex("#1e1e24"), { sides: 12 });
+  }
+  const g = kitMeshes(kitGeos(K.out()));
+  // (the voxel models were centred on their footprint)
+  g.position.set(-9 * s, 0, -5.5 * s);
+  const o = new THREE.Group();
+  o.add(g);
+  return o;
+}
+/** A racing kart, realistic: a low tub, a seat, the driver's helmet, four wheels. */
+function realKart(col: string) {
+  const K = new Kit({ lod: 0 });
+  const s = VOX;
+  K.loft("lm.plastic", [
+    { y: 0.8 * s, pts: roundRect(0, 0, 5 * s, 2 * s, 0.8 * s, 3) },
+    { y: 1.8 * s, pts: roundRect(0.2 * s, 0, 4.6 * s, 1.8 * s, 0.8 * s, 3) },
+  ], hex(col), { lid: "lm.plastic", lidCol: hex(col), smooth: true });
+  K.box("lm.plastic", 1 * s, 1.8 * s, -s, 4 * s, 2.8 * s, s, hex(col));
+  K.box("lm.dark", -2 * s, 1.8 * s, -s, 1 * s, 3.4 * s, s, hex("#1e1e24"));
+  K.sphere("lm.plastic", -0.6 * s, 4.3 * s, 0, 0.9 * s, hex(col === "#f4b728" ? "#ffffff" : "#f4b728"), { segs: 10 });
+  for (const x of [-4, 4]) for (const z of [-2.6, 2.6]) K.cyl("lm.dark", x * s, z * s, 1 * s, 1 * s, 0, 2 * s, hex("#1e1e24"), { sides: 10 });
+  return kitMeshes(kitGeos(K.out()));
 }
 
 function neonText(text: string, w: number, h: number, hex: string, size: number) {
@@ -159,8 +205,8 @@ function neonText(text: string, w: number, h: number, hex: string, size: number)
 
 class Tower {
   readonly group = new THREE.Group();
-  private floors: Geos[] = [];
-  private crownG: Geos | null = null;
+  private floors: KitGeos[] = [];
+  private crownG: KitGeos | null = null;
   private building: THREE.Group | null = null;
   private shown = "";
   private frame: THREE.Object3D | null = null;
@@ -197,11 +243,11 @@ class Tower {
   /** Meshes one more floor (or the crown) if one is missing; true when it did. */
   mesh() {
     if (this.floors.length < this.built) {
-      this.floors.push(geos(floorModel(this.floors.length), this.floors.length * FLOOR_M));
+      this.floors.push(realFloor(this.floors.length));
       return true;
     }
     if (this.done && !this.crownG) {
-      this.crownG = geos(crownModel(), FLOORS * FLOOR_M);
+      this.crownG = realCrown();
       return true;
     }
     return false;
@@ -220,7 +266,7 @@ class Tower {
       dispose(this.building);
       const parts = this.floors.slice(0, this.built);
       if (this.done && this.crownG) parts.push(this.crownG);
-      this.building = parts.length ? meshes(merge(parts)) : null;
+      this.building = parts.length ? kitMeshes(mergeKit(parts)) : null;
       if (this.building) this.group.add(this.building);
       this.shown = key;
       if (this.done) this.makeNames();
@@ -237,7 +283,7 @@ class Tower {
     const top = this.topY;
     if (this.frameAt !== this.built) {
       dispose(this.frame);
-      this.frame = toObject(frameModel(this.built));
+      this.frame = realFrame(this.built);
       this.frame.position.y = top;
       this.group.add(this.frame);
       this.frameAt = this.built;
@@ -609,22 +655,7 @@ class Karting {
 
   /** A road roller (drum in front) or a tar sprayer. */
   private machine(hex: string, drum: boolean) {
-    const m = new VoxelModel(18, 14, 11);
-    if (drum) {
-      m.box(12, 0, 0, 18, 7, 11, C("#6a6a72"));
-      m.box(0, 2, 1, 12, 8, 10, C(hex));
-      m.box(1, 0, 1, 5, 3, 3, C("#1e1e24"));
-      m.box(1, 0, 8, 5, 3, 10, C("#1e1e24"));
-      m.box(3, 8, 2, 9, 13, 9, G("#9fd8ff"));
-      m.box(2, 13, 1, 10, 14, 10, C(hex));
-    } else {
-      m.box(0, 2, 1, 18, 4, 10, C("#2a2838"));
-      m.box(0, 4, 2, 11, 10, 9, C(hex));
-      m.box(12, 4, 1, 18, 11, 10, C(hex));
-      m.box(13, 7, 1, 18, 10, 10, G("#9fd8ff"));
-      for (const x of [2, 13]) for (const z of [0, 9]) m.box(x, 0, z, x + 3, 3, z + 2, C("#1e1e24"));
-    }
-    return toObject(m);
+    return realMachine(hex, drum);
   }
 
   private makeFence() {
@@ -825,13 +856,7 @@ class Karting {
   private makeKarts() {
     const cols = ["#d8303a", "#3ef0ff", "#f4b728", VIOLET, "#38ff9c"];
     cols.forEach((hex, i) => {
-      const m = new VoxelModel(10, 5, 6);
-      m.box(0, 1, 1, 10, 2, 5, C(hex));
-      m.box(6, 2, 2, 9, 3, 4, C(hex));
-      m.box(3, 2, 2, 6, 4, 4, C("#1e1e24"));
-      m.box(3, 4, 2, 5, 5, 4, C(hex === "#f4b728" ? "#ffffff" : "#f4b728"));
-      for (const x of [0, 8]) for (const z of [0, 5]) m.box(x, 0, z, x + 2, 2, z + 1, C("#1e1e24"));
-      const obj = toObject(m);
+      const obj = realKart(hex);
       this.group.add(obj);
       this.karts.push({ obj, s: i * 24, v: 26 + i * 1.3, lane: (i % 2 ? 1 : -1) * 1.1 });
     });

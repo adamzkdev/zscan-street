@@ -4,6 +4,8 @@ import { C, E, hash, shades, VoxelModel, type Paint } from "../../scene/voxel/mo
 import { SNARK1, SNARK1_PALETTE } from "../../scene/voxel/landmarks/statue-art";
 import type { StatueKit } from "./kit";
 import type { Shell } from "./shell";
+import { groundMat } from "../../scene/real/ground";
+import { realOn } from "../realvox";
 
 /**
  * Floor 0: the pedestal museum, in the casemates of Fort Wood, the eleven-point star fort the statue
@@ -102,9 +104,16 @@ const flags = () =>
 
 export function museum(k: StatueKit, shell: Shell) {
   const f = 0;
-  const granite = new THREE.MeshStandardMaterial({ map: ashlar(), roughness: 0.85 });
-  const brick = new THREE.MeshStandardMaterial({ map: bricks(), roughness: 0.92, side: THREE.DoubleSide });
-  const floor = new THREE.MeshStandardMaterial({ map: flags(), roughness: 0.6, metalness: 0.05 });
+  // (the realistic pass: photographed granite ashlar, red brick and stone flags, world-mapped on every
+  // face; the drawn ones stay for ?inside=voxel)
+  const real = realOn();
+  const granite = real ? groundMat({ set: "Bricks008", tile: 3.4, anti: 0.3, patches: 0.25, tint: "#e8e2d8" }) : new THREE.MeshStandardMaterial({ map: ashlar(), roughness: 0.85 });
+  let brick: THREE.MeshStandardMaterial;
+  if (real) {
+    brick = groundMat({ set: "Bricks060", tile: 1.8, anti: 0.3, patches: 0.2, rough: 0.97, tint: "#d8c8c0" });
+    brick.side = THREE.DoubleSide;
+  } else brick = new THREE.MeshStandardMaterial({ map: bricks(), roughness: 0.92, side: THREE.DoubleSide });
+  const floor = real ? groundMat({ set: "PavingStones111", tile: 2.6, anti: 0.3, patches: 0.2, rough: 0.8, tint: "#d6d2cc" }) : new THREE.MeshStandardMaterial({ map: flags(), roughness: 0.6, metalness: 0.05 });
   const R = k.rects[f];
   const block = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material, scale = 2.4) => {
     const g = new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z);

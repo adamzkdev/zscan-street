@@ -6,6 +6,7 @@ import { Market } from "../../data/market";
 import { ZScan } from "../../data/zscan";
 import { loadArt, Snark } from "../../scene/snark";
 import { meshModel, MATERIALS } from "../../scene/voxel/mesher";
+import { RealVoxels, realOn } from "../realvox";
 import { hash, type Kind, type VoxelModel } from "../../scene/voxel/model";
 import type { Tone } from "../../scene/speech";
 import { textPlane } from "../kit";
@@ -173,7 +174,10 @@ class Batch {
 class Voxels {
   private static cache = new Map<string, Partial<Record<Kind, THREE.BufferGeometry>>>();
   private parts: Record<Kind, THREE.BufferGeometry[]> = { solid: [], glass: [], emit: [] };
+  /** (the realistic pass: the floor's pieces drawn real, src/interior/realvox.ts) */
+  private real = new RealVoxels("reserve");
   add(key: string, make: () => VoxelModel, m: THREE.Matrix4) {
+    if (realOn()) return this.real.add(key, make, m);
     let g = Voxels.cache.get(key);
     if (!g) Voxels.cache.set(key, (g = meshModel(make())));
     const box = new THREE.Box3();
@@ -188,6 +192,7 @@ class Voxels {
     return box;
   }
   build(parent: THREE.Object3D) {
+    this.real.build(parent);
     for (const kind of ["solid", "glass", "emit"] as Kind[]) {
       if (!this.parts[kind].length) continue;
       const geo = mergeGeometries(this.parts[kind]);

@@ -533,37 +533,31 @@ function spiral(k: MuseumKit, f: number, cx: number, cz: number) {
   const stoneMat = new THREE.MeshStandardMaterial({ color: "#d4c8b0", roughness: 0.55 });
   const tread = new THREE.MeshStandardMaterial({ color: "#c2b498", roughness: 0.6 });
   const da = (turns * Math.PI * 2) / N;
+  // the treads: stone steps sitting on a smooth helical slab (the realistic pass: no stack of blocks
+  // under them, no faceted balustrade)
   for (let i = 0; i < N; i++) {
     const a = a0 + da * (i + 0.5);
     const y = (top * (i + 1)) / N;
     const rm = (ri + ro) / 2;
-    const step = new THREE.BoxGeometry(ro - ri, 0.36, rm * da * 1.08);
+    const step = new THREE.BoxGeometry(ro - ri - 0.1, 0.36, rm * da * 1.08);
     step.rotateY(-a);
     step.translate(cx + Math.cos(a) * rm, y - 0.18, cz + Math.sin(a) * rm);
     k.geo(f, tread, step);
-    // the stone underside: one thick sloping slab under each step
-    const under = new THREE.BoxGeometry(ro - ri, 0.5, rm * da * 1.1);
-    under.rotateY(-a);
-    under.translate(cx + Math.cos(a) * rm, y - 0.7, cz + Math.sin(a) * rm);
-    k.geo(f, stoneMat, under);
   }
-  // balustrades: curved stone bands following the helix (segments), a brass handrail on the inner
-  const M = 90;
-  for (let i = 0; i < M; i++) {
-    const t0 = i / M,
-      t1 = (i + 1) / M;
-    const a = a0 + turns * Math.PI * 2 * t0,
-      b = a0 + turns * Math.PI * 2 * t1;
-    for (const [r, hgt, th] of [
-      [ro - 0.08, 1.05, 0.16],
-      [ri + 0.06, 1.0, 0.12],
-    ]) {
-      const p = new THREE.Vector3(cx + Math.cos(a) * r, top * t0 - 0.4, cz + Math.sin(a) * r);
-      const q = new THREE.Vector3(cx + Math.cos(b) * r, top * t1 - 0.4, cz + Math.sin(b) * r);
-      k.geo(f, stoneMat, beamGeo(p.clone().setY(p.y + (hgt + 0.4) / 2), q.clone().setY(q.y + (hgt + 0.4) / 2), th, hgt + 0.9));
-      if (r < 2) k.geo(f, k.brass, beamGeo(p.clone().setY(p.y + hgt + 0.85), q.clone().setY(q.y + hgt + 0.85), 0.07, 0.06));
-    }
+  const yAt = (t: number) => top * t;
+  // the slab the steps sit on, its smooth soffit seen from the hall
+  k.geo(f, stoneMat, helixRibbon(cx, cz, ri + 0.1, ro - 0.14, a0, turns, yAt, -0.68, -0.14, 160));
+  // the balustrades: one curved stone band each side, following the helix
+  k.geo(f, stoneMat, helixRibbon(cx, cz, ro - 0.17, ro, a0, turns, yAt, -0.7, 1.3, 160));
+  k.geo(f, stoneMat, helixRibbon(cx, cz, ri, ri + 0.13, a0, turns, yAt, -0.7, 1.2, 160));
+  // the brass handrail on the inner band
+  const railPts: THREE.Vector3[] = [];
+  for (let i = 0; i <= 120; i++) {
+    const t = i / 120,
+      a = a0 + turns * Math.PI * 2 * t;
+    railPts.push(new THREE.Vector3(cx + Math.cos(a) * (ri + 0.065), yAt(t) + 1.25, cz + Math.sin(a) * (ri + 0.065)));
   }
+  k.geo(f, k.brass, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(railPts), 240, 0.035, 8, false));
   // ---- walking it: the height under you follows the helix; on its 1.25 turns the step you are on
   // is the candidate nearest the height you stood at. Colliders: the lift well, the outer
   // balustrade as a ring of posts, with the way in open while you are low and the way out to the
@@ -1015,4 +1009,68 @@ function wing(k: MuseumKit, f: number, w: Wing, stone: THREE.Material, landing: 
     k.pool(f, lp.x, lp.z, 3, "#fff6e6", top + 0.012, 1.1);
   }
   return hits;
+}
+
+/**
+ * A solid band following a helix round (cx, cz): radii r0…r1, from angle a0 through `turns`, its
+ * floor and top at y(t) + dy0 and y(t) + dy1 (t 0…1 along it) — a stair's slab, its balustrades.
+ * Smooth (no segments): `n` slices, each face with its own normals.
+ */
+function helixRibbon(cx: number, cz: number, r0: number, r1: number, a0: number, turns: number, y: (t: number) => number, dy0: number, dy1: number, n: number) {
+  const pos: number[] = [],
+    nor: number[] = [],
+    uv: number[] = [],
+    idx: number[] = [];
+  const strip = (pt: (t: number, s: number) => [number, number, number], nm: (t: number) => [number, number, number], flip: boolean) => {
+    const base = pos.length / 3;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      for (const sv of [0, 1]) {
+        const p = pt(t, sv);
+        pos.push(...p);
+        nor.push(...nm(t));
+        uv.push(t * turns * 2 * Math.PI * (r0 + r1) * 0.5, sv);
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const a = base + i * 2,
+        b = a + 1,
+        c = a + 2,
+        d = a + 3;
+      if (flip) idx.push(a, c, b, b, c, d);
+      else idx.push(a, b, c, b, d, c);
+    }
+  };
+  const ang = (t: number) => a0 + turns * Math.PI * 2 * t;
+  const P = (r: number, t: number, dy: number): [number, number, number] => [cx + Math.cos(ang(t)) * r, y(t) + dy, cz + Math.sin(ang(t)) * r];
+  // outer wall, inner wall, top, bottom
+  strip((t, sv) => P(r1, t, sv ? dy1 : dy0), (t) => [Math.cos(ang(t)), 0, Math.sin(ang(t))], false);
+  strip((t, sv) => P(r0, t, sv ? dy1 : dy0), (t) => [-Math.cos(ang(t)), 0, -Math.sin(ang(t))], true);
+  strip((t, sv) => P(sv ? r1 : r0, t, dy1), () => [0, 1, 0], true);
+  strip((t, sv) => P(sv ? r1 : r0, t, dy0), () => [0, -1, 0], false);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  // (wound to face its normals, whatever the helix's handedness)
+  const p = g.getAttribute("position"),
+    nn = g.getAttribute("normal");
+  const A = new THREE.Vector3(),
+    B = new THREE.Vector3(),
+    C = new THREE.Vector3(),
+    N0 = new THREE.Vector3();
+  for (let i = 0; i < idx.length; i += 3) {
+    A.fromBufferAttribute(p, idx[i]);
+    B.fromBufferAttribute(p, idx[i + 1]);
+    C.fromBufferAttribute(p, idx[i + 2]);
+    N0.fromBufferAttribute(nn, idx[i]);
+    if (B.sub(A).cross(C.sub(A)).dot(N0) < 0) {
+      const tmp = idx[i + 1];
+      idx[i + 1] = idx[i + 2];
+      idx[i + 2] = tmp;
+    }
+  }
+  g.setIndex(idx);
+  return g;
 }

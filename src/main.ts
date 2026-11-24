@@ -24,10 +24,12 @@ import type { Person3 } from "./gta/people3d";
 import { FinishPass, GradePass, ScenePass } from "./scene/finish";
 import { cityEnvironment, loadSkies, SKY_ENVS } from "./scene/envmap";
 import { texSetup } from "./scene/real/tex";
+import { realObject } from "./scene/real/remesh";
+import { REAL_MESH } from "./scene/voxel/mesher";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { applyTheme, ATMOS, setRainWanted, type Theme } from "./scene/theme";
 import { applyDaylight, GameSky, type Daylight } from "./scene/daylight";
-import type { Snark } from "./scene/snark";
+import { Snark } from "./scene/snark";
 import { Overlays } from "./ui/overlays";
 import { openPartyHall, openTableGame, wireParty } from "./party/city";
 import { master } from "./audio/master";
@@ -36,6 +38,7 @@ import { StadiumLive } from "./scene/stadium";
 import { type RideKind, Sky } from "./scene/sky";
 import { Shibuya } from "./scene/shibuya";
 import { GoldenGate } from "./scene/goldengate";
+import { BayMarks } from "./scene/real/baymarks";
 import { WalletCrowns } from "./scene/walletcrowns";
 import { Forest } from "./scene/forest";
 import { Keys } from "./scene/keys";
@@ -711,6 +714,8 @@ function skyAt(x: number, y: number) {
 }
 // the Golden Gate: traffic over it, and its deck to walk on
 const goldenGate = new GoldenGate(scene, city);
+// the bay's statue and opera house, realistic (drawn here, not by the city's workers)
+const bayMarks = new BayMarks(city);
 // the ZODL and Vizor emblems turning over their towers
 const walletCrowns = new WalletCrowns(scene, city);
 // Shielded Woods: the redwood forest on the headland across the bridge, walkable off its deck
@@ -1081,11 +1086,29 @@ function loadPlace(key: Interior["key"]): Promise<void> {
   }
   return p;
 }
+// the walk-in places' voxel models made real while they are built and while you are inside (src/scene/real/remesh.ts)
+const REAL_INSIDE = new URLSearchParams(location.search).get("inside") !== "voxel";
+if (REAL_INSIDE) REAL_MESH.mesh = (m, o) => realObject(m, o);
+let realInside = false;
 const interiors = new InteriorManager(
   canvas,
-  Object.fromEntries((Object.keys(PLACE_CODE) as Interior["key"][]).map((k) => [k, () => placeBuilders[k]!(ictx)])) as Record<Interior["key"], () => Interior>,
+  Object.fromEntries(
+    (Object.keys(PLACE_CODE) as Interior["key"][]).map((k) => [
+      k,
+      () => {
+        REAL_MESH.on++;
+        try {
+          return placeBuilders[k]!(ictx);
+        } finally {
+          REAL_MESH.on--;
+        }
+      },
+    ]),
+  ) as Record<Interior["key"], () => Interior>,
   {
     entered: (i, f) => {
+      // (floors built on the way up are made real too)
+      if (!realInside) (realInside = true), REAL_MESH.on++;
       i.setTheme?.(theme);
       // its panorama may have been lent to another place meanwhile
       refreshView(i);
@@ -1097,6 +1120,7 @@ const interiors = new InteriorManager(
       playEntryFilm(i, f);
     },
     left: () => {
+      if (realInside) (realInside = false), REAL_MESH.on--;
       cine.stop(false);
       venues.close();
       hud.leaveInterior();
@@ -1298,7 +1322,7 @@ onFoot.collide = (x, z) => {
   // on the rock: the prison's own walls and bars
   if (inPrison) return !prison.free(x, z, 0.28);
   // on the Golden Gate: between its railings
-  if (goldenGate.onDeck(x, z)) return false;
+  if (goldenGate.onDeck(x, z)) return goldenGate.footBlocked(x, z);
   // across it, the beach town (and the tunnel there)
   if (keys.owns(x, z)) return keys.blocked(x, z) || dynamicHit(x, z);
   // in the woods across it: trunks, rocks, the creek, the cliffs
@@ -2651,6 +2675,8 @@ if (new URLSearchParams(location.search).has("debug")) {
       finish,
       grade,
       scene3: scene,
+      /** Out of the place you are in (tests). */
+      leavePlace: () => leavePlace(),
       ray,
       composer,
       setSamples: (n: number) => renderPass.setSamples(n),
@@ -3041,6 +3067,15 @@ let gtaFurniture: { type: string; x: number; z: number; y: number }[] | null = n
 /** The game's keys for the street's people drawn in 3D (src/gta/people3d.ts). */
 const gtaKeys = new WeakMap<Snark, string>();
 let gtaKeyN = 0;
+/** Shown and in the street's scene (every parent visible, the scene at the top). */
+const gtaTmp = new THREE.Vector3();
+function streetShown(o: THREE.Object3D) {
+  for (let p: THREE.Object3D | null = o; p; p = p.parent) {
+    if (!p.visible) return false;
+    if (p === scene) return true;
+  }
+  return false;
+}
 /** Who already shouted at your car, until when (ms). */
 const gtaShouted = new WeakMap<Snark, number>();
 const GTA_SHOUTS = ["HEY!", "WATCH IT!", "Slow down!", "Shielded driving, please!", "My parcel!", "Not on the pavement!"];
@@ -3123,6 +3158,26 @@ gta = new GtaMode({
         seat: () => s.seatHeight,
         hide: (on) => s.set3D(on),
         alive: () => s.root.visible && s.root.parent === scene && s.state !== "riding",
+      });
+    }
+    // the cut-outs made elsewhere (the woods' hikers, visitors, the rides' queues, the parade): in 3D
+    // too while they stand in the street, at their place in the world
+    const inDirector = new Set(director.snarks);
+    for (const s of Snark.live) {
+      if (inDirector.has(s) || s.state === "riding" || !streetShown(s.root)) continue;
+      s.root.getWorldPosition(gtaTmp);
+      if ((gtaTmp.x - x) ** 2 + (gtaTmp.z - z) ** 2 > r * r) continue;
+      let k = gtaKeys.get(s);
+      if (!k) gtaKeys.set(s, (k = `s${++gtaKeyN}`));
+      out.push({
+        key: k,
+        id: s.id,
+        pos: (o) => s.root.getWorldPosition(o),
+        down: () => s.down,
+        face: () => s.faceDir,
+        seat: () => s.seatHeight,
+        hide: (on) => s.set3D(on),
+        alive: () => Snark.live.has(s) && streetShown(s.root),
       });
     }
     const crowd = crowdOf();
@@ -3629,6 +3684,7 @@ function frameBody(stepDt?: number) {
   sky.update(t, sim, camQuat, camRight);
   if (!walking) sky.aim(rig.persp);
   goldenGate.update(sim);
+  bayMarks.update();
   walletCrowns.update(dt, t);
   forest.update(sim, t, cam, focus, theme === "night", walking, wide);
   cemetery.update(sim, t, cam, focus, theme === "night", walking, wide);

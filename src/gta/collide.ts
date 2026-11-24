@@ -249,7 +249,12 @@ export class StreetSolid {
       fz = (z - this.z0) / this.cell - 0.5;
     const i = Math.floor(fx),
       j = Math.floor(fz);
-    if (i < 0 || j < 0 || i >= this.size - 1 || j >= this.size - 1) return -1;
+    if (i < 0 || j < 0 || i >= this.size - 1 || j >= this.size - 1) {
+      // (the picture's last cell: a picture beyond it that covers the spot answers instead — the
+      // board's edge across the Orchard Tunnel read as a wall, a car driving north stopped dead there)
+      for (const m of this.more) if (m.sdf && x >= m.area.x0 && x <= m.area.x1 && z >= m.area.z0 && z <= m.area.z1) return m.dist(x, z);
+      return -1;
+    }
     const u = fx - i,
       v = fz - j;
     const N = this.size;

@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { toObject } from "../voxel/mesher";
 import { C, VoxelModel } from "../voxel/model";
+import { realBird, realDeer } from "../real/animals";
+/** (realistic deer and birds: src/scene/real/animals.ts; ?real=0 the voxels) */
+const REAL = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
 import { creekAt, F, FALLS, Land, rnd, SITES, trailDist, WATER } from "./land";
 
 /**
@@ -144,8 +147,8 @@ export class Wildlife {
     herds.forEach(([hx, hz, n], hi) => {
       for (let i = 0; i < n; i++) {
         const buck = i === 0 && hi % 2 === 0;
-        const up = toObject(deerModel("up", buck));
-        const down = toObject(deerModel("down", buck));
+        const up = REAL ? realDeer("up", buck) : toObject(deerModel("up", buck));
+        const down = REAL ? realDeer("down", buck) : toObject(deerModel("down", buck));
         const root = new THREE.Group();
         root.add(up, down);
         root.scale.setScalar(0.6 * (buck ? 1.12 : 1));
@@ -160,7 +163,7 @@ export class Wildlife {
 
     // ravens circling high, small birds hopping between treetops
     for (let i = 0; i < 4; i++) {
-      const frames = [toObject(birdModel("#1a1a22", 5, true)), toObject(birdModel("#1a1a22", 5, false))];
+      const frames = REAL ? [realBird("#1a1a22", 5, true), realBird("#1a1a22", 5, false)] : [toObject(birdModel("#1a1a22", 5, true)), toObject(birdModel("#1a1a22", 5, false))];
       const root = new THREE.Group();
       frames.forEach((f) => root.add(f));
       root.scale.setScalar(1.6);
@@ -174,7 +177,7 @@ export class Wildlife {
     }
     for (let i = 0; i < 14; i++) {
       const col = ["#c84a2a", "#3a5aa8", "#7a6a4a", "#e8c040"][i % 4];
-      const frames = [toObject(birdModel(col, 2, true)), toObject(birdModel(col, 2, false))];
+      const frames = REAL ? [realBird(col, 2, true), realBird(col, 2, false)] : [toObject(birdModel(col, 2, true)), toObject(birdModel(col, 2, false))];
       const root = new THREE.Group();
       frames.forEach((f) => root.add(f));
       this.group.add(root);

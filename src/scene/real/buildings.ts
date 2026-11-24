@@ -19,7 +19,8 @@ export type Slot = "f001" | "f005" | "f006" | "f017" | "f018" | "f019" | "f020" 
 export const SLOTS: Slot[] = ["f001", "f005", "f006", "f017", "f018", "f019", "f020", "plaster", "brick", "brickLight", "concrete", "roof", "tile", "wood", "metal", "glass", "shop", "fabric", "awning", "neon"];
 /** Slots left out of the game's solid shape (an awning over the pavement is walked under, not into). */
 export const NO_FIELD = new Set<string>(["awning"]);
-export const isSlot = (k: string): k is Slot => (SLOTS as string[]).includes(k);
+// (`lm.…`: the landmarks' slots, src/scene/real/markkit.ts / marksmat.ts)
+export const isSlot = (k: string): k is Slot => (SLOTS as string[]).includes(k) || k.startsWith("lm.");
 
 /** The texture set behind each slot (null: no photographed set). */
 export const SLOT_SET: Record<Slot, string | null> = {

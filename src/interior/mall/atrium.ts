@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { hash } from "../../scene/voxel/model";
+import { foliageCards } from "../../scene/real/trees";
 import { CZ, FH, LEVELS, MallKit, RAIL, ROOF, VX, VZ0, VZ1, X0, X1, Z0, Z1 } from "./kit";
 import { marbleTex, tiledMat, woodTex } from "./tex";
 
@@ -10,46 +11,46 @@ import { marbleTex, tiledMat, woodTex } from "./tex";
  * show, the glass roof onto the real sky, and the escalators criss-crossing the void.
  */
 
-const GREENS = ["#2e6b36", "#3b8040", "#4c9446", "#2a5d33", "#5fa84c", "#7cbd58", "#356f3a", "#46874a"];
+export const GREENS = ["#2e6b36", "#3b8040", "#4c9446", "#2a5d33", "#5fa84c", "#7cbd58", "#356f3a", "#46874a"];
 const BLOOM = ["#ff8ac8", "#ffffff", "#ffd84a", "#ff6a5a", "#c89aff"];
 
-/** A shrub: a few leaf cubes, now and then a flower. */
-export function bush(k: MallKit, x: number, y: number, z: number, s: number, seed: number) {
-  const n = 3 + Math.floor(hash(seed, 1, 3, 5) * 4);
-  for (let i = 0; i < n; i++) {
-    const r = hash(seed, i, 7, 1);
-    const sz = s * (0.45 + r * 0.55);
-    k.boxR(k.leaf, GREENS[Math.floor(hash(seed, i, 2, 2) * GREENS.length)], sz, sz * 0.85, sz, x + (hash(seed, i, 3, 3) - 0.5) * s, y + sz * 0.42 + hash(seed, i, 4, 4) * s * 0.4, z + (hash(seed, i, 5, 5) - 0.5) * s, 0, r * 1.6);
-  }
-  if (hash(seed, 9, 9, 9) > 0.6) for (let i = 0; i < 3; i++) k.box(k.paint, BLOOM[Math.floor(hash(seed, i, 6, 6) * BLOOM.length)], 0.09, 0.09, 0.09, x + (hash(seed, i, 8, 1) - 0.5) * s, y + s * 0.8, z + (hash(seed, i, 8, 2) - 0.5) * s);
+/**
+ * The realistic pass: leaves are leaf cards (src/scene/real/trees.ts foliageCards), not leaf cubes —
+ * merged into the kit's floor like everything else (one draw for the leaves of a floor).
+ */
+function leaves(k: MallKit, blobs: Parameters<typeof foliageCards>[0], seed: number) {
+  const f = foliageCards(blobs, seed);
+  k.geo(f.mat, "#ffffff", f.geometry);
 }
 
-/** A tree: trunk, two boughs, a cloud of leaf cubes. */
+/** A shrub: a mass of leaves, now and then a few flowers. */
+export function bush(k: MallKit, x: number, y: number, z: number, s: number, seed: number) {
+  leaves(k, [{ c: new THREE.Vector3(x, y + s * 0.42, z), rad: new THREE.Vector3(s * 0.55, s * 0.4, s * 0.55), n: 4 + Math.round(s * 3), size: [s * 0.55, s * 0.9] }], seed);
+  if (hash(seed, 9, 9, 9) > 0.6) for (let i = 0; i < 3; i++) k.cyl(k.paint, BLOOM[Math.floor(hash(seed, i, 6, 6) * BLOOM.length)], 0.05, 0.03, 0.06, x + (hash(seed, i, 8, 1) - 0.5) * s, y + s * 0.78, z + (hash(seed, i, 8, 2) - 0.5) * s, 7);
+}
+
+/** A tree: a tapering trunk, two boughs, a crown of leaves. */
 export function tree(k: MallKit, x: number, y: number, z: number, h: number, seed: number) {
   const tw = 0.12 + h * 0.025;
-  k.box(k.paint, "#6a4a32", tw, h * 0.72, tw, x, y, z, hash(seed, 1, 1, 1));
+  k.cyl(k.paint, "#6a4a32", tw * 0.32, tw * 0.55, h * 0.72, x, y, z, 9);
   for (let b = 0; b < 2; b++) {
     const a = hash(seed, b, 2, 1) * Math.PI * 2;
-    k.boxR(k.paint, "#6a4a32", tw * 0.6, h * 0.3, tw * 0.6, x + Math.sin(a) * h * 0.08, y + h * 0.55, z + Math.cos(a) * h * 0.08, Math.cos(a) * 0.6, 0, -Math.sin(a) * 0.6);
+    _m2.compose(new THREE.Vector3(x + Math.sin(a) * h * 0.08, y + h * 0.55, z + Math.cos(a) * h * 0.08), new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.cos(a) * 0.6, 0, -Math.sin(a) * 0.6, "YXZ")), new THREE.Vector3(1, 1, 1));
+    k.geo(k.paint, "#6a4a32", new THREE.CylinderGeometry(tw * 0.16, tw * 0.3, h * 0.3, 7), _m2.clone());
   }
-  const n = 9 + Math.floor(h * 1.5);
-  for (let i = 0; i < n; i++) {
-    const a = hash(seed, i, 3, 3) * Math.PI * 2,
-      r = Math.sqrt(hash(seed, i, 4, 4)) * h * 0.3;
-    const sz = h * (0.12 + hash(seed, i, 5, 5) * 0.12);
-    k.boxR(k.leaf, GREENS[Math.floor(hash(seed, i, 6, 6) * GREENS.length)], sz, sz * 0.8, sz, x + Math.sin(a) * r, y + h * (0.68 + hash(seed, i, 7, 7) * 0.3), z + Math.cos(a) * r, 0, a);
+  const blobs: Parameters<typeof foliageCards>[0] = [{ c: new THREE.Vector3(x, y + h * 0.8, z), rad: new THREE.Vector3(h * 0.32, h * 0.2, h * 0.32), n: 8 + Math.round(h * 3), size: [h * 0.22, h * 0.36] }];
+  for (let i = 0; i < 2; i++) {
+    const a = hash(seed, i, 3, 3) * Math.PI * 2;
+    blobs.push({ c: new THREE.Vector3(x + Math.sin(a) * h * 0.18, y + h * (0.66 + hash(seed, i, 7, 7) * 0.1), z + Math.cos(a) * h * 0.18), rad: new THREE.Vector3(h * 0.18, h * 0.12, h * 0.18), n: 4, size: [h * 0.18, h * 0.28] });
   }
+  leaves(k, blobs, seed);
 }
 
 /** A trailing vine hanging from (x, y, z) down `len` metres, pushed out along (nx, nz). */
 export function vine(k: MallKit, x: number, y: number, z: number, len: number, seed: number, nx = 0, nz = 0) {
-  const n = Math.max(2, Math.round(len / 0.22));
-  for (let i = 0; i < n; i++) {
-    const t = i / n;
-    const s = 0.2 - t * 0.06;
-    k.boxR(k.leaf, GREENS[(seed + i) % GREENS.length], s, 0.22, s, x + (hash(seed, i, 1, 9) - 0.5) * 0.12 + nx * 0.06, y - i * 0.2, z + (hash(seed, i, 2, 9) - 0.5) * 0.12 + nz * 0.06, 0, hash(seed, i, 3, 9) * 2);
-  }
+  leaves(k, [{ c: new THREE.Vector3(x + nx * 0.08, y - len / 2, z + nz * 0.08), rad: new THREE.Vector3(0.16, len / 2, 0.16), n: Math.max(2, Math.round(len * 3)), size: [0.32, 0.5] }], seed);
 }
+const _m2 = new THREE.Matrix4();
 
 /** A flat ring sector facing up, angle a from +z towards +x (CylinderGeometry's convention). */
 function ringSector(r0: number, r1: number, a0: number, a1: number, seg = 64) {

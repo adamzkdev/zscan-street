@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { treeObject } from "../../scene/real/trees";
 import { C, E, G, hash, shades, VoxelModel } from "../../scene/voxel/model";
 import { FINE } from "../furniture";
 
@@ -414,6 +415,20 @@ export function palm(seed = 1, planter = true) {
   const v = m(60, 58, 60);
   const cx = 30,
     cz = 30;
+  // the realistic pass: a real palm (ringed trunk, frond cards) in the planter instead of the voxel
+  // trunk and fronds; only the planter is drawn from the voxels (model units: twice the metres)
+  v.realKeep = (_x, y) => planter && y < 7;
+  v.real = () => {
+    const t = treeObject("palm", seed);
+    // (no wider than the voxel palm's fronds, about 4 model metres each way: the place's colliders
+    // are taken from the object's bounds, and a wider crown walled the SkyPark's lift in)
+    const bb = new THREE.Box3().setFromObject(t);
+    const half = Math.max(bb.max.x, -bb.min.x, bb.max.z, -bb.min.z);
+    t.scale.setScalar(Math.min(1.05, 3.6 / Math.max(0.1, half)));
+    t.position.set(0, planter ? 1.0 : 0, 0);
+    t.rotation.y = seed * 1.7;
+    return t;
+  };
   if (planter) {
     v.box(cx - 8, 0, cz - 8, cx + 8, 6, cz + 8, C("#e8e2d4"));
     v.box(cx - 7, 6, cz - 7, cx + 7, 6, cz + 7, C("#4a3020"));

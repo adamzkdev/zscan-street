@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { faces, type Look } from "./faces";
+import { partGeo, type PartKind } from "./snarkgeo";
+import { flushArt, snarkMaterial } from "./snarkmat";
 
 /**
  * A zkSNARK in 3D (src/gta): its bust from its own picture — the hooded head and the shoulders,
@@ -9,9 +11,10 @@ import { faces, type Look } from "./faces";
  * fighting guard, punches, being hit, going down and getting up, sitting, riding, and the gestures
  * (talking with the hands, waving, cheering, a phone at the ear, filming, hands up).
  *
- * The head and the shoulders are each a geometry per zkSNARK; every limb is a box of one colour: the
- * passers-by draw all of theirs in one instanced draw (people3d.ts), a single figure (`SnarkFigure`)
- * has its own.
+ * The head and the shoulders are each a geometry per zkSNARK (faces.ts, snarkgeo.ts); the limbs are
+ * shared shapes — sleeves, mitten hands, jeans, sneakers — in each one's colours: the passers-by
+ * draw all of theirs in one batch (people3d.ts), a single figure (`SnarkFigure`) in one of its own.
+ * One material for everything (snarkmat.ts).
  */
 
 // ---- the skeleton --------------------------------------------------------------------------------
@@ -33,28 +36,41 @@ const ARM_W = 0.135;
 type Slot = "cloth" | "trousers" | "skin" | "shoes" | "sole";
 interface Part {
   j: number;
-  s: [number, number, number];
-  c: [number, number, number];
+  /** Its shape (snarkgeo.ts partGeo, made in the joint's frame). */
+  kind: PartKind;
   col: Slot;
 }
 export const PARTS: Part[] = [
-  { j: J.hips, s: [0.32, 0.15, 0.24], c: [0, 0.035, 0], col: "trousers" },
-  { j: J.shR, s: [ARM_W, 0.21, ARM_W + 0.01], c: [0, -0.075, 0], col: "cloth" },
-  { j: J.shL, s: [ARM_W, 0.21, ARM_W + 0.01], c: [0, -0.075, 0], col: "cloth" },
-  { j: J.elR, s: [0.12, 0.165, 0.125], c: [0, -0.07, 0], col: "cloth" },
-  { j: J.elL, s: [0.12, 0.165, 0.125], c: [0, -0.07, 0], col: "cloth" },
-  { j: J.wrR, s: [0.115, 0.105, 0.105], c: [0, -0.04, 0.008], col: "skin" },
-  { j: J.wrL, s: [0.115, 0.105, 0.105], c: [0, -0.04, 0.008], col: "skin" },
-  { j: J.hipR, s: [0.155, 0.23, 0.165], c: [0, -0.09, 0], col: "trousers" },
-  { j: J.hipL, s: [0.155, 0.23, 0.165], c: [0, -0.09, 0], col: "trousers" },
-  { j: J.knR, s: [0.145, 0.21, 0.155], c: [0, -0.09, 0], col: "trousers" },
-  { j: J.knL, s: [0.145, 0.21, 0.155], c: [0, -0.09, 0], col: "trousers" },
-  // chunky trainers: the upper, and a sole a shade lighter that shows all round
-  { j: J.anR, s: [0.165, 0.085, 0.27], c: [0, -0.018, 0.045], col: "shoes" },
-  { j: J.anL, s: [0.165, 0.085, 0.27], c: [0, -0.018, 0.045], col: "shoes" },
-  { j: J.anR, s: [0.175, 0.035, 0.285], c: [0, -0.07, 0.045], col: "sole" },
-  { j: J.anL, s: [0.175, 0.035, 0.285], c: [0, -0.07, 0.045], col: "sole" },
+  { j: J.hips, kind: "hips", col: "trousers" },
+  { j: J.shR, kind: "upper", col: "cloth" },
+  { j: J.shL, kind: "upper", col: "cloth" },
+  { j: J.elR, kind: "fore", col: "cloth" },
+  { j: J.elL, kind: "fore", col: "cloth" },
+  { j: J.wrR, kind: "handR", col: "skin" },
+  { j: J.wrL, kind: "handL", col: "skin" },
+  { j: J.hipR, kind: "thigh", col: "trousers" },
+  { j: J.hipL, kind: "thigh", col: "trousers" },
+  { j: J.knR, kind: "shin", col: "trousers" },
+  { j: J.knL, kind: "shin", col: "trousers" },
+  // sneakers: the upper in the shoe's colour, the sole, its laces and its stripe in the sole's
+  { j: J.anR, kind: "shoe", col: "shoes" },
+  { j: J.anL, kind: "shoe", col: "shoes" },
+  { j: J.anR, kind: "sole", col: "sole" },
+  { j: J.anL, kind: "sole", col: "sole" },
 ];
+/** The kinds of limb, each one shape for everybody. */
+export const PART_KINDS: PartKind[] = ["hips", "upper", "fore", "handR", "handL", "thigh", "shin", "shoe", "sole"];
+const partGeos = new Map<PartKind, THREE.BufferGeometry>();
+/** A limb's shape (made once). */
+export function partShape(kind: PartKind) {
+  let g = partGeos.get(kind);
+  if (!g) {
+    g = partGeo(kind);
+    g.userData.shared = true;
+    partGeos.set(kind, g);
+  }
+  return g;
+}
 export const NPARTS = PARTS.length;
 
 /** What a body is doing: everything the pose is made from. */
@@ -426,11 +442,12 @@ export function pose(a: Act, look: Look, out: THREE.Matrix4[]) {
   }
 }
 
-/** A limb's matrix (a unit box made its size, at its place) from the joints'. */
+/** A limb's matrix from the joints' (its shape is made in its joint's frame; the hips as wide as the body). */
 export function partMatrix(i: number, joints: THREE.Matrix4[], look: Look, out: THREE.Matrix4) {
   const p = PARTS[i];
-  const k = i === 0 ? Math.max(0.8, (look.halfW * 2) / 0.42) : 1;
-  local.compose(v.set(p.c[0], p.c[1], p.c[2]), q.identity(), v2.set(p.s[0] * k, p.s[1], p.s[2]));
+  if (i !== 0) return out.copy(joints[p.j]);
+  const k = Math.min(1.25, Math.max(0.85, (look.halfW * 2) / 0.36));
+  local.compose(v.set(0, 0, 0), q.identity(), v2.set(k, 1, Math.min(1.15, Math.max(0.9, k * 0.95))));
   return out.multiplyMatrices(joints[p.j], local);
 }
 
@@ -446,78 +463,10 @@ export function partColor(look: Look, i: number) {
   return look[PARTS[i].col];
 }
 
-/** The box every limb is drawn with (its vertical edges cut: reads as a limb, not a crate). */
-let box: THREE.BufferGeometry | null = null;
-export function partBox() {
-  if (box) return box;
-  const k = 0.32;
-  const ring: [number, number][] = [
-    [-0.5 + k / 2, -0.5],
-    [0.5 - k / 2, -0.5],
-    [0.5, -0.5 + k / 2],
-    [0.5, 0.5 - k / 2],
-    [0.5 - k / 2, 0.5],
-    [-0.5 + k / 2, 0.5],
-    [-0.5, 0.5 - k / 2],
-    [-0.5, -0.5 + k / 2],
-  ];
-  const pos: number[] = [],
-    nor: number[] = [];
-  const quad = (a: number[], b: number[], c: number[], d: number[], n: number[]) => {
-    for (const p of [a, b, c, a, c, d]) pos.push(...p), nor.push(...n);
-  };
-  for (let i = 0; i < 8; i++) {
-    const [x0, z0] = ring[i],
-      [x1, z1] = ring[(i + 1) % 8];
-    const nx = z1 - z0,
-      nz = -(x1 - x0);
-    const l = Math.hypot(nx, nz);
-    quad([x0, -0.5, z0], [x0, 0.5, z0], [x1, 0.5, z1], [x1, -0.5, z1], [nx / l, 0, nz / l]);
-  }
-  for (const [y, s] of [
-    [0.5, 1],
-    [-0.5, -1],
-  ] as const)
-    for (let i = 1; i < 7; i++) {
-      const a = ring[0],
-        b = ring[i],
-        c = ring[i + 1];
-      for (const p of [a, b, c]) pos.push(p[0], y, p[1]), nor.push(0, s, 0);
-    }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
-  // (each triangle wound to face its normal's way)
-  const p = g.getAttribute("position").array as Float32Array;
-  const a = new THREE.Vector3(),
-    b = new THREE.Vector3(),
-    c = new THREE.Vector3(),
-    n = new THREE.Vector3();
-  for (let i = 0; i < p.length; i += 9) {
-    a.fromArray(p, i);
-    b.fromArray(p, i + 3);
-    c.fromArray(p, i + 6);
-    n.fromArray(nor, i);
-    if (b.sub(a).cross(c.sub(a)).dot(n) < 0)
-      for (let k2 = 0; k2 < 3; k2++) {
-        const tmp = p[i + 3 + k2];
-        p[i + 3 + k2] = p[i + 6 + k2];
-        p[i + 6 + k2] = tmp;
-      }
-  }
-  g.computeBoundingSphere();
-  g.userData.shared = true;
-  box = g;
-  return g;
-}
-
-let partMat: THREE.MeshStandardMaterial | null = null;
-let bustMat: THREE.MeshStandardMaterial | null = null;
+/** The figures' one material (snarkmat.ts): the art atlas, the fabrics, the sheen. */
 export function figureMaterials() {
-  partMat ??= new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0 });
-  bustMat ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0 });
-  partMat.userData.shared = bustMat.userData.shared = true;
-  return { part: partMat, bust: bustMat };
+  const m = snarkMaterial();
+  return { part: m, bust: m };
 }
 
 // ---- one figure ----------------------------------------------------------------------------------
@@ -532,9 +481,13 @@ export class SnarkFigure {
   private inner = new THREE.Group();
   readonly act = newAct();
   look: Look;
-  private parts: THREE.InstancedMesh;
-  private head: THREE.Mesh;
-  private body: THREE.Mesh;
+  /** Its limbs, its shoulders and its head: one batch, one draw. */
+  private batch: THREE.BatchedMesh;
+  private partIds: number[] = [];
+  private headGeo = -1;
+  private bodyGeo = -1;
+  private headId = -1;
+  private bodyId = -1;
   private joints = Array.from({ length: JOINTS }, () => new THREE.Matrix4());
   private m = new THREE.Matrix4();
   private c = new THREE.Color();
@@ -547,38 +500,62 @@ export class SnarkFigure {
   }
 
   constructor(readonly id: number) {
-    const mats = figureMaterials();
     this.look = faces.lookNow(id);
     faces.pin(id);
-    this.parts = new THREE.InstancedMesh(partBox(), mats.part, NPARTS);
-    this.parts.castShadow = true;
-    this.parts.frustumCulled = false;
-    this.head = new THREE.Mesh(this.look.head, mats.bust);
-    this.body = new THREE.Mesh(this.look.body, mats.bust);
-    for (const m of [this.head, this.body]) {
-      m.castShadow = true;
-      m.matrixAutoUpdate = false;
-      m.frustumCulled = false;
+    let verts = 0,
+      idx = 0;
+    for (const k of PART_KINDS) {
+      const g = partShape(k);
+      verts += g.getAttribute("position").count;
+      idx += g.getIndex()!.count;
     }
-    this.inner.add(this.parts, this.body, this.head);
+    const lv = this.look.head.getAttribute("position").count + this.look.body.getAttribute("position").count;
+    const li = this.look.head.getIndex()!.count + this.look.body.getIndex()!.count;
+    // (room for its own look twice: the stand-in, then its picture)
+    this.batch = new THREE.BatchedMesh(NPARTS + 2, verts + lv * 2 + 4000, idx + li * 2 + 12000, snarkMaterial());
+    this.batch.castShadow = true;
+    this.batch.frustumCulled = false;
+    this.batch.perObjectFrustumCulled = false;
+    this.batch.sortObjects = false;
+    const kindId = new Map<PartKind, number>();
+    for (const k of PART_KINDS) kindId.set(k, this.batch.addGeometry(partShape(k)));
+    for (let i = 0; i < NPARTS; i++) this.partIds.push(this.batch.addInstance(kindId.get(PARTS[i].kind)!));
+    this.wearLook(this.look);
+    this.inner.add(this.batch);
     this.root.add(this.inner);
     this.root.name = "gta:snark";
-    this.dress();
     if (!this.look.real)
       void faces.wait(id).then((l) => {
         if (this.gone || !l.real) return;
-        this.look = l;
-        this.head.geometry = l.head;
-        this.body.geometry = l.body;
-        this.dress();
+        this.wearLook(l);
       });
     this.pose();
   }
 
-  private dress() {
-    this.inner.scale.setScalar(this.look.bh);
-    for (let i = 0; i < NPARTS; i++) this.parts.setColorAt(i, this.c.setHex(partColor(this.look, i), THREE.SRGBColorSpace));
-    if (this.parts.instanceColor) this.parts.instanceColor.needsUpdate = true;
+  /** Its head and shoulders (the stand-in, then its own), its colours. */
+  private wearLook(l: Look) {
+    const b = this.batch;
+    if (this.headId >= 0) {
+      b.deleteInstance(this.headId);
+      b.deleteInstance(this.bodyId);
+      b.deleteGeometry(this.headGeo);
+      b.deleteGeometry(this.bodyGeo);
+    }
+    this.look = l;
+    try {
+      this.headGeo = b.addGeometry(l.head);
+      this.bodyGeo = b.addGeometry(l.body);
+    } catch {
+      b.optimize();
+      this.headGeo = b.addGeometry(l.head);
+      this.bodyGeo = b.addGeometry(l.body);
+    }
+    this.headId = b.addInstance(this.headGeo);
+    this.bodyId = b.addInstance(this.bodyGeo);
+    this.inner.scale.setScalar(l.bh);
+    for (let i = 0; i < NPARTS; i++) b.setColorAt(this.partIds[i], this.c.setHex(partColor(l, i), THREE.SRGBColorSpace));
+    b.setColorAt(this.headId, this.c.setRGB(1, 1, 1));
+    b.setColorAt(this.bodyId, this.c.setRGB(1, 1, 1));
   }
 
   wave(s = 1.6) {
@@ -602,18 +579,19 @@ export class SnarkFigure {
   }
 
   pose() {
+    // (its picture into the art atlas, if it was just read)
+    flushArt();
     pose(this.act, this.look, this.joints);
-    for (let i = 0; i < NPARTS; i++) this.parts.setMatrixAt(i, partMatrix(i, this.joints, this.look, this.m));
-    this.parts.instanceMatrix.needsUpdate = true;
-    bodyMatrix(this.joints, this.body.matrix);
-    headMatrix(this.joints, this.head.matrix);
-    this.body.matrixWorldNeedsUpdate = this.head.matrixWorldNeedsUpdate = true;
+    const b = this.batch;
+    for (let i = 0; i < NPARTS; i++) b.setMatrixAt(this.partIds[i], partMatrix(i, this.joints, this.look, this.m));
+    b.setMatrixAt(this.bodyId, bodyMatrix(this.joints, this.m));
+    b.setMatrixAt(this.headId, headMatrix(this.joints, this.m));
   }
 
   dispose() {
     if (!this.gone) faces.unpin(this.id);
     this.gone = true;
     this.root.removeFromParent();
-    this.parts.dispose();
+    this.batch.dispose();
   }
 }

@@ -3,6 +3,9 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { BAY, CITY, CURB, PARK, RIVER } from "../city/plan";
 import { MATERIALS, meshModel } from "../voxel/mesher";
 import { C, E, G, VOX, VoxelModel } from "../voxel/model";
+import { realDrone, realHeli, realParcel, realPlane } from "../real/aircraft";
+/** (realistic aircraft: src/scene/real/aircraft.ts; ?real=0 the voxel ones) */
+const REAL = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
 import type { AliveCtx, AliveFrame, AlivePart } from "./types";
 
 /**
@@ -29,14 +32,25 @@ export class Fleet {
   readonly meshes: THREE.InstancedMesh[] = [];
   readonly m: THREE.Matrix4[] = [];
   constructor(
-    model: VoxelModel,
+    model: VoxelModel | THREE.Object3D,
     readonly count: number,
     parent: THREE.Object3D,
     readonly scale = 1,
   ) {
-    for (const [kind, geo] of Object.entries(meshModel(model)) as [keyof typeof MATERIALS, THREE.BufferGeometry][]) {
-      const im = new THREE.InstancedMesh(geo, MATERIALS[kind], count);
+    // a voxel model (meshed by material), or a realistic one: each of its meshes instanced as it is
+    const pairs: [THREE.BufferGeometry, THREE.Material][] = [];
+    if ((model as THREE.Object3D).isObject3D) {
+      const o = model as THREE.Object3D;
+      o.updateMatrixWorld(true);
+      o.traverse((c) => {
+        const m = c as THREE.Mesh;
+        if (m.isMesh) pairs.push([m.geometry.clone().applyMatrix4(m.matrixWorld), m.material as THREE.Material]);
+      });
+    } else for (const [kind, geo] of Object.entries(meshModel(model as VoxelModel)) as [keyof typeof MATERIALS, THREE.BufferGeometry][]) pairs.push([geo, MATERIALS[kind]]);
+    for (const [geo, mat] of pairs) {
+      const im = new THREE.InstancedMesh(geo, mat, count);
       im.frustumCulled = false;
+      im.castShadow = !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial;
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       for (let i = 0; i < count; i++) im.setMatrixAt(i, _hidden);
       this.meshes.push(im);
@@ -543,8 +557,8 @@ class Air implements AlivePart {
     g.name = "alive-air";
     ctx.group.add(g);
     // helicopters: two news choppers (white and red), the gold tour helicopter of the sail hotel
-    this.news = new Fleet(heliModel("#f2f2f6", "#d0202a"), 2, g);
-    this.tourF = new Fleet(heliModel("#1e1d24", "#f4b728"), 1, g);
+    this.news = new Fleet(REAL ? realHeli("#f2f2f6", "#d0202a") : heliModel("#f2f2f6", "#d0202a"), 2, g);
+    this.tourF = new Fleet(REAL ? realHeli("#1e1d24", "#f4b728") : heliModel("#1e1d24", "#f4b728"), 1, g);
     const rmat = new THREE.MeshStandardMaterial({ color: "#2a2a30", roughness: 0.6, transparent: true, opacity: 0.85 });
     this.rotors = new THREE.InstancedMesh(rotorGeo(), rmat, 3);
     this.tails = new THREE.InstancedMesh(new THREE.BoxGeometry(1.7, 0.18, 0.05), rmat, 3);
@@ -587,13 +601,13 @@ class Air implements AlivePart {
       this.tourLen = this.tourPath.getLength();
     }
     // airliners
-    this.planes = new Fleet(planeModel(), LANES.length, g, 3);
+    this.planes = new Fleet(REAL ? realPlane() : planeModel(), LANES.length, g, 3);
     LANES.forEach((_, i) => this.planeT.push(-i * 22 - 4));
     // drones
     this.roofs = new Roofs(ctx);
     const nd = Math.min(this.roofs.tops.length, Math.round(14 + 22 * ctx.budget));
-    this.drones = new Fleet(droneModel(), nd, g, 1.1);
-    this.parcels = new Fleet(parcelModel(), nd, g, 1.6);
+    this.drones = new Fleet(REAL ? realDrone() : droneModel(), nd, g, 1.1);
+    this.parcels = new Fleet(REAL ? realParcel() : parcelModel(), nd, g, 1.6);
     for (let i = 0; i < nd; i++) {
       const from = this.roofs.tops[Math.floor(Math.random() * this.roofs.tops.length)].clone();
       const d: Drone = { from, to: from.clone(), cruise: 30, phase: 3, k: 0, hold: rand(0, 4), p: from.clone(), yaw: 0, carry: Math.random() < 0.5, seed: Math.random() * 100 };

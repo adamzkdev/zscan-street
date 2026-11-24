@@ -2,6 +2,9 @@
 
 All from [ambientCG](https://ambientcg.com) by Lennart Demes, under the Creative Commons CC0 1.0 Universal licence (public domain).
 
+- [Marble012](https://ambientcg.com/view?id=Marble012): marble floors
+- [WoodFloor051](https://ambientcg.com/view?id=WoodFloor051): parquet
+- [Carpet016](https://ambientcg.com/view?id=Carpet016): carpet
 - [Asphalt031](https://ambientcg.com/view?id=Asphalt031): road asphalt
 - [Asphalt025C](https://ambientcg.com/view?id=Asphalt025C): road asphalt, worn
 - [PavingStones130](https://ambientcg.com/view?id=PavingStones130): pavers (hexagonal)
@@ -37,3 +40,12 @@ All from [ambientCG](https://ambientcg.com) by Lennart Demes, under the Creative
 - [LeafSet010](https://ambientcg.com/view?id=LeafSet010): leaves (maple)
 - [LeafSet026](https://ambientcg.com/view?id=LeafSet026): leaves (long: palm leaflets)
 - [PineNeedles001](https://ambientcg.com/view?id=PineNeedles001): pine needles
+- [Bricks008](https://ambientcg.com/view?id=Bricks008): white stone ashlar (the museum, the tombs)
+- [Bricks083](https://ambientcg.com/view?id=Bricks083): weathered sandstone courses (the Colosseum, the pyramid)
+- [Bricks084](https://ambientcg.com/view?id=Bricks084): sandstone ashlar (Westminster)
+- [Marble021](https://ambientcg.com/view?id=Marble021): white marble (columns, steps)
+- [Metal024](https://ambientcg.com/view?id=Metal024): worn painted iron (the Eiffel Tower, tinted)
+- [Concrete012](https://ambientcg.com/view?id=Concrete012): light concrete (the stadium)
+- [Rock030](https://ambientcg.com/view?id=Rock030): rock (the bluff, the woods, the falls)
+- [Fabric030](https://ambientcg.com/view?id=Fabric030): canvas (awnings, umbrellas, loungers)
+- [Planks021](https://ambientcg.com/view?id=Planks021): weathered planks (the pier, the boardwalks)

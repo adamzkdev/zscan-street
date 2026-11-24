@@ -155,7 +155,7 @@ export class Plots {
       this.group.remove(f);
       this.free.delete(r.plot);
     }
-    const obj = toObject(toVoxel(m));
+    const obj = toObject(toVoxel(m), { voxel: true });
     // the model's front faces +z: turn it to face its street, its front on the plot's front edge
     const depth = m.d * VOX;
     obj.rotation.y = s.face === "n" ? Math.PI : 0;

@@ -368,7 +368,7 @@ export function buildOrchestra(L: Level, onConductor: () => PickInfo) {
   const glyph = canvasTex(128, 128, (c) => {
     c.clearRect(0, 0, 128, 128);
     c.fillStyle = "#ffffff";
-    c.font = '700 104px "DotGothic16", serif';
+    c.font = '700 104px "Archivo", "Helvetica Neue", serif';
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.fillText("♪", 64, 70);

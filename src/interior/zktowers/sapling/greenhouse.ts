@@ -76,7 +76,7 @@ export function greenhouse(k: SkyKit) {
       }
     }
     k.cyl(f, 0.09, 0.07, 0.16, -3, 0.79, z, "#c86a3a", "matte", 8);
-    k.box(f, 0.3, 0.25, 0.3, -3, 0.95, z, "#3d9440", "matte");
+    k.leaves(f, -3, 1.06, z, 0.2, 0.14, 0.2, 2, [0.12, 0.2]);
     k.solid(f, -6.5, z - 0.8, 0.5, z + 0.8);
   }
 

@@ -1,24 +1,24 @@
 /// <reference lib="webworker" />
 import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CURB } from "../city/plan";
-import { meshModel } from "../voxel/mesher";
-import { VOX, type Kind, type VoxelModel } from "../voxel/model";
-// (the trees are drawn realistic on the main thread now)
-import { beachBar, beachSet, buildLot, hillLetter, lifeguard, pier, rock, sandcastle, saplingPark, towel, tunnel, volleyNet } from "./models";
+import { VOX } from "../voxel/model";
+// (the trees are drawn realistic on the main thread; the voxel builders give the lots' layouts only: signs, doors, lights)
+import { buildLot } from "./models";
+import { kBeachBar, kBeachSet, keysLot, kLetter, kLifeguard, kPark, kPier, kRock, kSandcastle, kTowel, kTunnel, kVolleyNet, type KRGeo, type KSlot, type KW, type Layout } from "../real/keysreal";
 import { beachSpots, faceOut, faceYaw, KBED, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, sandAt } from "./plan";
 
 /**
- * Orchard Keys built off the main thread (src/scene/keys): every lot's model, the street palms and
- * lamps, the parked cars, the beach's huts and umbrellas, the pier, the park and the tunnel, meshed
- * (greedy + AO, as the city's are), put in place and merged per material a 64 m sector at a time.
- * Sent back as compact arrays (byte normals, half-float colours), with the signs, the lamps, the
- * shops' doors and the palms' trunks.
+ * Orchard Keys built off the main thread (src/scene/keys): every lot, the beach's huts, umbrellas,
+ * loungers and bars, the pier, the park, the letters on the bluff and the tunnel — realistic geometry
+ * (src/scene/real/keysreal.ts: metres, UVs for the photographed sets, a material slot per surface),
+ * put in place and merged per slot a 64 m sector at a time. Sent back as compact arrays (byte normals,
+ * half-float colours), with the signs, the lamps, the shops' doors, the trees and the parked cars.
  */
 
 export interface KGeo {
   pos: Float32Array;
   nor: Int8Array;
+  uv: Float32Array;
   col: Uint16Array;
   idx: Uint32Array | Uint16Array;
 }
@@ -42,7 +42,7 @@ export interface KFacade {
   out: [number, number];
 }
 export interface KOut {
-  chunks: { centre: [number, number]; geos: Partial<Record<Kind, KGeo>> }[];
+  chunks: { centre: [number, number]; geos: Partial<Record<KSlot, KGeo>> }[];
   signs: KSignOut[];
   lights: [number, number, number, string][];
   facades: KFacade[];
@@ -59,18 +59,29 @@ export interface KOut {
 }
 
 const toHalf = THREE.DataUtils.toHalfFloat;
-function pack(g: THREE.BufferGeometry, out: Transferable[]): KGeo {
-  const pos = g.getAttribute("position").array as Float32Array;
-  const n = g.getAttribute("normal").array;
-  const c = g.getAttribute("color").array;
-  const nor = new Int8Array(n.length);
-  for (let i = 0; i < n.length; i++) nor[i] = Math.round(n[i] * 127);
-  const col = new Uint16Array(c.length);
-  for (let i = 0; i < c.length; i++) col[i] = toHalf(c[i]);
-  const src = g.getIndex()!.array;
-  const idx = pos.length / 3 <= 65535 ? Uint16Array.from(src) : Uint32Array.from(src);
-  out.push(pos.buffer, nor.buffer, col.buffer, idx.buffer);
-  return { pos, nor, col, idx };
+/** A slot's geometry of a sector, growing as things are put in it. */
+interface Acc {
+  pos: number[];
+  nor: number[];
+  uv: number[];
+  col: number[];
+  idx: number[];
+}
+/** Packed for the main thread, its positions from the sector's centre (the mesh stands there: see keys/index.ts). */
+function pack(a: Acc, cx: number, cz: number, out: Transferable[]): KGeo {
+  const pos = Float32Array.from(a.pos);
+  for (let i = 0; i < pos.length; i += 3) {
+    pos[i] = a.pos[i] - cx;
+    pos[i + 2] = a.pos[i + 2] - cz;
+  }
+  const nor = new Int8Array(a.nor.length);
+  for (let i = 0; i < a.nor.length; i++) nor[i] = Math.round(a.nor[i] * 127);
+  const col = new Uint16Array(a.col.length);
+  for (let i = 0; i < a.col.length; i++) col[i] = toHalf(a.col[i]);
+  const uv = Float32Array.from(a.uv);
+  const idx = pos.length / 3 <= 65535 ? Uint16Array.from(a.idx) : Uint32Array.from(a.idx);
+  out.push(pos.buffer, nor.buffer, uv.buffer, col.buffer, idx.buffer);
+  return { pos, nor, uv, col, idx };
 }
 
 const Y = new THREE.Vector3(0, 1, 0);
@@ -109,8 +120,8 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
       d = hgt[i + 1 + (j + 1) * nx];
     return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
   };
-  const sectors = new Map<string, { centre: [number, number]; parts: Record<Kind, THREE.BufferGeometry[]> }>();
-  const meshed = new Map<string, Partial<Record<Kind, THREE.BufferGeometry>>>();
+  const sectors = new Map<string, { centre: [number, number]; parts: Map<KSlot, Acc> }>();
+  const built = new Map<string, { geos: Partial<Record<KSlot, KRGeo>>; trees: KW["trees"] }>();
   const signs: KSignOut[] = [];
   const lights: KOut["lights"] = [];
   const facades: KFacade[] = [];
@@ -119,18 +130,39 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
   const lampSpots: [number, number, number, number][] = [];
   const circles: [number, number, number][] = [];
   const cars: [number, number, number, number][] = [];
-  /** A model in place: centred on (x, z) at height y, turned by yaw; `key` shares the meshing of copies. */
-  const put = (model: VoxelModel | (() => VoxelModel), x: number, y: number, z: number, yaw: number, key?: string, scale = 1) => {
-    let geos = key ? meshed.get(key) : undefined;
-    if (!geos) {
-      geos = meshModel(typeof model === "function" ? model() : model);
-      if (key) meshed.set(key, geos);
+  /**
+   * A realistic model in place: its frame's origin at (x, y, z), turned by yaw; `key` shares the
+   * building of copies. Its trees go to the list, in place.
+   */
+  const put = (model: () => KW, x: number, y: number, z: number, yaw: number, key?: string) => {
+    let b = key ? built.get(key) : undefined;
+    if (!b) {
+      const K = model();
+      b = { geos: K.out(), trees: K.trees };
+      if (key) built.set(key, b);
     }
-    const mtx = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(Y, yaw), new THREE.Vector3(scale, scale, scale));
+    const c = Math.cos(yaw),
+      sn = Math.sin(yaw);
     const sk = `${Math.floor(x / SECTOR)}|${Math.floor(z / SECTOR)}`;
     let s = sectors.get(sk);
-    if (!s) sectors.set(sk, (s = { centre: [(Math.floor(x / SECTOR) + 0.5) * SECTOR, (Math.floor(z / SECTOR) + 0.5) * SECTOR], parts: { solid: [], glass: [], emit: [] } }));
-    for (const [k, g] of Object.entries(geos) as [Kind, THREE.BufferGeometry][]) s.parts[k].push(g.clone().applyMatrix4(mtx));
+    if (!s) sectors.set(sk, (s = { centre: [(Math.floor(x / SECTOR) + 0.5) * SECTOR, (Math.floor(z / SECTOR) + 0.5) * SECTOR], parts: new Map() }));
+    for (const [k, g] of Object.entries(b.geos) as [KSlot, KRGeo][]) {
+      let a = s.parts.get(k);
+      if (!a) s.parts.set(k, (a = { pos: [], nor: [], uv: [], col: [], idx: [] }));
+      const base = a.pos.length / 3;
+      for (let i = 0; i < g.pos.length; i += 3) {
+        const px = g.pos[i],
+          pz = g.pos[i + 2];
+        a.pos.push(x + px * c + pz * sn, y + g.pos[i + 1], z - px * sn + pz * c);
+        const nx = g.nor[i],
+          nz = g.nor[i + 2];
+        a.nor.push(nx * c + nz * sn, g.nor[i + 1], -nx * sn + nz * c);
+      }
+      for (let i = 0; i < g.uv.length; i++) a.uv.push(g.uv[i]);
+      for (let i = 0; i < g.col.length; i++) a.col.push(g.col[i]);
+      for (let i = 0; i < g.idx.length; i++) a.idx.push(base + g.idx[i]);
+    }
+    for (const [tx, ty, tz, sp, seed] of b.trees) trees.push([x + tx * c + tz * sn, y + ty, z - tx * sn + tz * c, sp, seed]);
   };
   /** Model voxels → world, for a model of size (w, d) placed as above. */
   const world = (w: number, d: number, x: number, y: number, z: number, yaw: number) => (vx: number, vy: number, vz: number) =>
@@ -140,7 +172,20 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
   for (const l of kLots()) {
     const b = buildLot(l);
     const yaw = faceYaw(l.face);
-    put(b.model, l.x, CURB, l.z, yaw);
+    // (the lot realistic, on its voxel layout: the door, the signs where they were)
+    const W = b.model.w,
+      D = b.model.d;
+    const lv = (vx: number, vz: number) => [(vx - W / 2) * VOX, (vz - D / 2) * VOX];
+    const [dx, dz] = lv(b.door[0], b.door[1]);
+    const L: Layout = {
+      doorX: dx,
+      frontZ: dz,
+      signs: b.signs.map((s) => {
+        const [sx, sz] = lv(s.x, s.z);
+        return { text: s.text, x: sx, y: s.y * VOX, z: sz, w: (s.facing === "side" ? 5.4 : s.w) * VOX, h: s.h * VOX, vertical: s.vertical, facing: s.facing };
+      }),
+    };
+    put(() => keysLot(l, L), l.x, CURB, l.z, yaw);
     const at = world(b.model.w, b.model.d, l.x, CURB, l.z, yaw);
     for (const s of b.signs) {
       const p = at(s.x, s.y, s.z);
@@ -245,41 +290,41 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
   // ---- Sapling Park -------------------------------------------------------------------------------
   {
     const P = KPARK;
-    put(saplingPark(P.x1 - P.x0 - 5, P.z1 - P.z0 - 5), (P.x0 + P.x1) / 2, CURB, (P.z0 + P.z1) / 2, 0);
+    put(() => kPark(P.x1 - P.x0 - 5, P.z1 - P.z0 - 5), (P.x0 + P.x1) / 2, CURB, (P.z0 + P.z1) / 2, 0);
   }
 
   // ---- the beach (the same spots the game's beach-goers use: plan.ts beachSpots) ---------------------
   for (const b of beachSpots()) {
     const y = sandAt(b.x, b.z);
     if (b.kind === "set") {
-      put(() => beachSet(b.seed % 12), b.x, y, b.z, b.yaw, `set${b.seed % 12}`);
+      put(() => kBeachSet(b.seed % 12), b.x, y, b.z, b.yaw, `set${b.seed % 12}`);
       circles.push([b.x, b.z, 0.25]);
-    } else if (b.kind === "towel") put(() => towel(b.seed % 16), b.x, y + 0.01, b.z, b.yaw, `towel${b.seed % 16}`);
-    else if (b.kind === "castle") put(() => sandcastle(b.seed % 5), b.x, y - 0.02, b.z, b.yaw, `castle${b.seed % 5}`);
+    } else if (b.kind === "towel") put(() => kTowel(b.seed % 16), b.x, y + 0.01, b.z, b.yaw, `towel${b.seed % 16}`);
+    else if (b.kind === "castle") put(() => kSandcastle(b.seed % 5), b.x, y - 0.02, b.z, b.yaw, `castle${b.seed % 5}`);
     else if (b.kind === "guard") {
-      put(() => lifeguard(b.seed), b.x, y, b.z, b.yaw, `guard${b.seed}`);
+      put(() => kLifeguard(b.seed), b.x, y, b.z, b.yaw, `guard${b.seed}`);
       circles.push([b.x, b.z, 2.4]);
     } else if (b.kind === "court") {
-      put(volleyNet, b.x, y, b.z, b.yaw, "net");
+      put(kVolleyNet, b.x, y, b.z, b.yaw, "net");
       for (const dx of [-4.9, 4.9]) circles.push([b.x + dx, b.z, 0.2]);
     } else if (b.kind === "palm") {
       trees.push([b.x, y - 0.1, b.z, "palm", b.seed]);
       palms.push([b.x, b.z]);
       circles.push([b.x, b.z, 0.4]);
     } else if (b.kind === "bar") {
-      put(beachBar, b.x, y, b.z, b.yaw, "bar");
+      put(kBeachBar, b.x, y, b.z, b.yaw, "bar");
       const p = world(60, 40, b.x, y, b.z, b.yaw)(30, 21.5, 26.2);
       signs.push({ text: b.seed === 1 ? "SHELL BAR" : "TIDE BAR", color: b.seed === 1 ? "#4dffb8" : "#ff4fa3", x: p.x, y: p.y, z: p.z, yaw: b.yaw, w: 30 * VOX, h: 3 * VOX, vertical: false, both: false });
     }
   }
   // the west and east beaches' huts, facing their seas
-  put(() => lifeguard(77), KGRID.west - 14, sandAt(KGRID.west - 14, 330), 330, -Math.PI / 2, "guardW");
-  put(() => lifeguard(91), KGRID.east + 14, sandAt(KGRID.east + 14, 330), 330, Math.PI / 2, "guardE");
+  put(() => kLifeguard(77), KGRID.west - 14, sandAt(KGRID.west - 14, 330), 330, -Math.PI / 2, "guardW");
+  put(() => kLifeguard(91), KGRID.east + 14, sandAt(KGRID.east + 14, 330), 330, Math.PI / 2, "guardE");
   // the pier
   {
     const P = KPIER;
     const len = P.z1 - P.z0;
-    put(pier(len, P.half, P.y, KBED), P.x, KBED, (P.z0 + P.z1) / 2, 0);
+    put(() => kPier(len, P.half, P.y, KBED), P.x, KBED, (P.z0 + P.z1) / 2, 0);
     signs.push({ text: "ORCHARD PIER", color: "#34e7ff", x: P.x, y: P.y + 17 * VOX, z: P.z1 - 40.2 * VOX, yaw: Math.PI, w: 26 * VOX, h: 4 * VOX, vertical: false, both: false });
   }
 
@@ -296,7 +341,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
       const x = x0 + i * pitch + pitch / 2;
       let low = Infinity;
       for (let dx = -2; dx <= 2; dx += 1) for (let dz = -1; dz <= 1; dz += 1) low = Math.min(low, ground(x + dx, z + dz));
-      put(() => hillLetter(ch, px, 16), x, low - 0.3, z, 0, `letter${ch}`);
+      put(() => kLetter(ch, px, 16), x, low - 0.3, z, 0, `letter${ch}`);
       for (let dx = -1.8; dx <= 1.8; dx += 0.9) circles.push([x + dx, z + 0.2, 0.7]);
     }
     lights.push([214, ground(214, z + 4) + 2, z + 5, "#fff2d8"]);
@@ -323,7 +368,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
           trees.push([jx, g - 0.2, jz, R() > 0.5 ? "pine" : "broad", seed]);
           circles.push([jx, jz, 0.45]);
         } else {
-          put(() => rock(seed % 5), jx, g - 0.4, jz, yaw, `rock${seed % 5}`);
+          put(() => kRock(seed % 5), jx, g - 0.4, jz, yaw, `rock${seed % 5}`);
           circles.push([jx, jz, 1.1]);
         }
         seed++;
@@ -345,8 +390,7 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
   {
     const T = KTUNNEL;
     const len = T.z1 - T.z0;
-    const { model } = tunnel(len, T.half, T.top);
-    put(model, T.x, 0.02 - VOX, (T.z0 + T.z1) / 2, 0);
+    put(() => kTunnel(len, T.half, T.top), T.x, 0, (T.z0 + T.z1) / 2, 0);
     const y = 0.02 + (T.top + 1.4) * 1;
     signs.push({ text: "ORCHARD TUNNEL", color: "#f4b728", x: T.x, y: y - 0.2, z: T.z0 - 0.05, yaw: Math.PI, w: 7, h: 0.9, vertical: false, both: false });
     for (let z = T.z0 + 2; z < T.z1; z += 10 / 6 * 6) lights.push([T.x, T.top - 0.3, z, "#ffe6b8"]);
@@ -356,12 +400,8 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
   const transfer: Transferable[] = [];
   const chunks: KOut["chunks"] = [];
   for (const s of sectors.values()) {
-    const geos: Partial<Record<Kind, KGeo>> = {};
-    for (const k of ["solid", "glass", "emit"] as Kind[]) {
-      if (!s.parts[k].length) continue;
-      const g = mergeGeometries(s.parts[k], false);
-      if (g) geos[k] = pack(g, transfer);
-    }
+    const geos: Partial<Record<KSlot, KGeo>> = {};
+    for (const [k, a] of s.parts) if (a.idx.length) geos[k] = pack(a, s.centre[0], s.centre[1], transfer);
     chunks.push({ centre: s.centre, geos });
   }
   const out: KOut = { chunks, signs, lights, facades, palms, trees, lamps: lampSpots, cars, circles, ms: Math.round(performance.now() - t0) };

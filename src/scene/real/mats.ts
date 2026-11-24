@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLASS_NIGHT } from "../voxel/surface";
 import { FACADE, SHOP_CELLS, SLOT_SET, type Slot } from "./buildings";
 import { maps } from "./tex";
+import { markMat } from "./marksmat";
 
 /**
  * The realistic buildings' materials (src/scene/real/buildings.ts makes the geometry): one shared
@@ -50,6 +51,8 @@ const keyed = (m: THREE.Material, slot: Slot) => {
 };
 
 function make(slot: Slot): THREE.Material {
+  // the landmarks' slots (src/scene/real/marksmat.ts)
+  if ((slot as string).startsWith("lm.")) return markMat(slot);
   const F = FACADE[slot];
   if (F) {
     const towers = slot === "f001" || slot === "f005" || slot === "f006" || slot === "f017";
@@ -71,12 +74,19 @@ function make(slot: Slot): THREE.Material {
           "#include <emissivemap_fragment>",
           `#include <emissivemap_fragment>
           {
-            // one window in a few lit by night: its bay and floor drawn
-            vec2 cell = floor(vMapUv * vec2(${F.bays.toFixed(1)}, ${F.floors.toFixed(1)}));
+            // one room in a few lit by night (a wide bay halved: a flat's window), lit as a
+            // room is — inset in its frame, softer at the edges, brighter toward its ceiling, a lamp's
+            // pool to one side — never a flat tile (whole lit cells read as a mosaic of pixels)
+            vec2 gw = vMapUv * vec2(${(F.bay >= 2 ? F.bays * 2 : F.bays).toFixed(1)}, ${F.floors.toFixed(1)});
+            vec2 cell = floor(gw);
+            vec2 fw = fract(gw);
             float h = realHash(cell);
-            float on = step(h, 0.34 * uNight) * realGlass;
-            vec3 warm = mix(vec3(1.0, 0.7, 0.4), vec3(0.62, 0.78, 1.0), step(0.72, realHash(cell + 7.3)));
-            totalEmissiveRadiance += on * warm * (0.38 + 0.4 * realHash(cell + 3.1)) * uNight;
+            float on = step(h, 0.26 * uNight) * realGlass;
+            float frame = smoothstep(0.03, 0.14, fw.x) * smoothstep(0.03, 0.14, 1.0 - fw.x) * smoothstep(0.06, 0.2, fw.y) * smoothstep(0.04, 0.16, 1.0 - fw.y);
+            float lampX = 0.25 + 0.5 * realHash(cell + 5.9);
+            float room = (0.5 + 0.5 * fw.y) * (0.75 + 0.45 * exp(-pow((fw.x - lampX) * 3.2, 2.0)));
+            vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.66, 0.8, 1.0), step(0.75, realHash(cell + 7.3)));
+            totalEmissiveRadiance += on * frame * room * warm * (0.3 + 0.36 * realHash(cell + 3.1)) * uNight;
           }`,
         );
     };

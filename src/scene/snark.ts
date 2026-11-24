@@ -325,6 +325,8 @@ export type SnarkState =
   | "guard";
 
 export class Snark {
+  /** Every zkSNARK cut-out alive (the game draws those in the street in 3D, wherever they were made: hikers, visitors, riders' queues, the parade). */
+  static readonly live = new Set<Snark>();
   readonly root = new THREE.Group();
   /** Camera-facing part: the paper cut-out. */
   readonly visual = new THREE.Group();
@@ -391,6 +393,7 @@ export class Snark {
     art: Art,
   ) {
     this.art = art;
+    Snark.live.add(this);
     holdArt(art);
     const mat = new THREE.MeshBasicMaterial({ map: art.texture, transparent: true, alphaTest: 0.5 });
     nearer(mat, this.near);
@@ -469,6 +472,7 @@ export class Snark {
    * go back to the pool. Safe to call twice; shared things (arm planes, shadow, sprites) are kept.
    */
   dispose() {
+    Snark.live.delete(this);
     if (this.disposed) return;
     this.disposed = true;
     this.root.parent?.remove(this.root);

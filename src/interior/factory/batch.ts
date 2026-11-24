@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { VoxelModel } from "../../scene/voxel/model";
 import { meshModel } from "../../scene/voxel/mesher";
+import { realObject } from "../../scene/real/remesh";
+import { realOn } from "../realvox";
 
 /**
  * Static geometry of the hall, merged: thousands of boxes become one mesh per material. Every box
@@ -88,6 +90,12 @@ const VSOLID = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0
 const VGLASS = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.12, metalness: 0.55 });
 const VEMIT = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
 export function voxObj(m: VoxelModel, scale = 1) {
+  // (the realistic pass: drawn real while the place is built, src/interior/realvox.ts)
+  if (realOn()) {
+    const r = realObject(m);
+    if (scale !== 1) r.traverse((o) => (o as THREE.Mesh).geometry?.scale(scale, scale, scale));
+    return r;
+  }
   const geos = meshModel(m);
   const g = new THREE.Group();
   for (const [kind, geo] of Object.entries(geos) as ["solid" | "glass" | "emit", THREE.BufferGeometry][]) {

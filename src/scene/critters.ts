@@ -2,65 +2,98 @@ import * as THREE from "three";
 import { CITY } from "./city";
 import { nz } from "./city/plan";
 import type { Director } from "./director";
-import { GRID, sprite, type Px } from "./sprites";
 
 /**
- * Pigeons and street cats, drawn on the zkSNARKs' own pixel grid. Pigeons peck about the plaza,
- * the square and the kerb; anyone walking up, or a bus pulling in, sends them flapping off to land
- * somewhere else. Cats doze in their spots, wash, stroll to another, and bolt when someone gets
- * close.
+ * Pigeons and street cats, modelled (branch gta-real: no more pixel sprites): a pigeon's grey body,
+ * its iridescent neck, the wings folded or beating, the pink feet; a cat in its coat, sitting,
+ * loafing or trotting. Each pose is one small merged mesh in vertex colours, swapped as they move
+ * (one draw a critter). Pigeons peck about the plaza, the square and the kerb; anyone walking up,
+ * or a bus pulling in, sends them flapping off to land somewhere else. Cats doze in their spots,
+ * wash, stroll to another, and bolt when someone gets close.
  */
 
-const PX = 1.75 / GRID;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(a: readonly T[]) => a[Math.floor(Math.random() * a.length)];
 
-// ---- pixel art ------------------------------------------------------------------------------------
+// ---- the models (front +x, feet at y 0, metres) --------------------------------------------------------
 
-type Frame = ReturnType<typeof sprite>;
+type Frame = THREE.BufferGeometry;
+
+/** A part in its colour, ready to merge. */
+function part(g: THREE.BufferGeometry, hex: string) {
+  const geo = g.index ? g.toNonIndexed() : g;
+  geo.deleteAttribute("uv");
+  const c = new THREE.Color(hex);
+  const n = geo.getAttribute("position").count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+function merge(gs: THREE.BufferGeometry[]) {
+  const out = new THREE.BufferGeometry();
+  for (const k of ["position", "normal", "color"]) {
+    const arrs = gs.map((g) => g.getAttribute(k).array as Float32Array);
+    const a = new Float32Array(arrs.reduce((n, x) => n + x.length, 0));
+    let o = 0;
+    for (const x of arrs) (a.set(x, o), (o += x.length));
+    out.setAttribute(k, new THREE.BufferAttribute(a, 3));
+  }
+  out.computeBoundingSphere();
+  return out;
+}
+/** An ellipsoid of radii (rx, ry, rz) at (x, y, z), turned about z by `tilt`. */
+const blob = (rx: number, ry: number, rz: number, x: number, y: number, z: number, tilt = 0, seg = 12) => new THREE.SphereGeometry(1, seg, Math.max(6, seg - 4)).scale(rx, ry, rz).rotateZ(tilt).translate(x, y, z);
+/** A limb from a to b (radius r). */
+function limb(a: THREE.Vector3, b: THREE.Vector3, r: number) {
+  const len = a.distanceTo(b);
+  const g = new THREE.CylinderGeometry(r, r * 0.85, len, 6).translate(0, len / 2, 0);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()));
+  return g.translate(a.x, a.y, a.z);
+}
+const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
 function pigeon(pose: "stand" | "peck" | "up" | "down"): Frame {
   const body = "#8a8a9a",
     dark = "#5a5a6a",
-    wing = "#a0a0b0",
+    wing = "#a4a4b2",
     neck = "#4a9a8a",
     feet = "#e07a8a",
     eye = "#e0602a";
-  return sprite(9, 7, (px: Px) => {
-    if (pose === "up" || pose === "down") {
-      // in flight: wings above or below the body
-      px(2, 3, 5, 2, body);
-      px(6, 2, 2, 2, neck);
-      px(7, 2, 1, 1, eye);
-      px(8, 3, 1, 1, "#2a2830");
-      px(0, 3, 2, 1, dark);
-      if (pose === "up") {
-        px(2, 0, 2, 3, wing);
-        px(4, 1, 2, 2, wing);
-      } else {
-        px(2, 5, 2, 2, wing);
-        px(4, 5, 2, 1, wing);
-      }
-      return;
+  const flying = pose === "up" || pose === "down";
+  const peck = pose === "peck";
+  const P: THREE.BufferGeometry[] = [];
+  const y0 = flying ? 0.06 : 0;
+  P.push(part(blob(0.15, 0.095, 0.09, 0, 0.15 + y0, 0, -0.18), body));
+  P.push(part(blob(0.1, 0.07, 0.075, 0.06, 0.13 + y0, 0, 0.1), "#9a9aaa"));
+  // the tail, dark at its tip
+  P.push(part(new THREE.BoxGeometry(0.13, 0.014, 0.075).rotateZ(-0.25).translate(-0.19, 0.18 + y0, 0), dark));
+  P.push(part(new THREE.BoxGeometry(0.03, 0.016, 0.077).rotateZ(-0.25).translate(-0.25, 0.195 + y0, 0), "#3a3a46"));
+  // the neck and the head (down to the ground when pecking)
+  const hx = peck ? 0.2 : 0.13,
+    hy = peck ? 0.07 : 0.29;
+  P.push(part(blob(0.055, 0.065, 0.055, peck ? 0.14 : 0.1, peck ? 0.14 : 0.22, 0, peck ? -0.9 : 0.3, 10).translate(0, y0, 0), neck));
+  P.push(part(blob(0.045, 0.042, 0.04, hx, hy + y0, 0, 0, 10), "#6e6e80"));
+  P.push(part(new THREE.ConeGeometry(0.011, 0.035, 6).rotateZ(-Math.PI / 2 - (peck ? 0.9 : 0)).translate(hx + 0.05, hy - (peck ? 0.02 : 0.005) + y0, 0), "#2a2830"));
+  for (const s of [-1, 1]) P.push(part(new THREE.SphereGeometry(0.009, 6, 4).translate(hx + 0.022, hy + 0.012 + y0, s * 0.034), eye));
+  if (flying) {
+    // the wings spread, beating: raised or lowered
+    const a = pose === "up" ? 0.75 : -0.45;
+    for (const s of [-1, 1]) {
+      const w = new THREE.SphereGeometry(1, 10, 6).scale(0.09, 0.012, 0.19).translate(0, 0, s * 0.19).rotateX(s * a).translate(-0.01, 0.2 + y0, s * 0.04);
+      P.push(part(w, wing));
+      P.push(part(new THREE.BoxGeometry(0.03, 0.014, 0.12).translate(0, 0, s * 0.27).rotateX(s * a).translate(-0.05, 0.2 + y0, s * 0.04), "#3a3a46"));
     }
-    const peck = pose === "peck";
-    px(1, 3, 5, 2, body);
-    px(2, 3, 3, 1, wing);
-    px(0, 3, 1, 1, dark);
-    px(1, 5, 4, 1, dark);
-    if (peck) {
-      px(5, 4, 2, 2, neck);
-      px(7, 5, 1, 1, "#2a2830");
-      px(6, 4, 1, 1, eye);
-    } else {
-      px(5, 1, 2, 3, neck);
-      px(5, 0, 2, 2, body);
-      px(6, 0, 1, 1, eye);
-      px(7, 1, 1, 1, "#2a2830");
+  } else {
+    // folded: on the sides, two dark bars across them; the pink feet
+    for (const s of [-1, 1]) {
+      P.push(part(blob(0.12, 0.05, 0.028, -0.03, 0.17, s * 0.068, -0.2, 10), wing));
+      for (const x of [-0.03, -0.07]) P.push(part(new THREE.BoxGeometry(0.018, 0.04, 0.01).rotateZ(-0.2).translate(x, 0.165, s * 0.093), "#3a3a46"));
+      P.push(part(limb(V(0.02, 0.0, s * 0.025), V(0.01, 0.08, s * 0.025), 0.008), feet));
+      P.push(part(new THREE.BoxGeometry(0.04, 0.006, 0.012).translate(0.03, 0.003, s * 0.025), feet));
     }
-    px(2, 6, 1, 1, feet);
-    px(4, 6, 1, 1, feet);
-  });
+  }
+  return merge(P);
 }
 
 const CAT_COATS = [
@@ -71,50 +104,55 @@ const CAT_COATS = [
 
 function cat(coat: (typeof CAT_COATS)[number], pose: "sit" | "walk1" | "walk2" | "loaf"): Frame {
   const { fur, dark, light } = coat;
-  return sprite(12, 9, (px: Px) => {
-    const eye = "#7ad07a";
-    if (pose === "sit") {
-      // sitting upright, tail curled round
-      px(4, 3, 4, 5, fur);
-      px(5, 5, 2, 3, light);
-      px(4, 0, 4, 3, fur);
-      px(4, 0, 1, 1, dark);
-      px(7, 0, 1, 1, dark);
-      px(5, 1, 1, 1, eye);
-      px(7, 1, 1, 1, eye);
-      px(1, 7, 4, 1, dark);
-      px(1, 6, 1, 1, dark);
-      px(4, 8, 4, 1, dark);
-      return;
+  const eye = "#7ad07a";
+  const P: THREE.BufferGeometry[] = [];
+  const head = (x: number, y: number) => {
+    P.push(part(blob(0.075, 0.068, 0.072, x, y, 0, 0, 12), fur));
+    P.push(part(blob(0.035, 0.028, 0.04, x + 0.06, y - 0.02, 0, 0, 8), light));
+    P.push(part(new THREE.SphereGeometry(0.008, 6, 4).translate(x + 0.095, y - 0.012, 0), "#e88a9a"));
+    for (const s of [-1, 1]) {
+      P.push(part(new THREE.ConeGeometry(0.028, 0.06, 4).rotateX(s * 0.25).translate(x - 0.005, y + 0.075, s * 0.042), fur));
+      P.push(part(new THREE.SphereGeometry(0.012, 6, 4).translate(x + 0.06, y + 0.015, s * 0.032), eye));
     }
-    if (pose === "loaf") {
-      px(2, 5, 8, 3, fur);
-      px(3, 5, 6, 1, light);
-      px(8, 3, 3, 3, fur);
-      px(8, 3, 1, 1, dark);
-      px(10, 3, 1, 1, dark);
-      px(9, 4, 1, 1, "#1a1820");
-      px(0, 7, 3, 1, dark);
-      px(2, 8, 8, 1, dark);
-      return;
+  };
+  /** The tail: a chain of segments from `a` along the points. */
+  const tail = (pts: THREE.Vector3[]) => {
+    for (let i = 1; i < pts.length; i++) P.push(part(limb(pts[i - 1], pts[i], 0.02 - i * 0.002), i === pts.length - 1 ? dark : fur));
+  };
+  if (pose === "sit") {
+    P.push(part(blob(0.1, 0.16, 0.09, -0.01, 0.16, 0, 0.25, 14), fur));
+    P.push(part(blob(0.06, 0.11, 0.07, 0.05, 0.17, 0, 0.2, 10), light));
+    for (const s of [-1, 1]) {
+      P.push(part(blob(0.08, 0.07, 0.045, -0.05, 0.07, s * 0.06, 0, 10), fur));
+      P.push(part(limb(V(0.06, 0.0, s * 0.035), V(0.05, 0.2, s * 0.035), 0.02), fur));
+      P.push(part(blob(0.03, 0.015, 0.022, 0.08, 0.012, s * 0.035, 0, 8), light));
     }
+    head(0.06, 0.36);
+    tail([V(-0.1, 0.03, 0), V(-0.06, 0.015, 0.1), V(0.04, 0.012, 0.13), V(0.1, 0.012, 0.09)]);
+  } else if (pose === "loaf") {
+    P.push(part(blob(0.2, 0.09, 0.1, 0, 0.09, 0, 0, 14), fur));
+    P.push(part(blob(0.12, 0.05, 0.08, 0.06, 0.06, 0, 0, 10), light));
+    head(0.19, 0.16);
+    tail([V(-0.18, 0.05, 0), V(-0.16, 0.03, 0.11), V(-0.02, 0.025, 0.12), V(0.08, 0.025, 0.11)]);
+  } else {
     const a = pose === "walk1";
-    px(2, 3, 7, 3, fur);
-    px(3, 4, 5, 1, light);
-    px(8, 1, 3, 3, fur);
-    px(8, 0, 1, 1, dark);
-    px(10, 0, 1, 1, dark);
-    px(10, 2, 1, 1, eye);
-    px(0, 1, 1, 2, dark);
-    px(1, 2, 1, 2, fur);
-    for (const [x, up] of [
-      [2, a],
-      [4, !a],
-      [6, a],
-      [8, !a],
-    ] as [number, boolean][])
-      px(x, 6, 1, up ? 2 : 3, dark);
-  });
+    P.push(part(blob(0.21, 0.09, 0.085, 0, 0.24, 0, 0.04, 14), fur));
+    P.push(part(blob(0.15, 0.05, 0.06, 0.02, 0.2, 0, 0, 10), light));
+    // the legs in a trot: diagonal pairs forward and back
+    for (const [x, s, fwd] of [
+      [0.13, 1, a],
+      [0.13, -1, !a],
+      [-0.13, 1, !a],
+      [-0.13, -1, a],
+    ] as [number, number, boolean][]) {
+      const sw = fwd ? 0.05 : -0.05;
+      P.push(part(limb(V(x, 0.22, s * 0.05), V(x + sw, 0.0, s * 0.05), 0.022), fur));
+      P.push(part(blob(0.028, 0.014, 0.022, x + sw + 0.01, 0.01, s * 0.05, 0, 8), light));
+    }
+    head(0.25, 0.32);
+    tail([V(-0.2, 0.27, 0), V(-0.28, 0.33, 0), V(-0.31, 0.42, 0), V(-0.29, 0.5, 0)]);
+  }
+  return merge(P);
 }
 
 // ---- where they hang out --------------------------------------------------------------------------
@@ -144,16 +182,15 @@ const CAT_SPOTS: CatSpot[] = [
 
 // ---- the animals ----------------------------------------------------------------------------------
 
-function makeSprite(f: Frame) {
-  const mat = new THREE.SpriteMaterial({ map: f.texture, alphaTest: 0.5 });
-  const s = new THREE.Sprite(mat);
-  s.center.set(0.5, 0);
-  s.scale.set(f.w * PX, f.h * PX, 1);
-  return s;
+const FUR = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+function makeMesh(f: Frame) {
+  const m = new THREE.Mesh(f, FUR);
+  m.castShadow = true;
+  return m;
 }
 
 interface Pigeon {
-  s: THREE.Sprite;
+  s: THREE.Mesh;
   patch: number[];
   pos: THREE.Vector3;
   /** Flight: from, to, progress 0..1, duration. */
@@ -167,7 +204,7 @@ interface Pigeon {
 }
 
 interface Cat {
-  s: THREE.Sprite;
+  s: THREE.Mesh;
   frames: Record<"sit" | "walk1" | "walk2" | "loaf", Frame>;
   spot: CatSpot;
   pos: THREE.Vector3;
@@ -186,7 +223,6 @@ export class Critters {
   private cats: Cat[] = [];
   private clock = 0;
   private group = new THREE.Group();
-  private camRight = new THREE.Vector3();
   /** The visitor's adopted cat follows this point (their place in the city). */
   private pet: Cat | null = null;
   private follow: (() => THREE.Vector3 | null) | null = null;
@@ -201,20 +237,20 @@ export class Critters {
     for (let i = 0; i < pigeons; i++) {
       const patch = FEEDING[i % FEEDING.length];
       const pos = this.spotIn(patch);
-      const s = makeSprite(PIGEON.stand);
+      const s = makeMesh(PIGEON.stand);
       s.position.copy(pos);
       this.group.add(s);
-      this.pigeons.push({ s, patch, pos, fly: null, next: rand(0, 2), pecking: false, facing: Math.random() < 0.5 ? 1 : -1, cool: 0, scare: false });
+      this.pigeons.push({ s, patch, pos, fly: null, next: rand(0, 2), pecking: false, facing: rand(0, Math.PI * 2), cool: 0, scare: false });
     }
     const spots = [...CAT_SPOTS].sort(() => Math.random() - 0.5);
     for (let i = 0; i < cats; i++) {
       const coat = CAT_COATS[i % CAT_COATS.length];
       const frames = { sit: cat(coat, "sit"), walk1: cat(coat, "walk1"), walk2: cat(coat, "walk2"), loaf: cat(coat, "loaf") };
       const spot = spots[i];
-      const s = makeSprite(frames[spot.pose]);
+      const s = makeMesh(frames[spot.pose]);
       s.position.copy(spot.p);
       this.group.add(s);
-      this.cats.push({ s, frames, spot, pos: spot.p.clone(), path: [], speed: 0, until: rand(20, 60), facing: 1, phase: 0 });
+      this.cats.push({ s, frames, spot, pos: spot.p.clone(), path: [], speed: 0, until: rand(20, 60), facing: rand(0, Math.PI * 2), phase: 0 });
     }
   }
 
@@ -254,8 +290,8 @@ export class Critters {
   }
 
   update(dt: number, camera: THREE.Camera) {
+    void camera;
     this.clock += dt;
-    this.camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
     const threats = this.threats();
     const near = (p: THREE.Vector3, extra = 0) => threats.some((x) => Math.abs(x.p.x - p.x) < x.r + extra && Math.abs(x.p.z - p.z) < x.r + extra && x.p.distanceTo(p) < x.r + extra + 1);
 
@@ -267,7 +303,7 @@ export class Critters {
         b.pos.lerpVectors(f.from, f.to, f.k);
         b.pos.y += Math.sin(f.k * Math.PI) * (2.4 + f.len);
         const flap = Math.floor(this.clock * 14) % 2 === 0;
-        b.s.material.map = (f.k > 0.9 ? PIGEON.stand : flap ? PIGEON.up : PIGEON.down).texture;
+        b.s.geometry = f.k > 0.9 ? PIGEON.stand : flap ? PIGEON.up : PIGEON.down;
         if (f.k >= 1) {
           b.fly = null;
           b.next = this.clock + rand(0.5, 2);
@@ -280,7 +316,7 @@ export class Critters {
         b.patch = patch;
         let to = this.spotIn(patch);
         for (let i = 0; i < 4 && near(to, 1); i++) to = this.spotIn(pick(FEEDING));
-        b.facing = to.x > b.pos.x ? 1 : -1;
+        b.facing = Math.atan2(-(to.z - b.pos.z), to.x - b.pos.x);
         b.fly = { from: b.pos.clone(), to, k: 0, len: Math.min(3, 0.8 + b.pos.distanceTo(to) / 9) };
         // its neighbours take fright too
         for (const o of this.pigeons) if (o !== b && !o.fly && o.pos.distanceTo(b.pos) < 2.5) setTimeout(() => (o.scare = true), rand(60, 400));
@@ -294,13 +330,13 @@ export class Critters {
           b.pos.add(step);
           b.pos.x = THREE.MathUtils.clamp(b.pos.x, b.patch[0], b.patch[1]);
           b.pos.z = THREE.MathUtils.clamp(b.pos.z, b.patch[2], b.patch[3]);
-          if (Math.abs(step.x) > 0.05) b.facing = step.x > 0 ? 1 : -1;
+          b.facing = Math.atan2(-step.z, step.x);
           b.pecking = false;
-        } else b.facing *= -1;
-        b.s.material.map = (b.pecking ? PIGEON.peck : PIGEON.stand).texture;
+        } else b.facing += rand(-2, 2);
+        b.s.geometry = b.pecking ? PIGEON.peck : PIGEON.stand;
       }
       b.s.position.copy(b.pos);
-      this.face(b.s, b.facing, PIGEON.stand.w);
+      b.s.rotation.y = b.facing;
     }
 
     // the adopted cat trots after its person, and sits when it catches up
@@ -333,19 +369,18 @@ export class Critters {
           c.path.shift();
         } else {
           c.pos.addScaledVector(d, step / dist);
-          if (Math.abs(d.x) > 0.01) c.facing = d.x > 0 ? 1 : -1;
+          if (dist > 0.01) c.facing = Math.atan2(-d.z, d.x);
         }
         c.phase += dt * c.speed * 5;
-        c.s.material.map = (Math.floor(c.phase) % 2 ? c.frames.walk1 : c.frames.walk2).texture;
-        this.setSize(c.s, c.frames.walk1);
+        c.s.geometry = Math.floor(c.phase) % 2 ? c.frames.walk1 : c.frames.walk2;
         if (!c.path.length) {
-          c.s.material.map = c.frames[c.spot.pose].texture;
+          c.s.geometry = c.frames[c.spot.pose];
           c.until = this.clock + rand(25, 80);
         }
       } else {
         if (c === this.pet) {
           c.s.position.copy(c.pos);
-          this.face(c.s, c.facing, c.frames.sit.w);
+          c.s.rotation.y = c.facing;
           continue;
         }
         const scared = threats.some((x) => x.p.distanceTo(c.pos) < (c.spot.p.y > CITY.curb + 0.3 ? 1.2 : 1.7) && x.r < 2);
@@ -365,17 +400,7 @@ export class Critters {
       c.s.position.copy(c.pos);
       // on the asphalt, down at road level
       if (c.pos.z > CITY.road.z0 + 0.1 && c.pos.z < CITY.road.z1 - 0.1) c.s.position.y = 0.01;
-      this.face(c.s, c.facing, c.frames.sit.w);
+      c.s.rotation.y = c.facing;
     }
-  }
-
-  private setSize(s: THREE.Sprite, f: Frame) {
-    s.scale.y = f.h * PX;
-  }
-
-  /** Sprites face the camera; flip so the head points the way it is going, on screen. */
-  private face(s: THREE.Sprite, facing: number, w: number) {
-    const along = new THREE.Vector3(facing, 0, 0).dot(this.camRight);
-    s.scale.x = w * PX * (along >= 0 ? 1 : -1);
   }
 }

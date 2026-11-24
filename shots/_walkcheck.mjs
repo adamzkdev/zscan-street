@@ -17,10 +17,11 @@ const port = args.includes("--port") ? args[args.indexOf("--port") + 1] : "3021"
 const only = args.find((a) => !a.startsWith("--") && a !== port);
 const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1200, height: 760 } });
 const p = await b.newPage();
+await p.evaluateOnNewDocument(() => { const W = window.WebSocket; const F = function (u, pr) { if (pr === "vite-hmr" || String(u).includes("token=")) return { addEventListener() {}, removeEventListener() {}, send() {}, close() {}, readyState: 0 }; return pr === undefined ? new W(u) : new W(u, pr); }; F.prototype = W.prototype; Object.assign(F, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 }); window.WebSocket = F; });
 const errs = [];
 p.on("pageerror", (e) => errs.push(e.message));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-await p.goto(`http://localhost:${port}/?debug&theme=day`);
+await p.goto(`http://localhost:${port}/?debug&theme=day${process.env.QS ? "&" + process.env.QS : ""}`);
 await p.waitForFunction(() => window.street?.interiors, { timeout: 180000 });
 await wait(5000);
 if (process.env.MAP) await p.evaluate((m) => (window.__walkMap = m), process.env.MAP);

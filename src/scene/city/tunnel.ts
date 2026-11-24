@@ -1,7 +1,12 @@
 import * as THREE from "three";
 import { markingsTexture, neonTexture } from "../textures";
 import { GROUND } from "../real/ground";
-import { toObject } from "../voxel/mesher";
+import { toObject as voxObject } from "../voxel/mesher";
+import { realObject } from "../real/remesh";
+import { realPropObject } from "../real/props";
+/** (realistic: the portal and its hill remeshed in photographed concrete and stone, real lamps; ?real=0 the voxels) */
+const REAL = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
+const toObject = (m: VoxelModel) => (REAL ? realObject(m) : voxObject(m));
 import { streetLamp } from "../voxel/props";
 import { C, E, hash, shades, VOX, VoxelModel } from "../voxel/model";
 import { mat } from "./kit";
@@ -128,7 +133,7 @@ export function tunnels(g: THREE.Group) {
     // lamps on the barriers, staggered, all the way to the portal
     for (let x = edge + 4, i = 0; x < TUNNEL.mouth - 2; x += 7, i++) {
       const north = i % 2 === 0;
-      const lamp = toObject(streetLamp("#ffb46b").model);
+      const lamp = REAL ? realPropObject("lamp", ["#ffb46b"]) : toObject(streetLamp("#ffb46b").model);
       lamp.position.set(side * x, 0.55, north ? CITY.road.z0 - 0.6 : CITY.road.z1 + 0.6);
       lamp.rotation.y = north ? 0 : Math.PI;
       g.add(lamp);

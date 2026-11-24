@@ -4,10 +4,12 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { CURB, GRID, gridCells, PARK, RIVER, ST } from "../city/plan";
 import { sayAt } from "../speech";
-import { toObject } from "../voxel/mesher";
-import { C, E, G, VoxelModel } from "../voxel/model";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { carObject } from "../real/cars";
 import { realShelter } from "../real/props";
 import { Crowd, Kind, PORTRAITS, type Person } from "./crowd";
+import { RealDogs } from "../real/dogs";
+const REAL_DOGS = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
 import type { AliveCtx, AliveFrame, AlivePart } from "./types";
 
 /**
@@ -53,58 +55,95 @@ const LINES = {
   street: ["Nice day for a walk.", "Did you see the new block?", "Shielded, always.", "Coffee?", "Look at that tower!"],
 };
 
-// ---- voxel props ---------------------------------------------------------------------------------
+// ---- the food trucks and the buskers' kits, realistic ---------------------------------------------
 
-/** A food truck: front +x, the serving hatch on +z with its awning, a lit menu and a roof sign. */
-function foodTruck(paint: string, trim: string, sign: string) {
-  const w = 34,
-    d = 13;
-  const m = new VoxelModel(w, 20, d + 4);
-  const body = C(paint),
-    dark = C("#1c1b22"),
-    white = C("#f2eee6");
-  m.box(0, 2, 0, w - 7, 16, d, body);
-  m.box(w - 7, 2, 0, w, 10, d, body);
-  m.box(w - 6, 10, 1, w - 1, 12, d - 1, G("#22304a"));
-  m.box(w - 7, 10, 0, w - 2, 13, d, body);
-  m.box(w - 1, 4, 1, w, 5, 3, E("#fff6e0", 3));
-  m.box(w - 1, 4, d - 3, w, 5, d - 1, E("#fff6e0", 3));
-  m.box(0, 4, 1, 1, 5, 3, E("#ff2a1a", 2.4));
-  m.box(0, 4, d - 3, 1, 5, d - 1, E("#ff2a1a", 2.4));
-  // trim stripe, the hatch (lit inside) and its counter, the awning
-  m.box(0, 6, 0, w, 7, d, C(trim));
-  m.box(4, 8, d - 1, 22, 14, d, E("#ffe0b0", 1.5));
-  m.box(4, 8, d - 1, 22, 9, d + 2, white);
-  for (let x = 3; x < 24; x++) m.box(x, 15, d, x + 1, 16, d + 3, x % 4 < 2 ? C(trim) : white);
-  // the menu board and the roof sign
-  m.box(7, 10, d, 13, 13, d + 1, E(sign, 1.2));
-  m.box(6, 16, 3, 24, 19, 9, E(sign, 1.8));
-  m.box(6, 16, 2, 24, 17, 10, dark);
-  // wheels
-  for (const x of [6, w - 8]) {
-    m.box(x - 2, 0, 0, x + 3, 3, 2, dark);
-    m.box(x - 2, 0, d - 2, x + 3, 3, d, dark);
-  }
-  return m;
+const kitMats = new Map<string, THREE.Material>();
+const kmat = (key: string, make: () => THREE.Material) => kitMats.get(key) ?? (kitMats.set(key, make()), kitMats.get(key)!);
+const matte = (hex: string, rough = 0.6, metal = 0) => kmat(`m:${hex}:${rough}:${metal}`, () => new THREE.MeshStandardMaterial({ color: hex, roughness: rough, metalness: metal }));
+const lit = (hex: string, k = 1.6) => kmat(`l:${hex}:${k}`, () => new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k), toneMapped: false }));
+const canvas = (hex: string) => kmat(`c:${hex}`, () => new THREE.MeshStandardMaterial({ color: hex, roughness: 0.9, side: THREE.DoubleSide }));
+const rb = (w: number, h: number, d: number, r: number) => new RoundedBoxGeometry(w, h, d, 2, r);
+function mesh(g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, shadow = true) {
+  const o = new THREE.Mesh(g, m);
+  o.position.set(x, y, z);
+  o.castShadow = shadow;
+  o.receiveShadow = true;
+  return o;
 }
 
-/** A busker's kit: an amp, a mic stand and an open guitar case with a few gold coins. */
-function buskerKit(color: string) {
-  const m = new VoxelModel(16, 10, 8);
-  m.box(0, 0, 0, 4, 5, 4, C("#1c1b22"));
-  m.box(1, 1, 3, 3, 4, 4, C("#4a4656"));
-  m.box(0, 5, 0, 4, 6, 4, E(color, 1.2));
-  m.box(7, 0, 2, 8, 9, 3, C("#2a2a30"));
-  m.box(6, 9, 1, 9, 10, 4, C("#2a2a30"));
-  m.box(9, 0, 4, 16, 1, 8, C("#3a2420"));
-  m.box(10, 1, 5, 15, 1.5, 7, C("#a02a3a"));
-  for (const [x, z] of [
-    [11, 5],
-    [13, 6],
-    [12, 6],
+/**
+ * A food truck: the street's realistic van (src/scene/real/cars.ts: front +x, the passenger side +z)
+ * in the truck's paint, with the serving hatch cut in its +z side (lit inside, a counter, the menu),
+ * a striped awning propped over it and the lit sign on its roof.
+ */
+function foodTruck(paint: string, trim: string, sign: string) {
+  const g = carObject("van", { paint });
+  const W = 1.0;
+  // the hatch: the lit kitchen behind it, its frame, the counter
+  g.add(mesh(new THREE.PlaneGeometry(2.3, 0.95), lit("#ffe0b0", 1.3), -0.85, 1.6, W + 0.012, false));
+  for (const [w, h, x, y] of [
+    [2.42, 0.06, -0.85, 2.1],
+    [0.06, 1.0, -2.03, 1.6],
+    [0.06, 1.0, 0.33, 1.6],
   ])
-    m.set(x, 1, z, E("#f4b728", 1.4));
-  return m;
+    g.add(mesh(new THREE.BoxGeometry(w, h, 0.05), matte("#d8dade", 0.3, 0.8), x, y, W + 0.02));
+  g.add(mesh(rb(2.4, 0.05, 0.36, 0.015), matte("#f2eee6", 0.35, 0.3), -0.85, 1.12, W + 0.17));
+  g.add(mesh(new THREE.BoxGeometry(2.4, 0.08, 0.06), matte(trim, 0.4, 0.3), -0.85, 0.98, W + 0.03));
+  // the menu board beside the hatch, lit
+  g.add(mesh(new THREE.PlaneGeometry(0.6, 0.5), lit(sign, 1.1), 0.75, 1.55, W + 0.015, false));
+  // the awning: canvas stripes on two struts, sloping out
+  const n = 8;
+  for (let i = 0; i < n; i++) {
+    const a = new THREE.PlaneGeometry(2.5 / n, 0.75);
+    a.rotateX(-Math.PI / 2 + 0.42);
+    g.add(mesh(a, canvas(i % 2 ? trim : "#f2eee6"), -2.1 + (i + 0.5) * (2.5 / n), 2.06, W + 0.34));
+  }
+  for (const x of [-2.0, 0.3]) {
+    const s = new THREE.CylinderGeometry(0.012, 0.012, 0.8, 6).rotateX(Math.PI / 2 - 0.42);
+    g.add(mesh(s, matte("#c8ccd2", 0.3, 0.9), x, 1.92, W + 0.36, false));
+  }
+  // the roof sign: a lightbox on two feet
+  g.add(mesh(rb(2.4, 0.5, 0.14, 0.03), matte("#16141c", 0.5), -0.6, 2.72, 0));
+  for (const z of [-1, 1]) g.add(mesh(new THREE.PlaneGeometry(2.2, 0.36), lit(sign, 1.5), -0.6, 2.72, z * 0.072, false).rotateY(z < 0 ? Math.PI : 0));
+  for (const x of [-1.5, 0.3]) g.add(mesh(new THREE.BoxGeometry(0.06, 0.26, 0.06), matte("#2a2a30", 0.5, 0.5), x, 2.4, 0));
+  return g;
+}
+
+/** A busker's kit: a combo amp (its grille, its lit knobs), a mic stand, the open guitar case with a few gold coins in its lining. */
+function buskerKit(color: string) {
+  const g = new THREE.Group();
+  // the amp
+  g.add(mesh(rb(0.62, 0.55, 0.32, 0.03).translate(0, 0.275, 0), matte("#1c1b22", 0.7), -1.0, 0, 0.33));
+  g.add(mesh(new THREE.PlaneGeometry(0.5, 0.34), matte("#3a3842", 0.95), -1.0, 0.24, 0.492, false));
+  g.add(mesh(new THREE.BoxGeometry(0.5, 0.06, 0.02), lit(color, 1.2), -1.0, 0.49, 0.495, false));
+  g.add(mesh(new THREE.BoxGeometry(0.22, 0.03, 0.08), matte("#2a2a30", 0.4, 0.6), -1.0, 0.565, 0.33));
+  // the mic stand: a tripod, the pole, the boom, the mic
+  const steel = matte("#2a2a30", 0.35, 0.8);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const leg = new THREE.CylinderGeometry(0.01, 0.01, 0.32, 6).rotateZ(Math.PI / 2 - 0.5).rotateY(a);
+    g.add(mesh(leg, steel, -0.17 + Math.cos(a) * 0.13, 0.08, 0.42 - Math.sin(a) * 0.13, false));
+  }
+  g.add(mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.45, 8).translate(0, 0.725, 0), steel, -0.17, 0.1, 0.42, false));
+  g.add(mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.4, 6).rotateX(Math.PI / 2 - 0.35), steel, -0.17, 1.6, 0.56, false));
+  g.add(mesh(new THREE.CapsuleGeometry(0.022, 0.12, 4, 10).rotateX(Math.PI / 2 - 0.35), matte("#3a3a40", 0.3, 0.7), -0.17, 1.66, 0.75, false));
+  // the guitar case, open: its shell (a rounded body and neck), the red plush, the coins
+  const shape = new THREE.Shape();
+  shape.absellipse(0, 0, 0.22, 0.17, 0, Math.PI * 2, false, 0);
+  const body = new THREE.ExtrudeGeometry(shape, { depth: 0.1, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.015, bevelSegments: 2, curveSegments: 20 }).rotateX(-Math.PI / 2);
+  g.add(mesh(body.clone(), matte("#2a1a16", 0.55), 0.55, 0, 0.35));
+  g.add(mesh(rb(0.62, 0.1, 0.16, 0.03).translate(0, 0.05, 0), matte("#2a1a16", 0.55), 0.95, 0, 0.35));
+  const lining = new THREE.ShapeGeometry(shape, 20).rotateX(-Math.PI / 2).scale(0.88, 1, 0.86);
+  g.add(mesh(lining, matte("#a02a3a", 1), 0.55, 0.121, 0.35, false));
+  g.add(mesh(new THREE.PlaneGeometry(0.56, 0.11).rotateX(-Math.PI / 2), matte("#a02a3a", 1), 0.95, 0.101, 0.35, false));
+  for (const [x, z] of [
+    [0.5, 0.32],
+    [0.6, 0.4],
+    [0.56, 0.28],
+    [0.9, 0.36],
+  ])
+    g.add(mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 12), matte("#f4b728", 0.25, 1), x, 0.125, z, false));
+  return g;
 }
 
 // ---- the part ------------------------------------------------------------------------------------
@@ -298,7 +337,7 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
     [-100, -192 + (GRID.zw[GRID.zs.indexOf(-192)] ?? 14) / 2 - 1.35, 0, "#38a06a", "#f2eee6", "#f4b728"],
   ];
   for (const [x, z, rot, paint, trim, sign] of TRUCKS) {
-    const o = toObject(foodTruck(paint, trim, sign));
+    const o = foodTruck(paint, trim, sign);
     o.position.set(x, Y, z);
     o.rotation.y = rot;
     statics.add(o);
@@ -327,7 +366,7 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
   const buskers: { x: number; z: number; id: number }[] = [];
   for (const [x, z, h] of BUSKERS) {
     const id = add({ kind: Kind.Dance, a: [x, z, h + Math.PI / 2, 0], y: Y });
-    const kit = toObject(buskerKit(pickOf(["#ff3e8a", "#3ef0ff", "#f4b728"])));
+    const kit = buskerKit(pickOf(["#ff3e8a", "#3ef0ff", "#f4b728"]));
     kit.position.set(x + Math.cos(h + Math.PI / 2) * 1.3, Y, z + Math.sin(h + Math.PI / 2) * 1.3);
     kit.rotation.y = -h;
     statics.add(kit);
@@ -362,10 +401,17 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
     if (!m.isMesh) return;
     const mat = m.material as THREE.Material;
     if (!byMat.has(mat)) byMat.set(mat, []);
-    const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
-    byMat.get(mat)!.push(g.index ? g : g);
+    const g0 = m.geometry.clone().applyMatrix4(m.matrixWorld);
+    // (all alike for the merge: no index, uvs everywhere)
+    const g = g0.index ? g0.toNonIndexed() : g0;
+    if (!g.getAttribute("uv")) g.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute("position").count * 2), 2));
+    byMat.get(mat)!.push(g);
   });
   for (const [mat, geos] of byMat) {
+    // (an attribute only some parts have is left out)
+    const names = Object.keys(geos[0].attributes).filter((n) => geos.every((g) => g.getAttribute(n)));
+    for (const g of geos) for (const n of Object.keys(g.attributes)) if (!names.includes(n)) g.deleteAttribute(n);
+    for (const g of geos) g.morphAttributes = {};
     const merged = mergeGeometries(geos, false);
     if (!merged) continue;
     const mesh = new THREE.Mesh(merged, mat);
@@ -374,6 +420,9 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
   }
   const crowd = new Crowd(people, 77);
   group.add(crowd.mesh, crowd.shadows);
+  // (realistic: the dogs in 3D instead of the crowd's pixel dogs; ?real=0 keeps them)
+  const dogs = REAL_DOGS ? new RealDogs(crowd) : null;
+  if (dogs) group.add(dogs.group);
   console.info(`[alive] ${people.length} people`);
 
   // ---- music notes over the buskers (sprites, near the camera only) ----
@@ -416,6 +465,7 @@ export async function buildPeople(ctx: AliveCtx): Promise<AlivePart> {
       update(f: AliveFrame) {
         // close up only the nearby crowd is drawn; from the overview, everyone (they are specks)
         crowd.update(f.t, f.focus, f.wide ? 1e5 : f.walking ? 160 : 230, raceStart);
+        dogs?.update(f.dt, f.focus, f.wide ? 1e5 : f.walking ? 160 : 230);
         // the marathon
         if (raceStart < 0 && f.t > raceAt) raceStart = f.t;
         if (raceStart >= 0 && f.t > raceStart + RACE_LEN) {

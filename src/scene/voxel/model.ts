@@ -115,6 +115,12 @@ export type Paint = number | ((x: number, y: number, z: number) => number);
 /** A dense voxel grid with drawing operations. y is up; the front of a building faces +z. */
 export class VoxelModel {
   readonly data: Uint16Array;
+  /**
+   * The realistic pass (src/scene/real/remesh.ts): a real object to stand in for part of the model
+   * (a palm for its voxel trunk and fronds), and which cells are still drawn from the voxels.
+   */
+  real?: () => import("three").Object3D;
+  realKeep?: (x: number, y: number, z: number) => boolean;
 
   constructor(
     readonly w: number,

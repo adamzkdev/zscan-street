@@ -36,6 +36,9 @@ export const TILE: Record<string, [number, number]> = {
   Facade018A: [16, 16],
   Facade019A: [16, 16],
   Facade020A: [16, 16],
+  Marble012: [2.2, 2.2],
+  WoodFloor051: [2.4, 2.4],
+  Carpet016: [1.6, 1.6],
   Facade009: [16, 16],
   Facade016: [16, 16],
 };

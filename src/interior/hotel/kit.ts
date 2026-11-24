@@ -101,6 +101,43 @@ export function tex(size: number, rx: number, ry: number, draw: (g: CanvasRender
   return t;
 }
 
+/**
+ * Falling water (the realistic pass): streaks of foam and clear water running down a sheet, a
+ * texture that scrolls (`fallingWater(k, f, …)` keeps it moving while you are on the floor).
+ */
+export function fallingWater(rx = 2, ry = 1, base = "#2a8ab0") {
+  const S = 512;
+  const { t } = makeCanvas(S, S, (g) => {
+    const grad = g.createLinearGradient(0, 0, S, 0);
+    grad.addColorStop(0, base);
+    grad.addColorStop(0.5, "#5ab8d8");
+    grad.addColorStop(1, base);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 260; i++) {
+      const x = hash(i, 1, 7, 7) * S,
+        w = 0.6 + hash(i, 2, 7, 7) * 2.6,
+        y0 = hash(i, 3, 7, 7) * S,
+        len = 60 + hash(i, 4, 7, 7) * 320;
+      const a = 0.12 + hash(i, 5, 7, 7) * 0.5;
+      const lg = g.createLinearGradient(0, y0, 0, y0 + len);
+      lg.addColorStop(0, `rgba(235,252,255,0)`);
+      lg.addColorStop(0.5, `rgba(235,252,255,${a})`);
+      lg.addColorStop(1, `rgba(235,252,255,0)`);
+      g.fillStyle = lg;
+      g.fillRect(x, y0, w, len);
+      // (wrapped: the streak carries on at the top)
+      if (y0 + len > S) {
+        g.fillRect(x, y0 - S, w, len);
+      }
+    }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(rx, ry);
+  t.anisotropy = 8;
+  return t;
+}
+
 /** Polished marble with veins. */
 export function marble(base = "#ebe6dd", vein = "120,110,100", rx = 10, ry = 7) {
   return tex(256, rx, ry, (g, S) => {

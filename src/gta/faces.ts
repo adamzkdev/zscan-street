@@ -2,14 +2,17 @@ import * as THREE from "three";
 import { portraitImage } from "../data/portrait";
 import { ZScan } from "../data/zscan";
 import { snarkCells } from "../scene/snarkbody";
+import { bodyGeo, Fine, headGeo } from "./snarkgeo";
+import { artPixels, SLOT_NONE, slotAlloc, slotFree, SLOTS, slotWrite } from "./snarkmat";
 
 /**
  * The zkSNARKs' looks for the game (src/gta): each one's own picture (the collection's PNG, exact:
  * not the atlas, whose JPEG smears a dark halo round every figure) read once into its 26 × 26 cells,
  * one request at a time with a pause between, so the image API is never flooded. From the cells:
- * the head in 3D voxels (its silhouette rounded into a volume, the art on the face, the hood's colour
- * round the back), and the colours the body is dressed in (the top, the hood, the skin), with
- * trousers and shoes picked by the number.
+ * a sculpted hood shaped to its silhouette with its face set in the opening, its picture (upscaled,
+ * in a slot of the shared art atlas: snarkmat.ts) on the front; a hoodie torso; the colours the body
+ * is dressed in (the top, the hood, the skin), with trousers and shoes picked by the number
+ * (snarkgeo.ts makes the shapes).
  *
  *   faces.want([ids]); faces.ready(id); faces.look(id) → Look | null
  */
@@ -40,12 +43,16 @@ export interface Look {
   sole: number;
   /** A little taller or shorter, by the number. */
   bh: number;
+  /** Its picture's slot in the art atlas (freed with the look). */
+  slot: number;
 }
 
 /** One voxel of the bust (m): a zkSNARK is about 1.5 m on its legs. */
 export const SNARK_VOX = 0.052;
 /** The shoulders drawn a little narrower than the art's (its bust is cut by the picture's edges). */
 const BODY_SX = 0.84;
+/** The head's scale against the picture's (the bust as drawn is all head). */
+const HEAD_K = 0.9;
 
 const cells = new Map<number, Cells | null>();
 /** Read from the collection's atlas (quick, all at once, a little soft): the street's own crowd. */
@@ -54,16 +61,42 @@ const quickAsked = new Set<number>();
 /** Built looks, the most recently used last (the oldest unpinned ones are freed past a few dozen). */
 const looks = new Map<number, Look>();
 const pins = new Map<number, number>();
-const KEEP = 320;
-function trimLooks() {
-  if (looks.size <= KEEP) return;
+/** (no more looks kept than the atlas has slots for, with room for the stand-ins and the pinned) */
+const KEEP = Math.min(320, SLOTS - 96);
+function drop(id: number, l: Look) {
+  l.head.dispose();
+  l.body.dispose();
+  slotFree(l.slot);
+  looks.delete(id);
+}
+function trimLooks(to = KEEP) {
+  if (looks.size <= to) return;
   for (const [id, l] of looks) {
-    if (looks.size <= KEEP) break;
+    if (looks.size <= to) break;
     if (pins.get(id)) continue;
+    drop(id, l);
+  }
+}
+/** A slot for a new look's picture: a free one, or the oldest look nobody wears gives its own up. */
+function takeSlot() {
+  let s = slotAlloc();
+  if (s !== SLOT_NONE) return s;
+  for (const [id, l] of looks) {
+    if (pins.get(id)) continue;
+    drop(id, l);
+    s = slotAlloc();
+    if (s !== SLOT_NONE) return s;
+  }
+  for (const [k, l] of standIns) {
+    if (pins.get(l.id)) continue;
+    standIns.delete(k);
     l.head.dispose();
     l.body.dispose();
-    looks.delete(id);
+    slotFree(l.slot);
+    s = slotAlloc();
+    if (s !== SLOT_NONE) return s;
   }
+  return SLOT_NONE;
 }
 const queue: number[] = [];
 let busy = false;
@@ -142,6 +175,9 @@ function keyHalo(c: Cells) {
     if (y < GRID - 1) stack.push(i + GRID);
   }
 }
+
+/** (development: each look's picture as it went to the atlas, the opening — figtest.html?art) */
+export const debugArt = new Map<number, { src: Int32Array; art: Int32Array; opening: { x: number; y: number; rx: number; ry: number }; hood: number; neck: number; top: number; hatEnd: number }>();
 
 export const faces = {
   /** Read these (in this order, after those already asked for; `first`: before them). */
@@ -229,7 +265,11 @@ function standInLook(id: number) {
     // (a few dozen kept: a stand-in is only for a moment)
     if (standIns.size > 48) {
       const [old] = standIns.keys();
+      const o = standIns.get(old)!;
       standIns.delete(old);
+      o.head.dispose();
+      o.body.dispose();
+      slotFree(o.slot);
     }
   }
   return l;
@@ -422,10 +462,8 @@ function build(id: number, src: Cells, real: boolean): Look {
   // both pieces round the shoulders' middle column (the head sits where the art has it)
   const cx = (bs.x0 + bs.x1 + 1) / 2;
   const v = SNARK_VOX;
-  const hw = hs.x1 - hs.x0 + 1,
-    bw = bs.x1 - bs.x0 + 1;
-  // the face: what is inside the hood and not the hood's colour, set a voxel back (the hood's rim
-  // stands proud of it, as a hood does)
+  const bw = bs.x1 - bs.x0 + 1;
+  // the face: what is inside the hood and not the hood's colour — set back in the hood's opening
   const hoodCol = shell[neck];
   const faceIn = (x: number, y: number) => {
     if (!inHead(x, y)) return false;
@@ -441,15 +479,203 @@ function build(id: number, src: Cells, real: boolean): Look {
       if (inHead(x + dx, y + dy)) n++;
     return n === 3;
   };
-  const head = pillow(inHead, at, shell, top, neck, cx, v, Math.max(9, hw * 1.02), Math.max(2.6, hw * 0.42), faceIn);
-  // the body: the art's shoulders, then two rows more of the top (its hem a shade darker), a hoodie's depth
+  // the face's cells, closed over its features' small gaps (the eyes are face too)
+  const faceCells = new Uint8Array(GRID * GRID);
+  for (let y = top; y <= neck; y++) for (let x = 0; x < GRID; x++) if (faceIn(x, y)) faceCells[y * GRID + x] = 1;
+  const closed = new Uint8Array(faceCells);
+  for (let y = top + 1; y < neck; y++)
+    for (let x = 1; x < GRID - 1; x++) {
+      if (faceCells[y * GRID + x] || !inHead(x, y)) continue;
+      const lr = faceCells[y * GRID + x - 1] && faceCells[y * GRID + x + 1],
+        ud = faceCells[(y - 1) * GRID + x] && faceCells[(y + 1) * GRID + x];
+      if (lr || ud) closed[y * GRID + x] = 1;
+    }
+  const isFace = (x: number, y: number) => x >= 0 && y >= 0 && x < GRID && y < GRID && closed[y * GRID + x] === 1;
+  // the hood's opening: an oval round the face's cells; where the face is the hood's own colour (a
+  // white face in a white hood), where a face sits in these pictures — forward and a little low
+  let fx0 = GRID,
+    fx1 = -1,
+    fy0 = GRID,
+    fy1 = -1,
+    fn = 0;
+  for (let y = top; y <= neck; y++)
+    for (let x = 0; x < GRID; x++)
+      if (isFace(x, y)) {
+        fn++;
+        fx0 = Math.min(fx0, x);
+        fx1 = Math.max(fx1, x);
+        fy0 = Math.min(fy0, y);
+        fy1 = Math.max(fy1, y);
+      }
+  const headW = hs.x1 - hs.x0 + 1,
+    headHc = neck - top + 1;
+  // the eyes: the few cells of the head (under the hat, in its front two thirds) unlike its common
+  // colours — the one thing every zkSNARK's face has
+  const counts = new Map<number, number>();
+  for (let y = top; y <= neck; y++) for (let x = 0; x < GRID; x++) if (inHead(x, y)) counts.set(at(x, y), (counts.get(at(x, y)) ?? 0) + 1);
+  const common = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c0]) => c0);
+  let ex0 = GRID,
+    ex1 = -1,
+    ey0 = GRID,
+    ey1 = -1,
+    en = 0;
+  const eyeSet = new Set<number>();
+  for (let y = Math.max(top + 1, hatEnd + 1); y <= neck - 2; y++)
+    for (let x = Math.floor(hs.x0 + headW * 0.35); x <= hs.x1; x++) {
+      if (!inHead(x, y)) continue;
+      const c0 = at(x, y);
+      if (common.some((k) => k === c0 || near(k, c0)) || near(c0, shell[y])) continue;
+      eyeSet.add(y * GRID + x);
+      en++;
+      ex0 = Math.min(ex0, x);
+      ex1 = Math.max(ex1, x);
+      ey0 = Math.min(ey0, y);
+      ey1 = Math.max(ey1, y);
+    }
+  const eyes = en >= 2 && en <= 18 && ex1 - ex0 <= headW * 0.75 && ey1 - ey0 <= 4;
+  let opening =
+    fn >= 10
+      ? { x: (fx0 + fx1 + 1) / 2, y: (fy0 + fy1 + 1) / 2, rx: Math.min(headW * 0.42, (fx1 - fx0 + 1) / 2 + 0.7), ry: Math.min(headHc * 0.42, (fy1 - fy0 + 1) / 2 + 0.7) }
+      : eyes
+        ? { x: (ex0 + ex1 + 1) / 2, y: (ey0 + ey1 + 1) / 2 + 1.2, rx: Math.max(headW * 0.3, (ex1 - ex0 + 1) / 2 + 2.2), ry: Math.max(headHc * 0.3, 3.6) }
+        : { x: (hs.x0 + hs.x1 + 1) / 2 + headW * 0.1, y: top + headHc * 0.58, rx: headW * 0.32, ry: headHc * 0.3 };
+  // (the opening stays under a hat's band)
+  if (hatEnd >= top && opening.y - opening.ry < hatEnd + 1.3) {
+    const bottom0 = opening.y + opening.ry;
+    const top0 = hatEnd + 1.3;
+    opening = { ...opening, y: (top0 + bottom0) / 2, ry: Math.max(2.5, (bottom0 - top0) / 2) };
+  }
+  // a cap's visor: the hat's lowest rows reaching out past the hood below — out of the outline,
+  // a peak of its own
+  const rightOf = (y: number) => {
+    for (let x = GRID - 1; x >= 0; x--) if (inHead(x, y)) return x;
+    return -1;
+  };
+  let visor = false,
+    hoodRight = 99;
+  if (hatEnd >= top) {
+    for (let y = hatEnd + 1; y <= Math.min(neck, hatEnd + 3); y++) hoodRight = Math.min(hoodRight, rightOf(y) < 0 ? 99 : rightOf(y));
+    for (let y = Math.max(top, hatEnd - 1); y <= hatEnd; y++) if (rightOf(y) > hoodRight + 1) visor = true;
+  }
+  const headShape = (x: number, y: number) => inHead(x, y) && !(visor && y <= hatEnd && x > hoodRight + 0.5);
+  // the picture for the atlas: the outline's dark line taken off (a figure in 3D has its own edge),
+  // eyes that shine marked
+  const art = new Int32Array(GRID * GRID).fill(-1);
+  for (let y = 0; y < GRID; y++)
+    for (let x = 0; x < GRID; x++) {
+      const inside = y <= neck ? inHead(x, y) : inBody(x, y);
+      if (inside) art[y * GRID + x] = at(x, y);
+    }
+  for (let y = 0; y < GRID; y++)
+    for (let x = 0; x < GRID; x++) {
+      const i = y * GRID + x;
+      if (art[i] < 0) continue;
+      const edge = [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ].some(([dx, dy]) => (art[(y + dy) * GRID + x + dx] ?? -1) < 0 || x + dx < 0 || x + dx >= GRID);
+      if (!edge) continue;
+      // the neighbour toward the middle
+      let best = -1;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]) {
+        const xx = x + dx,
+          yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= GRID || yy >= GRID) continue;
+        const v2 = art[yy * GRID + xx];
+        if (v2 >= 0 && (best < 0 || lum(v2) > lum(best))) best = v2;
+      }
+      if (best >= 0 && lum(art[i]) < lum(best) * 0.55) art[i] = best;
+    }
+  // the drawing's hood shading (its greys, its highlights, its outline) flattened to the hood's own
+  // colour: a 3D hood has its own light — only the face, the eyes, a mask stand out of it. The hood's
+  // palette is what its back half (the 3/4 view's far side) and its outline are drawn in.
+  {
+    const pal = new Map<number, number>();
+    const outside = (x: number, y: number) => x < 0 || y < 0 || x >= GRID || y >= GRID || !inHead(x, y);
+    for (let y = Math.max(top, hatEnd + 1); y <= neck; y++)
+      for (let x = 0; x < GRID; x++) {
+        if (!inHead(x, y)) continue;
+        let edge = false;
+        for (let dy = -2; dy <= 2 && !edge; dy++) for (let dx = -2; dx <= 2 && !edge; dx++) if (outside(x + dx, y + dy)) edge = true;
+        if (!edge) continue;
+        pal.set(at(x, y), (pal.get(at(x, y)) ?? 0) + 1);
+      }
+    const hoodish = [...pal.entries()].filter(([, n]) => n >= 2).map(([c0]) => c0);
+    // (a shade of the hood: its own colour lighter or darker — greys round a black hood, a highlight)
+    const sat = (c0: number) => {
+      const r = (c0 >> 16) & 255,
+        g = (c0 >> 8) & 255,
+        b = c0 & 255;
+      const mx = Math.max(r, g, b),
+        mn = Math.min(r, g, b);
+      return mx ? (mx - mn) / mx : 0;
+    };
+    const dist = (a: number, b: number) => Math.abs(((a >> 16) & 255) - ((b >> 16) & 255)) + Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)) + Math.abs((a & 255) - (b & 255));
+    const shadeOfHood = (c0: number) => dist(c0, hoodCol) < 110 || (sat(c0) < 0.2 && sat(hoodCol) < 0.2 && Math.abs(lum(c0) - lum(hoodCol)) < 95);
+    for (let y = Math.max(top, hatEnd + 1); y <= neck; y++)
+      for (let x = 0; x < GRID; x++) {
+        const i = y * GRID + x;
+        if (art[i] < 0 || !inHead(x, y)) continue;
+        // (never the eyes, nor a face plainly unlike its hood)
+        if (eyes && eyeSet.has(i)) continue;
+        if (isFace(x, y) && dist(art[i], hoodCol) > 140) continue;
+        if (hoodish.includes(art[i]) || shadeOfHood(art[i])) art[i] = hoodCol;
+      }
+  }
+  // where the picture shows on the hood: inside its opening (an oval, soft at its edge) and a hat's front
+  const sm = (a: number, b: number, x: number) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  const artMask = (mx: number, my: number) => {
+    const e = Math.hypot((mx - opening.x) / opening.rx, (my - opening.y) / opening.ry);
+    const inOpening = 1 - sm(0.86, 1.0, e);
+    const onHat = hatEnd >= top ? 1 - sm(hatEnd + 0.7, hatEnd + 1.2, my) : 0;
+    return Math.max(inOpening, onHat);
+  };
+  const slot = takeSlot();
+  slotWrite(slot, artPixels(art, artMask));
+  if (import.meta.env?.DEV) debugArt.set(id, { src: new Int32Array(src), art, opening, hood: hoodCol, neck, top, hatEnd });
+  const hood = new THREE.Color().setHex(hoodCol, THREE.SRGBColorSpace);
+  const hat = hatEnd >= top ? new THREE.Color().setHex(shell[top], THREE.SRGBColorSpace) : null;
+  const { geo: head } = headGeo({
+    slot,
+    shape: new Fine(headShape, 3),
+    opening,
+    top,
+    neck,
+    cx,
+    // (the head a little smaller than the picture's: still a big-headed zkSNARK, less of a bobblehead)
+    v: v * HEAD_K,
+    hood,
+    hat,
+    hatEnd,
+    visor,
+  });
+  // the torso: as wide as the picture's shoulders (a little narrower), down past them to a hoodie's hem
   const ext = 3;
-  const bodyAt = (x: number, y: number) => (y <= bottom ? at(x, y) : inBody(x, bottom) ? (y === bottom + ext ? shade(cloth, 0.82) : cloth) : -1);
-  const bodyIn = (x: number, y: number) => (y <= bottom ? inBody(x, y) : inBody(x, bottom) && x > bs.x0 && x < bs.x1);
-  const shellExt = new Int32Array(GRID + ext).fill(cloth);
-  for (let y = 0; y < GRID; y++) shellExt[y] = shell[y];
-  shellExt[bottom + ext] = shade(cloth, 0.82);
-  const body = pillow(bodyIn, bodyAt, shellExt, neck + 1, bottom + ext, cx, v, Math.max(8, Math.min(hw * 0.85, bw * 0.62)), Math.max(1.6, bw * 0.16), undefined, [0.18, 0.02], BODY_SX);
+  const halfW = (bw / 2) * v * BODY_SX;
+  const H = (bottom + ext - neck) * v;
+  const body = bodyGeo({
+    slot,
+    shape: new Fine((x, y) => inBody(x, y), 1),
+    neck,
+    bottom,
+    ext,
+    cx,
+    v,
+    sx: BODY_SX,
+    halfW,
+    H,
+    cloth: new THREE.Color().setHex(cloth, THREE.SRGBColorSpace),
+  });
   let h = Math.imul(id ^ 0x5bd1e995, 0x27d4eb2d) >>> 0;
   const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0) / 4294967296);
   return {
@@ -457,15 +683,16 @@ function build(id: number, src: Cells, real: boolean): Look {
     real,
     head,
     body,
-    headH: (neck - top + 1) * v,
-    bodyH: (bottom + ext - neck) * v,
-    halfW: (bw / 2) * v * BODY_SX,
+    headH: (neck - top + 1) * v * HEAD_K,
+    bodyH: H,
+    halfW,
     cloth,
     // (the street's look: trousers and sneakers of their own, by the number — denim, black, khaki,
     // grey or the top's own colour darker; white, black or bright trainers on a light sole)
     ...dress(rnd, cloth),
     skin,
     bh: 0.96 + rnd() * 0.08,
+    slot,
   };
 }
 
@@ -483,380 +710,4 @@ function dress(rnd: () => number, cloth: number) {
   ];
   const [shoes, sole] = SHOES[Math.floor(rnd() * SHOES.length)];
   return { trousers: TROUSERS[Math.floor(rnd() * TROUSERS.length)], shoes, sole };
-}
-
-/**
- * Rows y0..y1 of the art (the cells `inside`), x round column `cx`, rounded into a volume `D` voxels
- * deep in the middle and thinner toward the silhouette's edge over `R` cells (a pillow: the way a
- * head, a pair of shoulders is round). The front of each column is the art; behind it, the row's
- * hood colour. Its origin at the bottom middle, facing +z.
- */
-function inflate(inside: (x: number, y: number) => boolean, at: (x: number, y: number) => number, shell: Int32Array, y0: number, y1: number, cx: number, v: number, D: number, R: number, recess: (x: number, y: number) => boolean = () => false) {
-  const W = GRID,
-    H = y1 - y0 + 1;
-  // each cell's distance to the outside (a chamfer, two passes each way)
-  const dist = new Float32Array(W * H);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) dist[y * W + x] = inside(x, y0 + y) ? 99 : 0;
-  const get = (x: number, y: number) => (x < 0 || x >= W ? 0 : y < 0 || y >= H ? 99 : dist[y * W + x]);
-  for (let pass = 0; pass < 2; pass++) {
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++) {
-        const i = y * W + x;
-        if (!dist[i]) continue;
-        dist[i] = Math.min(dist[i], get(x - 1, y) + 1, get(x, y - 1) + 1, get(x - 1, y - 1) + 1.41, get(x + 1, y - 1) + 1.41);
-      }
-    for (let y = H - 1; y >= 0; y--)
-      for (let x = W - 1; x >= 0; x--) {
-        const i = y * W + x;
-        if (!dist[i]) continue;
-        dist[i] = Math.min(dist[i], get(x + 1, y) + 1, get(x, y + 1) + 1, get(x + 1, y + 1) + 1.41, get(x - 1, y + 1) + 1.41);
-      }
-  }
-  // (a head is round at the top and the bottom too: rows off the ends count as outside for it)
-  // and round all over, not a slab with soft edges: the depth falls off from the middle like a ball's
-  let mx = 0,
-    my = 0,
-    cnt = 0,
-    xa = W,
-    xb = 0;
-  for (let i = 0; i < W * H; i++)
-    if (dist[i]) {
-      const x = i % W,
-        y = Math.floor(i / W);
-      mx += x;
-      my += y;
-      cnt++;
-      xa = Math.min(xa, x);
-      xb = Math.max(xb, x);
-    }
-  mx /= Math.max(1, cnt);
-  my /= Math.max(1, cnt);
-  const hx = Math.max(2, (xb - xa + 1) / 2),
-    hy = Math.max(2, H / 2);
-  const zLo = new Int16Array(W * H),
-    zHi = new Int16Array(W * H).fill(-1);
-  for (let i = 0; i < W * H; i++) {
-    if (!dist[i]) continue;
-    const e = Math.min(1, (Math.min(dist[i], 99) - 0.4) / R);
-    const k = Math.sqrt(Math.max(0.1, 1 - (1 - e) * (1 - e)));
-    const u = ((i % W) + 0.5 - mx) / hx,
-      w = (Math.floor(i / W) + 0.5 - my) / hy;
-    const ball = Math.sqrt(Math.max(0.3, 1 - 0.32 * u * u - 0.14 * w * w));
-    const n = Math.max(2, Math.round(D * k * ball));
-    zLo[i] = Math.floor((D - n) / 2);
-    zHi[i] = zLo[i] + n - 1;
-    if (recess(i % W, y0 + Math.floor(i / W)) && zHi[i] - zLo[i] > 3) zHi[i]--;
-  }
-  // the sides and the back: lit from above (a shade lighter at the top, darker toward the bottom)
-  const sh = new Int32Array(H);
-  for (let y = 0; y < H; y++) sh[y] = shade(shell[y0 + y], 1.06 - 0.2 * (y / Math.max(1, H - 1)));
-  const color = (x: number, y: number, z: number): number => {
-    if (x < 0 || y < 0 || x >= W || y >= H || z < 0 || z >= D) return -1;
-    const i = y * W + x;
-    if (zHi[i] < 0 || z < zLo[i] || z > zHi[i]) return -1;
-    return z === zHi[i] ? at(x, y0 + y) : sh[y];
-  };
-  return greedy(color, [W, H, D], (gx, gy, gz) => [(gx - cx) * v, (H - gy) * v, (gz - D / 2) * v]);
-}
-
-/**
- * The same volume as a smooth surface (an art toy's, not a pile of voxels): the silhouette's cells
- * rows y0..y1, a depth at every cell corner rounded like a ball from the middle and like a pillow
- * toward the edge, the front and the back as smooth sheets — a quad per pixel of the art with its
- * own colour, so the art stays crisp while the light rolls round the volume — joined round the
- * outline by a rim. The face (`recess`) sits a little back in the hood. Origin at the bottom middle,
- * facing +z; vertex colours, smooth normals.
- */
-function pillow(inside: (x: number, y: number) => boolean, at: (x: number, y: number) => number, shell: Int32Array, y0: number, y1: number, cx: number, v: number, D: number, R: number, recess: (x: number, y: number) => boolean = () => false, round: [number, number] = [0.3, 0.16], sx = 1) {
-  const W = GRID,
-    H = y1 - y0 + 1;
-  const inC = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && inside(x, y0 + y);
-  // each cell's distance to the outside
-  const dist = new Float32Array(W * H);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) dist[y * W + x] = inC(x, y) ? 99 : 0;
-  const get = (x: number, y: number) => (x < 0 || x >= W || y < 0 || y >= H ? 0 : dist[y * W + x]);
-  for (let pass = 0; pass < 2; pass++) {
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++) {
-        const i = y * W + x;
-        if (dist[i]) dist[i] = Math.min(dist[i], get(x - 1, y) + 1, get(x, y - 1) + 1, get(x - 1, y - 1) + 1.41, get(x + 1, y - 1) + 1.41);
-      }
-    for (let y = H - 1; y >= 0; y--)
-      for (let x = W - 1; x >= 0; x--) {
-        const i = y * W + x;
-        if (dist[i]) dist[i] = Math.min(dist[i], get(x + 1, y) + 1, get(x, y + 1) + 1, get(x + 1, y + 1) + 1.41, get(x - 1, y + 1) + 1.41);
-      }
-  }
-  let mx = 0,
-    my = 0,
-    cnt = 0,
-    xa = W,
-    xb = 0;
-  for (let i = 0; i < W * H; i++)
-    if (dist[i]) {
-      mx += i % W;
-      my += Math.floor(i / W);
-      cnt++;
-      xa = Math.min(xa, i % W);
-      xb = Math.max(xb, i % W);
-    }
-  mx = mx / Math.max(1, cnt) + 0.5;
-  my = my / Math.max(1, cnt) + 0.5;
-  const hx = Math.max(2, (xb - xa + 1) / 2),
-    hy = Math.max(2, H / 2);
-  // the half depth at every cell corner (x, y in 0..W, 0..H): from the cells round it
-  const CW = W + 1;
-  const half = new Float32Array(CW * (H + 1));
-  for (let y = 0; y <= H; y++)
-    for (let x = 0; x <= W; x++) {
-      let d = 0,
-        n = 0;
-      for (const [dx, dy] of [
-        [-1, -1],
-        [0, -1],
-        [-1, 0],
-        [0, 0],
-      ]) {
-        const g = get(x + dx, y + dy);
-        if (g) ((d += Math.min(g, 99)), n++);
-      }
-      if (!n) continue;
-      // (a corner on the outline: the edge's own thickness)
-      const dd = n < 4 ? 0.15 : d / n - 0.5;
-      const e = Math.min(1, Math.max(0, dd) / R);
-      const k = Math.sqrt(Math.max(0.12, 1 - (1 - e) * (1 - e)));
-      const u = (x - mx) / hx,
-        w = (y - my) / hy;
-      const ball = Math.sqrt(Math.max(0.3, 1 - round[0] * u * u - round[1] * w * w));
-      half[y * CW + x] = (D / 2) * k * ball;
-    }
-  // the face set back in the hood: by corner (the share of face cells round it), so the sheet stays whole
-  const sinkC = new Float32Array(CW * (H + 1));
-  for (let y = 0; y <= H; y++)
-    for (let x = 0; x <= W; x++) {
-      let n = 0;
-      for (const [dx, dy] of [
-        [-1, -1],
-        [0, -1],
-        [-1, 0],
-        [0, 0],
-      ])
-        if (inC(x + dx, y + dy) && recess(x + dx, y0 + y + dy)) n++;
-      sinkC[y * CW + x] = 0.6 * (n / 4);
-    }
-  const hAt = (x: number, y: number) => half[Math.max(0, Math.min(H, y)) * CW + Math.max(0, Math.min(W, x))];
-  // the corner's normal on the front sheet (from the depth's slope), mirrored on the back
-  const nrm = (x: number, y: number, out: THREE.Vector3) => {
-    const dzdx = (hAt(x + 1, y) - hAt(x - 1, y)) / 2,
-      dzdy = (hAt(x, y + 1) - hAt(x, y - 1)) / 2;
-    // world: x right, y up (grid y runs down), z out of the front
-    return out.set(-dzdx, dzdy, 1).normalize();
-  };
-  const pos: number[] = [],
-    nor: number[] = [],
-    col: number[] = [];
-  const tmp = new THREE.Color();
-  const n0 = new THREE.Vector3();
-  const P = (x: number, y: number, z: number) => [(x - cx) * v * sx, (H - y) * v, z * v];
-  const push = (p: number[], n: THREE.Vector3, c: number, k = 1) => {
-    pos.push(p[0], p[1], p[2]);
-    nor.push(n.x, n.y, n.z);
-    tmp.setHex(c, THREE.SRGBColorSpace).multiplyScalar(k);
-    col.push(tmp.r, tmp.g, tmp.b);
-  };
-  // the sides and the back: lit from above a little (lighter at the top)
-  const shadeAt = (y: number) => 1.05 - 0.16 * (y / Math.max(1, H));
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) {
-      if (!inC(x, y)) continue;
-      const art = at(x, y0 + y);
-      const back = shell[y0 + y];
-      const corners: [number, number][] = [
-        [x, y],
-        [x + 1, y],
-        [x + 1, y + 1],
-        [x, y + 1],
-      ];
-      // front (+z): the art; back (−z): the hood, a shade by height
-      for (const side of [1, -1]) {
-        const vs = corners.map(([qx, qy]) => P(qx, qy, side * Math.max(0.15, hAt(qx, qy) - (side > 0 ? sinkC[qy * CW + qx] : 0))));
-        const ns = corners.map(([qx, qy]) => {
-          const nn = nrm(qx, qy, new THREE.Vector3());
-          if (side < 0) nn.z = -nn.z;
-          return nn;
-        });
-        const order = side > 0 ? [0, 3, 2, 0, 2, 1] : [0, 1, 2, 0, 2, 3];
-        for (const t of order) push(vs[t], ns[t], side > 0 ? art : back, side > 0 ? 1 : shadeAt(corners[t][1]));
-      }
-      // the rim, where the cell's edge is the outline: from the front sheet to the back one
-      const edges: [number, number, number, number, number, number][] = [
-        [x, y, x + 1, y, 0, 1],
-        [x + 1, y, x + 1, y + 1, 1, 0],
-        [x + 1, y + 1, x, y + 1, 0, -1],
-        [x, y + 1, x, y, -1, 0],
-      ];
-      const nb = [
-        [x, y - 1],
-        [x + 1, y],
-        [x, y + 1],
-        [x - 1, y],
-      ];
-      edges.forEach(([ax, ay, bx, by, ex, ey], k) => {
-        if (inC(nb[k][0], nb[k][1])) return;
-        n0.set(ex, ey, 0);
-        const za = Math.max(0.15, hAt(ax, ay)),
-          zb = Math.max(0.15, hAt(bx, by));
-        const a1 = P(ax, ay, za),
-          b1 = P(bx, by, zb),
-          b2 = P(bx, by, -zb),
-          a2 = P(ax, ay, -za);
-        // (the rim takes the art's colour on its front half, the hood's behind)
-        const mid1 = P(ax, ay, 0),
-          mid2 = P(bx, by, 0);
-        for (const [q1, q2, q3, q4, c] of [
-          [a1, b1, mid2, mid1, art],
-          [mid1, mid2, b2, a2, back],
-        ] as [number[], number[], number[], number[], number][]) {
-          for (const p0 of [q1, q2, q3, q1, q3, q4]) push(p0, n0, c, c === back ? shadeAt(ay) : 0.92);
-        }
-      });
-    }
-  // wind every triangle to face its normal
-  const pa = new THREE.Vector3(),
-    pb = new THREE.Vector3(),
-    pc = new THREE.Vector3(),
-    pn = new THREE.Vector3();
-  for (let i = 0; i < pos.length; i += 9) {
-    pa.fromArray(pos, i);
-    pb.fromArray(pos, i + 3);
-    pc.fromArray(pos, i + 6);
-    pn.fromArray(nor, i).add(pn.clone().fromArray(nor, i + 3)).add(pn.clone().fromArray(nor, i + 6));
-    if (pb.sub(pa).cross(pc.sub(pa)).dot(pn) < 0)
-      for (const arr of [pos, nor, col])
-        for (let k = 0; k < 3; k++) {
-          const t = arr[i + 3 + k];
-          arr[i + 3 + k] = arr[i + 6 + k];
-          arr[i + 6 + k] = t;
-        }
-  }
-  return indexed(pos, nor, col);
-}
-
-/**
- * Triangles to an indexed geometry: corners that are the same point with the same normal and colour
- * shared (the back's sheet and a run of one colour on the front are most of a bust: about half the
- * vertices of the triangle soup, for the 400 drawn round you).
- */
-function indexed(pos: number[], nor: number[], col: number[]) {
-  const map = new Map<string, number>();
-  const P: number[] = [],
-    N: number[] = [],
-    C: number[] = [],
-    I: number[] = [];
-  const r = (x: number, k: number) => Math.round(x * k);
-  for (let i = 0; i < pos.length; i += 3) {
-    const key = `${r(pos[i], 1e4)},${r(pos[i + 1], 1e4)},${r(pos[i + 2], 1e4)},${r(nor[i], 100)},${r(nor[i + 1], 100)},${r(nor[i + 2], 100)},${r(col[i], 255)},${r(col[i + 1], 255)},${r(col[i + 2], 255)}`;
-    let k = map.get(key);
-    if (k === undefined) {
-      k = P.length / 3;
-      map.set(key, k);
-      P.push(pos[i], pos[i + 1], pos[i + 2]);
-      N.push(nor[i], nor[i + 1], nor[i + 2]);
-      C.push(col[i], col[i + 1], col[i + 2]);
-    }
-    I.push(k);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3));
-  g.setAttribute("normal", new THREE.Float32BufferAttribute(N, 3));
-  g.setAttribute("color", new THREE.Float32BufferAttribute(C, 3));
-  g.setIndex(I);
-  g.computeBoundingBox();
-  g.computeBoundingSphere();
-  return g;
-}
-
-// (the voxel builder, kept: the look before the smooth one)
-void inflate;
-
-/** A voxel grid's faces, greedy-merged by colour, as a flat-shaded geometry (vertex colours). */
-function greedy(color: (x: number, y: number, z: number) => number, dims: number[], place: (x: number, y: number, z: number) => [number, number, number]) {
-  const pos: number[] = [],
-    nor: number[] = [],
-    col: number[] = [];
-  const tmp = new THREE.Color();
-  const a = new THREE.Vector3(),
-    b = new THREE.Vector3(),
-    cc = new THREE.Vector3(),
-    n = new THREE.Vector3();
-  for (let axis = 0; axis < 3; axis++)
-    for (let dir = -1; dir <= 1; dir += 2) {
-      const u = (axis + 1) % 3,
-        w = (axis + 2) % 3;
-      const mask = new Int32Array(dims[u] * dims[w]);
-      const p = [0, 0, 0],
-        q = [0, 0, 0];
-      q[axis] = dir;
-      for (p[axis] = 0; p[axis] < dims[axis]; p[axis]++) {
-        let m = 0;
-        for (p[w] = 0; p[w] < dims[w]; p[w]++)
-          for (p[u] = 0; p[u] < dims[u]; p[u]++, m++) {
-            const ca = color(p[0], p[1], p[2]);
-            mask[m] = ca >= 0 && color(p[0] + q[0], p[1] + q[1], p[2] + q[2]) < 0 ? ca : -1;
-          }
-        m = 0;
-        for (let j = 0; j < dims[w]; j++)
-          for (let i = 0; i < dims[u]; ) {
-            const c = mask[m];
-            if (c < 0) {
-              i++;
-              m++;
-              continue;
-            }
-            let ww = 1;
-            while (i + ww < dims[u] && mask[m + ww] === c) ww++;
-            let hh = 1;
-            outer: for (; j + hh < dims[w]; hh++) for (let k = 0; k < ww; k++) if (mask[m + k + hh * dims[u]] !== c) break outer;
-            const o = [0, 0, 0];
-            o[axis] = p[axis] + (dir > 0 ? 1 : 0);
-            o[u] = i;
-            o[w] = j;
-            const du = [0, 0, 0],
-              dv = [0, 0, 0];
-            du[u] = ww;
-            dv[w] = hh;
-            const corners = [
-              place(o[0], o[1], o[2]),
-              place(o[0] + du[0], o[1] + du[1], o[2] + du[2]),
-              place(o[0] + du[0] + dv[0], o[1] + du[1] + dv[1], o[2] + du[2] + dv[2]),
-              place(o[0] + dv[0], o[1] + dv[1], o[2] + dv[2]),
-            ];
-            // the face's normal in the world (grid y runs down: flipped)
-            n.set(axis === 0 ? dir : 0, axis === 1 ? -dir : 0, axis === 2 ? dir : 0);
-            a.fromArray(corners[0]);
-            b.fromArray(corners[1]);
-            cc.fromArray(corners[2]);
-            const flip = b.sub(a).cross(cc.sub(a)).dot(n) < 0;
-            const order = flip ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
-            // a touch of light baked in: underneath darker, the top a little brighter
-            const k = axis === 1 ? (dir > 0 ? 0.78 : 1.04) : 1;
-            tmp.setHex(c, THREE.SRGBColorSpace).multiplyScalar(k);
-            for (const t of order) {
-              pos.push(...corners[t]);
-              nor.push(n.x, n.y, n.z);
-              col.push(tmp.r, tmp.g, tmp.b);
-            }
-            for (let y = 0; y < hh; y++) for (let k2 = 0; k2 < ww; k2++) mask[m + k2 + y * dims[u]] = -1;
-            i += ww;
-            m += ww;
-          }
-      }
-    }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
-  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-  g.computeBoundingBox();
-  g.computeBoundingSphere();
-  return g;
 }

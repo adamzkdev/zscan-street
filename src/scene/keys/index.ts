@@ -8,8 +8,8 @@ import { markingsTexture, neonTexture, releaseAfterUpload } from "../textures";
 import { GROUND, terrainMat } from "../real/ground";
 import { plantTrees, type Species } from "../real/trees";
 import { placeProps } from "../real/props";
-import { MATERIALS } from "../voxel/mesher";
-import type { Kind } from "../voxel/model";
+import { keysMat } from "../real/keysmats";
+import type { KSlot } from "../real/keysreal";
 import { beachY, corridor, inKeys, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, shoreDist } from "./plan";
 import { KeysSea } from "./sea";
 import type { KGeo, KOut } from "./worker";
@@ -226,7 +226,8 @@ export class Keys {
     };
     for (const s of kStreets()) add(roadMat(s.width), strip(s.axis, s.at, s.from, s.to, s.width, 0.011 + (s.axis === "z" ? 0.002 : 0)));
     // the corridor: the tunnel's road and the bit of headland road before it
-    add(roadMat(KTUNNEL.half * 2 - 2), strip("z", KX, KTUNNEL.z0 - 0.4, KTUNNEL.z1 + 0.2, KTUNNEL.half * 2 - 2, 0.03));
+    // (painted for two lanes each way, as the traffic runs through it: a double yellow, broken lane lines)
+    add(GROUND.asphalt(markingsTexture(16, KTUNNEL.half * 2 - 2, [], 4)), strip("z", KX, KTUNNEL.z0 - 0.4, KTUNNEL.z1 + 0.2, KTUNNEL.half * 2 - 2, 0.03));
     // under it all, a floor the colour of the asphalt (no glimpse of the sea through a seam)
     const under = new THREE.PlaneGeometry(TOWN.x1 - TOWN.x0, TOWN.z1 - TOWN.z0).rotateX(-Math.PI / 2).translate((TOWN.x0 + TOWN.x1) / 2, -0.02, (TOWN.z0 + TOWN.z1) / 2);
     add(GROUND.asphalt(), under);
@@ -327,11 +328,16 @@ export class Keys {
       return null;
     });
     if (!out) return;
+    // the town, realistic: a mesh per material slot and 64 m sector (src/scene/real/keysreal.ts, keysmats.ts)
+    const flat = new Set<KSlot>(["neon", "water", "lawn", "path", "sand", "asphalt", "court", "shop"]);
     for (const ch of out.chunks) {
-      for (const [k, d] of Object.entries(ch.geos) as [Kind, KGeo][]) {
-        const mesh = new THREE.Mesh(geometry(d), MATERIALS[k]);
-        mesh.castShadow = k !== "emit";
-        mesh.receiveShadow = k !== "emit";
+      for (const [k, d] of Object.entries(ch.geos) as [KSlot, KGeo][]) {
+        const mesh = new THREE.Mesh(geometry(d), keysMat(k));
+        // (standing at its sector's centre: what judges a mesh's size on screen measures from its origin)
+        mesh.position.set(ch.centre[0], 0, ch.centre[1]);
+        mesh.updateMatrix();
+        mesh.castShadow = !flat.has(k);
+        mesh.receiveShadow = k !== "neon";
         mesh.userData.kind = k;
         mesh.matrixAutoUpdate = false;
         this.group.add(mesh);
@@ -494,6 +500,7 @@ function geometry(d: KGeo) {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(d.pos, 3));
   g.setAttribute("normal", new THREE.BufferAttribute(d.nor, 3, true));
+  g.setAttribute("uv", new THREE.BufferAttribute(d.uv, 2));
   g.setAttribute("color", half(d.col));
   g.setIndex(new THREE.BufferAttribute(d.idx, 1));
   g.computeBoundingSphere();

@@ -10,8 +10,6 @@ import { SCRAMBLE, type CityTraffic } from "./citytraffic";
 import { ADS, MARKET_ADS, TICKER, zLogo, type Ad, type LiveData } from "./decor";
 import { fitText } from "./fit";
 import { sayAt } from "./speech";
-import { toObject } from "./voxel/mesher";
-import { C, E, VoxelModel } from "./voxel/model";
 
 /**
  * Shibuya, alive: the scramble crossing at the north boulevard and the street west of the park.
@@ -338,49 +336,65 @@ function plaqueTexture() {
 // ---- Hachiko -------------------------------------------------------------------------------------
 
 /**
- * Hachiko, sitting up and waiting, as a zebra (Zcash's mascot) zkSNARK: white with black stripes,
- * a black mane, gold eyes and a gold Z on his collar. Voxels at the street's own scale (6 per metre),
- * facing +z in the model.
+ * Hachiko, sitting up and waiting, as a zebra (Zcash's mascot) zkSNARK: cast in bronze, his stripes
+ * the dark patina between the polished ones, a red enamelled collar, gold eyes and a gold Z on the
+ * collar's tag. Real shapes (rounded body, legs, head, ears, the tail curled over the back) at the
+ * size the voxel statue had, facing +z, the plinth's top at y 0.
  */
-function hachikoModel() {
-  const m = new VoxelModel(16, 22, 18);
-  const W = C("#ecebe6"),
-    K = C("#141318"),
-    gold = E("#f4b728", 2.2);
-  const stripe = (x: number, y: number, z: number) => (Math.floor((y + z * 0.6 + Math.abs(x - 7.5) * 0.3) / 2) % 2 === 0 ? K : W);
-  // haunches and hind legs
-  m.box(3, 0, 1, 13, 5, 8, stripe);
-  m.box(2, 0, 3, 4, 3, 9, stripe);
-  m.box(12, 0, 3, 14, 3, 9, stripe);
-  // front legs, straight
-  m.box(5, 0, 9, 7, 8, 11, stripe);
-  m.box(9, 0, 9, 11, 8, 11, stripe);
-  m.box(5, 0, 11, 7, 1, 12, K);
-  m.box(9, 0, 11, 11, 1, 12, K);
-  // chest and body leaning up
-  m.box(4, 5, 3, 12, 10, 10, stripe);
-  m.box(5, 10, 5, 11, 13, 11, stripe);
-  // neck and head
-  m.box(5, 12, 7, 11, 15, 12, stripe);
-  m.box(4, 14, 7, 12, 19, 13, stripe);
-  // muzzle, nose
-  m.box(6, 14, 13, 10, 17, 16, W);
-  m.box(7, 16, 15, 9, 17, 16, K);
-  // ears up
-  m.box(4, 19, 8, 6, 21, 10, K);
-  m.box(10, 19, 8, 12, 21, 10, K);
-  // mane along the neck
-  m.box(7, 13, 5, 9, 20, 7, K);
-  // eyes
-  m.set(5, 17, 13, gold);
-  m.set(10, 17, 13, gold);
-  // collar with the Z tag
-  m.box(5, 12, 8, 11, 13, 12, C("#c0302e"));
-  m.box(7, 10, 12, 9, 12, 13, gold);
-  // the tail curled over the back
-  m.box(7, 6, 0, 9, 9, 1, stripe);
-  m.box(7, 9, 0, 9, 10, 2, K);
-  return m;
+function hachikoStatue() {
+  const lightB = new THREE.Color("#c9a26a"),
+    darkB = new THREE.Color("#3a2c20");
+  const parts: THREE.BufferGeometry[] = [];
+  const blob = (rx: number, ry: number, rz: number, x: number, y: number, z: number, tx = 0) => parts.push(new THREE.SphereGeometry(1, 22, 16).scale(rx, ry, rz).rotateX(tx).translate(x, y, z));
+  const limb = (a: THREE.Vector3, b: THREE.Vector3, r: number) => {
+    const len = a.distanceTo(b);
+    const g = new THREE.CylinderGeometry(r, r * 0.9, len, 14).translate(0, len / 2, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()));
+    parts.push(g.translate(a.x, a.y, a.z));
+  };
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  blob(0.95, 0.5, 0.72, 0, 0.45, -0.55);
+  for (const s of [-1, 1]) {
+    blob(0.26, 0.16, 0.5, s * 0.82, 0.14, -0.15);
+    limb(V(s * 0.33, 1.25, 0.5), V(s * 0.33, 0.06, 0.72), 0.17);
+    blob(0.2, 0.1, 0.26, s * 0.33, 0.07, 0.86);
+  }
+  blob(0.66, 0.88, 0.6, 0, 1.2, -0.02, -0.35);
+  blob(0.42, 0.5, 0.45, 0, 2.02, 0.38, -0.3);
+  blob(0.58, 0.5, 0.55, 0, 2.72, 0.6);
+  blob(0.3, 0.24, 0.42, 0, 2.58, 1.12);
+  for (const s of [-1, 1]) parts.push(new THREE.ConeGeometry(0.17, 0.48, 12).rotateX(-0.12).translate(s * 0.33, 3.3, 0.48));
+  // the tail, curled over the haunches
+  parts.push(new THREE.TorusGeometry(0.26, 0.1, 10, 20, Math.PI * 1.5).rotateY(Math.PI / 2).translate(0, 1.15, -1.05));
+  // (one geometry; its colours the stripes: polished bronze and the dark patina)
+  const body = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)), false)!;
+  const p = body.getAttribute("position");
+  const col = new Float32Array(p.count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i),
+      y = p.getY(i),
+      z = p.getZ(i);
+    const k = (y + z * 0.6 + Math.abs(x) * 0.3) / 0.34;
+    const t = THREE.MathUtils.smoothstep(Math.abs((k % 2) - 1), 0.42, 0.58);
+    c.copy(darkB).lerp(lightB, t);
+    // (the mane and the ears dark, the muzzle polished by every hand that strokes it)
+    if (Math.abs(x) < 0.12 && z < 0.25 && y > 1.9 && y < 3.0) c.copy(darkB);
+    if (y > 3.05) c.copy(darkB);
+    if (z > 1.2 && y > 2.4) c.copy(lightB).multiplyScalar(1.15);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  body.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const g = new THREE.Group();
+  const bronze = new THREE.Mesh(body, new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.85, roughness: 0.36, envMapIntensity: 1.2 }));
+  bronze.castShadow = bronze.receiveShadow = true;
+  const gold = new THREE.MeshStandardMaterial({ color: "#f4b728", metalness: 1, roughness: 0.2, emissive: "#3a2600" });
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.07, 10, 28).rotateX(Math.PI / 2 - 0.35).translate(0, 2.02, 0.38), new THREE.MeshStandardMaterial({ color: "#a8231f", roughness: 0.3, metalness: 0.2 }));
+  const tag = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.03, 18).rotateX(Math.PI / 2).translate(0, 1.72, 0.86), gold);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8).translate(0, 2.68, 1.52), new THREE.MeshStandardMaterial({ color: "#1a1612", roughness: 0.25, metalness: 0.6 }));
+  const eyes = new THREE.Mesh(mergeGeometries([-1, 1].map((s) => new THREE.SphereGeometry(0.06, 10, 8).translate(s * 0.27, 2.86, 1.02)), false)!, gold);
+  g.add(bronze, collar, tag, nose, eyes);
+  return g;
 }
 
 // ---- the module ------------------------------------------------------------------------------------
@@ -567,7 +581,7 @@ export class Shibuya {
     plinth.position.set(p.x, CURB + 0.55, p.z);
     const cap = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.1, 1.26), new THREE.MeshStandardMaterial({ color: "#8e877e", roughness: 0.7 }));
     cap.position.set(p.x, CURB + 1.15, p.z);
-    const dog = toObject(hachikoModel());
+    const dog = hachikoStatue();
     dog.position.set(p.x, CURB + 1.2, p.z);
     // facing the crossing
     dog.rotation.y = Math.atan2(SCRAMBLE.x - p.x, SCRAMBLE.z - p.z);

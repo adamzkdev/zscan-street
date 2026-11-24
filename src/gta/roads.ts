@@ -73,7 +73,8 @@ const GX0 = Math.min(CITY.minX, KEYS.x0),
 const W = Math.ceil((Math.max(CITY.maxX, KEYS.x1) - GX0) / RES);
 const H = Math.ceil((Math.max(CITY.maxZ, KEYS.z1) - GZ0) / RES);
 /** On the Golden Gate's deck. */
-const onBridge = (x: number, z: number) => Math.abs(x - BAY.bridge.x) < 6 && z > ST.ringS + 4 && z < BAY.headland.z0 + 4;
+// (the realistic bridge: six lanes, cycle lanes and walkways — src/scene/real/bridge.ts)
+const onBridge = (x: number, z: number) => Math.abs(x - BAY.bridge.x) < 16 && z > ST.ringS + 7 && z < BAY.headland.z0 + 4;
 
 export class Roads {
   readonly rects: Rect[] = [];

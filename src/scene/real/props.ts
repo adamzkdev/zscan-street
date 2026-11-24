@@ -5,6 +5,7 @@ import { PROP_HOLES, PROP_HOLE_N } from "../voxel/mesher";
 import { GROUND } from "./ground";
 import { maps } from "./tex";
 import { plantTrees, type TreeSpot } from "./trees";
+import { build2, KINDS2, LIGHT2, RADIUS2, SOLID2, type Kit } from "./props2";
 
 /**
  * The street's furniture, realistic (src/scene/real): powder-coated street lamps with a lit head,
@@ -16,7 +17,7 @@ import { plantTrees, type TreeSpot } from "./trees";
  */
 
 /** The kinds this module draws (the rest of the plan's props stay with the voxel props worker). */
-export const REAL_PROPS = new Set(["lamp", "bench", "bollard", "trashBin", "hydrant", "mailbox", "planter", "vending", "streetSign", "stopPole", "taxiSign"]);
+export const REAL_PROPS = new Set(["lamp", "bench", "bollard", "trashBin", "hydrant", "mailbox", "planter", "vending", "streetSign", "stopPole", "taxiSign", "shelter", ...KINDS2]);
 
 /** Radius for the walker's collisions (as the voxel props had them). */
 const RADIUS: Record<string, number> = { lamp: 0.18, bench: 0.5, bollard: 0.18, trashBin: 0.35, hydrant: 0.2, mailbox: 0.35, planter: 0.75, vending: 0.6, streetSign: 0.15, stopPole: 0.2, taxiSign: 0.2 };
@@ -78,6 +79,16 @@ const glow = (hex: string, k = 3) =>
     return m;
   });
 const lens = () => M("lens", () => new THREE.MeshStandardMaterial({ color: "#d8d4c8", roughness: 0.2, metalness: 0.1, emissive: "#ffe8c0", emissiveIntensity: 0.15 }));
+
+/** What the other kinds' builders (props2.ts) use: the same shared materials (with the knock-down holes). */
+const KIT: Kit = {
+  M,
+  add: (parts, m, g) => add(parts, m, g),
+  paint: (hex, rough, metal) => paint(hex, rough, metal),
+  steel: () => steel(),
+  wood: () => wood(),
+  glow: (hex, k) => glow(hex, k),
+};
 
 // ---- geometry helpers -------------------------------------------------------------------------
 
@@ -269,9 +280,14 @@ export interface PropSpot {
  */
 export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
   const byKey = new Map<string, PropSpot[]>();
+  const shelters: PropSpot[] = [];
   for (const p of list) {
     if (!REAL_PROPS.has(p.type)) continue;
-    const variant = p.type === "lamp" ? String(p.args[0] ?? "#ffb46b") : p.type === "vending" ? String(p.args[0] ?? "red") : "";
+    if (p.type === "shelter") {
+      shelters.push(p);
+      continue;
+    }
+    const variant = p.type === "lamp" ? String(p.args[0] ?? "#ffb46b") : p.type === "vending" ? String(p.args[0] ?? "red") : (KINDS2 as readonly string[]).includes(p.type) ? JSON.stringify(p.args) : "";
     const k = `${p.type}|${variant}`;
     const l = byKey.get(k);
     if (l) l.push(p);
@@ -279,6 +295,7 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
   }
   const lights: [number, number, number, string][] = [];
   const circles: [number, number, number][] = [];
+  const rects: [number, number, number, number][] = [];
   const shrubs: TreeSpot[] = [];
   const m = new THREE.Matrix4(),
     q = new THREE.Quaternion(),
@@ -286,7 +303,9 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
     pos = new THREE.Vector3(),
     Y = new THREE.Vector3(0, 1, 0);
   for (const [k, ps] of byKey) {
-    const [type, variant] = k.split("|");
+    const bar = k.indexOf("|");
+    const type = k.slice(0, bar),
+      variant = k.slice(bar + 1);
     const parts: Parts = new Map();
     let head: THREE.Vector3 | null = null;
     if (type === "lamp") head = lamp(parts, variant);
@@ -300,6 +319,7 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
     else if (type === "stopPole") stopPole(parts);
     else if (type === "taxiSign") taxiSign(parts);
     else if (type === "planter") planter(parts);
+    else if ((KINDS2 as readonly string[]).includes(type)) build2(KIT, parts, type, JSON.parse(variant || "[]"));
     for (const [mat, geos] of parts) {
       const geo = mergeGeometries(geos, false);
       if (!geo) continue;
@@ -316,7 +336,22 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
       parent.add(im);
     }
     for (const p of ps) {
-      circles.push([p.x, p.z, RADIUS[type] ?? 0.3]);
+      // (what a body bumps into whole: its footprint; posts and trunks a circle; flat things nothing)
+      const solid = SOLID2[type];
+      if (solid) {
+        const turned = Math.abs(Math.sin(p.rot)) > 0.7;
+        const hw = (turned ? solid[1] : solid[0]) / 2,
+          hd = (turned ? solid[0] : solid[1]) / 2;
+        rects.push([p.x - hw, p.z - hd, p.x + hw, p.z + hd]);
+      } else {
+        const rr = RADIUS2[type] ?? RADIUS[type] ?? 0.3;
+        if (rr > 0) circles.push([p.x, p.z, rr]);
+      }
+      const l2 = LIGHT2[type];
+      if (l2) {
+        const w = new THREE.Vector3(l2[0], l2[1], l2[2]).applyAxisAngle(Y, p.rot);
+        lights.push([p.x + w.x, (p.y ?? 0.2) + w.y, p.z + w.z, l2[3]]);
+      }
       if (head) {
         const w = head.clone().applyAxisAngle(Y, p.rot);
         lights.push([p.x + w.x, (p.y ?? 0.2) + w.y, p.z + w.z, variant]);
@@ -325,7 +360,19 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
     }
   }
   if (shrubs.length) plantTrees(parent, shrubs);
-  return { lights, circles };
+  // the plan's own bus shelter (the heart's): the realistic one, its light, its footprint
+  for (const p of shelters) {
+    const sh = realShelter();
+    sh.position.set(p.x, p.y ?? 0.2, p.z);
+    sh.rotation.y = p.rot;
+    sh.name = "real:props:shelter";
+    parent.add(sh);
+    const w = new THREE.Vector3(0, 2.33, 0.17).applyAxisAngle(Y, p.rot);
+    lights.push([p.x + w.x, (p.y ?? 0.2) + w.y, p.z + w.z, "#ffd28a"]);
+    const turned = Math.abs(Math.sin(p.rot)) > 0.7;
+    rects.push(turned ? [p.x - 0.85, p.z - 2.35, p.x + 0.85, p.z + 2.35] : [p.x - 2.35, p.z - 0.85, p.x + 2.35, p.z + 0.85]);
+  }
+  return { lights, circles, rects };
 }
 
 /**
@@ -333,6 +380,26 @@ export function placeProps(parent: THREE.Object3D, list: PropSpot[]) {
  * a light strip under it (lit at night), a slatted bench; the advert's lightbox is put on its open
  * end by the caller (local x +2.36). Same footprint as the voxel one: 4.7 × 1.7 m, open to +z.
  */
+/** One prop on its own, plain meshes on the shared parts (a lamp the game knocks over falls as this): its foot at the origin, front +z. */
+export function realPropObject(type: string, args: unknown[] = []) {
+  const parts: Parts = new Map();
+  if (type === "lamp") lamp(parts, String(args[0] ?? "#ffb46b"));
+  else if (type === "bollard") bollard(parts);
+  else if (type === "trashBin") trashBin(parts);
+  else if (type === "streetSign") streetSign(parts);
+  else if (type === "stopPole") stopPole(parts);
+  else if ((KINDS2 as readonly string[]).includes(type)) build2(KIT, parts, type, args);
+  const g = new THREE.Group();
+  for (const [mat, geos] of parts) {
+    const geo = mergeGeometries(geos, false);
+    if (!geo) continue;
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = !(mat as THREE.MeshBasicMaterial).isMeshBasicMaterial;
+    g.add(m);
+  }
+  return g;
+}
+
 export function realShelter() {
   const g = new THREE.Group();
   const frame = paint("#2a2d32", 0.4, 0.75);

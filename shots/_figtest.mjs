@@ -9,7 +9,7 @@ const errs = [];
 p.on("pageerror", (e) => errs.push(e.message));
 p.on("console", (m) => m.text().startsWith("verts") && console.log(m.text()));
 for (const view of (process.env.VIEWS ?? "front,three,side,back").split(",")) {
-  await p.goto(`http://localhost:3061/figtest.html?ids=${IDS}&view=${view}${process.env.CLOSE ? '&close' : ''}`);
+  await p.goto(`http://localhost:3061/figtest.html?ids=${IDS}&view=${view}${process.env.CLOSE ? '&close' : ''}${process.env.QS ?? ''}`);
   await p.waitForFunction(() => window.__figReady, { timeout: 60000, polling: 200 });
   await new Promise((r) => setTimeout(r, 800));
   await p.screenshot({ path: `${OUT}-${view}.png` });

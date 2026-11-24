@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { BAY, RIVER } from "../city/plan";
 import { C, E, G, VoxelModel } from "../voxel/model";
 import { Fleet, yawOf } from "./air";
+import { realCruise, realJetSki, realMotorYacht, realSailYacht, realSpeedBoat } from "../real/yachts";
+const REAL = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
 import type { AliveCtx, AliveFrame, AlivePart } from "./types";
 
 /**
@@ -332,11 +334,12 @@ class Water implements AlivePart {
     g.name = "alive-water";
     ctx.group.add(g);
     const k = ctx.budget;
-    this.sails = new Fleet(sailModel("#f4f4f6", "#f4b728"), 4, g);
-    this.motors = new Fleet(motorModel(), 3, g);
-    this.skis = [new Fleet(jetskiModel("#f4b728"), 3, g), new Fleet(jetskiModel("#3ef0ff"), 3, g)];
-    this.speeds = new Fleet(speedModel("#d0202a"), 4, g);
-    this.cruise = new Fleet(cruiseModel(), 1, g, 2);
+    // (realistic hulls, sails and riders: src/scene/real/yachts.ts; ?real=0 the voxel ones)
+    this.sails = new Fleet(REAL ? realSailYacht("#f4f4f6", "#f4b728") : sailModel("#f4f4f6", "#f4b728"), 4, g);
+    this.motors = new Fleet(REAL ? realMotorYacht() : motorModel(), 3, g);
+    this.skis = [new Fleet(REAL ? realJetSki("#f4b728") : jetskiModel("#f4b728"), 3, g), new Fleet(REAL ? realJetSki("#3ef0ff") : jetskiModel("#3ef0ff"), 3, g)];
+    this.speeds = new Fleet(REAL ? realSpeedBoat("#d0202a") : speedModel("#d0202a"), 4, g);
+    this.cruise = new Fleet(REAL ? realCruise() : cruiseModel(), 1, g, 2);
     this.wakes = new Wakes(k > 0.5 ? 3200 : 1800, g);
     const bay = BAY.water,
       riv = RIVER.water;

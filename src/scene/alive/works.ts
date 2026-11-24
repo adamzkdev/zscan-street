@@ -1,6 +1,43 @@
 import * as THREE from "three";
 import { CURB } from "../city/plan";
-import { toObject } from "../voxel/mesher";
+import { toObject as voxObject } from "../voxel/mesher";
+import { realObject } from "../real/remesh";
+import { paint as carPaint } from "../real/carkit";
+/** (realistic: the voxel parts remeshed in photographed materials, the cranes' lattices as steel tubes; ?real=0 the voxels) */
+const REAL = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
+const toObject = (m: VoxelModel, o: { shadows?: boolean } = {}) => (REAL ? realObject(m, o) : voxObject(m, o));
+/** A steel member from a to b (m), its radius r: into `out`. */
+function member(out: THREE.BufferGeometry[], a: THREE.Vector3, b: THREE.Vector3, r: number) {
+  const len = a.distanceTo(b);
+  if (len < 1e-3) return;
+  const g = new THREE.CylinderGeometry(r, r, len, 6, 1).translate(0, len / 2, 0);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()));
+  out.push(g.translate(a.x, a.y, a.z));
+}
+function lattice(geos: THREE.BufferGeometry[], color: string) {
+  const g = mergeTubes(geos);
+  const m = new THREE.Mesh(g, carPaint(color, "solid"));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+function mergeTubes(list: THREE.BufferGeometry[]) {
+  let n = 0;
+  for (const g of list) n += (g.index ? g.index.count : g.getAttribute("position").count);
+  const pos = new Float32Array(n * 3),
+    nor = new Float32Array(n * 3);
+  let o = 0;
+  for (const g0 of list) {
+    const g = g0.index ? g0.toNonIndexed() : g0;
+    pos.set(g.getAttribute("position").array as Float32Array, o);
+    nor.set(g.getAttribute("normal").array as Float32Array, o);
+    o += g.getAttribute("position").count * 3;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  out.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+  return out;
+}
 import { C, E, G, VOX, VoxelModel, type Paint } from "../voxel/model";
 import type { AliveCtx, AliveFrame, AlivePart } from "./types";
 
@@ -254,7 +291,32 @@ class Site {
         line(mm, a as [number, number, number], b as [number, number, number], yel);
     }
     mm.box(0, 0, 0, 10, 2, 10, C("#3a3842"));
-    const mast = toObject(mm);
+    let mast: THREE.Object3D;
+    if (REAL) {
+      // the mast: four chords, a horizontal and a diagonal brace on each face every 1.5 m
+      const tubes: THREE.BufferGeometry[] = [];
+      const hw = 0.75,
+        H = mastH * VOX;
+      const cs: [number, number][] = [
+        [-hw, -hw],
+        [hw, -hw],
+        [hw, hw],
+        [-hw, hw],
+      ];
+      for (const [x, z] of cs) member(tubes, new THREE.Vector3(x, 0, z), new THREE.Vector3(x, H, z), 0.07);
+      for (let y = 0; y < H - 1.4; y += 1.5)
+        for (let k = 0; k < 4; k++) {
+          const [ax, az] = cs[k],
+            [bx, bz] = cs[(k + 1) % 4];
+          member(tubes, new THREE.Vector3(ax, y, az), new THREE.Vector3(bx, y, bz), 0.035);
+          member(tubes, new THREE.Vector3(ax, y, az), new THREE.Vector3(bx, y + 1.5, bz), 0.03);
+        }
+      mast = new THREE.Group();
+      mast.add(lattice(tubes, YELLOW));
+      const base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.35, 2.2).translate(0, 0.17, 0), carPaint("#3a3842", "solid"));
+      base.receiveShadow = true;
+      mast.add(base);
+    } else mast = toObject(mm);
     this.mast.set(wx(mx0) + 4.5 * VOX, CURB, wz(mz0) + 4.5 * VOX);
     mast.position.copy(this.mast);
     this.root.add(mast);
@@ -274,10 +336,10 @@ class Site {
     // jib: two bottom chords, a top chord, lacing
     const jy = 12,
       jt = 21;
-    jm.box(piv, jy, zc - 3, JW - 1, jy + 1, zc - 2, yel);
-    jm.box(piv, jy, zc + 3, JW - 1, jy + 1, zc + 4, yel);
-    jm.box(piv, jt, zc, JW - 4, jt + 1, zc + 1, yel);
-    for (let x = piv; x < JW - 6; x += 6) {
+    if (!REAL) jm.box(piv, jy, zc - 3, JW - 1, jy + 1, zc - 2, yel);
+    if (!REAL) jm.box(piv, jy, zc + 3, JW - 1, jy + 1, zc + 4, yel);
+    if (!REAL) jm.box(piv, jt, zc, JW - 4, jt + 1, zc + 1, yel);
+    for (let x = piv; x < JW - 6 && !REAL; x += 6) {
       line(jm, [x, jy, zc - 3], [x + 3, jt, zc], yel);
       line(jm, [x + 3, jt, zc], [x + 6, jy, zc - 3], yel);
       line(jm, [x, jy, zc + 3], [x + 3, jt, zc], yel);
@@ -294,12 +356,14 @@ class Site {
     // the apex and its pendant ties to both ends
     const ax = piv,
       ay = JH - 2;
-    line(jm, [piv - 5, 12, zc - 3], [ax, ay, zc], yel, 1);
-    line(jm, [piv + 5, 12, zc - 3], [ax, ay, zc], yel, 1);
-    line(jm, [piv - 5, 12, zc + 4], [ax, ay, zc], yel, 1);
-    line(jm, [piv + 5, 12, zc + 4], [ax, ay, zc], yel, 1);
-    line(jm, [ax, ay, zc], [piv + Math.round(L * 0.7), jt, zc], C("#5a5864"));
-    line(jm, [ax, ay, zc], [4, jy + 2, zc], C("#5a5864"));
+    if (!REAL) {
+      line(jm, [piv - 5, 12, zc - 3], [ax, ay, zc], yel, 1);
+      line(jm, [piv + 5, 12, zc - 3], [ax, ay, zc], yel, 1);
+      line(jm, [piv - 5, 12, zc + 4], [ax, ay, zc], yel, 1);
+      line(jm, [piv + 5, 12, zc + 4], [ax, ay, zc], yel, 1);
+      line(jm, [ax, ay, zc], [piv + Math.round(L * 0.7), jt, zc], C("#5a5864"));
+      line(jm, [ax, ay, zc], [4, jy + 2, zc], C("#5a5864"));
+    }
     // the cab, beside the turntable
     jm.box(piv + 5, 1, zc + 6, piv + 13, 11, JD, C("#e8e4ec"));
     jm.box(piv + 12, 3, zc + 7, piv + 13, 10, JD - 1, G("#2a3448"));
@@ -309,6 +373,36 @@ class Site {
     jib.position.x = (JW / 2 - piv - 0.5) * VOX;
     jib.position.z = (JD / 2 - zc - 0.5) * VOX;
     this.slew.add(jib);
+    if (REAL) {
+      // the jib and the apex as a steel lattice, in the slewing part's frame (voxel (x, y, z) → ((x − piv)·VOX, y·VOX, (z − zc)·VOX))
+      const P = (x: number, y: number, z: number) => new THREE.Vector3((x - piv) * VOX, y * VOX, (z - zc) * VOX);
+      const tubes: THREE.BufferGeometry[] = [],
+        ties: THREE.BufferGeometry[] = [];
+      const end = JW - 1;
+      member(tubes, P(piv, jy + 0.5, zc - 2.5), P(end, jy + 0.5, zc - 2.5), 0.06);
+      member(tubes, P(piv, jy + 0.5, zc + 3.5), P(end, jy + 0.5, zc + 3.5), 0.06);
+      member(tubes, P(piv, jt + 0.5, zc + 0.5), P(end - 3, jt + 0.5, zc + 0.5), 0.06);
+      member(tubes, P(end - 3, jt + 0.5, zc + 0.5), P(end, jy + 0.5, zc + 0.5), 0.05);
+      for (let x = piv; x < end - 5; x += 6) {
+        for (const zz of [zc - 2.5, zc + 3.5]) {
+          member(tubes, P(x, jy + 0.5, zz), P(x + 3, jt + 0.5, zc + 0.5), 0.03);
+          member(tubes, P(x + 3, jt + 0.5, zc + 0.5), P(x + 6, jy + 0.5, zz), 0.03);
+        }
+        member(tubes, P(x, jy + 0.5, zc - 2.5), P(x, jy + 0.5, zc + 3.5), 0.03);
+      }
+      // the apex: four legs from the turntable to the top, the pendant ties out to the jib and back to the counterweights
+      for (const [dx, dz] of [
+        [-5, -3],
+        [5, -3],
+        [-5, 4],
+        [5, 4],
+      ])
+        member(tubes, P(piv + dx, 12, zc + dz), P(ax, ay, zc + 0.5), 0.05);
+      member(ties, P(ax, ay, zc + 0.5), P(piv + Math.round(L * 0.7), jt + 0.5, zc + 0.5), 0.025);
+      member(ties, P(ax, ay, zc + 0.5), P(4, jy + 2, zc + 0.5), 0.025);
+      this.slew.add(lattice(tubes, YELLOW));
+      this.slew.add(lattice(ties, "#5a5864"));
+    }
     // the builder's name on the counterweights, both sides
     const signT = signTexture(s.sign);
     for (const side of [-1, 1]) {

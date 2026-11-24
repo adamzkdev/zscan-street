@@ -5,6 +5,7 @@ import { ZScan } from "../../data/zscan";
 import { loadArt, poseCell, Snark } from "../../scene/snark";
 import { FLASH_CELL } from "../../scene/sprites";
 import { MATERIALS, meshModel } from "../../scene/voxel/mesher";
+import { RealVoxels, realOn } from "../realvox";
 import type { Kind, VoxelModel } from "../../scene/voxel/model";
 import { hash } from "../../scene/voxel/model";
 import { additive, poolTexture, washTexture } from "../gallery/look";
@@ -174,16 +175,20 @@ class Batch {
 class Voxels {
   private parts: Record<Kind, THREE.BufferGeometry[]> = { solid: [], glass: [], emit: [] };
   private static cache = new Map<string, Partial<Record<Kind, THREE.BufferGeometry>>>();
+  /** (the realistic pass: the floor's pieces drawn real, src/interior/realvox.ts) */
+  private real = new RealVoxels("museum");
   add(key: string, make: () => VoxelModel, x: number, y: number, z: number, yaw = 0, k = 1) {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(k, k, k));
+    if (realOn()) return void this.real.add(key, make, m);
     let g = Voxels.cache.get(key);
     if (!g) Voxels.cache.set(key, (g = meshModel(make())));
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(k, k, k));
     for (const kind of ["solid", "glass", "emit"] as Kind[]) {
       const geo = g[kind];
       if (geo) this.parts[kind].push(geo.clone().applyMatrix4(m));
     }
   }
   build(parent: THREE.Object3D) {
+    this.real.build(parent);
     for (const kind of ["solid", "glass", "emit"] as Kind[]) {
       if (!this.parts[kind].length) continue;
       const geo = mergeGeometries(this.parts[kind]);

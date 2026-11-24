@@ -9,6 +9,10 @@ const OUT = path.resolve("public/tex");
 const WORK = path.resolve(process.argv[2] ?? "/tmp/cc0-textures");
 /** [id, resolution, what it is for] */
 const SETS = [
+  // inside the places (interior/refine.ts): polished marble, parquet, carpet
+  ["Marble012", "1K", "marble floors"],
+  ["WoodFloor051", "1K", "parquet"],
+  ["Carpet016", "1K", "carpet"],
   // the ground
   ["Asphalt031", "2K", "road asphalt"],
   ["Asphalt025C", "2K", "road asphalt, worn"],
@@ -48,6 +52,17 @@ const SETS = [
   ["LeafSet010", "1K", "leaves (maple)", "PNG"],
   ["LeafSet026", "1K", "leaves (long: palm leaflets)", "PNG"],
   ["PineNeedles001", "1K", "pine needles", "PNG"],
+  // the landmarks of the north and the centre (real/marks.ts)
+  ["Bricks008", "1K", "white stone ashlar (the museum, the tombs)"],
+  ["Bricks083", "1K", "weathered sandstone courses (the Colosseum, the pyramid)"],
+  ["Bricks084", "1K", "sandstone ashlar (Westminster)"],
+  ["Marble021", "1K", "white marble (columns, steps)"],
+  ["Metal024", "1K", "worn painted iron (the Eiffel Tower, tinted)"],
+  ["Concrete012", "1K", "light concrete (the stadium)"],
+  // Orchard Keys, the woods and the street's last props (wave 2: real/keysreal.ts, real/props2.ts, forest)
+  ["Rock030", "1K", "rock (the bluff, the woods, the falls)"],
+  ["Fabric030", "1K", "canvas (awnings, umbrellas, loungers)"],
+  ["Planks021", "1K", "weathered planks (the pier, the boardwalks)"],
 ];
 const MAPS = { Color: "color", NormalGL: "normal", Roughness: "rough", AmbientOcclusion: "ao", Metalness: "metal", Opacity: "opacity" };
 fs.mkdirSync(OUT, { recursive: true });

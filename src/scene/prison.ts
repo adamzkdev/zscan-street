@@ -4,31 +4,31 @@ import type { Director } from "./director";
 import { Nav } from "./nav";
 import {
   bleachers,
-  cellHouse,
   cellWing,
   FERRY,
   ferry,
-  gatehouse,
   GATE,
   ground,
   hoop,
   HOUSE,
   LIGHT,
-  lighthouse,
-  pier,
   PIER,
   TANK,
   TOWER,
   WALL,
-  wallModel,
   wardenRuin,
-  watchTower,
-  waterTower,
   WING,
   type CellKind,
 } from "./prison-model";
+import { realCellHouse, realGatehouse, realLighthouse, realPier, realWall, realWatchTower, realWaterTower } from "./real/rock";
 import type { Snark } from "./snark";
-import { toObject } from "./voxel/mesher";
+import { toObject as voxObject } from "./voxel/mesher";
+import { realObject } from "./real/remesh";
+import { GROUND, groundMat } from "./real/ground";
+import { plantTrees, type Species } from "./real/trees";
+/** (realistic: the island's ground in photographed paving, grass and gravel, the rest of its voxel parts remeshed, real trees; ?real=0 the voxels) */
+const REAL = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
+const toObject = (m: VoxelModel, o: { shadows?: boolean; own?: boolean } = {}) => (REAL ? realObject(m, o) : voxObject(m, o));
 import { half, VOX, type VoxelModel } from "./voxel/model";
 import { tree } from "./voxel/props";
 
@@ -286,6 +286,56 @@ export class Prison {
     return this.nav.free(x, z, rad);
   }
 
+  /**
+   * The island's top in photographed materials (the voxel ground's own zones: the yard's slabs, the
+   * court, its lines, the flagstone paths, the road, the gravel, the gardens' lawns): flat quads at
+   * the ground's height, each row's runs of one zone merged, one mesh per material.
+   */
+  private realGround(GW: number, GD: number, zone: (x: number, z: number) => string) {
+    const P = PRISON;
+    const y = F + 0.02;
+    const runs = new Map<string, number[]>();
+    for (let vz = 0; vz < GD; vz++) {
+      let start = 0,
+        cur = zone(0, vz);
+      for (let vx = 1; vx <= GW; vx++) {
+        const k = vx < GW ? zone(vx, vz) : "__end";
+        if (k === cur) continue;
+        if (cur !== "none") {
+          const l = runs.get(cur) ?? [];
+          const x0 = P.x0 + start * VOX,
+            x1 = P.x0 + vx * VOX,
+            z0 = P.z0 + vz * VOX,
+            z1 = z0 + VOX;
+          l.push(x0, y, z0, x0, y, z1, x1, y, z1, x0, y, z0, x1, y, z1, x1, y, z0);
+          runs.set(cur, l);
+        }
+        start = vx;
+        cur = k;
+      }
+    }
+    const MAT: Record<string, THREE.Material> = {
+      yard: GROUND.plaza(),
+      court: groundMat({ set: "Concrete034", tile: 2, tint: "#a85a46", anti: 0.3, patches: 0.2 }),
+      line: groundMat({ set: "Concrete034", tile: 2, tint: "#f4f0e8", anti: 0.2, patches: 0 }),
+      path: GROUND.slabs(),
+      road: GROUND.asphalt(),
+      gravel: GROUND.gravel(),
+      garden: GROUND.lawn(),
+    };
+    for (const [k, pos] of runs) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.computeVertexNormals();
+      // (a little proud of each other: the lines over the court)
+      const mesh = new THREE.Mesh(g, MAT[k] ?? GROUND.gravel());
+      mesh.position.y = k === "line" ? 0.004 : 0;
+      mesh.receiveShadow = true;
+      mesh.name = `prison:ground:${k}`;
+      this.group.add(mesh);
+    }
+  }
+
   /** A voxel model into the group: (x0, z0) is its north-west corner, unless `center` is given. */
   private put(m: VoxelModel, x: number, y: number, z: number, o: { rot?: number; center?: boolean; shadows?: boolean } = {}) {
     // placed now, meshed a part at a time (see mesh()), so building the island never stalls a frame for long
@@ -309,6 +359,28 @@ export class Prison {
     else {
       const swap = Math.abs(Math.sin(rot)) > 0.5;
       obj.position.set(x + ((swap ? m.d : m.w) * VOX) / 2, y, z + ((swap ? m.w : m.d) * VOX) / 2);
+    }
+    this.group.add(obj);
+    return obj;
+  }
+
+  /**
+   * A realistic part (src/scene/real/rock.ts) in place of a voxel model of `w` × `d` voxels: its
+   * near and far copies, placed as put() places the model.
+   */
+  private putReal(build: (lod: 0 | 1) => THREE.Group, w: number, d: number, x: number, y: number, z: number, o: { rot?: number; center?: boolean } = {}) {
+    const obj = new THREE.Group();
+    const near = build(0),
+      far = build(1);
+    far.visible = false;
+    obj.add(near, far);
+    this.lods.push({ near, far });
+    const rot = o.rot ?? 0;
+    obj.rotation.y = rot;
+    if (o.center) obj.position.set(x, y, z);
+    else {
+      const swap = Math.abs(Math.sin(rot)) > 0.5;
+      obj.position.set(x + ((swap ? d : w) * VOX) / 2, y, z + ((swap ? w : d) * VOX) / 2);
     }
     this.group.add(obj);
     return obj;
@@ -347,11 +419,14 @@ export class Prison {
       if (inR(x, z, { x0: -99.6, x1: -93, z0: 183, z1: 194.4 })) return "garden";
       return "gravel";
     };
-    this.put(ground(GW, GD, zone), P.x0, BASE, P.z0, { shadows: false });
+    if (REAL) this.realGround(GW, GD, zone);
+    else this.put(ground(GW, GD, zone), P.x0, BASE, P.z0, { shadows: false });
 
     // ---- the cell house and its wing of cells ----
     const houseX = (x: number) => Math.round((x - (HOUSE_X0 - HOUSE.margin * VOX)) / VOX);
-    this.put(cellHouse([houseX(WING_X0), houseX(cellX(CELLS.length) + 2 * VOX)]), HOUSE_X0 - HOUSE.margin * VOX, F, HOUSE_Z0 - HOUSE.margin * VOX);
+    // (realistic: src/scene/real/rock.ts, in the voxel model's frame)
+    const wingSpan: [number, number] = [houseX(WING_X0), houseX(cellX(CELLS.length) + 2 * VOX)];
+    this.putReal((lod) => realCellHouse(wingSpan, lod), HOUSE.margin * 2 + HOUSE.w + HOUSE.portico, HOUSE.margin * 2 + HOUSE.d, HOUSE_X0 - HOUSE.margin * VOX, F, HOUSE_Z0 - HOUSE.margin * VOX);
     this.block(HOUSE_X0, HOUSE_Z0, HOUSE_X1, HOUSE_Z1);
     this.block(PORTICO.x0, PORTICO.z0, PORTICO.x1, PORTICO.z1);
     this.put(cellWing(CELLS.map((c) => c.kind)), WING_X0 - WING.margin * VOX, BASE, WING_Z0);
@@ -385,16 +460,17 @@ export class Prison {
     const len = (a: number, b: number) => Math.round((b - a) / VOX);
     const gateU: [number, number] = [len(P.x0, -110), len(P.x0, -100)];
     // north: inside face on z = 179, a gap for the gatehouse
-    this.put(wallModel(len(P.x0, P.x1), { lights: 60, gaps: [gateU], seed: 41 }), P.x0, F, 179 - (WALL.back + WALL.thick) * VOX);
+    const wall = (n: number, o: Parameters<typeof realWall>[1]) => [(lod: 0 | 1) => realWall(n, o, lod), n, WD] as const;
+    this.putReal(...wall(len(P.x0, P.x1), { lights: 60, gaps: [gateU] }), P.x0, F, 179 - (WALL.back + WALL.thick) * VOX);
     // south: inside face on z = 207, the guards' catwalk over the yard
-    this.put(wallModel(len(P.x0, P.x1), { catwalk: true, lights: 54, seed: 42 }), (P.x0 + P.x1) / 2, F, 207 - (WD / 2 - (WALL.back + WALL.thick)) * VOX, { rot: Math.PI, center: true });
+    this.putReal(...wall(len(P.x0, P.x1), { catwalk: true, lights: 54 }), (P.x0 + P.x1) / 2, F, 207 - (WD / 2 - (WALL.back + WALL.thick)) * VOX, { rot: Math.PI, center: true });
     // west and east
-    this.put(wallModel(len(P.z0, P.z1), { lights: 48, seed: 43 }), P.x0 + 1 - (WALL.back + WALL.thick) * VOX + (WD * VOX) / 2, F, (P.z0 + P.z1) / 2, { rot: Math.PI / 2, center: true });
-    this.put(wallModel(len(P.z0, P.z1), { lights: 48, seed: 44 }), P.x1 - 1 + (WALL.back + WALL.thick) * VOX - (WD * VOX) / 2, F, (P.z0 + P.z1) / 2, { rot: -Math.PI / 2, center: true });
+    this.putReal(...wall(len(P.z0, P.z1), { lights: 48 }), P.x0 + 1 - (WALL.back + WALL.thick) * VOX + (WD * VOX) / 2, F, (P.z0 + P.z1) / 2, { rot: Math.PI / 2, center: true });
+    this.putReal(...wall(len(P.z0, P.z1), { lights: 48 }), P.x1 - 1 + (WALL.back + WALL.thick) * VOX - (WD * VOX) / 2, F, (P.z0 + P.z1) / 2, { rot: -Math.PI / 2, center: true });
     // the yard's east wall, catwalk on the yard side
-    this.put(wallModel(len(189, 207), { catwalk: true, lights: 40, seed: 45 }), -111 + (WALL.back + WALL.thick) * VOX - (WD * VOX) / 2, F, 198, { rot: -Math.PI / 2, center: true });
+    this.putReal(...wall(len(189, 207), { catwalk: true, lights: 40 }), -111 + (WALL.back + WALL.thick) * VOX - (WD * VOX) / 2, F, 198, { rot: -Math.PI / 2, center: true });
     // the yard's west gate, between the west wall and the cell house
-    this.put(wallModel(len(P.x0 + 1, HOUSE_X0), { gate: [4, 18], seed: 46 }), P.x0 + 1, F, 190 - (WALL.back + WALL.thick) * VOX);
+    this.putReal(...wall(len(P.x0 + 1, HOUSE_X0), { gate: [4, 18] }), P.x0 + 1, F, 190 - (WALL.back + WALL.thick) * VOX);
     this.block(P.x0, P.z0, -110, 179);
     this.block(-100, P.z0, P.x1, 179);
     this.block(P.x0, 207, P.x1, P.z1);
@@ -457,7 +533,7 @@ export class Prison {
     }
 
     // ---- the sally port, the pier, the ferry ----
-    this.put(gatehouse(), GATE_X0, F, GATE_Z0);
+    this.putReal(realGatehouse, GATE.w + 2, GATE.d + 2, GATE_X0, F, GATE_Z0);
     const gx0 = GATE_X0 + VOX,
       gx1 = GATE_X0 + (GATE.w + 1) * VOX;
     const pass0 = GATE_X0 + GATE.passage[0] * VOX,
@@ -479,7 +555,7 @@ export class Prison {
       if (side < 0) s.rotation.y = Math.PI;
       this.group.add(s);
     }
-    this.put(pier(), PIER_X0, F - PIER.deck * VOX, PIER_Z0);
+    this.putReal(realPier, PIER.w, PIER.d, PIER_X0, F - PIER.deck * VOX, PIER_Z0);
     this.boat = this.put(ferry(), FERRY_X0, BAY.water - FERRY.water * VOX, FERRY_Z0);
 
     // ---- towers, the water tower, the lighthouse, the ruin, the yard's steps and hoops ----
@@ -488,7 +564,7 @@ export class Prison {
     beam.rotateX(Math.PI);
     const beamMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.5, 1.1), transparent: true, opacity: 0.05, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide, toneMapped: false });
     TOWERS.forEach(([x, z], i) => {
-      this.put(watchTower(), x, F, z, { center: true });
+      this.putReal(realWatchTower, 26, 26, x, F, z, { center: true });
       this.block(x - 1.6, z - 1.6, x + 1.6, z + 1.6);
       const light = new THREE.Mesh(beam, beamMat);
       light.position.set(x, F + (TOWER.lens - 1) * VOX, z);
@@ -498,7 +574,7 @@ export class Prison {
       this.group.add(light);
       this.nightOnly.push(light);
     });
-    this.put(waterTower(), WATER_TOWER.x, F, WATER_TOWER.z, { center: true });
+    this.putReal(realWaterTower, 42, 42, WATER_TOWER.x, F, WATER_TOWER.z, { center: true });
     for (const dx of [-1, 1]) for (const dz of [-1, 1]) this.block(WATER_TOWER.x + dx * 2.3 - 0.3, WATER_TOWER.z + dz * 2.3 - 0.3, WATER_TOWER.x + dx * 2.3 + 0.3, WATER_TOWER.z + dz * 2.3 + 0.3);
     const tankR = TANK.r * VOX + 0.04;
     const az = THREE.MathUtils.degToRad(34);
@@ -508,7 +584,7 @@ export class Prison {
     );
     graffiti.position.set(WATER_TOWER.x, F + (TANK.y0 + TANK.h / 2) * VOX, WATER_TOWER.z);
     this.group.add(graffiti);
-    this.put(lighthouse(), LIGHTHOUSE.x, F, LIGHTHOUSE.z, { center: true });
+    this.putReal(realLighthouse, 40, 40, LIGHTHOUSE.x, F, LIGHTHOUSE.z, { center: true });
     this.block(LIGHTHOUSE.x - 2, LIGHTHOUSE.z - 2, LIGHTHOUSE.x + 2, LIGHTHOUSE.z + 2);
     // the lighthouse's two beams, turning
     const lbeam = new THREE.ConeGeometry(3.2, 46, 16, 1, true);
@@ -540,6 +616,8 @@ export class Prison {
       this.block(x - 0.4, (COURT.z0 + COURT.z1) / 2 - 0.4, x + 0.4, (COURT.z0 + COURT.z1) / 2 + 0.4);
     }
     // a few trees in the gardens
+    const SPECIES: Record<string, Species> = { round: "broad", tall: "plane", bush: "bush" };
+    const realTrees: { x: number; z: number; y: number; species: Species; seed: number }[] = [];
     for (const [x, z, kind, seed] of [
       [-96.5, 197, "round", 7],
       [-108.2, 203.5, "tall", 9],
@@ -547,8 +625,21 @@ export class Prison {
       [-107.5, 197.2, "bush", 5],
     ] as const) {
       const t = tree(kind, seed);
-      this.put(t.model, x, F, z, { center: true });
+      if (REAL) realTrees.push({ x, z, y: F, species: SPECIES[kind], seed });
+      else this.put(t.model, x, F, z, { center: true });
       this.nav.addCircle(x, z, t.radius);
+    }
+    if (REAL) {
+      // (and the gardens' shrubs, the voxel ground's rose bushes)
+      for (const [x, z] of [
+        [-109.4, 200.2],
+        [-94.6, 199.6],
+        [-97.8, 185.4],
+        [-96.2, 190.2],
+        [-103.6, 205.8],
+      ])
+        realTrees.push({ x, z, y: F, species: "bush", seed: Math.round(x * 3 + z) });
+      plantTrees(this.group, realTrees);
     }
 
     // ---- night: pools of floodlight on the yard and the paths ----

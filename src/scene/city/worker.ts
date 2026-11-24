@@ -7,6 +7,10 @@ import type { Prop } from "../voxel/props";
 import { buildJob, propModel } from "./build";
 import { workerCache } from "./cache";
 import { realBuilding, REAL_TYPES, type RGeo, type Slot } from "../real/buildings";
+import { MAIN_LANDMARKS, mainLandmarkMeta } from "../real/mainmarks";
+import { REAL_HEART, REAL_LANDMARKS, realLandmark } from "../real/landmarks";
+import { REAL_MARKS, realMark } from "../real/marks";
+import { PALM_MARKS, realPalmMark } from "../real/palmmarks";
 import type { BuildingJob, PropJob } from "./plan";
 
 /**
@@ -96,13 +100,14 @@ function scaled(geos: Partial<Record<Kind, THREE.BufferGeometry>>, k: number) {
 const SOLID = new Set(["bench", "shelter", "stall", "container", "greenhouse", "vending", "bicycle", "crates", "trashBags", "planter", "fence", "mailbox", "barrel"]);
 
 self.onmessage = async (e: MessageEvent) => {
-  const msg = e.data as { kind: "buildings"; jobs: BuildingJob[]; lite?: boolean; real?: boolean; keys?: Record<number, string> } | { kind: "props"; props: PropJob[] } | { kind: "hello" };
+  const msg = e.data as { kind: "buildings"; jobs: BuildingJob[]; lite?: boolean; real?: boolean; marks?: boolean; keys?: Record<number, string> } | { kind: "props"; props: PropJob[] } | { kind: "hello" };
   // the main thread asks which bundle this is: its hashed name versions the city cache
   if (msg.kind === "hello") return void (self as unknown as Worker).postMessage({ url: self.location.pathname });
   const transfer: Transferable[] = [];
   if (msg.kind === "buildings") {
     const lite = !!msg.lite;
     const realOn = msg.real !== false;
+    const marksOn = msg.marks !== false;
     // the city cache (`keys`: the variants' cache keys, when it is on)
     const cache = msg.keys ? await workerCache() : null;
     // each building posted as soon as it is meshed, so the main thread places it while the next one
@@ -131,6 +136,89 @@ self.onmessage = async (e: MessageEvent) => {
     function buildOne(j: BuildingJob) {
       const b = buildJob(j);
       const m = b.model;
+      if (j.type === "landmark" && MAIN_LANDMARKS.has((j.opts as { kind: string }).kind)) {
+        // drawn on the main thread, realistic (src/scene/real/mainmarks.ts): the layout only
+        const kind = (j.opts as { kind: string }).kind;
+        return { id: j.id, full: {}, cut: {}, lod: {}, meta: mainLandmarkMeta(b, b.scale ?? 1, kind) };
+      }
+      if (realOn && marksOn && j.type === "landmark" && REAL_MARKS.has((j.opts as { kind: string }).kind)) {
+        // a landmark of the north or the centre rebuilt realistically (src/scene/real/marks.ts): metres, its layout from its voxels
+        const kind = (j.opts as { kind: string }).kind;
+        const k = b.scale ?? 1;
+        const v = (n: number) => n * k;
+        const near = realMark(kind, b, j, lite ? 1 : 0);
+        return {
+          id: j.id,
+          real: true,
+          full: packReal(near.geos, transfer),
+          cut: {},
+          lod: packReal(realMark(kind, b, j, 1).geos, transfer),
+          meta: {
+            w: m.w * k,
+            h: m.h * k,
+            d: m.d * k,
+            signs: b.signs.map((s) => ({ ...s, x: v(s.x), y: v(s.y), z: v(s.z), w: v(s.w), h: v(s.h) })),
+            door: b.door.map(v),
+            body: b.body.map(v),
+            lights: b.lights.map(([x, y, z, c]) => [v(x), v(y), v(z), c]),
+            walls: b.walls?.map((w) => w.map(v)),
+            points: b.points && Object.fromEntries(Object.entries(b.points).map(([n, p]) => [n, p.map(v)])),
+            extras: { trees: near.trees, props: near.props },
+          },
+        };
+      }
+      if (realOn && marksOn && j.type === "landmark" && PALM_MARKS.has((j.opts as { kind: string }).kind)) {
+        // the Palm and the sail hotel rebuilt realistically (src/scene/real/palmmarks.ts): metres, the layout from their voxels
+        const kind = (j.opts as { kind: string }).kind;
+        const k = b.scale ?? 1;
+        const v = (n: number) => n * k;
+        const near = realPalmMark(kind, b, j, lite ? 1 : 0);
+        return {
+          id: j.id,
+          real: true,
+          full: packReal(near.geos, transfer),
+          cut: {},
+          lod: packReal(realPalmMark(kind, b, j, 1).geos, transfer),
+          meta: {
+            w: m.w * k,
+            h: m.h * k,
+            d: m.d * k,
+            signs: b.signs.map((s) => ({ ...s, x: v(s.x), y: v(s.y), z: v(s.z), w: v(s.w), h: v(s.h) })),
+            door: b.door.map(v),
+            body: b.body.map(v),
+            lights: b.lights.map(([x, y, z, c]) => [v(x), v(y), v(z), c]),
+            walls: b.walls?.map((w) => w.map(v)),
+            points: b.points && Object.fromEntries(Object.entries(b.points).map(([n, p]) => [n, p.map(v)])),
+            extras: { trees: near.trees, props: near.props },
+          },
+        };
+      }
+      if (realOn && marksOn && j.type === "landmark" && REAL_LANDMARKS.has((j.opts as { kind: string }).kind)) {
+        // a landmark rebuilt realistically (src/scene/real/landmarks.ts): metres; the layout from its voxels
+        const kind = (j.opts as { kind: string }).kind;
+        const k = b.scale ?? 1;
+        const v = (n: number) => n * k;
+        const near = realLandmark(kind, b, { lod: lite ? 1 : 0 });
+        return {
+          id: j.id,
+          real: true,
+          full: packReal(near.geos, transfer),
+          cut: {},
+          lod: packReal(realLandmark(kind, b, { lod: 1 }).geos, transfer),
+          meta: {
+            w: m.w * k,
+            h: m.h * k,
+            d: m.d * k,
+            signs: b.signs.map((s) => ({ ...s, x: v(s.x), y: v(s.y), z: v(s.z), w: v(s.w), h: v(s.h) })),
+            door: b.door.map(v),
+            body: b.body.map(v),
+            lights: b.lights.map(([x, y, z, c]) => [v(x), v(y), v(z), c]),
+            walls: b.walls?.map((w) => w.map(v)),
+            points: b.points && Object.fromEntries(Object.entries(b.points).map(([n, p]) => [n, p.map(v)])),
+            extras: near.extras,
+          },
+        };
+      }
       if (j.type === "landmark") {
         // a landmark: meshed once at its own voxel size, no walls-down cut, coordinates in VOX units
         const k = b.scale ?? 1;
@@ -154,6 +242,16 @@ self.onmessage = async (e: MessageEvent) => {
             points: b.points && Object.fromEntries(Object.entries(b.points).map(([n, p]) => [n, p.map(v)])),
           },
         };
+      }
+      if (realOn && marksOn && REAL_HEART.has(j.type)) {
+        // the heart's own buildings (MEMPOOL HQ and kiosks, the street shops, the bookshop, the
+        // pavilion), realistic (src/scene/real/landmarks.ts "h:" builders): metres; walls-down copy clipped
+        const hb = Object.assign(b, { kind: (j.opts as { kind?: string }).kind });
+        const near = realLandmark(`h:${j.type}`, hb, { lod: lite ? 1 : 0 });
+        const meta = { w: m.w, h: m.h, d: m.d, signs: b.signs, door: b.door, body: b.body, lights: b.lights, walls: b.walls, points: b.points, extras: near.extras };
+        if (!j.ext) return { id: j.id, real: true, full: packReal(near.geos, transfer), cut: packReal(realLandmark(`h:${j.type}`, hb, { lod: 1, clipY: CUT_VOX * VOX }).geos, transfer), meta };
+        const far = realLandmark(`h:${j.type}`, hb, { lod: 1 }).geos;
+        return { id: j.id, real: true, full: packReal(near.geos, transfer), cut: {}, lod: packReal(far, transfer), lod2: packReal(realLandmark(`h:${j.type}`, hb, { lod: 1 }).geos, transfer), meta };
       }
       // the ordinary buildings, realistic (src/scene/real): the voxel model only for its layout
       if (realOn && REAL_TYPES.has(j.type)) {

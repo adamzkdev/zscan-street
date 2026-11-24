@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { DETAIL_ON, MATERIALS, meshModel } from "../voxel/mesher";
-import { voxelSolid } from "../voxel/surface";
-import { C, half, hash, palette, rand, VOX, VoxelModel, type Paint } from "../voxel/model";
+import { maps } from "../real/tex";
+import { treeShape } from "../real/trees";
+import { C, hash, palette, rand, VoxelModel, type Paint } from "../voxel/model";
 
 /**
  * The forest's plants as voxel models, instanced: coast redwoods (three heights), Douglas firs,
@@ -279,28 +279,6 @@ export const KINDS: Record<Species, Kind> = {
 
 // ---- materials: the voxel look, with a breeze through the canopies --------------------------------
 export const WIND = { value: 0 };
-function swayMaterial() {
-  const m = MATERIALS.solid.clone();
-  m.onBeforeCompile = (sh) => {
-    if (DETAIL_ON) voxelSolid(sh);
-    sh.uniforms.uWind = WIND;
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uWind;\nattribute float aSway;").replace(
-      "#include <begin_vertex>",
-      `#include <begin_vertex>
-      #ifdef USE_INSTANCING
-      {
-        vec2 o = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
-        float k = aSway * transformed.y * transformed.y * 0.0009;
-        transformed.x += sin(uWind * 1.1 + o.x * 0.21 + o.y * 0.13) * k;
-        transformed.z += sin(uWind * 0.9 + o.y * 0.17) * k * 0.7;
-      }
-      #endif`,
-    );
-  };
-  m.customProgramCacheKey = () => "forest-sway";
-  return m;
-}
-let SWAY: THREE.Material | null = null;
 
 export interface Instance {
   x: number;
@@ -311,10 +289,198 @@ export interface Instance {
   tint: number;
 }
 
-/** One species: a near and a far instanced mesh; instances move between them as the viewer does. */
+// ---- the realistic woods (branch gta-real): each kind drawn from real shapes, not voxels ------------------
+
+/** A drawn part of a kind: its geometry (in metres, scaled to the kind), material, and a tint of its own. */
+interface Part {
+  geo: THREE.BufferGeometry;
+  mat: THREE.Material;
+  depth?: THREE.Material;
+  tint?: THREE.Color;
+  /** Drawn afar too (the trunks and the crowns' first third; not the undergrowth). */
+  far: boolean;
+}
+const realCache = new Map<Species, { parts: Part[]; height: number }>();
+const forestMats = new Map<string, THREE.Material>();
+function fmat(key: string, make: () => THREE.Material) {
+  let m = forestMats.get(key);
+  if (!m) forestMats.set(key, (m = make()));
+  return m;
+}
+/** A tree shape of real/trees.ts stretched to `H` metres, `wide` times as wide as the stretch would make it. */
+function stretched(sp: "pine" | "maple" | "broad" | "bush", v: number, H: number, wide: number, opts: { barkTint?: string; leafTint?: string; noLeaves?: boolean; flat?: number } = {}) {
+  const t = treeShape(sp, v);
+  const box = new THREE.Box3();
+  for (const g of [t.bark, t.leaves]) {
+    if (!g.getAttribute("position")?.count) continue;
+    g.computeBoundingBox();
+    box.union(g.boundingBox!);
+  }
+  const h0 = Math.max(0.5, box.max.y);
+  const ky = H / h0;
+  const kx = ky * wide;
+  const parts: Part[] = [];
+  if (t.bark.getAttribute("position")?.count) parts.push({ geo: t.bark.clone().scale(kx, ky, kx), mat: t.barkMat, tint: opts.barkTint ? new THREE.Color(opts.barkTint) : undefined, far: true });
+  if (!opts.noLeaves) parts.push({ geo: t.leaves.clone().scale(kx, ky * (opts.flat ?? 1), kx), mat: t.leafMat, depth: t.leafDepth, tint: opts.leafTint ? new THREE.Color(opts.leafTint) : undefined, far: true });
+  return parts;
+}
+/** A mossy boulder: a lumpy displaced sphere in the CC0 rock, moss on its top. */
+function boulder(seed: number, w: number, h: number): Part[] {
+  const r = rand(seed);
+  const g = new THREE.IcosahedronGeometry(1, 3);
+  const p = g.getAttribute("position");
+  const n = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i),
+      y = p.getY(i),
+      z = p.getZ(i);
+    const k = 1 + 0.16 * Math.sin(x * 3.1 + seed) * Math.cos(z * 2.7) + 0.1 * Math.sin(y * 5.3 + x * 2) + 0.05 * (hash(Math.round(x * 9), Math.round(y * 9), Math.round(z * 9), seed) - 0.5);
+    p.setXYZ(i, x * k * (w / 2), Math.max(-0.15, y * k) * h * 0.6 + h * 0.08, z * k * (w / 2) * (0.8 + r() * 0.0));
+    // moss on what faces up
+    const up = THREE.MathUtils.smoothstep(y, 0.35, 0.75);
+    const c = new THREE.Color("#b8b2a8").lerp(new THREE.Color("#5e7a3a"), up * 0.85);
+    n.set([c.r, c.g, c.b], i * 3);
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(n, 3));
+  g.computeVertexNormals();
+  const uv = g.getAttribute("uv");
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (p.getX(i) + p.getZ(i)) / 2.5, p.getY(i) / 2.5);
+  const mat = fmat("rock", () => {
+    const mp = maps("Rock030");
+    return new THREE.MeshStandardMaterial({ vertexColors: true, map: mp.map, normalMap: mp.normalMap, roughnessMap: mp.roughnessMap, roughness: 1, color: new THREE.Color(2.1, 2.05, 1.95) });
+  });
+  return [{ geo: g, mat, far: false }];
+}
+/** A fallen log along x: barked, its sawn end showing the rings, a strip of moss along its top. */
+function fallenLog(): Part[] {
+  const L = 6.6,
+    R = 0.58;
+  const bark = new THREE.CylinderGeometry(R, R * 1.05, L, 18, 1, true).rotateZ(Math.PI / 2).translate(0, R, 0);
+  const uv = bark.getAttribute("uv");
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 2, uv.getY(i) * 4);
+  const end = new THREE.CircleGeometry(R * 0.95, 18).rotateY(Math.PI / 2).translate(L / 2, R, 0);
+  const moss = new THREE.CylinderGeometry(R * 1.02, R * 1.06, L * 0.8, 18, 1, true, -0.6, 1.2).rotateZ(Math.PI / 2).translate(0, R, 0);
+  const barkM = fmat("logbark", () => {
+    const mp = maps("Bark012");
+    return new THREE.MeshStandardMaterial({ map: mp.map, normalMap: mp.normalMap, roughnessMap: mp.roughnessMap, roughness: 1, color: "#b09a88" });
+  });
+  return [
+    { geo: bark, mat: barkM, far: false },
+    { geo: end, mat: fmat("logend", () => new THREE.MeshStandardMaterial({ color: "#b8865a", roughness: 0.9 })), far: false },
+    { geo: moss, mat: fmat("moss", () => new THREE.MeshStandardMaterial({ color: "#5c7a34", roughness: 1 })), far: false },
+  ];
+}
+/** A clump of toadstools: pale stems, red and orange caps with their white spots. */
+function toadstools(): Part[] {
+  const r = rand(12);
+  const geos: THREE.BufferGeometry[] = [];
+  const col = (g: THREE.BufferGeometry, hex: string) => {
+    const c = new THREE.Color(hex);
+    const gg = g.index ? g.toNonIndexed() : g;
+    const a = new Float32Array(gg.getAttribute("position").count * 3);
+    for (let i = 0; i < a.length; i += 3) a.set([c.r, c.g, c.b], i);
+    gg.setAttribute("color", new THREE.BufferAttribute(a, 3));
+    gg.deleteAttribute("uv");
+    return gg;
+  };
+  for (let i = 0; i < 6; i++) {
+    const x = (r() - 0.5) * 0.7,
+      z = (r() - 0.5) * 0.7,
+      h = 0.08 + r() * 0.12,
+      cr = 0.05 + r() * 0.05;
+    geos.push(col(new THREE.CylinderGeometry(cr * 0.3, cr * 0.38, h, 8).translate(x, h / 2, z), "#efe6d6"));
+    geos.push(col(new THREE.SphereGeometry(cr, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.7, 1).translate(x, h, z), i % 2 ? "#d8332a" : "#c8762a"));
+    for (let k = 0; k < 3; k++) geos.push(col(new THREE.SphereGeometry(cr * 0.16, 5, 3).translate(x + (r() - 0.5) * cr, h + cr * 0.6, z + (r() - 0.5) * cr), "#f6f0e4"));
+  }
+  const g = new THREE.BufferGeometry();
+  for (const k of ["position", "normal", "color"]) {
+    const arrs = geos.map((x) => x.getAttribute(k).array as Float32Array);
+    const a = new Float32Array(arrs.reduce((n, x) => n + x.length, 0));
+    let o = 0;
+    for (const x of arrs) (a.set(x, o), (o += x.length));
+    g.setAttribute(k, new THREE.BufferAttribute(a, 3));
+  }
+  return [{ geo: g, mat: fmat("shroom", () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 })), far: false }];
+}
+
+/** A kind's parts: the redwoods, firs and snags as tall conifers, the broadleaves, the undergrowth, rocks, logs. */
+function realKind(kind: Species) {
+  let e = realCache.get(kind);
+  if (e) return e;
+  let parts: Part[];
+  switch (kind) {
+    case "redwood":
+      parts = stretched("pine", 0, 18, 0.72, { barkTint: "#c88a6a" });
+      break;
+    case "redwoodTall":
+      parts = stretched("pine", 1, 24, 0.68, { barkTint: "#c88a6a" });
+      break;
+    case "redwoodGiant":
+      parts = stretched("pine", 2, 30, 0.64, { barkTint: "#c07a5a" });
+      break;
+    case "genesis":
+      parts = stretched("pine", 0, 40, 0.66, { barkTint: "#b06a4a" });
+      break;
+    case "fir":
+      parts = stretched("pine", 1, 17, 0.85, { leafTint: "#a8c8a0" });
+      break;
+    case "maple":
+      parts = stretched("maple", 0, 10, 1.05, { leafTint: "#ffd060" });
+      break;
+    case "alder":
+      parts = stretched("maple", 1, 9.3, 0.95, { leafTint: "#ff8a5a" });
+      break;
+    case "oak":
+      parts = stretched("broad", 1, 7.3, 1.3);
+      break;
+    case "snag":
+      parts = stretched("pine", 2, 15, 0.7, { barkTint: "#a8a49a", noLeaves: true });
+      break;
+    case "scrub":
+      parts = stretched("bush", 0, 2.2, 1.1, { leafTint: "#c8c890" });
+      break;
+    case "shrub":
+      parts = stretched("bush", 1, 1.5, 1.0, { leafTint: "#8ab07a" });
+      break;
+    case "shrub2":
+      parts = stretched("bush", 2, 1.4, 1.1);
+      break;
+    case "fern":
+      parts = stretched("bush", 0, 1.0, 1.5, { leafTint: "#9ad07a", flat: 0.8 });
+      break;
+    case "fern2":
+      parts = stretched("bush", 1, 0.8, 1.6, { leafTint: "#b0d890", flat: 0.8 });
+      break;
+    case "rock":
+      parts = boulder(4, 3.2, 2);
+      break;
+    case "rock2":
+      parts = boulder(8, 2.4, 1.4);
+      break;
+    case "log":
+      parts = fallenLog();
+      break;
+    default:
+      parts = toadstools();
+  }
+  // the undergrowth near only
+  if (!KINDS[kind].far) for (const p of parts) p.far = false;
+  const box = new THREE.Box3();
+  for (const p of parts) {
+    p.geo.computeBoundingBox();
+    box.union(p.geo.boundingBox!);
+  }
+  e = { parts, height: box.max.y };
+  realCache.set(kind, e);
+  return e;
+}
+
+/** One species: its parts instanced near (whole, casting shadows) and afar (trunks and a third of the crown); instances move between them as the viewer does. */
 export class Stand {
-  readonly near: THREE.InstancedMesh;
-  readonly far: THREE.InstancedMesh | null;
+  readonly near = new THREE.Group();
+  readonly far: THREE.Group | null;
+  private nearMeshes: { m: THREE.InstancedMesh; tint?: THREE.Color }[] = [];
+  private farMeshes: { m: THREE.InstancedMesh; tint?: THREE.Color }[] = [];
   private mats: THREE.Matrix4[] = [];
   private cols: THREE.Color[] = [];
   private pos: THREE.Vector3[] = [];
@@ -326,22 +492,39 @@ export class Stand {
     list: Instance[],
     sphere: THREE.Sphere,
   ) {
-    const K = KINDS[kind];
-    const model = K.build();
-    this.height = model.h * K.s;
-    const geo = (m: VoxelModel, k: number) => {
-      const g = meshModel(m).solid!;
-      g.scale(k, k, k);
-      g.setAttribute("aSway", new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute("position").count).fill(K.sway), 1));
-      return g;
-    };
-    SWAY ??= swayMaterial();
+    const K = realKind(kind);
+    this.height = K.height;
     const n = Math.max(1, list.length);
-    this.near = new THREE.InstancedMesh(geo(model, K.s / VOX), SWAY, n);
-    this.near.castShadow = true;
-    this.near.receiveShadow = true;
-    this.far = K.far ? new THREE.InstancedMesh(geo(half(model), (2 * K.s) / VOX), SWAY, n) : null;
-    if (this.far) this.far.receiveShadow = true;
+    const anyFar = K.parts.some((p) => p.far);
+    this.far = anyFar ? new THREE.Group() : null;
+    for (const p of K.parts) {
+      const near = new THREE.InstancedMesh(p.geo, p.mat, n);
+      if (p.depth) near.customDepthMaterial = p.depth;
+      near.castShadow = true;
+      near.receiveShadow = true;
+      near.userData.noField = true;
+      this.near.add(near);
+      this.nearMeshes.push({ m: near, tint: p.tint });
+      if (p.far && this.far) {
+        // (afar: the same buffers, a shorter draw for the crowns)
+        let g = p.geo;
+        if (p.depth && p.geo.index) {
+          g = new THREE.BufferGeometry();
+          for (const [name, a] of Object.entries(p.geo.attributes)) g.setAttribute(name, a);
+          // (one leaf card in three, all the way up: the first third of the cards was the lowest
+          // tier only, and from the bridge the ridge was a row of bare trunks sticking up)
+          const src = p.geo.index.array;
+          const keep: number[] = [];
+          for (let c = 0; c + 6 <= src.length; c += 6) if ((c / 6) % 3 === 0) for (let k = 0; k < 6; k++) keep.push(src[c + k]);
+          g.setIndex(keep);
+        }
+        const far = new THREE.InstancedMesh(g, p.mat, n);
+        far.receiveShadow = true;
+        far.userData.noField = true;
+        this.far.add(far);
+        this.farMeshes.push({ m: far, tint: p.tint });
+      }
+    }
     const q = new THREE.Quaternion();
     for (const it of list) {
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), it.rot);
@@ -349,8 +532,7 @@ export class Stand {
       this.cols.push(new THREE.Color(1, 1, 1).multiplyScalar(it.tint));
       this.pos.push(new THREE.Vector3(it.x, it.y, it.z));
     }
-    for (const m of [this.near, this.far]) {
-      if (!m) continue;
+    for (const { m } of [...this.nearMeshes, ...this.farMeshes]) {
       m.boundingSphere = sphere;
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.setColorAt(0, new THREE.Color(1, 1, 1));
@@ -363,23 +545,26 @@ export class Stand {
     let a = 0,
       b = 0;
     const r2 = r * r;
+    const c = new THREE.Color();
     for (let i = 0; i < this.mats.length; i++) {
       const close = at !== null && this.pos[i].distanceToSquared(at) < r2;
       if (!close && !this.far) continue;
-      const m = close ? this.near : this.far!;
+      const list = close ? this.nearMeshes : this.farMeshes;
       const k = close ? a++ : b++;
-      m.setMatrixAt(k, this.mats[i]);
-      m.setColorAt(k, this.cols[i]);
+      for (const { m, tint } of list) {
+        m.setMatrixAt(k, this.mats[i]);
+        m.setColorAt(k, tint ? c.copy(this.cols[i]).multiply(tint) : this.cols[i]);
+      }
     }
-    this.near.count = a;
-    this.near.instanceMatrix.needsUpdate = true;
-    if (this.near.instanceColor) this.near.instanceColor.needsUpdate = true;
-    this.near.visible = a > 0;
-    if (this.far) {
-      this.far.count = b;
-      this.far.instanceMatrix.needsUpdate = true;
-      if (this.far.instanceColor) this.far.instanceColor.needsUpdate = true;
-      this.far.visible = b > 0;
-    }
+    for (const [list, n] of [
+      [this.nearMeshes, a],
+      [this.farMeshes, b],
+    ] as const)
+      for (const { m } of list) {
+        m.count = n;
+        m.instanceMatrix.needsUpdate = true;
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
+        m.visible = n > 0;
+      }
   }
 }

@@ -589,8 +589,14 @@ export function plantTrees(parent: THREE.Object3D, list: TreeSpot[]) {
     // the far crowns: the same cards' first third (shared buffers, a shorter draw)
     const lite = new THREE.BufferGeometry();
     for (const [name, a] of Object.entries(sh.leaves.attributes)) lite.setAttribute(name, a);
-    lite.setIndex(sh.leaves.index);
-    lite.setDrawRange(0, Math.ceil((sh.leaves.index?.count ?? 0) / 18) * 6);
+    // (one card in three over the whole crown: the first third was one end of it, and a far pine or
+    // palm showed a bare top over a tuft)
+    {
+      const src = sh.leaves.index?.array ?? [];
+      const keep: number[] = [];
+      for (let c = 0; c + 6 <= src.length; c += 6) if ((c / 6) % 3 === 0) for (let k = 0; k < 6; k++) keep.push(src[c + k]);
+      lite.setIndex(keep);
+    }
     const far = new THREE.InstancedMesh(lite, sh.leaf.mat, ts.length);
     const lot: Lot = { mats: [], at: [], bark, near, far, colors: [] };
     ts.forEach((t, i) => {
@@ -624,4 +630,40 @@ export function plantTrees(parent: THREE.Object3D, list: TreeSpot[]) {
   }
   lastFocus.set(1e9, 0, 0);
   return crowns;
+}
+
+/** One tree on its own (plain meshes on the shared shape and materials: a tree the game knocks over falls as this). */
+export function treeObject(species: Species, seed: number) {
+  const sh = shape(species, Math.floor(Math.abs(seed)) % SHAPES);
+  const g = new THREE.Group();
+  if (sh.bark.getAttribute("position")?.count) {
+    const b = new THREE.Mesh(sh.bark, sh.barkMat);
+    b.castShadow = true;
+    g.add(b);
+  }
+  const l = new THREE.Mesh(sh.leaves, sh.leaf.mat);
+  l.customDepthMaterial = sh.leaf.depth;
+  l.castShadow = true;
+  g.add(l);
+  return g;
+}
+
+/** A species' shared shape (geometry and materials), for others that instance it their own way (the woods: src/scene/forest/trees.ts). */
+export function treeShape(species: Species, v: number) {
+  const sh = shape(species, Math.floor(Math.abs(v)) % SHAPES);
+  return { bark: sh.bark, leaves: sh.leaves, barkMat: sh.barkMat, leafMat: sh.leaf.mat, leafDepth: sh.leaf.depth };
+}
+
+/**
+ * Foliage in given blobs (indoor plants, planters, a voxel model's leaves turned real: src/scene/real/remesh.ts):
+ * leaf cards in each ellipsoid (centre, radii, count, card size), one geometry, the broadleaf cards with a
+ * whisper of sway. Returns the geometry and its shared materials.
+ */
+export function foliageCards(blobs: { c: THREE.Vector3; rad: THREE.Vector3; n: number; size: [number, number] }[], seed = 1, kind: "broad" | "plane" = "broad") {
+  const r = rand(seed * 31 + 7);
+  const geos = blobs.map((b) => crownCards(r, b.n, b.c, b.rad, b.size, 0.35));
+  const geometry = geos.length === 1 ? geos[0] : mergeGeometries(geos, false)!;
+  const t = kind === "plane" ? tex("plane", () => clusterCard("LeafSet010", 2, 2, { n: 160, size: [76, 118], seed: 6, twig: "#6a5a3a" })) : tex("broad", () => clusterCard("LeafSet009", 3, 2, { n: 190, size: [64, 100], seed: 5, twig: "#5a4630" }));
+  const m = leafMat(`indoor-${kind}`, t, 3, kind === "plane" ? "#d8ecb0" : "#a6cc8a", 0.015);
+  return { geometry, mat: m.mat, depth: m.depth };
 }

@@ -29,6 +29,8 @@ export interface GroundOpts {
   anti?: number;
   /** Large patches of older and newer surface (asphalt repairs, worn slabs): 0…1. */
   patches?: number;
+  /** The geometry's vertex colours multiply the photograph (one material, many paints: interiors). */
+  vc?: boolean;
 }
 
 const VERT_HEAD = /* glsl */ `
@@ -157,11 +159,11 @@ const made = new Map<string, THREE.MeshStandardMaterial>();
 
 /** A ground material (shared by key: the same set, tint and options give the same material). */
 export function groundMat(o: GroundOpts): THREE.MeshStandardMaterial {
-  const key = `${o.set}|${o.tile ?? ""}|${o.tint ?? ""}|${o.rough ?? ""}|${o.normal ?? ""}|${o.markings?.uuid ?? ""}|${o.wet ? 1 : 0}|${o.anti ?? ""}|${o.patches ?? ""}`;
+  const key = `${o.set}|${o.tile ?? ""}|${o.tint ?? ""}|${o.rough ?? ""}|${o.normal ?? ""}|${o.markings?.uuid ?? ""}|${o.wet ? 1 : 0}|${o.anti ?? ""}|${o.patches ?? ""}|${o.vc ? 1 : 0}`;
   const had = made.get(key);
   if (had) return had;
   const mp = maps(o.set);
-  const m = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 1, metalness: 0 });
+  const m = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 1, metalness: 0, vertexColors: !!o.vc });
   // (the paint's UVs are the strip's own: vUv)
   m.defines = { ...(m.defines ?? {}), USE_UV: "" };
   const u = {
@@ -188,7 +190,7 @@ export function groundMat(o: GroundOpts): THREE.MeshStandardMaterial {
       .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
       .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL);
   };
-  m.customProgramCacheKey = () => "real-ground";
+  m.customProgramCacheKey = () => (o.vc ? "real-ground-vc" : "real-ground");
   m.userData.shared = true;
   m.userData.realGround = o.set;
   m.userData.groundUniforms = u;

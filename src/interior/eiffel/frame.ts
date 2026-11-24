@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { std } from "../kit";
+import { treeShape } from "../../scene/real/trees";
 import { EiffelKit, hw, lw, makeCanvas, P1, P2, PT } from "./kit";
 
 /**
@@ -363,13 +364,21 @@ export function buildFrame(k: EiffelKit) {
   // alleys of chestnut trees along the gardens
   const trees: [number, number, number][] = [];
   for (const sx of [-1, 1]) for (let x = 32; x < 84; x += 6) for (const z of [-30, 30]) trees.push([sx * x, z, 3 + ((x * 7) % 5) * 0.25]);
-  const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18, 0.25, 1, 6), std("#4a3426", 0.9), trees.length);
-  const crowns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), std("#356f35", 0.95), trees.length);
-  trees.forEach(([x, z, s], i) => {
-    trunks.setMatrixAt(i, new THREE.Matrix4().compose(V(x, 1.4, z), new THREE.Quaternion(), V(1, 2.8, 1)));
-    crowns.setMatrixAt(i, new THREE.Matrix4().compose(V(x, 2.8 + s * 0.8, z), new THREE.Quaternion(), V(s, s * 0.85, s)));
-  });
-  k.frame.add(trunks, crowns);
+  // (the realistic pass: real chestnut-like trees — bark limbs and leaf cards, instanced — not
+  // icosahedron blobs on sticks)
+  for (const v of [0, 1, 2]) {
+    const sh = treeShape("plane", v);
+    const mine = trees.filter((_, i) => i % 3 === v);
+    const bark = new THREE.InstancedMesh(sh.bark, sh.barkMat, mine.length);
+    const crown = new THREE.InstancedMesh(sh.leaves, sh.leafMat, mine.length);
+    crown.customDepthMaterial = sh.leafDepth;
+    mine.forEach(([x, z, s], i) => {
+      const m = new THREE.Matrix4().compose(V(x, 0, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), (x * 13 + z) % 6.28), V(s / 3.4, s / 3.4, s / 3.4));
+      bark.setMatrixAt(i, m);
+      crown.setMatrixAt(i, m);
+    });
+    k.frame.add(bark, crown);
+  }
   // the carousel in the west garden
   const car = new THREE.Group();
   car.position.set(-44, 0, 14);

@@ -146,17 +146,18 @@ export function livingWall(k: SkyKit, f: number, x0: number, z0: number, x1: num
   // the normal points to the room side: callers give the wall left-to-right as seen from the room
   const mat = new THREE.MeshStandardMaterial({ map: livingTex(Math.max(1, len / 4), Math.max(1, h / 4), seed), roughness: 0.95 });
   k.plane(f, len, h, mat, (x0 + x1) / 2 + nx * 0.02, y + h / 2, (z0 + z1) / 2 + nz * 0.02, 0, ry);
-  // clumps standing off the mat
-  const greens = ["#2f7a34", "#3d9440", "#4aa84a", "#5cb84e", "#256a2c", "#7ac860", "#1f5a26", "#3d9440", "#2f7a34", "#4aa84a", "#5cb84e", "#256a2c", "#3d9440", "#f06aa0", "#2f7a34", "#4aa84a", "#5cb84e", "#256a2c", "#3d9440", "#ffd04a"];
-  const n = Math.round(len * h * 7);
-  for (let i = 0; i < n; i++) {
-    const t = hash(i, 1, seed, 3),
-      yy = y + 0.1 + hash(i, 2, seed, 3) * (h - 0.2);
-    const s = 0.07 + hash(i, 3, seed, 3) * 0.12;
-    const px = x0 + (x1 - x0) * t + nx * s * 0.5,
-      pz = z0 + (z1 - z0) * t + nz * s * 0.5;
-    k.box(f, s * 1.3, s, s, px, yy, pz, greens[i % greens.length], "matte", ry + (hash(i, 4, seed, 3) - 0.5));
-  }
+  // the plants standing off the mat: leaf cards in clumps over the whole wall (not cubes)
+  const cols = Math.max(1, Math.round(len / 0.9)),
+    rows = Math.max(1, Math.round(h / 0.8));
+  const flatX = Math.abs(nx) > Math.abs(nz);
+  for (let i = 0; i < cols; i++)
+    for (let j = 0; j < rows; j++) {
+      const t = (i + 0.5 + (hash(i, j, seed, 3) - 0.5) * 0.4) / cols;
+      const yy = y + ((j + 0.5 + (hash(i, j, seed, 4) - 0.5) * 0.4) * h) / rows;
+      const px = x0 + (x1 - x0) * t + nx * 0.14,
+        pz = z0 + (z1 - z0) * t + nz * 0.14;
+      k.leaves(f, px, yy, pz, flatX ? 0.14 : 0.55, 0.48, flatX ? 0.55 : 0.14, 1.6, [0.2, 0.34]);
+    }
   k.wall(f, x0, z0, x1, z1, h, "#2a3a2a", "matte", 0.1, y);
 }
 
@@ -165,13 +166,14 @@ export function creepers(k: SkyKit, f: number, x0: number, z0: number, x1: numbe
   const len = Math.hypot(x1 - x0, z1 - z0);
   const n = Math.round(len / every);
   const greens = ["#2f7a34", "#3d9440", "#4aa84a", "#256a2c", "#5cb84e"];
-  for (let i = 0; i < n; i++) {
+  // trailing strands of leaves (leaf cards hanging in thin masses, not stacked cubes)
+  void greens;
+  for (let i = 0; i < n; i += 2) {
     const t = (i + hash(i, 1, seed, 5) * 0.5) / n;
     const L = 0.2 + Math.pow(hash(i, 2, seed, 5), 1.5) * drop;
     const x = x0 + (x1 - x0) * t + (hash(i, 3, seed, 5) - 0.5) * 0.12,
       z = z0 + (z1 - z0) * t + (hash(i, 4, seed, 5) - 0.5) * 0.12;
-    k.box(f, 0.05, L, 0.05, x, top - L, z, "#2f6a2c");
-    for (let s = 0.1; s < L; s += 0.16) k.box(f, 0.13, 0.08, 0.09, x + (hash(i, Math.round(s * 10), seed, 6) - 0.5) * 0.1, top - s, z, greens[(i + Math.round(s * 10)) % greens.length], "matte", hash(i, Math.round(s * 10), seed, 8) * 3);
+    k.leaves(f, x, top - L / 2, z, 0.14, L / 2, 0.14, 1.6, [0.14, 0.24]);
   }
 }
 
@@ -179,13 +181,21 @@ export function creepers(k: SkyKit, f: number, x0: number, z0: number, x1: numbe
 export function bed(k: SkyKit, f: number, x: number, z: number, w: number, d: number, seed = 1, flowers = false) {
   k.box(f, w, 0.5, d, x, 0, z, SAP.teak);
   k.box(f, w - 0.12, 0.02, d - 0.12, x, 0.5, z, "#3a2a1c");
-  const greens = flowers ? ["#3d9440", "#f06aa0", "#ffd04a", "#4aa84a", "#f4f0f0", "#ff8a4a"] : ["#3d9440", "#5cb84e", "#7ac860", "#2f7a34", "#a8d870"];
-  const n = Math.round(w * d * 14);
-  for (let i = 0; i < n; i++) {
-    const px = x - w / 2 + 0.12 + hash(i, 1, seed, 2) * (w - 0.24),
-      pz = z - d / 2 + 0.12 + hash(i, 2, seed, 2) * (d - 0.24);
-    const s = 0.08 + hash(i, 3, seed, 2) * 0.12;
-    k.box(f, s, s * 0.9, s, px, 0.52, pz, greens[Math.floor(hash(i, 4, seed, 2) * greens.length)], "matte", hash(i, 5, seed, 2) * 3);
+  // the greens: low leafy clumps along the bed (leaf cards, not cubes); flowers as small heads among them
+  const clumps = Math.max(1, Math.round((w * d) / 0.45));
+  for (let i = 0; i < clumps; i++) {
+    const px = x - w / 2 + 0.2 + hash(i, 1, seed, 2) * (w - 0.4),
+      pz = z - d / 2 + 0.2 + hash(i, 2, seed, 2) * (d - 0.4);
+    k.leaves(f, px, 0.66, pz, 0.32, 0.16, 0.32, 1.2, [0.18, 0.3]);
+  }
+  if (flowers) {
+    const fl = ["#f06aa0", "#ffd04a", "#f4f0f0", "#ff8a4a"];
+    const n = Math.round(w * d * 5);
+    for (let i = 0; i < n; i++) {
+      const px = x - w / 2 + 0.12 + hash(i, 1, seed, 4) * (w - 0.24),
+        pz = z - d / 2 + 0.12 + hash(i, 2, seed, 4) * (d - 0.24);
+      k.cyl(f, 0.035, 0.02, 0.05, px, 0.7 + hash(i, 3, seed, 4) * 0.12, pz, fl[i % fl.length], "matte", 7);
+    }
   }
   k.solid(f, x - w / 2, z - d / 2, x + w / 2, z + d / 2);
 }
@@ -194,13 +204,12 @@ export function bed(k: SkyKit, f: number, x: number, z: number, w: number, d: nu
 export function tree(k: SkyKit, f: number, x: number, z: number, h: number, r: number, seed = 1, palette = ["#2f7a34", "#3d9440", "#4aa84a", "#256a2c", "#5cb84e"]) {
   k.cyl(f, 0.16, 0.1, h * 0.65, x, 0, z, "#5a4030", "matte", 8);
   k.cyl(f, 0.06, 0.04, r * 0.9, x, h * 0.45, z, "#5a4030", "matte", 6, 0);
-  const n = Math.round(r * r * 70);
-  for (let i = 0; i < n; i++) {
+  // the canopy: a crown of leaf cards (two or three masses, not a cloud of cubes)
+  void palette;
+  k.leaves(f, x, h * 0.62 + r * 0.25, z, r, r * 0.62, r, 1, [0.45, 0.8]);
+  for (let i = 0; i < 3; i++) {
     const a = hash(i, 1, seed, 9) * Math.PI * 2;
-    const rr = Math.sqrt(hash(i, 2, seed, 9)) * r;
-    const yy = h * 0.55 + hash(i, 3, seed, 9) * r * 1.1 - (rr / r) * r * 0.35;
-    const s = 0.12 + hash(i, 4, seed, 9) * 0.14;
-    k.box(f, s, s, s, x + Math.cos(a) * rr, yy, z + Math.sin(a) * rr, palette[i % palette.length], "matte", a);
+    k.leaves(f, x + Math.cos(a) * r * 0.55, h * 0.55 + hash(i, 2, seed, 9) * r * 0.5, z + Math.sin(a) * r * 0.55, r * 0.55, r * 0.4, r * 0.55, 1.1, [0.4, 0.7]);
   }
   k.solid(f, x - 0.3, z - 0.3, x + 0.3, z + 0.3);
 }
@@ -219,12 +228,16 @@ export function meshScreen(k: SkyKit, f: number, x0: number, z0: number, x1: num
   }
   for (let j = 0; j <= rows; j++) k.wall(f, x0, z0, x1, z1, 0.05, SAP.mesh[j % SAP.mesh.length], "matte", 0.05, y + (j * h) / rows, false);
   const greens = ["#2f7a34", "#3d9440", "#4aa84a", "#256a2c"];
-  for (let i = 0; i < cols; i++) {
+  // creepers climbing the lattice: leaf cards in strips (not stacked cubes)
+  void greens;
+  const along = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+  for (let i = 0; i < cols; i += 2) {
     const reach = Math.pow(hash(i >> 1, 3, seed, 4), 1.4) * h * green * 2.4;
-    for (let s = 0; s < reach; s += 0.14) {
-      const t = (i + 0.5 + (hash(i, Math.round(s * 10), seed, 5) - 0.5) * 0.8) / cols;
-      k.box(f, 0.14, 0.12, 0.1, x0 + (x1 - x0) * t, y + s, z0 + (z1 - z0) * t, greens[(i + Math.round(s * 7)) % 4], "matte", ry + hash(i, Math.round(s * 9), seed, 6));
-    }
+    if (reach < 0.3) continue;
+    const t = (i + 0.5) / cols;
+    const cx = x0 + (x1 - x0) * t,
+      cz = z0 + (z1 - z0) * t;
+    k.leaves(f, cx, y + reach / 2, cz, along ? 0.3 : 0.12, reach / 2, along ? 0.12 : 0.3, 1.4, [0.16, 0.28]);
   }
 }
 

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { CITY, PARK, GRID } from "../scene/city/plan";
 import { KEYS, KGRID } from "../scene/keys/plan";
+import { GG } from "../scene/real/bridge";
 
 /** The base map's frame (the game's own maps, src/gta, draw from the same picture). */
 export const MAP_FRAME = {
@@ -83,6 +84,7 @@ uniform vec4 uLake;
 uniform vec3 uLand;
 uniform vec4 uKeys;
 uniform vec4 uTown;
+uniform vec4 uGG;
 varying float vY;
 varying vec2 vXZ;
 void main() {
@@ -98,6 +100,14 @@ void main() {
   if (park && dot(lk, lk) < 1.0) { gl_FragColor = vec4(1.0 / 255.0, 0.0, 0.0, 1.0); return; }
   green = green || park;
   float cls;
+  // the Golden Gate's deck (high over the bay, it would read as a building): its road and its walkways
+  // (uGG: centre x, the deck's two ends z, where it narrows into the headland's cut)
+  if (vXZ.y > uGG.y && vXZ.y < uGG.z && vY > -0.45 && vY < 9.0) {
+    float hw = mix(${GG.road.toFixed(2)}, ${GG.roadEnd.toFixed(2)}, smoothstep(uGG.w, uGG.w + 9.0, vXZ.y));
+    float d = abs(vXZ.x - uGG.x);
+    if (d < hw + 0.5) { gl_FragColor = vec4(2.0 / 255.0, clamp(vY / 80.0, 0.0, 1.0), 0.0, 1.0); return; }
+    if (d < ${GG.rail.toFixed(2)} && vXZ.y < ${GG.walkEnd.toFixed(1)}) { gl_FragColor = vec4(3.0 / 255.0, clamp(vY / 80.0, 0.0, 1.0), 0.0, 1.0); return; }
+  }
   // Orchard Keys across the bridge: its town (streets, blocks, lots), the bluff behind it, its beaches
   bool keys = vXZ.x > uKeys.x && vXZ.x < uKeys.y && vXZ.y > uKeys.z && vXZ.y < uKeys.w;
   bool town = vXZ.x > uTown.x && vXZ.x < uTown.y && vXZ.y > uTown.z && vXZ.y < uTown.w;
@@ -132,6 +142,7 @@ function bake(renderer: THREE.WebGLRenderer, scene: THREE.Scene): HTMLCanvasElem
       uLand: { value: new THREE.Vector3(CITY.minX, CITY.maxX, CITY.minZ) },
       uKeys: { value: new THREE.Vector4(KEYS.x0, KEYS.x1, KEYS.z0 + 8, KEYS.z1) },
       uTown: { value: new THREE.Vector4(KGRID.west, KGRID.east, KGRID.north, KGRID.south) },
+      uGG: { value: new THREE.Vector4(GG.x, GG.quay, GG.z1, GG.narrowFrom) },
     },
   });
   const cam = new THREE.OrthographicCamera(-SPAN / 2, SPAN / 2, SPAN / 2, -SPAN / 2, 1, 310);

@@ -1,8 +1,11 @@
 import * as THREE from "three";
+import { realPropObject } from "../scene/real/props";
+import { treeObject } from "../scene/real/trees";
 
 /**
- * Pieces flying (src/gta): what a smashed thing leaves, voxel chunks in its colours, thrown, falling,
- * bouncing on the floor they fell from and lying there a while. Every piece in one instanced draw.
+ * Pieces flying (src/gta): what a smashed thing leaves, splinters and shards in its colours (one
+ * irregular, faceted piece, turned every way), thrown, falling, bouncing on the floor they fell from
+ * and lying there a while. Every piece in one instanced draw.
  */
 interface Piece {
   p: THREE.Vector3;
@@ -16,6 +19,24 @@ interface Piece {
 
 const MAX = 600;
 
+/** A shard: a flattened, irregular polyhedron about a unit across (a splinter of wood, a chip of plastic or glass). */
+function shard() {
+  const g = new THREE.IcosahedronGeometry(0.55, 0);
+  const p = g.getAttribute("position");
+  let s = 7;
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  // (the same corner, the same jitter: the faces stay closed)
+  const seen = new Map<string, [number, number, number]>();
+  for (let i = 0; i < p.count; i++) {
+    const k = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
+    let j = seen.get(k);
+    if (!j) seen.set(k, (j = [0.7 + r() * 0.6, 0.35 + r() * 0.3, 0.8 + r() * 0.7]));
+    p.setXYZ(i, p.getX(i) * j[2], p.getY(i) * j[1], p.getZ(i) * j[0]);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 export class Debris {
   readonly mesh: THREE.InstancedMesh;
   private list: Piece[] = [];
@@ -25,7 +46,7 @@ export class Debris {
   private c = new THREE.Color();
 
   constructor() {
-    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.05 }), MAX);
+    this.mesh = new THREE.InstancedMesh(shard(), new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.05, flatShading: true }), MAX);
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
     this.mesh.frustumCulled = false;
@@ -138,11 +159,6 @@ interface Down {
   key: string;
 }
 
-const POLE = new THREE.MeshStandardMaterial({ color: "#2a2a32", roughness: 0.5, metalness: 0.6 });
-const LIGHT = new THREE.MeshBasicMaterial({ color: new THREE.Color("#fff1d6").multiplyScalar(1.4), toneMapped: false });
-const BARK = new THREE.MeshStandardMaterial({ color: "#5a3d26", roughness: 0.9 });
-const LEAF = new THREE.MeshStandardMaterial({ color: "#3f8a3a", roughness: 0.8 });
-const BOX = new THREE.BoxGeometry(1, 1, 1);
 
 export class Fallen {
   readonly group = new THREE.Group();
@@ -155,23 +171,14 @@ export class Fallen {
   /** Down it goes: `type` the prop's kind, at (x, y, z), pushed along (dx, dz). */
   fall(key: string, type: string, x: number, y: number, z: number, dx: number, dz: number) {
     const g = new THREE.Group();
-    const part = (m: THREE.Material, w: number, h: number, d: number, py: number) => {
-      const b = new THREE.Mesh(BOX, m);
-      b.scale.set(w, h, d);
-      b.position.y = py;
-      b.castShadow = true;
-      g.add(b);
-    };
     if (type === "lamp") {
-      part(POLE, 0.16, 5, 0.16, 2.5);
-      part(POLE, 0.14, 0.14, 1.2, 5);
-      part(LIGHT, 0.3, 0.12, 0.5, 4.95);
-    } else if (type === "tree" || type === "maple") {
-      part(BARK, 0.34, 2.6, 0.34, 1.3);
-      const leaf = type === "maple" ? new THREE.MeshStandardMaterial({ color: "#c0482e", roughness: 0.8 }) : LEAF;
-      part(leaf, 2.4, 2, 2.4, 3.4);
-      part(leaf, 1.6, 1.2, 1.6, 4.6);
-    } else return false;
+      // the street's realistic lamp (src/scene/real/props.ts), its pole on the spot
+      const l = realPropObject("lamp", ["#ffd9a0"]);
+      l.position.z = 0.6;
+      g.add(l);
+    } else if (type === "tree" || type === "maple") g.add(treeObject(type === "maple" ? "maple" : "broad", Math.round(x * 7 + z * 13)));
+    else if (type === "pole" || type === "bollard" || type === "streetSign" || type === "stopPole" || type === "trashBin") g.add(realPropObject(type));
+    else return false;
     g.position.set(x, y, z);
     this.group.add(g);
     const l = Math.hypot(dx, dz) || 1;

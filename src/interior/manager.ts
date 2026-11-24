@@ -369,10 +369,17 @@ function exitSign(i: Interior) {
   g.fillText("出口", 150, 50);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.34), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: new THREE.Color(1.3, 1.3, 1.3), side: THREE.DoubleSide }));
+  // (two faces back to back, each the right way round: one plane seen from behind read "TIX3 口出")
+  const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: new THREE.Color(1.3, 1.3, 1.3) });
+  const sign = new THREE.Group();
+  for (const r of [0, Math.PI]) {
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.34), mat);
+    face.rotation.y = r;
+    face.position.z = r ? -0.004 : 0.004;
+    sign.add(face);
+  }
   const d = doorOf(f, i.colliders(0));
   sign.position.set(d.x, f.y + 2.45, d.z - 0.06);
-  sign.rotation.y = Math.PI;
   i.scene.add(sign);
 }
 

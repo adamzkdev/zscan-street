@@ -310,7 +310,7 @@ export class Editor {
         this.scene.remove(this.mesh);
         this.mesh.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
       }
-      this.mesh = toObject(toVoxel(this.model), { shadows: false });
+      this.mesh = toObject(toVoxel(this.model), { shadows: false, voxel: true });
       this.scene.add(this.mesh);
     }
     const h = (this.model.h * VOX) / 3;

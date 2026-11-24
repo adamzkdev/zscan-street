@@ -4,24 +4,21 @@ import { visitorToken } from "../data/token";
 import { CURB, worksSites, type WorkSite } from "../scene/city/plan";
 import type { Decor } from "../scene/decor";
 import { sayAt } from "../scene/speech";
-import { C, VOX, VoxelModel } from "../scene/voxel/model";
-import { MATERIALS, toObject } from "../scene/voxel/mesher";
+import { VOX } from "../scene/voxel/model";
+import { MATERIALS } from "../scene/voxel/mesher";
 import type { Kind } from "../scene/voxel/model";
 import type { ChainClock } from "./clock";
 import {
-	crownModel,
 	FH,
-	floorModel,
 	footprint,
-	frameModel,
-	geos,
-	merge,
 	NEON,
 	heightOf,
 	type Geos,
 	type Plan,
 } from "./design";
 import type { GameHud } from "./ui";
+import { kitMeshes, mergeKit, type KitGeos } from "../scene/real/kitobj";
+import { realWorker, realWorksCrown, realWorksFloor, realWorksFrame } from "./realworks";
 
 export interface Who {
 	id: number;
@@ -177,19 +174,9 @@ const sparkMat = new THREE.PointsMaterial({
 });
 
 /** A worker in a hard hat and a high-vis vest. */
-let workerProto: THREE.Group | null = null;
 export function worker() {
-	if (!workerProto) {
-		const m = new VoxelModel(5, 11, 3);
-		m.box(0, 0, 0, 2, 4, 3, C("#2a3550"));
-		m.box(3, 0, 0, 5, 4, 3, C("#2a3550"));
-		m.box(0, 4, 0, 5, 8, 3, C("#ff7a1a"));
-		m.box(0, 6, 0, 5, 7, 3, C("#e8f0f0"));
-		m.box(1, 8, 0, 4, 10, 3, C("#e8b88a"));
-		m.box(0, 10, 0, 5, 11, 3, C("#f4d020"));
-		workerProto = toObject(m, { shadows: false });
-	}
-	return workerProto.clone();
+	// (realistic: src/game/realworks.ts; the voxel figure was a box)
+	return realWorker();
 }
 
 export function meshes(g: Geos, shadows = true) {
@@ -296,8 +283,8 @@ class Site {
 	readonly hit: THREE.Mesh;
 	row: SiteRow | null = null;
 	next = false;
-	private floors: Geos[] = [];
-	private crownG: Geos | null = null;
+	private floors: KitGeos[] = [];
+	private crownG: KitGeos | null = null;
 	private building: THREE.Group | null = null;
 	private shown = -1;
 	private frame: THREE.Object3D | null = null;
@@ -379,11 +366,11 @@ class Site {
 		if (!p) return false;
 		const want = this.built;
 		if (this.floors.length < want) {
-			this.floors.push(geos(floorModel(p, this.floors.length), this.floors.length * FLOOR_M));
+			this.floors.push(realWorksFloor(p, this.floors.length));
 			return true;
 		}
 		if (this.done && !this.crownG) {
-			this.crownG = geos(crownModel(p), p.floors * FLOOR_M);
+			this.crownG = realWorksCrown(p);
 			return true;
 		}
 		return false;
@@ -412,7 +399,7 @@ class Site {
 			dispose(this.building);
 			const parts = this.floors.slice(0, built);
 			if (this.done && this.crownG) parts.push(this.crownG);
-			this.building = parts.length ? meshes(merge(parts)) : null;
+			this.building = parts.length ? kitMeshes(mergeKit(parts)) : null;
 			if (this.building) this.group.add(this.building);
 			this.shown = have;
 		}
@@ -429,7 +416,7 @@ class Site {
 		// the floor going up: its bare concrete rising through the block
 		if (this.frameAt !== built) {
 			dispose(this.frame);
-			this.frame = toObject(frameModel(p, built));
+			this.frame = realWorksFrame(p, built);
 			this.frame.position.y = built * FLOOR_M;
 			this.group.add(this.frame);
 			this.frameAt = built;
@@ -1044,12 +1031,12 @@ export class Works {
 	}
 
 	private preview(p: Plan) {
-		const parts: Geos[] = [];
-		for (let f = 0; f < p.floors; f++) parts.push(geos(floorModel(p, f), f * FLOOR_M));
-		parts.push(geos(crownModel(p), p.floors * FLOOR_M));
-		const merged = merge(parts);
+		const parts: KitGeos[] = [];
+		for (let f = 0; f < p.floors; f++) parts.push(realWorksFloor(p, f));
+		parts.push(realWorksCrown(p));
+		const merged = mergeKit(parts);
 		for (const g of parts) for (const x of Object.values(g)) x?.dispose();
-		const obj = meshes(merged, false);
+		const obj = kitMeshes(merged, { shadows: false });
 		const scene = new THREE.Scene();
 		scene.add(obj, new THREE.HemisphereLight("#dfe8ff", "#3a3040", 2.2));
 		const sun = new THREE.DirectionalLight("#fff1dc", 2.4);

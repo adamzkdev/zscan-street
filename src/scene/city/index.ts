@@ -4,10 +4,13 @@ import { Nav } from "../nav";
 import { addDetail } from "../detail";
 import { blobTexture, markingsTexture, neonTexture, releaseAfterUpload, waterTexture } from "../textures";
 import { GROUND, terrainMat } from "../real/ground";
-import { plantTrees, speciesOf, treeLod, type TreeSpot } from "../real/trees";
-import { placeProps, REAL_PROPS } from "../real/props";
-import { MATERIALS, ownMaterial, propDepthMaterial, sharedFor, toObject } from "../voxel/mesher";
-import { C, E, G, VOX, VoxelModel, type Kind } from "../voxel/model";
+import { plantTrees, speciesOf, treeLod, type Species, type TreeSpot } from "../real/trees";
+import { placeProps, REAL_PROPS, type PropSpot } from "../real/props";
+import { realBoat, realFerry } from "../real/boats";
+import { realIslands } from "../real/islands";
+import type { Extras } from "../real/landmarks";
+import { MATERIALS, ownMaterial, propDepthMaterial, sharedFor } from "../voxel/mesher";
+import { C, VOX, type Kind } from "../voxel/model";
 import type { SignSpot } from "../voxel/parts";
 import { mat } from "./kit";
 import { AREAS, BAY, CITY, CORE, CURB, DISTRICTS, GRID, gridCells, nz, PARK, planCity, polePositions, RIVER, SHOTENGAI, ST, streetSegments, type BuildingJob, type DistrictKey } from "./plan";
@@ -20,6 +23,8 @@ import { realMat } from "../real/mats";
 
 /** `?real=0`: the voxel city as it was (the realistic buildings off: a kill switch, and a baseline). */
 const REAL_ON = typeof location === "undefined" || new URLSearchParams(location.search).get("real") !== "0";
+/** (dev, before/after shots) `?marks=voxel`: the landmarks in their old voxels. */
+const REAL_MARKS = typeof location === "undefined" || new URLSearchParams(location.search).get("marks") !== "voxel";
 import { CityCache } from "./cache";
 
 export { AREAS, CITY, CURB, DISTRICTS, CUT_VOX };
@@ -197,6 +202,8 @@ type Meta = {
   lights: [number, number, number, string][];
   walls?: [number, number, number, number][];
   points?: Record<string, [number, number, number]>;
+  /** A realistic landmark's trees and props, metres in its frame (src/scene/real/landmarks.ts). */
+  extras?: Extras;
 };
 
 /** A half-float attribute over the worker's own array (Float16BufferAttribute would copy it). */
@@ -424,6 +431,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   {
     const real = placeProps(g, planned.filter((p) => REAL_PROPS.has(p.type)));
     for (const [x, z, r] of real.circles) nav.addCircle(x, z, r);
+    for (const [x0, z0, x1, z1] of real.rects) nav.addRect(x0, z0, x1, z1);
     for (const [x, y, z, color] of real.lights) lamps.push({ pos: new THREE.Vector3(x, y, z), color });
   }
   {
@@ -532,6 +540,15 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
     cut.visible = false;
     g.add(full, cut, extras);
     const toWorld = (vx: number, vy: number, vz: number) => full.localToWorld(local(vx, vy, vz));
+    // a realistic landmark's trees and props: planted with the others once the city is in
+    for (const [x, y, z, sp, seed] of m.extras?.trees ?? []) {
+      const p = full.localToWorld(new THREE.Vector3(x, y, z));
+      lmTrees.push({ x: p.x, y: p.y, z: p.z, species: sp as Species, seed });
+    }
+    for (const [type, x, y, z, rot, arg] of m.extras?.props ?? []) {
+      const p = full.localToWorld(new THREE.Vector3(x, y, z));
+      lmProps.push({ type, args: arg ? [arg] : [], x: p.x, y: p.y, z: p.z, rot: rot + ROT[j.face] });
+    }
     for (const w of m.walls ?? [m.body]) {
       const a = toWorld(w[0], 0, w[1]),
         b = toWorld(w[2], 0, w[3]);
@@ -663,6 +680,9 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   const propChunks: LodSet[] = [];
   /** Landmarks' near and far meshes, and each one's centre. */
   const landmarkLods: { full: THREE.Object3D; far: THREE.Object3D; at: THREE.Vector3 }[] = [];
+  /** The realistic landmarks' trees and props, planted in one go at the end. */
+  const lmTrees: TreeSpot[] = [];
+  const lmProps: PropSpot[] = [];
   /** The bigger city's signs and screens, per building: hidden far from the focus. */
   const farExtras: { group: THREE.Object3D; at: THREE.Vector3 }[] = [];
   /** Each variant's copies (full, half and quarter resolution), batched once the whole city is in (extBatch). */
@@ -762,7 +782,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
             w.terminate();
             resolve();
           };
-          w.postMessage({ kind: "buildings", jobs: queues[i], lite: LITE, real: REAL_ON, keys: cache.on ? Object.fromEntries(queues[i].map((j) => [j.id, variantKey(j)])) : undefined });
+          w.postMessage({ kind: "buildings", jobs: queues[i], lite: LITE, real: REAL_ON, marks: REAL_MARKS, keys: cache.on ? Object.fromEntries(queues[i].map((j) => [j.id, variantKey(j)])) : undefined });
         }),
     ),
     new Promise<void>((resolve) => {
@@ -792,6 +812,16 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   ]);
   extBatch(g, lods);
   extBatch(g, propChunks, true, "props");
+  if (lmProps.length) {
+    const real = placeProps(g, lmProps);
+    for (const [x, z, r] of real.circles) nav.addCircle(x, z, r);
+    for (const [x0, z0, x1, z1] of real.rects) nav.addRect(x0, z0, x1, z1);
+    for (const [x, y, z, color] of real.lights) lamps.push({ pos: new THREE.Vector3(x, y, z), color });
+  }
+  if (lmTrees.length) {
+    for (const c of plantTrees(g, lmTrees)) canopies.push(c);
+    for (const t of lmTrees) if (t.y! < CURB + 1) nav.addCircle(t.x, t.z, t.species === "bush" ? 0.8 : 0.3);
+  }
   // the batches hold their own copy of every level: the workers' arrays (~85 MB on a phone) were
   // kept alive for nothing by these lists (lod() only needs the ids and positions)
   for (const l of [...lods, ...propChunks]) l.levels = [];
@@ -1281,17 +1311,8 @@ function river(g: THREE.Group, nav: Nav, animated: ((t: number, dt: number) => v
   }
   bits.flush(g);
   // boats: moored along the north quay, a water bus going up and down
-  const boat = (hull: string, cabin: string) => {
-    const m = new VoxelModel(48, 14, 14);
-    m.box(2, 0, 2, 46, 4, 12, C(hull));
-    m.box(0, 2, 3, 48, 4, 11, C(hull));
-    m.box(4, 4, 3, 44, 5, 11, C("#d8d0c0"));
-    m.box(14, 5, 4, 36, 11, 10, C(cabin));
-    m.box(15, 7, 3, 35, 10, 11, G("#1a2030"));
-    m.box(14, 11, 4, 36, 12, 10, C("#3a3844"));
-    m.box(44, 4, 6, 46, 6, 8, E("#fff6e0", 2.6));
-    return toObject(m);
-  };
+  // (realistic: src/scene/real/boats.ts)
+  const boat = (hull: string, cabin: string) => realBoat(hull, cabin);
   const moored = [
     [-210, "#3a7a5a", "#f0e8d8"],
     [-170, "#1a1820", "#e8e4dc"],
@@ -1324,39 +1345,6 @@ function river(g: THREE.Group, nav: Nav, animated: ((t: number, dt: number) => v
   });
 }
 
-/**
- * Voxel-style terrain: columns `step` metres square, as high as `height` says (null: none), in the
- * colour `paint` picks; all merged into one vertex-coloured mesh.
- */
-function terrain(g: THREE.Group, x0: number, x1: number, z0: number, z1: number, step: number, base: number, height: (x: number, z: number) => number | null, paint: (x: number, z: number, h: number) => string) {
-  const geos: THREE.BufferGeometry[] = [];
-  const col = new THREE.Color();
-  for (let x = x0; x < x1; x += step)
-    for (let z = z0; z < z1; z += step) {
-      const cx = x + step / 2,
-        cz = z + step / 2;
-      const h = height(cx, cz);
-      if (h === null) continue;
-      const geo = new THREE.BoxGeometry(step, h - base, step).translate(cx, (h + base) / 2, cz).toNonIndexed();
-      col.set(paint(cx, cz, h));
-      const n = geo.getAttribute("position").count;
-      const c = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) {
-        // the sides a shade darker than the top
-        const k = geo.getAttribute("normal").getY(i) > 0.5 ? 1 : 0.72;
-        c[i * 3] = col.r * k;
-        c[i * 3 + 1] = col.g * k;
-        c[i * 3 + 2] = col.b * k;
-      }
-      geo.setAttribute("color", new THREE.BufferAttribute(c, 3));
-      geo.deleteAttribute("uv");
-      geos.push(geo);
-    }
-  if (!geos.length) return;
-  const m = new THREE.Mesh(mergeGeometries(geos, false), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
-  m.castShadow = m.receiveShadow = true;
-  g.add(m);
-}
 
 /**
  * The sea all round the island: one wide plane of water to the horizon, and a beach sloping down
@@ -1469,58 +1457,29 @@ function bay(g: THREE.Group, nav: Nav, animated: ((t: number, dt: number) => voi
   const stone = mat("#7c7682");
   stone.userData.dayColor = "#bdb6ae";
   const rail = mat("#2a2832");
+  // (the quay's coping and railing stop where the Golden Gate lands: its deck, cycle lanes and
+  // walkways run straight off Bay Road onto the bridge — src/scene/real/bridge.ts)
+  const gap: [number, number] = [BAY.bridge.x - 18.4, BAY.bridge.x + 18.4];
+  const runs: [number, number][] = [
+    [CT.minX, gap[0]],
+    [gap[1], CT.maxX],
+  ];
   box(g, W, CURB - BAY.bed, 0.8, stone, 0, BAY.bed, BAY.z0 + 0.4);
-  box(g, W, 0.12, 0.9, mat("#9a94a0"), 0, CURB, BAY.z0 + 0.45);
   const posts: THREE.BufferGeometry[] = [];
-  for (let x = CT.minX + 1; x < CT.maxX; x += 2.4) posts.push(new THREE.BoxGeometry(0.06, 0.9, 0.06).translate(x, CURB + 0.57, BAY.z0 + 0.2));
-  posts.push(new THREE.BoxGeometry(W, 0.06, 0.08).translate(0, CURB + 1.03, BAY.z0 + 0.2));
+  for (const [a, b] of runs) {
+    box(g, b - a, 0.12, 0.9, mat("#9a94a0"), (a + b) / 2, CURB, BAY.z0 + 0.45);
+    for (let x = a + 1; x < b - 0.2; x += 2.4) posts.push(new THREE.BoxGeometry(0.06, 0.9, 0.06).translate(x, CURB + 0.57, BAY.z0 + 0.2));
+    posts.push(new THREE.BoxGeometry(b - a, 0.06, 0.08).translate((a + b) / 2, CURB + 1.03, BAY.z0 + 0.2));
+  }
   g.add(new THREE.Mesh(mergeGeometries(posts, false), rail));
   nav.addRect(CT.minX, BAY.z0 + 0.1, CT.maxX, CT.maxZ);
-  const noise = (x: number, z: number, s: number) => Math.sin(x * 0.13 + s) * Math.cos(z * 0.11 + s * 2) + Math.sin((x + z) * 0.07 + s * 3) * 0.6;
-  // Liberty island: a round of lawn on a granite rim, a paved star in the middle for the statue
+  // Liberty island, the rock, Bennelong point: realistic (src/scene/real/islands.ts), the same heights
+  realIslands(g);
   const L = BAY.liberty;
-  terrain(g, L.x - L.r - 2, L.x + L.r + 2, L.z - L.r - 2, L.z + L.r + 2, 1, BAY.bed, (x, z) => {
-    const d = Math.hypot(x - L.x, z - L.z);
-    return d < L.r ? CURB : d < L.r + 1.5 ? CURB - 0.8 : null;
-  }, (x, z) => {
-    const d = Math.hypot(x - L.x, z - L.z);
-    return d > L.r - 1 ? "#8a8590" : d < 8 ? "#b8b0a4" : (Math.floor(x) + Math.floor(z)) % 7 === 0 ? "#4f8a4a" : "#5a9a52";
-  });
-  // the rock: cliffs, a flat top for the prison
   const R = BAY.rock;
-  terrain(g, R.x0 - 6, R.x1 + 6, R.z0 - 6, R.z1 + 6, 1, BAY.bed, (x, z) => {
-    const out = Math.max(R.x0 - x, x - R.x1, R.z0 - z, z - R.z1, 0);
-    if (out > 5 + noise(x, z, 2) * 1.5) return null;
-    return out > 0 ? CURB + 1.2 - out * 0.9 + noise(x, z, 5) * 0.6 : CURB + 1.2;
-  }, (x, z, h) => (h < CURB + 0.3 ? (noise(x, z, 8) > 0.4 ? "#6a6470" : "#5a5560") : x > R.x0 && x < R.x1 && z > R.z0 && z < R.z1 ? "#8a8690" : "#4f7a48"));
-  // Bennelong point: the Opera House's granite pier, and the promenade out to it from the quay
-  const O = BAY.opera;
-  const ox = (O.x0 + O.x1) / 2;
-  terrain(g, O.x0 - 2, O.x1 + 2, BAY.z0 - 1, O.z1 + 2, 1, BAY.bed, (x, z) => {
-    const onPier = x > O.x0 && x < O.x1 && z > O.z0 && z < O.z1;
-    const onWalk = Math.abs(x - ox) < 4 && z >= BAY.z0 - 1 && z <= O.z0 + 1;
-    const rim = x > O.x0 - 1.5 && x < O.x1 + 1.5 && z > O.z0 - 1.5 && z < O.z1 + 1.5;
-    return onPier || onWalk ? CURB : rim ? CURB - 0.6 : null;
-  }, (x, z) => {
-    const onWalk = Math.abs(x - ox) < 4 && z < O.z0;
-    return onWalk ? ((Math.floor(z) & 1) ? "#b8b0a4" : "#c4bcb0") : x < O.x0 + 0.5 || x > O.x1 - 0.5 || z > O.z1 - 0.5 ? "#8a8590" : (Math.floor(x / 2) + Math.floor(z / 2)) % 2 ? "#cfc8bc" : "#c4bdb1";
-  });
   // ferries: from the quay out to Liberty island and to the rock, and back, waiting at each pier
-  const ferry = (hull: string, band: string) => {
-    const m = new VoxelModel(60, 20, 18);
-    m.box(2, 0, 2, 58, 4, 16, C(hull));
-    m.box(0, 2, 3, 60, 5, 15, C(hull));
-    m.box(1, 4, 3, 59, 5, 15, C(band));
-    m.box(4, 5, 3, 56, 6, 15, C("#d8d0c0"));
-    m.box(10, 6, 4, 46, 13, 14, C("#ece8e0"));
-    m.box(11, 8, 3, 45, 11, 15, G("#1a2030"));
-    m.box(18, 13, 5, 38, 17, 13, C("#ece8e0"));
-    m.box(19, 14, 4, 37, 16, 14, G("#1a2030"));
-    m.box(26, 17, 8, 30, 20, 10, C(band));
-    m.box(56, 5, 7, 58, 7, 11, E("#fff6e0", 2.6));
-    for (let x = 12; x < 46; x += 4) m.box(x, 7, 2, x + 2, 8, 3, E("#ffe6b0", 1.4));
-    return toObject(m);
-  };
+  // (realistic: src/scene/real/boats.ts)
+  const ferry = (hull: string, band: string) => realFerry(hull, band);
   const piers: { boat: THREE.Object3D; a: THREE.Vector3; b: THREE.Vector3; t: number }[] = [];
   const pier = (x: number, z0: number, z1: number) => {
     box(g, 3, CURB - BAY.water + 0.2, z1 - z0, mat("#6a5a4a"), x, BAY.water - 0.2, (z0 + z1) / 2);
@@ -1578,13 +1537,13 @@ function arcade(g: THREE.Group, flicker: Flicker[], nav: Nav) {
     for (let i = 1; i < archPts.length; i++) {
       const a = archPts[i - 1],
         b = archPts[i];
-      const seg = new THREE.BoxGeometry(a.distanceTo(b) + 0.05, 0.16, 0.16);
+      const seg = new THREE.CylinderGeometry(0.08, 0.08, a.distanceTo(b) + 0.05, 8).rotateZ(Math.PI / 2);
       seg.rotateZ(Math.atan2(b.y - a.y, b.x - a.x));
       seg.translate((a.x + b.x) / 2 + A.x, (a.y + b.y) / 2, z);
       ribGeo.push(seg);
     }
     for (const side of [-1, 1]) {
-      ribGeo.push(new THREE.BoxGeometry(0.16, H, 0.16).translate(A.x + (side * w) / 2, H / 2 + CURB, z));
+      ribGeo.push(new THREE.CylinderGeometry(0.09, 0.11, H, 10).translate(A.x + (side * w) / 2, H / 2 + CURB, z));
       nav.addCircle(A.x + (side * w) / 2, z, 0.2);
     }
   }
@@ -1610,7 +1569,8 @@ function arcade(g: THREE.Group, flicker: Flicker[], nav: Nav) {
   roof.renderOrder = 2;
   g.add(roof);
   // paper lanterns down the middle, two rows, lit
-  const lanternGeo = new THREE.BoxGeometry(0.34, 0.46, 0.34);
+  // (chōchin: round paper lanterns, a black cap top and bottom — no boxes)
+  const lanternGeo = mergeGeometries([new THREE.SphereGeometry(0.2, 14, 10).scale(1, 1.2, 1), new THREE.CylinderGeometry(0.11, 0.11, 0.06, 12).translate(0, 0.25, 0), new THREE.CylinderGeometry(0.11, 0.11, 0.06, 12).translate(0, -0.25, 0)].map((q) => q.toNonIndexed()), false)!;
   const colors = [new THREE.Color(1.8, 0.5, 0.24), new THREE.Color(1.7, 1.4, 0.9)];
   const n = Math.floor(len / 2.6) * 2;
   const lanterns = new THREE.InstancedMesh(lanternGeo, new THREE.MeshBasicMaterial({ toneMapped: false }), n);

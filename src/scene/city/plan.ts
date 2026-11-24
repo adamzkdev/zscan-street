@@ -969,6 +969,8 @@ export function planCity() {
           const off = st.at + side * (st.width / 2 + 1.1);
           const [x, z] = st.axis === "x" ? [a, off] : [off, a];
           if (LOTS.some((l) => x > l.x0 && x < l.x1 && z > l.z0 && z < l.z1)) continue;
+          // (none where the Golden Gate lands: its deck, cycle lanes and walkways come off Bay Road there)
+          if (z > ST.ringS && z < BAY.z0 && Math.abs(x - BAY.bridge.x) < 20) continue;
           // palms by the water and down the boulevards (the bay's side of the city, the ring road,
           // the big avenues); the blossoms and maples keep the north and the Japanese streets
           const palmy = z > ST.south + 8 || st.at === ST.blvdW || st.at === ST.blvdE || st.at === ST.ringW || st.at === ST.ringE || (st.axis === "x" && st.at === ST.ringS);
@@ -1026,6 +1028,8 @@ export function planCity() {
       const len = long ? c.x1 - c.x0 : c.z1 - c.z0;
       for (let t = 3; t < len - 2; t += 7.5) {
         const [x, z] = long ? [c.x0 + t, (c.z0 + c.z1) / 2] : [(c.x0 + c.x1) / 2, c.z0 + t];
+        // (none where the Golden Gate lands)
+        if (z > ST.ringS && z < BAY.z0 + 1 && Math.abs(x - BAY.bridge.x) < 21) continue;
         const [kind, seed] = greenKinds[gk++ % greenKinds.length];
         props.push({ type: "tree", args: [kind, seed], x, z, rot: gk, y: CURB, district: "downtown" });
         circles.push([x, z, 0.5]);

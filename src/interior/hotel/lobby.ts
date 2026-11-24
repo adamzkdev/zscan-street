@@ -6,7 +6,9 @@ import * as F from "../furniture";
 import { box, glowMat, std } from "../kit";
 import * as H from "./furniture";
 import { pianist } from "../music/acts";
-import { HotelKit, LEVELS, LIFT_Z, makeCanvas, marble, num, reward, usd, water } from "./kit";
+import { fallingWater, HotelKit, LEVELS, LIFT_Z, makeCanvas, marble, num, reward, usd, water } from "./kit";
+import { maps, TILE } from "../../scene/real/tex";
+import { foliageCards } from "../../scene/real/trees";
 import { STAIR } from "./stair";
 
 /** The piano's tune, played with the Web Audio API. */
@@ -85,19 +87,31 @@ export function lobby(k: HotelKit) {
   k.lifts(f);
 
   // the leaning face of tower 1, east: rows of balconies rising over the atrium
-  const lt = leanTexture();
+  // (the realistic pass: a photographed facade — its own windows, its rooms lit — not a painted
+  // grid of window cells; the planters along the balconies real leaves)
+  void leanTexture;
+  const slant = Math.hypot(6, 9);
+  const tile = TILE.Facade019A ?? [16, 16];
   const lean = new THREE.BufferGeometry();
   lean.setAttribute("position", new THREE.Float32BufferAttribute([14.9, 0, 0, 14.9, 0, -22, 8.9, 9, -22, 8.9, 9, 0], 3));
-  lean.setAttribute("uv", new THREE.Float32BufferAttribute([1, 0, 0, 0, 0, 1, 1, 1], 2));
+  lean.setAttribute("uv", new THREE.Float32BufferAttribute([22 / tile[0], 0, 0, 0, 0, slant / tile[1], 22 / tile[0], slant / tile[1]], 2));
   lean.setIndex([0, 1, 2, 0, 2, 3]);
   lean.computeVertexNormals();
-  g.add(new THREE.Mesh(lean, new THREE.MeshStandardMaterial({ map: lt.map, emissive: "#ffffff", emissiveMap: lt.emissive, emissiveIntensity: 0.9, roughness: 0.7, side: THREE.DoubleSide })));
+  const fm = maps("Facade019A");
+  const leanMat = new THREE.MeshStandardMaterial({ map: fm.map, normalMap: fm.normalMap, roughnessMap: fm.roughnessMap, roughness: 1, emissive: "#ffd9a0", emissiveMap: maps("Facade016").map, emissiveIntensity: 0.55, side: THREE.DoubleSide });
+  g.add(new THREE.Mesh(lean, leanMat));
+  const hedges: Parameters<typeof foliageCards>[0] = [];
   for (let r = 1; r < 6; r++) {
     const yy = r * 1.5,
       xx = 14.9 - (6 * yy) / 9;
     box(g, 0.5, 0.12, 22, std("#cfc8bc", 0.6), xx - 0.25, y + yy, -11);
-    box(g, 0.3, 0.22, 22, std("#2f6a34", 0.95), xx - 0.3, y + yy + 0.12, -11);
+    box(g, 0.3, 0.16, 22, std("#5a524a", 0.8), xx - 0.3, y + yy + 0.12, -11);
+    for (let z = -21; z < -0.5; z += 3.5) hedges.push({ c: new THREE.Vector3(xx - 0.3, y + yy + 0.42, z + 1.75), rad: new THREE.Vector3(0.22, 0.22, 1.7), n: 9, size: [0.38, 0.62] });
   }
+  const hf = foliageCards(hedges, 41);
+  const hm = new THREE.Mesh(hf.geometry, hf.mat);
+  hm.customDepthMaterial = hf.depth;
+  g.add(hm);
   k.rects[f].push([13.4, -22, 15, 0]);
 
   // the glass roof: a grid of steel over the sky
@@ -136,7 +150,8 @@ export function lobby(k: HotelKit) {
   rim.rotation.x = Math.PI / 2;
   rim.position.set(OX, y + 0.56, OZ);
   g.add(rim);
-  const fallT = water(1, 3, "#3aa8d0");
+  const fallT = fallingWater(1, 1.6, "#3aa8d0");
+  k.ticks[f].push((dt) => (fallT.offset.y += dt * 0.9));
   const fall = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.8, h - 0.5, 32, 1, true), new THREE.MeshStandardMaterial({ map: fallT, emissive: "#3ab8e0", emissiveMap: fallT, emissiveIntensity: 0.7, transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide }));
   fall.position.set(OX, y + 0.5 + (h - 0.5) / 2, OZ);
   fall.raycast = () => {};
@@ -216,8 +231,9 @@ export function lobby(k: HotelKit) {
   k.put(f, "trolley1", () => H.trolley(1), -2.9, -15.0, 0.2);
 
   // the water wall, north-east: eight metres of falling water into a long pond
-  const wt = water(2, 4);
-  const wfall = new THREE.Mesh(new THREE.PlaneGeometry(5, 7.4), new THREE.MeshStandardMaterial({ map: wt, emissive: "#2a8ab0", emissiveMap: wt, emissiveIntensity: 0.7, roughness: 0.1, metalness: 0.2 }));
+  const wt = fallingWater(1.2, 1.4);
+  k.ticks[f].push((dt) => (wt.offset.y += dt * 0.75));
+  const wfall = new THREE.Mesh(new THREE.PlaneGeometry(5, 7.4), new THREE.MeshStandardMaterial({ map: wt, emissive: "#2a8ab0", emissiveMap: wt, emissiveIntensity: 0.55, roughness: 0.05, metalness: 0.1 }));
   wfall.position.set(10.4, y + 4.0, -21.6);
   g.add(wfall);
   box(g, 5.6, 8.2, 0.2, std("#1a1820", 0.6), 10.4, y + 0.1, -21.82);

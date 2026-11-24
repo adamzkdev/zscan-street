@@ -27,6 +27,7 @@ import { Heat } from "./police";
 import { Roads } from "./roads";
 import { GtaSound, type AudioOut } from "./sound";
 import { CarRadio } from "./radio";
+import { snarkRenderer } from "./snarkmat";
 import { SkyClock, WEATHER_NAME, weatherIcon } from "./skyclock";
 import type { Daylight } from "../scene/daylight";
 import { SwimFx } from "./swim";
@@ -331,6 +332,8 @@ export class GtaMode {
       hitMe: (dmg, x, z) => this.hurtMe(dmg, x, z),
       report: (why) => this.heat.raise(1, why),
     };
+    // the figures' art atlas is written through the street's renderer
+    snarkRenderer(host.renderer);
     this.people = new People3D(host.scene, (x, z, r) => [...this.peds.near(x, z, r), ...this.beach.near(x, z, r), ...host.people3d(x, z, r)]);
     this.breakables = new Breakables(this.debris);
     this.props = new StreetProps(host.scene, this.debris);

@@ -114,7 +114,7 @@ const SHOTENGAI = { x0: -86 - 6, x1: -86 + 6, z0: -39, z1: 31 };
 const PARKR = { x0: GRID.park.x0, x1: GRID.park.x1, z0: GRID.park.z0, z1: GRID.park.z1 };
 const PALM = { x0: Math.min(BAY.palm.x0, BAY.arab.x0), x1: Math.max(BAY.palm.x1, BAY.arab.x1), z0: Math.min(BAY.palm.z0, BAY.arab.z0), z1: Math.max(BAY.palm.z1, BAY.arab.z1) };
 /** The suspension bridge over the bay's mouth, as a thin strip. */
-const BRIDGE = { x0: BAY.bridge.x - 6, x1: BAY.bridge.x + 6, z0: BAY.z0 - 10, z1: BAY.headland.z0 + 10 };
+const BRIDGE = { x0: BAY.bridge.x - 18, x1: BAY.bridge.x + 18, z0: BAY.z0 - 10, z1: BAY.headland.z0 + 10 };
 
 const DISTRICTS: Record<string, District> = {
   shibuya: {

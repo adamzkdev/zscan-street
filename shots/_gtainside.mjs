@@ -3,6 +3,7 @@ import puppeteer from "puppeteer-core";
 const [URL = "http://localhost:3061/?debug&gta=1192&theme=day", OUT = "shots/gta/in", PLACE = process.env.PLACE ?? "mempool"] = process.argv.slice(2);
 const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 1600, height: 900 } });
 const p = await b.newPage();
+await p.evaluateOnNewDocument(() => { const W = window.WebSocket; const F = function (u, pr) { if (pr === "vite-hmr" || String(u).includes("token=")) return { addEventListener() {}, removeEventListener() {}, send() {}, close() {}, readyState: 0 }; return pr === undefined ? new W(u) : new W(u, pr); }; F.prototype = W.prototype; Object.assign(F, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 }); window.WebSocket = F; });
 const errs = [];
 p.on("pageerror", (e) => errs.push("pageerror " + e.message));
 p.on("console", (m) => (m.type() === "error" || /gta:/.test(m.text())) && errs.push(m.text().slice(0, 300)));

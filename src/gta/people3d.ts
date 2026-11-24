@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { faces, type Look } from "./faces";
-import { bodyMatrix, figureMaterials, headMatrix, JOINTS, newAct, NPARTS, partBox, partColor, partMatrix, pose, stride, type Act } from "./figure";
+import { bodyMatrix, figureMaterials, headMatrix, JOINTS, newAct, NPARTS, PART_KINDS, PARTS, partColor, partMatrix, partShape, pose, stride, type Act } from "./figure";
+import { flushArt } from "./snarkmat";
 
 /**
  * The street's zkSNARKs in 3D (src/gta): round you, every zkSNARK — the game's own passers-by first,
@@ -60,7 +61,8 @@ interface Slot {
 export class People3D {
   readonly group = new THREE.Group();
   private busts: THREE.BatchedMesh;
-  private parts: THREE.InstancedMesh;
+  /** Every limb of everyone: the shared shapes, NPARTS instances per body slot (made once, shown or hidden). */
+  private parts: THREE.BatchedMesh;
   private slots = new Map<string, Slot>();
   /** Busts in the batch, by zkSNARK: their geometries there, how many wear them, when last used. */
   private geos = new Map<number, { body: number; head: number; users: number; used: number }>();
@@ -107,15 +109,28 @@ export class People3D {
     this.limit = this.max;
     const mats = figureMaterials();
     // (indexed busts: the smooth ones share their corners)
-    this.busts = new THREE.BatchedMesh(this.max * 2, 400_000, 900_000, mats.bust);
+    // (a bust is about 1.7k vertices and 9k indices: room for all of them at once, no regrowth while playing)
+    this.busts = new THREE.BatchedMesh(this.max * 2, (this.max + 30) * 1800, (this.max + 30) * 9600, mats.bust);
     this.busts.castShadow = true;
     this.busts.frustumCulled = false;
     this.busts.perObjectFrustumCulled = true;
-    this.parts = new THREE.InstancedMesh(partBox(), mats.part, this.max * NPARTS);
+    let pv = 0,
+      pi = 0;
+    for (const k of PART_KINDS) {
+      pv += partShape(k).getAttribute("position").count;
+      pi += partShape(k).getIndex()!.count;
+    }
+    this.parts = new THREE.BatchedMesh(this.max * NPARTS, pv, pi, mats.part);
     this.parts.castShadow = true;
     this.parts.frustumCulled = false;
-    this.parts.count = 0;
-    this.parts.setColorAt(0, this.c.set(0xffffff));
+    this.parts.perObjectFrustumCulled = true;
+    this.parts.sortObjects = false;
+    const kindGeo = new Map(PART_KINDS.map((k) => [k, this.parts.addGeometry(partShape(k))] as const));
+    // (instance ids in order: slot i's limb k is i × NPARTS + k)
+    for (let i = 0; i < this.max * NPARTS; i++) {
+      const id = this.parts.addInstance(kindGeo.get(PARTS[i % NPARTS].kind)!);
+      this.parts.setVisibleAt(id, false);
+    }
     this.group.add(this.busts, this.parts);
     this.group.name = "gta:people3d";
     this.group.visible = false;
@@ -228,6 +243,8 @@ export class People3D {
         try {
           g = { body: this.add(look.body), head: this.add(look.head), users: 0, used: 0 };
           this.geos.set(p.id, g);
+          // (its picture's slot in the atlas stays its own while its bust is in the batch)
+          faces.pin(p.id);
         } catch (e) {
           console.warn("gta: people3d is full", e);
           continue;
@@ -250,7 +267,6 @@ export class People3D {
       const sl: Slot = { p, inst, body, head, id: p.id, heading: p.heading?.() ?? Math.random() * Math.PI * 2, last: at, act: newAct(), aside: new THREE.Vector3(), skip: 0, fresh: true, look };
       this.slots.set(p.key, sl);
       for (let k = 0; k < NPARTS; k++) this.parts.setColorAt(inst * NPARTS + k, this.c.setHex(partColor(look, k), THREE.SRGBColorSpace));
-      if (this.parts.instanceColor) this.parts.instanceColor.needsUpdate = true;
     }
     if (asked.length) faces.want(asked);
     if (quick.length) faces.quick(quick);
@@ -304,6 +320,7 @@ export class People3D {
       this.busts.deleteGeometry(g.body);
       this.busts.deleteGeometry(g.head);
       this.geos.delete(id);
+      faces.unpin(id);
     }
   }
 
@@ -328,7 +345,7 @@ export class People3D {
     this.slots.delete(s.p.key);
     this.busts.deleteInstance(s.body);
     this.busts.deleteInstance(s.head);
-    for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(s.inst * NPARTS + k, this.zero);
+    for (let k = 0; k < NPARTS; k++) this.parts.setVisibleAt(s.inst * NPARTS + k, false);
     this.free.push(s.inst);
     const g = this.geos.get(s.id);
     if (g) g.users--;
@@ -338,7 +355,7 @@ export class People3D {
 
   /** Every body a step on: its place, its heading (from where it went, or its own), its pose. */
   private pose(dt: number) {
-    let top = 0;
+    flushArt();
     this.frame++;
     for (const sl of this.slots.values()) {
       const at = sl.p.pos(this.tmp);
@@ -366,7 +383,6 @@ export class People3D {
         }
       }
       sl.last.copy(at);
-      top = Math.max(top, sl.inst + 1);
       // far off: posed one frame in three (the walk carries on between)
       const camD = this.eye ? Math.hypot(at.x - this.eye.x, at.z - this.eye.z) : 9;
       if (camD > 55 && (this.frame + sl.inst) % 3 !== 0 && !sl.fresh) continue;
@@ -407,8 +423,8 @@ export class People3D {
       this.root.compose(this.v.set(at.x, at.y, at.z), this.q, this.s.setScalar(lk.bh));
       this.busts.setVisibleAt(sl.body, !close);
       this.busts.setVisibleAt(sl.head, !close);
-      if (close) for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(sl.inst * NPARTS + k, this.zero);
-      else {
+      for (let k = 0; k < NPARTS; k++) this.parts.setVisibleAt(sl.inst * NPARTS + k, !close);
+      if (!close) {
         pose(a, lk, this.joints);
         for (let k = 0; k < JOINTS; k++) this.joints[k].premultiply(this.root);
         for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(sl.inst * NPARTS + k, partMatrix(k, this.joints, lk, this.m));
@@ -416,10 +432,6 @@ export class People3D {
         this.busts.setMatrixAt(sl.head, headMatrix(this.joints, this.m));
       }
     }
-    // the unused slots out of sight
-    for (const i of this.free) if (i < top) for (let k = 0; k < NPARTS; k++) this.parts.setMatrixAt(i * NPARTS + k, this.zero);
-    this.parts.count = top * NPARTS;
-    this.parts.instanceMatrix.needsUpdate = true;
   }
 
   /** How many are drawn in 3D now, and how many flat figures are hidden round about. */
