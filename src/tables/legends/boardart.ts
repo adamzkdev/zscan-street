@@ -1057,3 +1057,170 @@ export function rimTex(base: string, kind: "metal" | "wood" | "stone"): THREE.Ca
     return t;
   });
 }
+
+// ---- the arenas' cloth: the drape hung round the table, the rug under it ----------------------------------
+
+/**
+ * The drape round the table (one tile, 4 × 1.5 world units, repeating along the side): folds of the
+ * cloth, an embroidered gold band at the top with Z medallions, a scalloped hem with a gold fringe.
+ */
+export function clothTex(base: string, hem: string): THREE.CanvasTexture {
+  return memo(`cloth|${base}|${hem}`, () => {
+    const W = 1024,
+      H = 384;
+    const c = cnv(W, H);
+    const g = c.getContext("2d")!;
+    const r = rng(7);
+    // the cloth and its folds
+    g.fillStyle = base;
+    g.fillRect(0, 0, W, H - 40);
+    for (let x = 0; x < W; x += 2) {
+      const k = Math.sin((x / W) * Math.PI * 12) * 0.5 + Math.sin((x / W) * Math.PI * 30 + 1) * 0.15;
+      g.fillStyle = k > 0 ? `rgba(255,240,220,${k * 0.16})` : `rgba(0,0,0,${-k * 0.42})`;
+      g.fillRect(x, 0, 2, H - 40);
+    }
+    texture(g, grainTile(), 0.35, 0, 0, W, H - 40);
+    // shade toward the floor
+    const sh = g.createLinearGradient(0, 0, 0, H);
+    sh.addColorStop(0, "rgba(0,0,0,0)");
+    sh.addColorStop(1, "rgba(0,0,0,0.35)");
+    g.fillStyle = sh;
+    g.fillRect(0, 0, W, H);
+    // the embroidered band
+    const tr: Trim = { m0: mixc(hem, "#000000", 0.6), m1: mixc(hem, "#000000", 0.25), m2: hem, m3: mixc(hem, "#ffffff", 0.65) };
+    const band = new Path2D();
+    band.rect(0, 18, W, 46);
+    metalFill(g, band, tr, 0, 18, W, 64, 3);
+    g.fillStyle = mixc(base, "#000000", 0.35);
+    for (let x = 8; x < W; x += 32) {
+      g.save();
+      g.translate(x + 8, 41);
+      g.rotate(Math.PI / 4);
+      g.fillRect(-7, -7, 14, 14);
+      g.restore();
+    }
+    // two Z medallions per tile
+    for (const mx of [W * 0.25, W * 0.75]) {
+      const disc = new Path2D();
+      disc.arc(mx, 150, 54, 0, Math.PI * 2);
+      g.save();
+      g.shadowColor = "rgba(0,0,0,0.5)";
+      g.shadowBlur = 12;
+      g.shadowOffsetY = 5;
+      g.fillStyle = tr.m0;
+      g.fill(disc);
+      g.restore();
+      metalFill(g, disc, tr, mx - 54, 96, mx + 54, 204, 4);
+      const inner = new Path2D();
+      inner.arc(mx, 150, 40, 0, Math.PI * 2);
+      g.fillStyle = mixc(base, "#000000", 0.25);
+      g.fill(inner);
+      zMark(g, mx, 150, 8, hem);
+    }
+    // the scalloped hem: cut the cloth's foot into arcs, a gold fringe hanging under each
+    g.save();
+    g.globalCompositeOperation = "destination-out";
+    for (let x = 0; x < W; x += 64) {
+      g.beginPath();
+      g.ellipse(x + 32, H - 40, 34, 22, 0, 0, Math.PI);
+      g.rect(x, H - 40, 64, 40);
+      g.fill();
+    }
+    g.restore();
+    for (let x = 0; x < W; x += 64) {
+      g.strokeStyle = tr.m1;
+      g.lineWidth = 6;
+      g.beginPath();
+      g.ellipse(x + 32, H - 42, 32, 20, 0, 0, Math.PI);
+      g.stroke();
+      // tassel
+      const tx = x + 32;
+      g.fillStyle = tr.m1;
+      g.fillRect(tx - 5, H - 26, 10, 22);
+      g.fillStyle = tr.m3;
+      g.fillRect(tx - 5, H - 26, 4, 22);
+      g.fillStyle = tr.m0;
+      g.fillRect(tx - 7, H - 28, 14, 5);
+    }
+    void r;
+    const t = tex(c);
+    t.wrapS = THREE.RepeatWrapping;
+    return t;
+  });
+}
+
+/** The rug under the table: a field with a lattice of motifs, wide bands with a stepped border, a fringe. */
+export function rugTex(dark: string, field: string, gold: string): THREE.CanvasTexture {
+  return memo(`rug|${dark}|${field}|${gold}`, () => {
+    const W = 1024,
+      H = 768;
+    const c = cnv(W, H);
+    const g = c.getContext("2d")!;
+    const r = rng(23);
+    g.fillStyle = field;
+    g.fillRect(0, 0, W, H);
+    // the lattice: small diamonds, a dot of gold in each, a quiet weave
+    g.strokeStyle = mixc(field, "#000000", 0.18);
+    g.lineWidth = 2;
+    for (let y = -24; y < H + 24; y += 24)
+      for (let x = ((y / 24) % 2 ? 12 : 0) - 24; x < W + 24; x += 24) {
+        g.beginPath();
+        g.moveTo(x, y - 11);
+        g.lineTo(x + 11, y);
+        g.lineTo(x, y + 11);
+        g.lineTo(x - 11, y);
+        g.closePath();
+        g.stroke();
+        g.fillStyle = mixc(field, gold, 0.3);
+        g.fillRect(x - 2, y - 2, 4, 4);
+      }
+    // the borders: dark band, gold stepped line, dark band with gold blocks
+    const band = (inset: number, w: number, col: string) => {
+      g.fillStyle = col;
+      g.fillRect(inset, inset, W - inset * 2, w);
+      g.fillRect(inset, H - inset - w, W - inset * 2, w);
+      g.fillRect(inset, inset, w, H - inset * 2);
+      g.fillRect(W - inset - w, inset, w, H - inset * 2);
+    };
+    band(0, 70, dark);
+    band(70, 10, gold);
+    band(80, 26, mixc(dark, field, 0.4));
+    band(106, 6, gold);
+    for (let x = 20; x < W - 20; x += 40) {
+      g.fillStyle = gold;
+      g.fillRect(x, 26, 18, 18);
+      g.fillRect(x, H - 44, 18, 18);
+    }
+    for (let y = 20; y < H - 20; y += 40) {
+      g.fillStyle = gold;
+      g.fillRect(26, y, 18, 18);
+      g.fillRect(W - 44, y, 18, 18);
+    }
+    // wool: fibres and wear
+    for (let i = 0; i < 14000; i++) {
+      g.fillStyle = r() < 0.5 ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.08)";
+      g.fillRect(r() * W, r() * H, 1 + r() * 3, 1);
+    }
+    texture(g, grainTile(), 0.4, 0, 0, W, H);
+    return tex(c);
+  });
+}
+
+/** A gold coin's face with the pixel Z struck in it. */
+export function zCoinTex(): THREE.CanvasTexture {
+  return memo("zcoin", () => {
+    const S = 128;
+    const c = cnv(S, S);
+    const g = c.getContext("2d")!;
+    const d = new Path2D();
+    d.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2);
+    metalFill(g, d, GOLD, 0, 0, S, S, 5);
+    const i = new Path2D();
+    i.arc(S / 2, S / 2, S / 2 - 14, 0, Math.PI * 2);
+    g.fillStyle = "rgba(90,58,6,0.25)";
+    g.fill(i);
+    zMark(g, S / 2 + 1.5, S / 2 + 2, 9, "rgba(60,36,2,0.7)");
+    zMark(g, S / 2, S / 2, 9, "#ffe48a");
+    return tex(c);
+  });
+}

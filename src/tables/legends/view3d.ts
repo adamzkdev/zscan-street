@@ -14,6 +14,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { ChainRail, type ChainInfo } from "./chain3d";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
@@ -29,7 +30,9 @@ export type Pick = { kind: "minion" | "hero" | "power" | "end" | "deck" | "weapo
 type XY = { x: number; y: number };
 
 const GRID = 26;
-const SLOT = 1.95;
+const SLOT = 2.06;
+/** Minions sit a size up from their painted frames' native size (readability). */
+const TOKEN_SCALE = 1.1;
 const HERO_Z: [number, number] = [4.45, -4.7];
 const easeOut = (k: number) => 1 - (1 - k) ** 3;
 const easeIn = (k: number) => k * k * k;
@@ -548,6 +551,7 @@ export class View3D {
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
   private map: MapHandle;
+  readonly chain: ChainRail;
   private raf = 0;
   private last = 0;
   private time = 0;
@@ -602,6 +606,8 @@ export class View3D {
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
     this.map = buildMap(mapKind, this.renderer, this.scene);
+    // the live chain beside the table (chain3d.ts)
+    this.chain = new ChainRail(this.scene, mapKind);
     this.accent = this.map.accent;
     this.pickables.push(...this.map.toys);
 
@@ -635,6 +641,7 @@ export class View3D {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.map.dispose();
+    this.chain.dispose();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.geometry && !Array.from(geoCache.values()).includes(m.geometry)) m.geometry.dispose();
@@ -916,7 +923,10 @@ export class View3D {
     const legend = d.rarity === "legendary";
     const group = new THREE.Group();
     const body = new THREE.Group();
-    group.add(body);
+    const size = new THREE.Group();
+    size.scale.setScalar(TOKEN_SCALE);
+    size.add(body);
+    group.add(size);
     // Guard: a stone shield behind (its iron edge for thickness, the painted stone on top)
     const guard = new THREE.Group();
     const gEdge = new THREE.Mesh(geo("guard", () => slab(shieldShape(2.2, 2.7), 0.14, 0.04)), paintedMetal("#4a4642", "stone"));
@@ -1853,6 +1863,30 @@ export class View3D {
     // your turn starts: a sweep of light across your side
     if ((state === "ready" || state === "done") && (prev === "wait" || prev === "")) this.sweep();
   }
+  private introK = 1;
+  private introS = 1.6;
+  private introWait = 0;
+  private camFrom = new THREE.Vector3();
+  /** The duel opens: the camera sweeps down from above the hall onto the table, then both heroes drop
+   * into their frames with a thump. */
+  entrance(ms = 1400, hold = 1.5) {
+    this.introS = ms / 1000;
+    this.introK = 0;
+    this.introWait = hold;
+    this.camFrom.copy(this.camBase).add(new THREE.Vector3(-6, 14, 12));
+    this.heroes.forEach((h, i) => {
+      h.body.position.y = 7;
+      h.body.visible = false;
+      setTimeout(() => {
+        if (this.disposed) return;
+        h.body.visible = true;
+        void this.tween(330, (k) => (h.body.position.y = 7 * (1 - easeIn(k)))).then(() => {
+          h.body.position.y = 0;
+          this.slam(h.group.position.clone(), i === 0);
+        });
+      }, hold * 1000 + ms * 0.62 + i * 220);
+    });
+  }
   pressEnd() {
     const t = this.endTop;
     void this.tween(200, (k) => (t.position.y = 0.42 - Math.sin(k * Math.PI) * 0.18));
@@ -1997,8 +2031,8 @@ export class View3D {
   }
   /** Screen size of a minion token (px wide), for the hand's cards to match. */
   tokenPx(): number {
-    const a = this.project(new THREE.Vector3(-0.78, 0, TABLE.laneZ[0]));
-    const b = this.project(new THREE.Vector3(0.78, 0, TABLE.laneZ[0]));
+    const a = this.project(new THREE.Vector3(-0.78 * TOKEN_SCALE, 0, TABLE.laneZ[0]));
+    const b = this.project(new THREE.Vector3(0.78 * TOKEN_SCALE, 0, TABLE.laneZ[0]));
     return Math.abs(b.x - a.x);
   }
   /** The screen y of my lane (for dropping cards). */
@@ -2006,6 +2040,20 @@ export class View3D {
     return this.project(new THREE.Vector3(0, 0, TABLE.laneZ[s])).y;
   }
 
+  /** The block of the live chain under the pointer, if any. */
+  pickChain(x: number, y: number): ChainInfo | null {
+    if (!this.chain.pickables.length) return null;
+    const ndc = new THREE.Vector2((x / this.W) * 2 - 1, -(y / this.H) * 2 + 1);
+    this.ray.setFromCamera(ndc, this.camera);
+    const hit = this.ray.intersectObjects(this.chain.pickables, true)[0];
+    let o: THREE.Object3D | null = hit?.object ?? null;
+    while (o && !o.userData.chain) o = o.parent;
+    return (o?.userData.chain as ChainInfo | undefined) ?? null;
+  }
+  /** Screen point of a world position (for HUD bits beside 3D things). */
+  toScreen(p: THREE.Vector3): XY {
+    return this.project(p);
+  }
   pick(x: number, y: number): Pick {
     const ndc = new THREE.Vector2((x / this.W) * 2 - 1, -(y / this.H) * 2 + 1);
     this.ray.setFromCamera(ndc, this.camera);
@@ -2051,6 +2099,7 @@ export class View3D {
       }
     }
     this.map.update(dt, t);
+    this.chain.update(dt, t);
     // living things: halo rings turning, the highlight rings breathing, secrets bobbing, the veil scrolling
     for (const tk of this.tokens.values()) {
       if (tk.halo.visible) tk.halo.children[1].rotation.y = t * 0.8;
@@ -2102,8 +2151,14 @@ export class View3D {
         this.rings.splice(i, 1);
       }
     }
-    // camera shake
+    // camera shake (and the opening fly-in: from high above the room down to the seat)
     this.camera.position.copy(this.camBase);
+    if (this.introK < 1) {
+      if (this.introWait > 0) this.introWait -= dt;
+      else this.introK = Math.min(1, this.introK + dt / this.introS);
+      const k = easeInOut(this.introK);
+      this.camera.position.lerp(this.camFrom, 1 - k);
+    }
     if (this.shakeAmt > 0.001) {
       this.camera.position.x += (Math.random() - 0.5) * this.shakeAmt;
       this.camera.position.y += (Math.random() - 0.5) * this.shakeAmt * 0.6;

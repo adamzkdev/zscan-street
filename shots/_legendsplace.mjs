@@ -37,7 +37,9 @@ for (let turn = 0; turn < 6; turn++) {
       await p.mouse.down();
       await p.mouse.move(c.x + 20, c.y - 60, { steps: 4 });
       await p.mouse.move(W * (0.3 + 0.4 * Math.random()), targetY, { steps: 10 });
+      if (process.env.DEBUG) console.log("before up", JSON.stringify(await p.evaluate(() => { const z = window.zkl; return { drag: z.drag && { uid: z.drag.uid, moved: z.drag.moved }, busy: z.busy, q: z.queue.length, tgt: !!z.tgt, picked: z.picked, handY: z.L.handY, showing: z.showing }; })));
       await p.mouse.up();
+      if (process.env.DEBUG) console.log("after up", JSON.stringify(await p.evaluate(() => { const z = window.zkl; return { drag: !!z.drag, busy: z.busy, q: z.queue.length, tgt: !!z.tgt, pend: !!z.pending }; })));
       tries[mode === 3 ? "chain" : "drag"]++;
     } else if (mode === 1) {
       await p.mouse.click(c.x, c.y);
@@ -60,7 +62,7 @@ for (let turn = 0; turn < 6; turn++) {
     const ok = after.hand < before.hand || after.board > before.board;
     const key = mode === 0 ? "dragOk" : mode === 1 ? "clickOk" : mode === 2 ? "twiceOk" : "chainOk";
     if (ok) tries[key]++;
-    else console.log("missed", ["drag", "click", "twice", "chain"][mode], c.id);
+    else console.log("missed", ["drag", "click", "twice", "chain"][mode], c.id, JSON.stringify(before), JSON.stringify(after), JSON.stringify(await p.evaluate((u) => { const z = window.zkl; const el = z.hand.get(u); return { inHand: !!z.state.s[0].hand.find((x) => x.uid === u), q: z.queue.length, busy: z.busy, queuedCls: el?.classList.contains("queued"), board: z.state.s[0].board.length, turn: z.state.turn, mana: z.state.s[0].mana }; }, c.uid)));
   }
   const d = await p.evaluate(() => window.zkl.debugPoints());
   await p.mouse.click(d.end.x, d.end.y);

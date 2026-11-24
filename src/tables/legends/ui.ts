@@ -33,6 +33,7 @@ import {
   type Action,
   type Ev,
   type Game,
+  type HandCard,
   type Minion,
   type Side,
   newGame,
@@ -344,6 +345,12 @@ export class LegendsTable {
     el.innerHTML = `${side(this.me)}<div class="vs">VS</div>${side(this.foe)}`;
     for (const k of [0, 1] as Side[]) el.querySelector(`[data-pic="${k}"]`)!.appendChild(snarkCanvas(s[k]?.id ?? k + 1));
     this.root.appendChild(el);
+    // behind it the camera waits high over the hall, then sweeps down onto the table as it fades
+    if (!this.fast) {
+      this.view.entrance(1400, 1.5);
+      // what sits on the screen by the 3D pieces is placed again once the camera has landed
+      this.later(() => this.layout(), 3000);
+    }
     this.snd.reveal();
     this.later(() => {
       this.snd.land(true);
@@ -427,11 +434,11 @@ export class LegendsTable {
     this.arrow.innerHTML = `<g class="tail"></g><polygon class="head" points=""/><g class="ret"><circle r="27"/><path d="M0 -38V-24M0 24V38M-38 0H-24M24 0H38"/></g>`;
     this.arrow.style.display = "none";
     this.fxLayer.appendChild(this.arrow);
-    // the rival's name over its hero (yours you know)
-    for (const s of [this.foe]) {
-      const n = div(`zkl-name ${s === this.me ? "me" : "foe"}`);
-      n.innerHTML = `${esc(this.names[s])}<small>#${this.o.seats[s]?.id ?? (s ? 2 : 1)}</small>`;
-      n.dataset.side = String(s);
+    // the names, Hearthstone's: tabs at the screen's left edge, the rival's on top, yours at the bottom
+    for (const k of [this.foe, this.me]) {
+      const n = div(`zkl-tag ${k === this.me ? "me" : "foe"}`);
+      n.style.setProperty("--fc", FACTION_INFO[this.pools[k]].color);
+      n.innerHTML = `<b>${esc(this.names[k])}</b><small>#${this.o.seats[k]?.id ?? (k ? 2 : 1)}</small>`;
       r.appendChild(n);
     }
 
@@ -487,15 +494,9 @@ export class LegendsTable {
       this.root.appendChild(h);
       this.later(() => h.remove(), 6000);
     }
-    this.logEl.style.top = `${H * 0.2}px`;
-    this.logEl.style.height = `${H * 0.6}px`;
-    for (const n of this.root.querySelectorAll<HTMLElement>(".zkl-name")) {
-      const s = Number(n.dataset.side) as Side;
-      const p = this.view.screenOf("hero", s);
-      const px = this.view.tokenPx();
-      // the rival's plate hangs at its frame's top left, clear of the cards in its hand
-      n.style.transform = `translate(${Math.round(p.x - px * 0.95)}px, ${Math.round(p.y - px * 0.62)}px) translate(-100%, -50%)`;
-    }
+    // (above the near-left corner piece: the history ends where the arena's star prop begins)
+    this.logEl.style.top = `${H * 0.11}px`;
+    this.logEl.style.height = `${H * 0.56}px`;
     this.layoutHand();
   }
 
@@ -513,11 +514,13 @@ export class LegendsTable {
   private layoutHand() {
     if (!this.L) return;
     const L = this.L;
-    const n = this.handOrder.length;
-    const hi = this.drag || this.tgt ? -1 : this.handOrder.indexOf(this.hoverUid || this.picked);
-    this.handOrder.forEach((uid, i) => {
+    // queued cards wait where they were dropped: the fan closes up without them
+    const order = this.queue.length ? this.handOrder.filter((u) => !this.isQueued(u)) : this.handOrder;
+    const n = order.length;
+    const hi = this.drag || this.tgt ? -1 : order.indexOf(this.hoverUid || this.picked);
+    order.forEach((uid, i) => {
       const el = this.hand.get(uid);
-      if (!el || el === this.drag?.el || el === this.pending?.el) return;
+      if (!el || el === this.drag?.el || el === this.pending?.el || uid === this.showing) return;
       el.style.setProperty("--w", `${L.cw}px`);
       const p = this.handXY(i, n);
       // the cards beside the one you point at step aside, so it can be read and grabbed
@@ -588,7 +591,10 @@ export class LegendsTable {
     // my hand
     const mine = g.s[this.me].hand;
     const ids = mine.map((h) => h.uid);
-    for (const [uid, el] of this.hand) if (!ids.includes(uid)) el.remove(), this.hand.delete(uid);
+    for (const [uid, el] of this.hand) if (!ids.includes(uid) && el !== this.pending?.el && !this.isQueued(uid)) el.remove(), this.hand.delete(uid);
+    // (and anything left in the hand layer that isn't one of them: a card must never sit there untracked)
+    const kept = new Set(this.hand.values());
+    for (const el of [...this.handLayer.querySelectorAll<HTMLElement>("[data-hand]")]) if (!kept.has(el as HTMLDivElement)) el.remove();
     for (const h of mine) {
       let el = this.hand.get(h.uid);
       if (!el) {
@@ -623,7 +629,7 @@ export class LegendsTable {
     let any = false;
     for (const [uid, el] of this.hand) {
       const h = g.s[this.me].hand.find((x) => x.uid === uid);
-      const ok = !!h && mine && canPlay(g, this.me, h);
+      const ok = !!h && mine && this.playable(h);
       el.classList.toggle("can-act", ok);
       el.classList.toggle("picked", this.picked === uid);
       any ||= ok;
@@ -683,24 +689,62 @@ export class LegendsTable {
   }
 
   private endTurn() {
-    if (!this.myTurn() || this.busy) return;
+    if (!this.myTurn()) return;
     this.rope(false);
     this.view.pressEnd();
+    // (while a move plays out, the end of the turn waits behind it)
     void this.act({ k: "end" });
   }
 
   // ---- playing moves ----------------------------------------------------------------------------------
 
-  private queued: Action | null = null;
-  private async act(a: Action, side: Side = this.me) {
+  /** Your moves made while the last one still plays out: they go next, in order. */
+  private queue: Action[] = [];
+  private isQueued(uid: number) {
+    return this.queue.some((a) => a.k === "play" && a.uid === uid);
+  }
+  /** ZEC and board room already promised to queued moves. */
+  private reserved() {
+    let zec = 0,
+      room = 0;
+    for (const a of this.queue)
+      if (a.k === "play") {
+        const h = this.g.s[this.me].hand.find((x) => x.uid === a.uid);
+        if (!h) continue;
+        zec += costOf(this.g, this.me, h);
+        if (card(h.id).type === "minion") room++;
+      }
+    return { zec, room };
+  }
+  /** Can this hand card be played, counting what's queued? */
+  private playable(h: HandCard) {
+    const g = this.g;
+    if (this.isQueued(h.uid) || !canPlay(g, this.me, h)) return false;
+    if (!this.queue.length) return true;
+    const r = this.reserved();
+    if (costOf(g, this.me, h) > g.s[this.me].mana - r.zec) return false;
+    if (card(h.id).type === "minion" && g.s[this.me].board.length + r.room >= 7) return false;
+    return true;
+  }
+  private async act(a: Action, side: Side = this.me, fromQueue = false) {
     if (this.closed) return;
     if (this.busy) {
-      // your move while the last one plays out: it goes next
-      if (side === this.me) this.queued = a;
+      if (side === this.me && !(a.k === "end" && this.queue.some((q) => q.k === "end"))) {
+        this.queue.push(a);
+        // the card waits where it was dropped, faded, out of reach
+        if (a.k === "play") {
+          const el = this.hand.get(a.uid);
+          if (el) el.classList.add("queued");
+          this.picked = 0;
+        }
+        this.hints();
+      }
       return;
     }
     this.busy = true;
-    this.cancel(true, true);
+    // a move of yours made now takes the place of what you were aiming; one coming off the queue doesn't
+    // touch what you're doing meanwhile
+    if (!fromQueue) this.cancel(true, true);
     this.hints();
     const g = this.g;
     g.ev = [];
@@ -709,26 +753,58 @@ export class LegendsTable {
     g.ev = [];
     if (!ok) {
       if (side === this.me) this.snd.error();
+      if (a.k === "play") this.hand.get(a.uid)?.classList.remove("queued");
       this.busy = false;
       this.syncAll();
+      if (this.queue.length && g.turn === this.me && g.phase === "play") return void this.act(this.queue.shift()!, this.me, true);
       return;
     }
     if (a.k === "end" && side === this.me) this.snd.end();
     await this.play(evs);
     if (this.closed) return;
-    if (!this.queued) this.view.ghost(null);
+    if (!this.queue.length && !this.drag) this.view.ghost(null);
     this.syncAll();
     this.busy = false;
-    if (this.queued && g.turn === this.me && g.phase === "play") {
-      const q = this.queued;
-      this.queued = null;
-      return void this.act(q);
+    if (this.queue.length && g.turn === this.me && g.phase === "play" && !g.pending) {
+      const q = this.queue.shift()!;
+      return void this.act(q, this.me, true);
     }
-    this.queued = null;
+    this.dropQueue();
     this.hints();
     if (g.pending && g.pending.side === this.me && !this.auto) return this.discoverScreen();
     if (g.phase === "over") return void this.finish();
     if (g.turn === this.foe || this.auto) void this.loop();
+  }
+
+  private drawShown = false;
+  /** The card being shown large after its draw (the fan leaves it alone meanwhile). */
+  private showing = 0;
+  private thinkEl: HTMLDivElement | null = null;
+  /** Hearthstone's tell: "..." over the rival's portrait while it decides (from its third move of a turn
+   * on, so short turns stay clean). */
+  private thinkN = 0;
+  private thinking(on: boolean) {
+    if (!on) {
+      this.thinkEl?.remove();
+      this.thinkEl = null;
+      return;
+    }
+    if (this.fast || this.auto || this.thinkEl || ++this.thinkN % 2) return;
+    const p = this.view.screenOf("hero", this.foe);
+    const px = this.view.tokenPx();
+    const t = div("zkl-think");
+    t.innerHTML = "<i></i><i></i><i></i>";
+    t.style.left = `${p.x + px * 0.9}px`;
+    t.style.top = `${p.y - px * 0.45}px`;
+    this.fxLayer.appendChild(t);
+    this.thinkEl = t;
+  }
+
+  /** What's left queued when the turn has moved on: the cards go back to the hand. */
+  private dropQueue() {
+    for (const a of this.queue) if (a.k === "play") this.hand.get(a.uid)?.classList.remove("queued");
+    this.queue = [];
+    this.layoutHand();
   }
 
   private looping = false;
@@ -738,9 +814,11 @@ export class LegendsTable {
     try {
       while (!this.closed && this.g.phase === "play" && (this.g.turn === this.foe || this.auto || (this.g.pending && this.g.pending.side === this.foe))) {
         const side = this.g.turn;
+        if (side === this.foe) this.thinking(true);
         await this.wait(this.g.s[side].board.length + this.g.s[side].hand.length > 6 ? 650 : 520);
         if (this.closed) return;
         const a = decide(this.g, side, this.aiOpts(side));
+        this.thinking(false);
         if (side === this.foe) await this.foeAim(a);
         this.busy = false;
         await this.act(a, side);
@@ -833,15 +911,46 @@ export class LegendsTable {
       case "give": {
         this.snd.draw();
         if (e.side === this.me) {
-          const el = cardEl(e.id);
-          el.dataset.hand = String(e.uid);
+          // the state already holds the card, so a sync may have made its element: fly that one in
+          let el = this.hand.get(e.uid);
+          if (!el) {
+            el = cardEl(e.id);
+            el.dataset.hand = String(e.uid);
+            this.handLayer.appendChild(el);
+            this.hand.set(e.uid, el);
+          }
+          if (!this.handOrder.includes(e.uid)) this.handOrder.push(e.uid);
+          if (this.drag?.uid === e.uid) return;
           el.style.setProperty("--w", `${this.L.cw}px`);
           const from = e.t === "draw" ? v.screenOf("deck", e.side) : { x: this.L.cx, y: this.L.H * 0.5 };
           el.style.transition = "none";
           el.style.transform = `translate(${from.x - this.L.cw / 2}px, ${from.y - this.L.cw * 0.7}px) scale(0.3) rotate(-20deg)`;
-          this.handLayer.appendChild(el);
-          this.hand.set(e.uid, el);
-          this.handOrder.push(e.uid);
+          // your draw, Hearthstone's: the card comes off the deck, shows itself large beside it, then joins
+          // the hand (quick when several come at once, skipped in the mulligan's deal)
+          if (e.t === "draw" && !this.fast && this.g.phase === "play" && !this.drawShown) {
+            this.drawShown = true;
+            void el.offsetWidth;
+            const cw = this.L.cw;
+            const sc = Math.min(1.75, (this.L.H * 0.4) / (cw * 1.4));
+            // (its middle beside the deck, clear of the turn banner; the card scales from its foot)
+            const cx = Math.min(this.L.W - (cw * sc) / 2 - 24, from.x - 10);
+            const cy = this.L.H * 0.5;
+            el.style.transition = "transform 0.32s cubic-bezier(.2,.9,.3,1.1)";
+            el.style.transform = `translate(${cx - cw / 2}px, ${cy + (cw * 1.4 * sc) / 2 - cw * 1.4}px) scale(${sc})`;
+            el.style.zIndex = "40";
+            // (it can be grabbed while it shows: a press ends the show and the card is yours to move)
+            this.showing = e.uid;
+            await this.wait(this.queue.length ? 380 : 680);
+            const held = this.drag?.uid === e.uid || this.picked === e.uid;
+            if (this.showing === e.uid) this.showing = 0;
+            this.later(() => (this.drawShown = false), 40);
+            if (held) {
+              await this.wait(120);
+              return;
+            }
+            el.style.zIndex = "";
+            el.style.transition = "transform 0.34s cubic-bezier(.4,0,.2,1)";
+          }
           void el.offsetWidth;
           el.style.transition = "";
           this.layoutHand();
@@ -965,6 +1074,7 @@ export class LegendsTable {
         const am = isHero(e.from) ? null : this.snap(e.from);
         const hs = g.s[e.from === 1 ? 0 : 1].hero;
         const power = am ? am.atk + am.aura : hs.tmpAtk + (hs.weapon?.atk ?? 2);
+        this.logAttack(e.from, am);
         await v.attack(e.from, e.to, power);
         return;
       }
@@ -1185,7 +1295,23 @@ export class LegendsTable {
       i.dataset.card = id;
     }
     this.logEl.appendChild(i);
-    while (this.logEl.childElementCount > Math.max(4, Math.min(8, Math.floor((this.L.H * 0.56) / 50)))) this.logEl.firstElementChild?.remove();
+    while (this.logEl.childElementCount > Math.max(4, Math.min(8, Math.floor((this.L.H * 0.54) / 58)))) this.logEl.firstElementChild?.remove();
+  }
+  /** An attack in the history, Hearthstone's: the attacker's face with a sword across its corner. */
+  private logAttack(from: number, m: Minion | null) {
+    const side: Side = m ? m.side : from === HERO_UID[0] ? 0 : 1;
+    const i = div(`zkl-log-i atk ${side === this.me ? "me" : "foe"}`);
+    if (m) {
+      const d = card(m.id);
+      i.style.setProperty("--fc", FACTION_INFO[d.faction].color);
+      i.appendChild(snarkCanvas(d.art));
+      i.dataset.card = m.id;
+    } else {
+      i.style.setProperty("--fc", FACTION_INFO[this.g.s[side].hero.faction].color);
+      i.appendChild(snarkCanvas(this.o.seats[side]?.id ?? side + 1));
+    }
+    this.logEl.appendChild(i);
+    while (this.logEl.childElementCount > Math.max(4, Math.min(8, Math.floor((this.L.H * 0.54) / 58)))) this.logEl.firstElementChild?.remove();
   }
   private logPower(side: Side) {
     const f = this.g.s[side].hero.faction;
@@ -1288,8 +1414,35 @@ export class LegendsTable {
   }
 
   /** What the 3D board has under the pointer (a preview, a pointer cursor). */
+  private tipEl: HTMLDivElement | null = null;
+  /** A block of the live chain under the pointer: its height, transactions, miner, age. */
+  private blockTip(p: XY): boolean {
+    const b = this.view.pickChain(p.x, p.y);
+    if (!b) {
+      this.tipEl?.remove();
+      this.tipEl = null;
+      return false;
+    }
+    const t = this.tipEl ?? div("zkl-blocktip");
+    if (!this.tipEl) this.fxLayer.appendChild(t);
+    this.tipEl = t;
+    const age = Math.max(0, Math.round((Date.now() - b.time) / 1000));
+    const ago = age < 90 ? T(`${age} s ago`, `${age} 秒前`) : T(`${Math.round(age / 60)} min ago`, `${Math.round(age / 60)} 分钟前`);
+    t.innerHTML = b.pending
+      ? `<b>${T("Next block", "下一个区块")}</b><small>#${b.height.toLocaleString("en-US")} · ${T("being filled", "打包中")}</small><p>${T(`${b.txs} transactions waiting`, `${b.txs} 笔交易等待中`)}<br>${T(`last block ${ago}`, `上个区块 ${ago}`)}</p>`
+      : `<b>#${b.height.toLocaleString("en-US")}</b><small>${T("Block mined", "区块已出")} · ${ago}</small><p>${T(`${b.txs} transactions`, `${b.txs} 笔交易`)}${b.pool ? `<br>${esc(b.pool)}` : ""}${b.fees !== null ? `<br>${T("Fees", "手续费")} ${(b.fees / 1e8).toFixed(5)} ZEC` : ""}</p>`;
+    t.style.left = `${p.x - 18}px`;
+    t.style.top = `${p.y}px`;
+    return true;
+  }
+
   private hover3d(p: XY) {
     if (this.drag || this.tgt || this.overlay) return;
+    if (this.blockTip(p)) {
+      this.hoverPick = "chain";
+      this.view.hover(0);
+      return this.preview(null);
+    }
     const pk = this.view.pick(p.x, p.y);
     const key = pk ? `${pk.kind}|${pk.uid ?? pk.side ?? pk.toy}` : "";
     if (key === this.hoverPick) return;
@@ -1329,10 +1482,15 @@ export class LegendsTable {
     if (t.closest(".zkl-emotes") || t.closest(".zkl-gear")) return;
     // (while the last move still plays out, your next one may start: it is queued)
     if (this.busy && !(this.g.turn === this.me && this.g.phase === "play")) return;
-    // a target being picked (click mode)
+    // a target being picked (click mode); a press on another card in your hand drops it for that card
+    const onHand = t.closest<HTMLElement>("[data-hand]");
     if (this.tgt && !this.tgt.dragging) {
-      this.pickTarget(p);
-      return;
+      const other = onHand && Number(onHand.dataset.hand) !== this.tgt.uid && !onHand.classList.contains("queued");
+      if (!other) {
+        this.pickTarget(p);
+        return;
+      }
+      this.cancel(true);
     }
     const pk: Pick = t.closest("[data-hand]") ? null : this.view.pick(p.x, p.y);
     if (pk?.kind === "toy" && pk.toy !== undefined) {
@@ -1355,8 +1513,12 @@ export class LegendsTable {
     if (hc) {
       const uid = Number(hc.dataset.hand);
       const h = g.s[this.me].hand.find((x) => x.uid === uid);
-      if (!h) return;
-      if (!canPlay(g, this.me, h)) {
+      if (!h || this.isQueued(uid) || this.drag) return;
+      if (this.showing === uid) {
+        this.showing = 0;
+        hc.style.zIndex = "";
+      }
+      if (!this.playable(h)) {
         this.snd.error();
         hc.animate([{ translate: "0 0" }, { translate: "6px 0" }, { translate: "-6px 0" }, { translate: "0 0" }], { duration: 220 });
         return;
@@ -1371,7 +1533,8 @@ export class LegendsTable {
     // a picked card waiting for a place on the board
     if (this.picked) {
       const h = g.s[this.me].hand.find((x) => x.uid === this.picked);
-      if (h && card(h.id).type === "minion" && p.y < this.L.handY - 10) {
+      // (a minion goes where you click; a weapon or a spell with no target is played by any click above the hand)
+      if (h && p.y < this.L.handY - 10 && !this.isQueued(h.uid)) {
         this.dropCard(h.uid, p);
         return;
       }
@@ -1773,16 +1936,17 @@ export class LegendsTable {
     };
     if (this.auto) return this.exit(res);
     const o = this.over(
-      `<div class="zkl-end-panel">
+      `<div class="zkl-end-panel ${won ? "win" : w === -1 ? "draw" : "lose"}">
+         <div class="face"><i class="rays"></i><span data-face></span><i class="crack"></i></div>
          <div class="big${won ? "" : " lose"}">${w === -1 ? T("DRAW", "平局") : won ? T("VICTORY", "胜利") : T("DEFEAT", "失败")}</div>
-         <span data-face></span>
          <p class="zkl-sub">${won ? T(`${esc(this.names[1])} is out of Health.`, `${esc(this.names[1])} 的生命值归零。`) : w === -1 ? T("Both heroes fell.", "双方英雄同时倒下。") : T(`${esc(this.names[1])} wins this one.`, `${esc(this.names[1])} 赢下了这一局。`)} ${stake ? (payout ? T(`You take ⓩ ${payout}.`, `你赢得 ⓩ ${payout}。`) : T(`The stake (ⓩ ${stake}) is lost.`, `赌注（ⓩ ${stake}）输掉了。`)) : ""}</p>
          ${award?.lines.length ? `<div class="zkl-award">${award.lines.map((l) => `<p${/pack|卡包/i.test(l) ? ' class="pack"' : ""}>${esc(l)}</p>`).join("")}</div>` : ""}
          <div class="zkl-row" style="justify-content:center"><button class="zkl-btn" data-done>${T("Continue", "继续")}</button></div>
        </div>`,
       "zkl-glass",
     );
-    o.querySelector("[data-face]")?.replaceWith(snarkCanvas(won ? (this.o.seats[0]?.id ?? 1) : (this.o.seats[1]?.id ?? 2)));
+    // your own hero, in its frame: gold when it won, iron and cracked when it fell
+    o.querySelector("[data-face]")?.replaceWith(snarkCanvas(this.o.seats[0]?.id ?? 1));
     o.querySelector("[data-done]")!.addEventListener("click", () => this.exit(res));
   }
 

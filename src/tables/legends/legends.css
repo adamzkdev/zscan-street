@@ -388,6 +388,12 @@
 .zkl-hand .zkl-card.picked {
   filter: drop-shadow(0 0 1px #fff4c8) drop-shadow(0 0 2px #f4b728) drop-shadow(0 0 0.3em rgba(244, 183, 40, 0.8)) drop-shadow(0 0.5em 0.6em rgba(0, 0, 0, 0.55));
 }
+/* played while the last move still plays out: it waits where it was dropped */
+.zkl-hand .zkl-card.queued {
+  opacity: 0.55;
+  pointer-events: none;
+  filter: drop-shadow(0 0 0.3em rgba(244, 183, 40, 0.7)) saturate(0.7);
+}
 .zkl-hand .zkl-back {
   position: absolute;
   left: 0;
@@ -424,6 +430,132 @@
 }
 .zkl-name.foe {
   border-image-source: var(--hud-thin-bronze);
+}
+/* the players' names, Hearthstone's: dark tabs at the screen's left edge, the rival's at the top, yours
+   at the bottom, the pool's colour along the edge */
+.zkl-tag {
+  position: absolute;
+  left: 0;
+  z-index: 6;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 260px;
+  padding: 7px 26px 7px 14px;
+  background: linear-gradient(90deg, rgba(8, 6, 4, 0.92) 70%, rgba(8, 6, 4, 0));
+  border-left: 4px solid var(--fc);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.zkl-tag.foe {
+  top: 12px;
+}
+.zkl-tag.me {
+  bottom: 14px;
+}
+.zkl-tag b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.03em;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+.zkl-tag small {
+  font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: 13px;
+  color: #b8a888;
+}
+/* the rival thinking: Hearthstone's "..." over its portrait */
+.zkl-think {
+  position: absolute;
+  z-index: 7;
+  display: flex;
+  gap: 5px;
+  padding: 9px 13px;
+  border-radius: 18px;
+  background: #f6efe0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  animation: zkl-bub 0.25s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.zkl-think::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  bottom: -7px;
+  border: 8px solid transparent;
+  border-top-color: #f6efe0;
+  border-bottom: 0;
+}
+.zkl-think i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3a2a1a;
+  animation: zkl-dot 1s ease-in-out infinite;
+}
+.zkl-think i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.zkl-think i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes zkl-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+/* a block of the live chain, pointed at */
+.zkl-blocktip {
+  position: absolute;
+  z-index: 36;
+  min-width: 190px;
+  padding: 10px 14px 11px;
+  background: #15110c;
+  border-top: 2px solid #c89a2a;
+  border-bottom: 2px solid #0a0805;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+  transform: translate(-100%, -50%);
+  pointer-events: none;
+}
+.zkl-blocktip b {
+  display: block;
+  font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 900;
+  font-size: 22px;
+  color: #ffe28a;
+}
+.zkl-blocktip small {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--display);
+  font-stretch: 75%;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #b8a888;
+}
+.zkl-blocktip p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #e8dcc4;
 }
 .zkl-gear {
   position: absolute;
@@ -580,6 +712,25 @@
 .zkl-log-i:hover {
   filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.6)) brightness(1.2);
 }
+/* an attack: a pixel sword over the tile's lower right corner */
+.zkl-log-i.atk > canvas:not([style]) {
+  filter: saturate(0.8);
+}
+.zkl-log-i.atk {
+  --sword: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Cpath d='M9 1h2v2h-1v1h-1v1h-1v1h-1v1h-1v-1h-1v-1h1v-1h1v-1h1v-1h1z' fill='%23f3efe6'/%3E%3Cpath d='M3 6h1v1h1v1h1v1h-1v1h-1v-1h-1v1h-1v-1h-1v-1h1v-1h1z' fill='%23f4b728'/%3E%3Cpath d='M2 9h1v1h-1v1h-1v-1h1z' fill='%238a5a0a'/%3E%3C/svg%3E");
+}
+.zkl-log-i.atk > canvas:not([style])::after {
+  content: none;
+}
+.zkl-log-i.atk::before {
+  background-image: var(--sword), var(--hud-log);
+  background-size: 46% 46%, 100% 100%;
+  background-position: 108% 108%, center;
+  background-repeat: no-repeat;
+}
+.zkl-log-i.atk.foe::before {
+  background-image: var(--sword), var(--hud-log-foe);
+}
 @keyframes zkl-logi {
   from {
     transform: translateX(-40px) scale(0.6);
@@ -717,19 +868,20 @@
 }
 .zkl-float span {
   display: block;
-  font-family: var(--text);
+  font-family: var(--display);
+  font-stretch: 75%;
   font-weight: 900;
-  font-size: 36px;
+  font-size: 40px;
   line-height: 1;
   color: #fff;
-  -webkit-text-stroke: 8px #1a0504;
+  -webkit-text-stroke: 8px #2a0c02;
   paint-order: stroke fill;
   letter-spacing: -0.02em;
 }
 .zkl-float.dmg,
 .zkl-float.heal {
-  width: 96px;
-  height: 96px;
+  width: 108px;
+  height: 108px;
   display: grid;
   place-items: center;
   background: var(--hud-splat) center / 100% 100% no-repeat;
@@ -1265,9 +1417,9 @@
 .zkl-end-panel .big {
   position: relative;
   isolation: isolate;
-  width: min(760px, 94vw);
+  width: min(700px, 94vw);
   aspect-ratio: 1200 / 340;
-  margin: 0 auto -10px;
+  margin: 0 auto -6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1305,26 +1457,80 @@
     opacity: 0;
   }
 }
-.zkl-end-panel > canvas {
+/* your hero, large in its frame; the banner across its foot */
+.zkl-end-panel .face {
+  position: relative;
+  width: clamp(170px, 30vh, 270px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border: 26px solid transparent;
+  border-image: var(--hud-frame-hollow) 30 / 26px stretch;
+  background: radial-gradient(circle at 50% 62%, #5a3c14, #0c0805 75%) padding-box;
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.7));
+  animation: zkl-endface 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+}
+.zkl-end-panel .face canvas {
+  position: relative;
+  z-index: 1;
   display: block;
-  width: 214px;
-  height: 214px;
-  margin: 0 auto 8px;
-  border: 30px solid transparent;
-  border-image: var(--hud-medal) 30% fill / 34px stretch;
-  background: radial-gradient(circle at 50% 40%, #4a3418, #0c0805 70%);
-  filter: drop-shadow(0 14px 20px rgba(0, 0, 0, 0.65));
-  animation: zkl-medal 0.6s 0.15s cubic-bezier(0.2, 0.9, 0.3, 1.3) backwards;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
 }
-.zkl-end-panel:has(.big.lose) > canvas {
-  border-image-source: var(--hud-medal-iron);
-  background: radial-gradient(circle at 50% 40%, #34302a, #0a0908 70%);
+.zkl-end-panel .face .rays {
+  position: absolute;
+  inset: -70%;
+  z-index: -1;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 214, 110, 0.22) 0deg 7deg, transparent 7deg 20deg);
+  -webkit-mask: radial-gradient(closest-side, #000 25%, transparent 75%);
+  mask: radial-gradient(closest-side, #000 25%, transparent 75%);
+  animation: zkl-rays 24s linear infinite;
+  pointer-events: none;
 }
-@keyframes zkl-medal {
+.zkl-end-panel.lose .face,
+.zkl-end-panel.draw .face {
+  border-image-source: var(--hud-frame-iron);
+  background: radial-gradient(circle at 50% 62%, #34302a, #0a0908 75%) padding-box;
+}
+.zkl-end-panel.lose .face .rays,
+.zkl-end-panel.draw .face .rays {
+  display: none;
+}
+.zkl-end-panel.lose .face canvas {
+  filter: grayscale(1) brightness(0.72) contrast(1.1);
+  transition: filter 0.6s 0.5s;
+}
+.zkl-end-panel .face .crack {
+  display: none;
+}
+.zkl-end-panel.lose .face .crack {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' shape-rendering='crispEdges'%3E%3Cg fill='none'%3E%3Cpath d='M47 0L53 17L43 31L56 45L46 60L59 77L49 100M53 17L67 23L77 14M56 45L31 52L16 47M46 60L69 67L86 75M43 31L27 25L20 30M59 77L40 85' stroke='%23000' stroke-width='3.4'/%3E%3Cpath d='M48 0L54 17L44 31L57 45L47 60L60 77L50 100M54 17L68 23L78 14M57 45L32 52L17 47M47 60L70 67L87 75M44 31L28 25L21 30M60 77L41 85' stroke='%23e8e0d0' stroke-opacity='.55' stroke-width='.9'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  clip-path: inset(0 0 100% 0);
+  animation: zkl-crack 0.5s 0.55s steps(6) forwards;
+}
+@keyframes zkl-crack {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes zkl-rays {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes zkl-endface {
   from {
-    transform: scale(0.3) rotate(-30deg);
+    transform: translateY(-60px) scale(0.6);
     opacity: 0;
   }
+}
+.zkl-end-panel .big {
+  margin-top: -54px;
+  z-index: 3;
 }
 .zkl-end-panel .zkl-sub {
   font-size: 15px;
@@ -1435,11 +1641,12 @@
     width: min(460px, 64vw);
     font-size: 40px;
   }
-  .zkl-end-panel > canvas {
-    width: 96px;
-    height: 96px;
-    border-width: 14px;
-    margin-bottom: 2px;
+  .zkl-end-panel .face {
+    width: 110px;
+    border-width: 16px;
+  }
+  .zkl-end-panel .big {
+    margin-top: -30px;
   }
   .zkl-award {
     margin: 0 auto 6px;

@@ -48,7 +48,10 @@ await p.mouse.move(40, 40);
 await p.evaluate(() => document.querySelector(".zkl-gear")?.click());
 await sleep(500);
 await shot("6-menu");
-await p.evaluate(() => document.querySelector("[data-concede]")?.click());
+if (process.env.WIN) {
+  await p.evaluate(() => document.querySelector("[data-resume]")?.click());
+  await p.evaluate(() => { const z = window.zkl; z.state.s[1].hero.hp = 0; z.act({ k: "concede", side: 1 }, 1); });
+} else await p.evaluate(() => document.querySelector("[data-concede]")?.click());
 await sleep(5000);
 await shot("7-end");
 console.log("errors:", errs.length ? [...new Set(errs)].join("\n") : "none");

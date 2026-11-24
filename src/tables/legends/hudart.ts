@@ -365,10 +365,10 @@ function splat(c0: string, c1: string, c2: string, N = 160) {
   const cx = N / 2,
     cy = N / 2;
   const pts: [number, number][] = [];
-  const spikes = 13;
+  const spikes = 11;
   for (let i = 0; i < spikes * 2; i++) {
-    const a = -Math.PI / 2 + (i / (spikes * 2)) * Math.PI * 2;
-    const r = (i % 2 ? 0.3 : 0.47 - ((i * 7) % 5) * 0.012) * N;
+    const a = -Math.PI / 2 + ((i + ((i * 5) % 3) * 0.18) / (spikes * 2)) * Math.PI * 2;
+    const r = (i % 2 ? 0.27 + ((i * 3) % 4) * 0.012 : 0.48 - ((i * 7) % 5) * 0.022) * N;
     pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
   }
   const p = poly(pts);
@@ -714,7 +714,7 @@ function paintAll(): Record<string, string> {
     "--hud-banner": `url(${banner(GOLD, ["#5a0a10", "#b8202a", "#ff6a5a"], "#3a2610")})`,
     "--hud-banner-violet": `url(${banner(VIOLET, ["#1a0a3a", "#5a2ab0", "#b494f0"], "#24143a")})`,
     "--hud-banner-iron": `url(${banner(IRON, ["#141414", "#3a3836", "#7a7670"], "#22201c")})`,
-    "--hud-splat": `url(${splat("#5a0408", "#d0141e", "#ff8a7a")})`,
+    "--hud-splat": `url(${splat("#8a3a02", "#f0a010", "#fff2a0")})`,
     "--hud-splat-heal": `url(${splat("#0a3a12", "#2aa83a", "#b8ffb0")})`,
     "--hud-parchment": `url(${parchment()})`,
     "--hud-tail": `url(${tail()})`,
