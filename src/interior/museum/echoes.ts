@@ -862,6 +862,7 @@ export function echoesFloor(k: MuseumKit) {
     }
   };
 
+  let liveOn = true;
   // for the films (shots/film/echoes-capture.mjs): steer the show from the page
   g.userData.echoShow = {
     ask: (n: number, live = false) => {
@@ -869,7 +870,9 @@ export function echoesFloor(k: MuseumKit) {
       if (e) ask(e, live);
     },
     restart,
-    state: () => ({ cur: cur?.echo ?? null, condensed, step: step.kind, t: step.t, busy }),
+    /** Films: a reveal during a take must not take the monolith over. */
+    live: (on: boolean) => (liveOn = on),
+    state: () => ({ cur: cur?.echo ?? null, condensed, step: step.kind, t: step.t, busy, target: step.e?.echo ?? null }),
   };
 
   // ---- the data: screens, plates, the board, the steles; an Echo revealed while you are here ------------
@@ -911,7 +914,7 @@ export function echoesFloor(k: MuseumKit) {
     echoesFeed.onReveal((got) => {
       for (const e of got) fresh.set(e.echo, 0);
       // the newest plays at once if you are here
-      if (k.current === f) {
+      if (k.current === f && liveOn) {
         ask(got[got.length - 1], true);
         cheer(0.8);
       }
