@@ -1,12 +1,13 @@
 import * as THREE from "three";
 
 /**
- * The light of floor 7, A BLANK CANVAS (./blankcanvas.ts): one projection shared by every surface
- * of the warehouse. A work of FedosArt is thrown across the walls unrolled round the room (centred
- * behind the monolith, mirrored on as it runs out, slowly drifting), and the monolith's zkSNARK
- * silhouette shows the same work, sharp, as if it were a hole through to it. The next work spreads
- * out from the monolith over the last one; "white" is the blank canvas (the walls go dark, the
- * silhouette glows white).
+ * The light of floor 7, ECHOES (./echoes.ts): one projection shared by every surface of the
+ * warehouse. A painting of FedosArt (an Echo's inspiration) is thrown across the walls unrolled round
+ * the room (centred behind the monolith, mirrored on as it runs out, slowly drifting), and the
+ * monolith's zkSNARK silhouette shows the same painting, sharp, as if it were a hole through to it.
+ * The next spreads out from the monolith over the last one; "white" is the blank canvas (the walls
+ * go dark, the silhouette glows white). Then the silhouette condenses into the Echo itself: pixel by
+ * pixel the figure becomes the Echo's 26 × 26 pixels (`uEchoA`/`uEchoB`, 0 → 1, over `uEA`/`uEB`).
  */
 
 /** The zkSNARK in the monolith, as the teaser draws it: 20 × 20 pixels, eyes and the glitched left edge. */
@@ -39,6 +40,15 @@ const FX = 4,
 /** Where the figure sits in the grid (cells, from the bottom left): its centre, its box. */
 export const FIG = { cx: FX + 10, cy: GRID - FY - 10, x0: FX, x1: FX + 20, y0: GRID - FY - 20, y1: GRID - FY };
 
+/** The figure's cells (column, row from the bottom), for things that fly into it. */
+export function figureCells() {
+  const out: [number, number][] = [];
+  FIGURE.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) if (row[c] === "#") out.push([FX + c, GRID - 1 - (FY + r)]);
+  });
+  return out;
+}
+
 export function maskTexture() {
   const d = new Uint8Array(GRID * GRID);
   FIGURE.forEach((row, r) => {
@@ -54,6 +64,30 @@ export function maskTexture() {
 export const ROOM = { XW: 15, Z0: -8, ZB: -46, PX: 0.27, PY: 3.2, HP: 13 };
 
 const blank = new THREE.Texture();
+const none = new THREE.DataTexture(new Uint8Array(GRID * GRID * 4), GRID, GRID);
+none.needsUpdate = true;
+
+/** An Echo's 26 × 26 pixels (sRGB strings, "" = off, rows from the top) as a texture for the monolith. */
+export function echoTexture(px: string[]) {
+  const d = new Uint8Array(GRID * GRID * 4);
+  const c = new THREE.Color();
+  px.forEach((v, i) => {
+    if (!v) return;
+    c.setStyle(v, THREE.NoColorSpace);
+    const x = i % GRID,
+      y = GRID - 1 - Math.floor(i / GRID);
+    const o = (y * GRID + x) * 4;
+    d[o] = Math.round(c.r * 255);
+    d[o + 1] = Math.round(c.g * 255);
+    d[o + 2] = Math.round(c.b * 255);
+    d[o + 3] = 255;
+  });
+  const t = new THREE.DataTexture(d, GRID, GRID, THREE.RGBAFormat, THREE.UnsignedByteType);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = t.minFilter = THREE.NearestFilter;
+  t.needsUpdate = true;
+  return t;
+}
 
 /** The uniforms every projected surface shares. */
 export function projectionUniforms(floorY: number) {
@@ -72,6 +106,13 @@ export function projectionUniforms(floorY: number) {
     uColB: { value: new THREE.Color("#000000") },
     uFloorY: { value: floorY },
     uGain: { value: 6 },
+    /** The Echoes on either side of the change, and how far each has condensed (0 = the figure). */
+    uEA: { value: none as THREE.Texture },
+    uEB: { value: none as THREE.Texture },
+    uEchoA: { value: 0 },
+    uEchoB: { value: 0 },
+    /** A purged zkSNARK just went into the monolith: the figure flares. */
+    uPulse: { value: 0 },
   };
 }
 export type ProjectionUniforms = ReturnType<typeof projectionUniforms>;
@@ -199,36 +240,63 @@ float bcRim(vec2 c, vec2 fr) {
 
 const SIL_FRAG = /* glsl */ `
 uniform sampler2D uMask;
+uniform sampler2D uEA;
+uniform sampler2D uEB;
+uniform float uEchoA;
+uniform float uEchoB;
+uniform float uPulse;
 uniform float uFlip;
 uniform float uCell;
 varying vec2 vUv;
 varying vec3 vBcP;
 ${PROJ}
 ${RIM}
+vec4 bcEcho(sampler2D e, vec2 c) {
+  if (c.x < 0.0 || c.y < 0.0 || c.x > ${GRID - 1}.0 || c.y > ${GRID - 1}.0) return vec4(0.0);
+  return texture(e, (c + 0.5) / ${GRID}.0);
+}
 void main() {
   vec2 q = vUv;
   if (uFlip > 0.5) q.x = 1.0 - q.x;
   vec2 cell = floor(q * ${GRID}.0);
+  vec2 fr = fract(q * ${GRID}.0);
   // the glitch: rows slide sideways by whole pixels for a frame or two
   float tick = floor(uTime * 14.0);
   float sh = 0.0;
   if (bcHash(vec2(cell.y, tick)) < uGlitch * 0.4) sh = floor((bcHash(vec2(tick, cell.y + 3.0)) - 0.5) * 6.0);
   vec2 c = vec2(cell.x - sh, cell.y);
-  if (bcCell(c) < 0.5) discard;
-  float rim = bcRim(c, fract(q * ${GRID}.0));
-  vec3 p = vBcP - vec3(0.0, uFloorY, 0.0);
-  float s = p.x - BC_PX - sh * uCell;
+  // the figure, or (condensing pixel by pixel, in their own random order) the Echo's pixels
+  float m0 = bcCell(c);
+  vec4 ea = bcEcho(uEA, c), eb = bcEcho(uEB, c);
+  float r2 = bcHash(cell + 19.0);
+  float ka = clamp((uEchoA * 1.3 - r2) / 0.3, 0.0, 1.0);
+  float kb = clamp((uEchoB * 1.3 - r2) / 0.3, 0.0, 1.0);
   // B takes over pixel by pixel, in a random order, each pixel flashing as it turns
   float r = bcHash(cell + 7.0);
   float k = clamp((uMix * 1.3 - r) / 0.3, 0.0, 1.0);
-  vec3 a = mix(texture(uA, bcUV(s, p.y, uAspA)).rgb, vec3(1.0), uWhiteA);
-  vec3 b = mix(texture(uB, bcUV(s, p.y, uAspB)).rgb, vec3(1.0), uWhiteB);
+  float vis = mix(mix(m0, ea.a, ka), mix(m0, eb.a, kb), k);
+  if (vis < 0.5) discard;
+  float rim = bcRim(c, fr);
+  vec3 p = vBcP - vec3(0.0, uFloorY, 0.0);
+  float s = p.x - BC_PX - sh * uCell;
+  vec3 pa = mix(texture(uA, bcUV(s, p.y, uAspA)).rgb, vec3(1.0), uWhiteA) * mix(1.9, 1.2, uWhiteA);
+  vec3 pb = mix(texture(uB, bcUV(s, p.y, uAspB)).rgb, vec3(1.0), uWhiteB) * mix(1.9, 1.2, uWhiteB);
+  vec3 a = mix(pa, ea.rgb * 1.35, ka);
+  vec3 b = mix(pb, eb.rgb * 1.35, kb);
   vec3 col = mix(a, b, k);
   float white = mix(uWhiteA, uWhiteB, k);
-  col *= mix(1.9, 1.2, white);
+  float echo = mix(ka, kb, k);
+  // the Echo reads as lit pixels: a hairline of black between them
+  float edge = max(step(fr.x, 0.05) + step(0.95, fr.x), step(fr.y, 0.05) + step(0.95, fr.y));
+  col *= 1.0 - 0.45 * min(edge, 1.0) * echo;
   // the figure's edge, lit: it reads even on a dark piece
-  col += vec3(0.55) * rim * (1.0 - white);
+  col += vec3(0.55) * rim * (1.0 - white) * (1.0 - echo);
   col += vec3(0.9) * (1.0 - abs(k - 0.5) * 2.0) * step(0.001, uMix) * step(uMix, 0.999);
+  // condensing: each pixel flashes white as it turns; a purged zkSNARK going in, the whole figure flares
+  float ta = (1.0 - abs(ka - 0.5) * 2.0) * step(0.001, uEchoA) * step(uEchoA, 0.999);
+  float tb = (1.0 - abs(kb - 0.5) * 2.0) * step(0.001, uEchoB) * step(uEchoB, 0.999);
+  col += vec3(1.3) * mix(ta, tb, k);
+  col *= 1.0 + 0.35 * uPulse * (1.0 - white);
   // a glitched row splits its colours
   if (sh != 0.0) col = vec3(col.r * 1.4, col.g * 0.7, col.b * 1.3);
   gl_FragColor = vec4(col, 1.0);
@@ -291,6 +359,61 @@ void main() {
   #include <colorspace_fragment>
 }
 `;
+
+const ECHO_WIN_VERT = /* glsl */ `
+attribute float aIdx;
+attribute vec4 aOff;
+varying vec2 vUv;
+varying vec2 vArt;
+varying float vIdx;
+void main() {
+  vUv = uv;
+  vIdx = aIdx;
+  vArt = aOff.xy + uv * aOff.zw;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const ECHO_WIN_FRAG = /* glsl */ `
+uniform sampler2D uArt;
+uniform float uWake[N];
+uniform float uGlow[N];
+uniform float uTime;
+varying vec2 vUv;
+varying vec2 vArt;
+varying float vIdx;
+void main() {
+  int i = int(vIdx + 0.5);
+  float w = uWake[i];
+  vec3 col = texture(uArt, vArt).rgb * uGlow[i];
+  // lit pixels, a hairline of black between them
+  vec2 fr = fract(vUv * ${GRID}.0);
+  float edge = max(step(fr.x, 0.06) + step(0.94, fr.x), step(fr.y, 0.06) + step(0.94, fr.y));
+  col *= 1.0 - 0.5 * min(edge, 1.0);
+  // a scanline running down the awake one
+  float scan = smoothstep(0.03, 0.0, abs(fract(vUv.y - uTime * 0.35) - 0.5));
+  col += vec3(0.9) * scan * w * 0.22;
+  gl_FragColor = vec4(col, 1.0);
+  #include <colorspace_fragment>
+}
+`;
+
+/**
+ * The 26 small monoliths' screens: each Echo's pixels (or a "?" while it is hidden), one atlas, one
+ * draw. `uGlow` (per screen) is set every frame: asleep, awake, on the monolith, just revealed.
+ */
+export function echoWindowMaterial(art: THREE.Texture, n: number) {
+  return new THREE.ShaderMaterial({
+    vertexShader: ECHO_WIN_VERT,
+    fragmentShader: `#define N ${n}\n${ECHO_WIN_FRAG}`,
+    uniforms: {
+      uArt: { value: art },
+      uWake: { value: new Array(n).fill(0) },
+      uGlow: { value: new Array(n).fill(0.6) },
+      uTime: { value: 0 },
+    },
+  });
+}
 
 /** The small monoliths' windows: the same figure, each with its work (one atlas, one draw). */
 export function windowMaterial(mask: THREE.Texture, art: THREE.Texture, n: number) {

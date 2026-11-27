@@ -6,7 +6,7 @@ import { aile } from "./aile";
 import { apartments } from "./apartments";
 import { memorial } from "./memorial";
 import { planetarium } from "./planetarium";
-import { blankCanvas } from "./blankcanvas";
+import { echoesFloor } from "./echoes";
 import { Collection } from "./data";
 import { etats } from "./etats";
 import { galerie } from "./galerie";
@@ -21,10 +21,11 @@ import { FLOORS } from "./parts";
  * the winged Victory and the Salle des États where zkSNARKs #1, the original, hangs alone behind
  * glass; the Napoleon III apartments; the Aile des Apparitions, the zkSNARKs purge as a
  * sculpture of pixels and the explorer's charts; the Memorial of the Purged, for the 676; and the
- * FedosArt Planetarium, the artist behind zkSNARKs and his works under a turning sky; and A BLANK
- * CANVAS, zkSNARKs' Experiment_002: a bare warehouse where his pieces are thrown across the walls
- * and through a monolith cut in the shape of a zkSNARK, a first look at each. Every painting
- * is a real zkSNARK (or one of his works): hover for its name, click for its data.
+ * FedosArt Planetarium, the artist behind zkSNARKs and his works under a turning sky; and ECHOES,
+ * zkSNARKs' Experiment_002, live: a bare warehouse where a monolith cut in the shape of a zkSNARK
+ * draws in each Echo's 13 purged, takes on the painting it was imagined after and condenses into
+ * the Echo, the 26 down both sides. Every painting is a real zkSNARK (or one of his works): hover
+ * for its name, click for its data.
  */
 export function buildMuseum(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#0c0b0a");
@@ -36,7 +37,7 @@ export function buildMuseum(ctx: InteriorContext): Interior {
   const k = new MuseumKit(ctx, scene);
   const data = new Collection();
 
-  const built: { spawn: THREE.Vector3; yaw: number; onData?: (d: Collection) => void; fill?: () => void }[] = [hall(k, data), galerie(k, data), etats(k, data), apartments(k, data), aile(k, data), memorial(k, data), planetarium(k, data), blankCanvas(k)];
+  const built: { spawn: THREE.Vector3; yaw: number; onData?: (d: Collection) => void; fill?: () => void }[] = [hall(k, data), galerie(k, data), etats(k, data), apartments(k, data), aile(k, data), memorial(k, data), planetarium(k, data), echoesFloor(k)];
 
   // ---- the paintings get their zkSNARKs once the collection is known -------------------------
   const idOf: (number | null)[][] = k.hangs.map((l) => l.map((h) => h.id ?? null));

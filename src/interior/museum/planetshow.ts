@@ -20,11 +20,17 @@ const IN = 3.6,
 /** A work's image as a texture, and its average colour, loaded once. */
 const cache = new Map<string, Promise<{ tex: THREE.Texture; color: THREE.Color }>>();
 export function workTexture(w: Work) {
-  let p = cache.get(w.slug);
+  return imageTexture(w.slug, workImage(w));
+}
+
+/** Any painting by URL as a texture, and its average colour, loaded once (other origins: CORS). */
+export function imageTexture(key: string, url: string) {
+  let p = cache.get(key);
   if (!p) {
     p = new Promise((res, rej) => {
       const im = new Image();
       im.decoding = "async";
+      if (/^https?:/.test(url) && !url.startsWith(location.origin)) im.crossOrigin = "anonymous";
       im.onload = () => {
         const tex = new THREE.Texture(im);
         tex.colorSpace = THREE.SRGBColorSpace;
@@ -50,10 +56,13 @@ export function workTexture(w: Work) {
         color.setHSL(hsl.h, Math.min(1, hsl.s * 1.6 + 0.15), 0.55);
         res({ tex, color });
       };
-      im.onerror = () => rej(new Error(`no image ${w.slug}`));
-      im.src = workImage(w);
+      im.onerror = () => {
+        cache.delete(key);
+        rej(new Error(`no image ${key}`));
+      };
+      im.src = url;
     });
-    cache.set(w.slug, p);
+    cache.set(key, p);
   }
   return p;
 }

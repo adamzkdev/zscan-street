@@ -178,7 +178,7 @@ const planetarium: Preset = {
   },
 };
 
-/** The Louvre's A BLANK CANVAS: a bare warehouse, the hush of the museum far off, its own music (./blank.ts). */
+/** The Louvre's ECHOES (Experiment_002, once A BLANK CANVAS): a bare warehouse, the hush of the museum far off, its own music (./blank.ts). */
 const blankCanvas: Preset = {
   room: WAREHOUSE,
   rain: 0.04,
@@ -769,7 +769,7 @@ export function presetFor(key: string, floor: number, name: string): string {
     case "colosseum":
       return has("hypogeum") ? "hypogeum" : "colosseum";
     case "museum":
-      return has("planetarium") ? "planetarium" : has("blank canvas") ? "blank-canvas" : "museum";
+      return has("planetarium") ? "planetarium" : has("blank canvas", "echoes") ? "blank-canvas" : "museum";
     case "hotel":
       if (has("casino")) return "casino";
       if (has("spa")) return "spa";

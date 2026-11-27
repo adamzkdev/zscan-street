@@ -2,7 +2,8 @@
  * A BLANK CANVAS (the Louvre's floor 7), synthesised after the teaser it comes from: a heavy sub
  * drone that breathes, dark chords far off in the concrete (A minor, F, D minor, E: ten seconds
  * each, filtered saws), two high sines beating like a projector's hum, and the warehouse settling
- * now and then (a beam ticks, a far door). The room's events (./interior/museum/blankcanvas.ts):
+ * now and then (a beam ticks, a far door). An Echo's ritual: a swell under the 13 rising, a tick
+ * and a thump as each goes into the figure, a run of bells as it condenses. The room's events (./interior/museum/echoes.ts):
  * a work thrown onto the walls lands on an impact (a rising breath, a sub drop, a struck plate);
  * back to the blank canvas, a downward sweep and a white ring; every typed letter, a key.
  */
@@ -104,7 +105,7 @@ export function blankCanvasMusic(s: Scene) {
     clank(s, t + 0.05, 95, 0.02, 2.2, 0.9);
   });
 
-  // ---- what happens in the room (blankcanvas.ts sends them) ----
+  // ---- what happens in the room (echoes.ts sends them) ----
   // a work lands on the walls: a breath rising into it, a sub drop, a struck plate, a high shimmer
   s.on["canvas-hit"] = (t) => {
     const sw = burst(s, t, "pink", "bandpass", 300, 1.2, 0.07, 0.55, 0.5, 0, 0.5);
@@ -129,6 +130,35 @@ export function blankCanvasMusic(s: Scene) {
   s.on["canvas-type"] = (t) => {
     burst(s, t, "white", "bandpass", rnd(2600, 3400), 1.8, 0.05, 0.025, 0.12);
     burst(s, t + 0.004, "pink", "lowpass", 420, 0.8, 0.03, 0.03, 0.1);
+  };
+  // an Echo's ritual begins: a low swell under the 13 rising (their arrivals: "echo-in")
+  s.on["echo-purge"] = (t) => {
+    const sw = burst(s, t, "pink", "bandpass", 180, 1.0, 0.05, 1.4, 0.7, 0, 0.6);
+    sw.frequency.setValueAtTime(180, t);
+    sw.frequency.exponentialRampToValueAtTime(900, t + 1.3);
+    tone(s, t, 41.2, "sine", 0.16, 3.2, 0.5, { a: 0.6 });
+    tone(s, t + 0.2, midi(64), "sine", 0.012, 3, 0.8, { a: 0.8 });
+  };
+  // the same, LIVE: a revealed Echo while you are here, a brighter call over it
+  s.on["echo-live"] = (t) => {
+    s.on["echo-purge"]?.(t);
+    for (let r = 0; r < 3; r++) bell(s, t + r * 0.18, midi([76, 83, 88][r]), 3.5, 0.03, 0.9, r % 2 ? 0.5 : -0.5);
+  };
+  // a purged zkSNARK goes into the figure: a short dry tick and a sub thump, a little higher each time
+  let ins = 0;
+  s.on["echo-in"] = (t) => {
+    ins = (ins + 1) % 13;
+    burst(s, t, "white", "bandpass", 1800 + ins * 120, 2.2, 0.035, 0.05, 0.25, rnd(-0.4, 0.4));
+    tone(s, t, 70 + ins * 3, "sine", 0.07, 0.35, 0.3, { to: 40, a: 0.003 });
+  };
+  // the figure condenses into the Echo: pixels falling into place (a run of high bells), the star blooms
+  s.on["echo-condense"] = (t) => {
+    for (let r = 0; r < 14; r++) bell(s, t + r * 0.13 + rnd(0, 0.04), midi([88, 91, 95, 100][r % 4] - (r % 3) * 12), 1.6, 0.009, 0.85, rnd(-0.8, 0.8));
+    const at = t + 1.9;
+    tone(s, at, midi(57), "sine", 0.05, 5, 0.6, { a: 0.02 });
+    tone(s, at, midi(64), "sine", 0.03, 5.5, 0.7, { a: 0.05 });
+    tone(s, at, midi(76), "sine", 0.02, 6, 0.8, { a: 0.1 });
+    burst(s, at, "pink", "highpass", 5000, 0.7, 0.03, 2.4, 0.9, 0, 0.05);
   };
   // a small monolith wakes as you come up to it
   s.on["canvas-wake"] = (t) => {

@@ -1,12 +1,14 @@
 import * as THREE from "three";
 import { portraitImage } from "../data/portrait";
+import { echoesFeed } from "../data/echoes";
 import { get, ZScan } from "../data/zscan";
 
 /**
  * THE 676 — a drone show over the bay. 676 drones, one for every zkSNARK purged for the
  * Apparitions, and one for every pixel of a zkSNARK (26 × 26). They lift off a grid on the water,
- * spell 676, become the Apparitions one after another (each drone a pixel), the last zkSNARK sold on
- * Zilk Road, FedosArt's #9593, a spinning Zcash coin, ZSTREET, burst into a sphere and come home.
+ * spell 676, become the Apparitions one after another (each drone a pixel), then ECHOES and three of
+ * the Echoes, the last zkSNARK sold on Zilk Road, FedosArt's #9593, a spinning Zcash coin, ZSTREET,
+ * burst into a sphere and come home.
  *
  * The show runs on a clock shared by everyone (`t` = seconds since the scheduled start, see
  * src/game/droneshow.ts), so every visitor sees the same formation at the same moment.
@@ -237,6 +239,8 @@ export async function snarkPixels(id: number): Promise<Pixels | null> {
 /** What the show needs from the API: the Apparitions, the last sale. */
 export interface ShowData {
   apparitions: { id: number; name: string; px: Pixels }[];
+  /** Three Echoes (Experiment_002), a different set every day. */
+  echoes: { id: number; name: string; px: Pixels }[];
   lastSold: { id: number; price: number; px: Pixels } | null;
   fedos: Pixels | null;
 }
@@ -255,8 +259,12 @@ export async function loadShowData(): Promise<ShowData> {
   );
   const sale = coll?.venue_sales?.[0];
   const lastPx = sale ? await snarkPixels(Number(sale.item_id)) : null;
+  const es = (await echoesFeed.ready())?.echoes ?? [];
+  const epick = es.length ? [...new Set([0, 1, 2].map((k) => (day * 3 + k * 5) % es.length))].map((i) => es[i]) : [];
+  const echoes = (await Promise.all(epick.map(async (e) => ({ id: e.item, name: e.name, px: await snarkPixels(e.item) })))).filter((e): e is { id: number; name: string; px: Pixels } => !!e.px);
   return {
     apparitions,
+    echoes,
     lastSold: sale && lastPx ? { id: Number(sale.item_id), price: sale.price, px: lastPx } : null,
     fedos: await snarkPixels(9593),
   };
@@ -269,6 +277,10 @@ function programme(d: ShowData): Act[] {
     { name: "676", hold: 6, f: () => text("676", hex("#f4b728").multiplyScalar(2.4), 96) },
   ];
   for (const a of d.apparitions) acts.push({ name: a.name, hold: 7, f: () => pixelArt(a.px), sway: true });
+  if (d.echoes.length) {
+    acts.push({ name: "ECHOES", hold: 5, f: () => text("ECHOES", hex("#f2f0ff").multiplyScalar(2.2), 130) });
+    for (const e of d.echoes) acts.push({ name: e.name, hold: 7, f: () => pixelArt(e.px), sway: true });
+  }
   if (d.lastSold) {
     const ls = d.lastSold;
     acts.push({ name: `Sold · #${ls.id}`, hold: 7, f: () => pixelArt(ls.px), sway: true });

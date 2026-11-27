@@ -7,7 +7,8 @@ import type { Decor } from "./decor";
 /**
  * The Needle's LED screen: the last zkSNARKs sold on Zilk Road, one after another, as 26 × 26
  * lit pixels over the tower's face (front and back, under the anniversary banner), the sale under
- * it. A new sale while you watch takes over every LED screen in the city for a moment.
+ * it. A new sale while you watch takes over every LED screen in the city for a moment. An Echo
+ * revealed (Experiment_002) takes the screen for a while: `feature()`.
  */
 
 const FONT = '"DotGothic16", "JetBrains Mono", monospace';
@@ -33,6 +34,8 @@ export class LedTower {
   private poll = 0;
   private newest = "";
   private flash = 0;
+  /** A featured zkSNARK (a revealed Echo) holding the screen, its lines. */
+  private featured: { im: HTMLImageElement; top: string; bottom: string; color: string } | null = null;
 
   constructor(
     scene: THREE.Scene,
@@ -131,7 +134,35 @@ export class LedTower {
     this.tex.needsUpdate = true;
   }
 
+  /** Put a zkSNARK on the screen for a while (a revealed Echo), its two lines under it. */
+  async feature(id: number, top: string, bottom: string, color = "#e8e6ff") {
+    const im = await portraitImage(ZScan.zkSnarkImage(id)).catch(() => null);
+    if (!im) return;
+    this.featured = { im, top, bottom, color };
+    this.t = SHOW * 3;
+    this.flash = 1;
+    this.draw();
+  }
+
   private draw() {
+    if (this.featured) {
+      const { im, top, bottom, color } = this.featured;
+      const g = this.g;
+      g.fillStyle = "#050407";
+      g.fillRect(0, 0, 520, 680);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(im, 0, 0, 520, 520);
+      this.grid();
+      g.textAlign = "center";
+      g.fillStyle = color;
+      g.font = `400 46px ${FONT}`;
+      g.fillText(top, 260, 584);
+      g.fillStyle = "#ffffff";
+      g.font = `400 40px ${FONT}`;
+      g.fillText(bottom, 260, 648);
+      this.tex.needsUpdate = true;
+      return;
+    }
     const s = this.sales[this.i % Math.max(1, this.sales.length)];
     if (!s) return;
     const g = this.g;
@@ -142,12 +173,7 @@ export class LedTower {
       g.imageSmoothingEnabled = false;
       g.drawImage(im, 0, 0, 520, 520);
     }
-    // the LED grid: a dark line between the pixels
-    g.fillStyle = "rgba(5,4,7,0.55)";
-    for (let k = 0; k <= 26; k++) {
-      g.fillRect(k * 20 - 1, 0, 2, 520);
-      g.fillRect(0, k * 20 - 1, 520, 2);
-    }
+    this.grid();
     g.textAlign = "center";
     g.fillStyle = "#7dffb0";
     g.font = `400 46px ${FONT}`;
@@ -158,6 +184,16 @@ export class LedTower {
     this.tex.needsUpdate = true;
   }
 
+  /** The LED grid: a dark line between the pixels. */
+  private grid() {
+    const g = this.g;
+    g.fillStyle = "rgba(5,4,7,0.55)";
+    for (let k = 0; k <= 26; k++) {
+      g.fillRect(k * 20 - 1, 0, 2, 520);
+      g.fillRect(0, k * 20 - 1, 520, 2);
+    }
+  }
+
   update(dt: number, night: boolean) {
     this.poll += dt;
     if (this.poll > POLL) {
@@ -165,6 +201,7 @@ export class LedTower {
       void this.refresh();
     }
     this.t -= dt;
+    if (this.t <= 0 && this.featured) this.featured = null;
     if (this.t <= 0 && this.sales.length) {
       this.t = SHOW;
       this.i = (this.i + 1) % this.sales.length;

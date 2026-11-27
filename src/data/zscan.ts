@@ -23,6 +23,9 @@ async function slot() {
   }
 }
 
+/** zkSNARKs whose art was replaced after launch (src/data/echoes.ts fills it). */
+export const redrawn = new Set<number>();
+
 export async function get<T>(path: string): Promise<T | null> {
   for (let attempt = 0; attempt < 3; attempt++) {
     await slot();
@@ -98,7 +101,9 @@ export const ZScan = {
     tx.pool = d.ironwood_actions?.length ? "ironwood" : d.orchard_actions?.length ? "orchard" : d.sapling_spends?.length || d.sapling_outputs?.length ? "sapling" : null;
     return tx;
   },
-  zkSnarkImage: (id: number) => `${API}/v1/collections/zksnarks/items/${id}/image`,
+  /** A zkSNARK's picture. Items re-drawn by an experiment (the Echoes) get a version: browsers keep
+   * the old picture for a year (the API sends it immutable). */
+  zkSnarkImage: (id: number) => `${API}/v1/collections/zksnarks/items/${id}/image${redrawn.has(id) ? "?v=echo" : ""}`,
   /** Any block in full, genesis to tip (kept in a small cache: stepping back and forth is instant). */
   blockDetail: (height: number): Promise<ArchiveBlock | null> => cached(height, () => get<ArchiveBlock>(`/v1/blocks/${height}`)),
   /** Up to `n` block summaries below `before` (indexed range only: empty further back). */

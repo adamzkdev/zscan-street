@@ -1,5 +1,7 @@
+import { echoesFeed } from "../../data/echoes";
 import { API, EXPLORER, get, ZScan } from "../../data/zscan";
 import type { PickInfo } from "../types";
+import { echoInfo } from "./echoes";
 import { median, Purge } from "./purge";
 
 /** The collection as the museum needs it: every item by id and by rank, market figures, the purge. */
@@ -92,6 +94,10 @@ export class Collection {
   }
 
   hover(id: number) {
+    const echo = echoesFeed.byItem(id);
+    if (echo) return `<b>${esc(echo.name)}</b><span>was zkSNARKs #${id} · ${echo.purged.length} purged for it</span>`;
+    const forEcho = echoesFeed.purgedFor(id);
+    if (forEcho) return `<b>zkSNARKs #${id}</b><span>purged · ${esc(forEcho.name)}</span>`;
     const app = this.purge.appOf.get(id);
     if (app) return `<b>${app.name}</b><span>was zkSNARKs #${id} · 26 purged for it</span>`;
     const gone = this.purge.purgedFor.get(id);
@@ -104,6 +110,18 @@ export class Collection {
   info(id: number, where: string): PickInfo {
     const it = this.byId.get(id);
     const link = { href: `${EXPLORER}/collection/zksnarks/item/${id}`, label: "ZScan" };
+    const echo = echoesFeed.byItem(id);
+    if (echo) return echoInfo(echo, where);
+    const forEcho = echoesFeed.purgedFor(id);
+    if (forEcho)
+      return {
+        eyebrow: `${where} · Rank #${it?.rank != null ? num(it.rank) : "—"}`,
+        title: `zkSNARKs #${id}`,
+        image: ZScan.zkSnarkImage(id),
+        tag: ["Purged", "warn"],
+        body: `<p>Burned to reveal ${esc(forEcho.name)}. Gone for good.</p>`,
+        link,
+      };
     const app = this.purge.appOf.get(id);
     if (app) {
       const ps = this.purge.of(app);

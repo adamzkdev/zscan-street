@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { atlasBitmap } from "../../data/atlas";
+import { echoesFeed, echoNum, type EchoesState } from "../../data/echoes";
 import { ZScan } from "../../data/zscan";
 import type { Collection } from "./data";
 import { boxGeo, canvasTex, FACE, type MuseumKit } from "./kit";
@@ -17,6 +18,8 @@ import type { Snark } from "../../scene/snark";
  * it, on a granite plinth, the Unknown Purged Snark in bronze: the silhouette all 676 share (every
  * pixel lit in at least half of them), with an eternal flame and wreaths at its feet. Down both
  * walls, 26 stone tablets engraved with the names, Apparition by Apparition. A guard of honour.
+ * Either side of the Wall, the Walls of the Echoes (Experiment_002): every Echo, then the 13 burned
+ * for it, rows filling as the Echoes are revealed; the inscription counts every zkSNARK purged.
  */
 
 const X = 14,
@@ -81,6 +84,20 @@ export function memorial(k: MuseumKit, data: Collection) {
     c.letterSpacing = "14px";
     c.fillText("TO THE 676 PURGED zkSNARKs · FROM A GRATEFUL COLLECTION", w / 2, h / 2 + 6);
   });
+  /** The inscription again, with every zkSNARK purged so far (the Apparitions' 676, the Echoes' 13s). */
+  const inscribe = (n: number) => {
+    const t = (ins.material as THREE.MeshBasicMaterial).map as THREE.CanvasTexture;
+    const cv = t.image as HTMLCanvasElement;
+    const c = cv.getContext("2d")!;
+    c.clearRect(0, 0, cv.width, cv.height);
+    c.fillStyle = "#b8923a";
+    c.font = `600 120px ${SERIF}`;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.letterSpacing = "14px";
+    c.fillText(`TO THE ${n.toLocaleString("en-US")} PURGED zkSNARKs · FROM A GRATEFUL COLLECTION`, cv.width / 2, cv.height / 2 + 6);
+    t.needsUpdate = true;
+  };
   ins.position.set(0, H - 2.1, L + 0.27);
   const WS = 8.4;
   const wallTex = canvasTex(2000, 2000, (c, w, h) => {
@@ -128,6 +145,114 @@ export function memorial(k: MuseumKit, data: Collection) {
       return id != null ? data.info(id, "Memorial of the Purged") : { eyebrow: "Memorial of the Purged", title: "The Wall of the Purged", body: "<p>All 676 zkSNARKs burned for the Apparitions, one row per Apparition, its own portrait at the start of the row.</p>" };
     },
   );
+
+  // ---- the Walls of the Echoes: either side of the Wall, every Echo, then the 13 burned for it ------------
+  const EWS = 5.6,
+    EPX = 1400,
+    EROW = 100,
+    ETOP = 50,
+    EX0 = 40,
+    EPC = 170,
+    ESTEP = 92;
+  const echoWalls = [-1, 1].map((side) => {
+    const tex = canvasTex(EPX, EPX, (c, w, h) => {
+      c.fillStyle = "#121014";
+      c.fillRect(0, 0, w, h);
+    });
+    tex.magFilter = THREE.NearestFilter;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(EWS, EWS), new THREE.MeshBasicMaterial({ map: tex, color: "#e6e0d6" }));
+    const x = side * (WS / 2 + 1.1 + EWS / 2);
+    m.position.set(x, 1.3 + EWS / 2, L + 0.3);
+    g.add(m);
+    for (const [w, h, dx, y] of [
+      [EWS + 0.5, 0.25, 0, 1.05],
+      [EWS + 0.5, 0.25, 0, 1.3 + EWS],
+      [0.25, EWS + 0.5, -(EWS / 2 + 0.125), 1.05],
+      [0.25, EWS + 0.5, EWS / 2 + 0.125, 1.05],
+    ])
+      k.geo(f, bronze, boxGeo(w, h, 0.2, x + dx, y, L + 0.35));
+    const label = k.panel(f, 1400, 140, EWS, (c, w, h) => {
+      c.fillStyle = "#6e5222";
+      c.font = `600 84px ${SERIF}`;
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.letterSpacing = "10px";
+      c.fillText(side < 0 ? "THE ECHOES · 01 – 13" : "THE ECHOES · 14 – 26", w / 2, h / 2 + 4);
+    });
+    label.position.set(x, 1.3 + EWS + 0.62, L + 0.27);
+    k.wash(f, x, L + 0.32, FACE.pz, 7, 6.5, 8, "#fff0dc");
+    return { m, tex, side, rows: [] as (number[] | null)[] };
+  });
+  for (const w of echoWalls) {
+    const at = (hit: THREE.Intersection) => {
+      if (!hit.uv) return null;
+      const px = hit.uv.x * EPX,
+        py = (1 - hit.uv.y) * EPX;
+      const r = Math.floor((py - ETOP) / EROW);
+      const row = w.rows[r];
+      if (!row) return null;
+      if (px >= EX0 && px < EX0 + EROW) return row[0];
+      const c = Math.floor((px - EPC) / ESTEP);
+      return c >= 0 && c < 13 ? (row[c + 1] ?? null) : null;
+    };
+    k.pick(
+      f,
+      w.m,
+      (hit) => {
+        const id = at(hit);
+        return id != null ? data.hover(id) : "<b>The Walls of the Echoes</b><span>every Echo, then the 13 purged for it</span>";
+      },
+      (hit) => {
+        const id = at(hit);
+        return id != null ? data.info(id, "Memorial of the Purged") : { eyebrow: "Memorial of the Purged", title: "The Walls of the Echoes", body: "<p>Experiment_002: each Echo, then the 13 zkSNARKs purged for it.</p>" };
+      },
+    );
+  }
+  const fillEchoes = async (s: EchoesState) => {
+    const atlas = await atlasBitmap().catch(() => null);
+    if (!atlas) return;
+    const byN = new Map(s.echoes.map((e) => [e.echo, e]));
+    for (const w of echoWalls) {
+      const cv = w.tex.image as HTMLCanvasElement;
+      const c = cv.getContext("2d")!;
+      c.imageSmoothingEnabled = false;
+      c.fillStyle = "#121014";
+      c.fillRect(0, 0, EPX, EPX);
+      for (let r = 0; r < 13; r++) {
+        const n = (w.side < 0 ? 0 : 13) + r + 1;
+        const e = byN.get(n);
+        const y = ETOP + r * EROW;
+        if (!e) {
+          w.rows[r] = null;
+          c.fillStyle = "#3a3530";
+          c.font = `500 34px ${SERIF}`;
+          c.textBaseline = "middle";
+          c.fillText(echoNum(n), EX0 + 22, y + EROW / 2);
+          c.strokeStyle = "#2a2622";
+          c.lineWidth = 2;
+          for (let k2 = 0; k2 < 13; k2++) c.strokeRect(EPC + k2 * ESTEP + 2, y + 6, ESTEP - 6, ESTEP - 6);
+          continue;
+        }
+        w.rows[r] = [e.item, ...e.purged.map((p) => p.item)];
+        e.purged.forEach((p, k2) => snark(c, atlas, p.item, EPC + k2 * ESTEP, y + 4, ESTEP - 4));
+        c.fillStyle = "#b8923a";
+        c.fillRect(EPC - 22, y + 4, 4, EROW - 8);
+        // the Echo itself from its own picture (the atlas may still hold the old art)
+        const im = await k.image(ZScan.zkSnarkImage(e.item)).catch(() => null);
+        if (im) c.drawImage(im, EX0, y, EROW - 6, EROW - 6);
+        else snark(c, atlas, e.item, EX0, y, EROW - 6);
+      }
+      w.tex.needsUpdate = true;
+    }
+  };
+  void (async () => {
+    await k.whenVisited(f);
+    await echoesFeed.ready();
+    echoesFeed.onChange((s) => {
+      if (s.purgedTotal != null) inscribe(s.purgedTotal);
+      void fillEchoes(s);
+    });
+  })();
 
   // ---- the Unknown Purged Snark: plinth, bronze, flame, wreaths ---------------------------------------
   k.geo(f, granite, boxGeo(3.2, 0.5, 3.2, 0, 0, SZ));

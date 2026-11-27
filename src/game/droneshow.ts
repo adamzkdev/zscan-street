@@ -45,8 +45,8 @@ export class DroneShowEvent {
     const h = new Date(now);
     h.setMinutes(MINUTE, 0, 0);
     let s = h.getTime();
-    // still running (about 2 minutes): that one
-    if (s + 150_000 < now) s += 3600_000;
+    // still running (about 3 minutes with the Echoes): that one
+    if (s + 210_000 < now) s += 3600_000;
     return s;
   }
 
@@ -101,7 +101,7 @@ export class DroneShowEvent {
         this.o.mail(
           "event",
           `The 676 · drone show at ${local(this.start)}`,
-          "676 drones over the bay, one for every zkSNARK purged for the Apparitions, one for every pixel of a zkSNARK: today's Apparitions, the last zkSNARK sold, a Zcash coin.",
+          "676 drones over the bay, one for every zkSNARK purged for the Apparitions, one for every pixel of a zkSNARK: today's Apparitions and Echoes, the last zkSNARK sold, a Zcash coin.",
           { label: "Watch", fn: () => this.watch() },
         );
       }

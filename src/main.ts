@@ -108,6 +108,7 @@ import { Nu7Night } from "./game/nu7night";
 import { Parade } from "./game/parade";
 import { DroneShowEvent } from "./game/droneshow";
 import { LedTower } from "./scene/ledtower";
+import { echoesFeed } from "./data/echoes";
 import { Factions } from "./game/factions";
 import { LiveEvents } from "./game/events";
 import { Disasters } from "./game/disasters";
@@ -2133,6 +2134,32 @@ const drones = new DroneShowEvent(scene, {
     rig.district(new THREE.Vector3(x, 1, z), zoom);
   },
 });
+// zkSNARKs' Experiment_002: an Echo revealed on Zilk Road while you are here is news for the whole city
+// (inbox, the LED screens, the Needle); the Louvre's floor 7 plays its ritual (src/interior/museum/echoes.ts)
+setTimeout(() => {
+  void echoesFeed.ready().then((s) => {
+    if (!s) return;
+    const missed = echoesFeed.sinceLastVisit();
+    if (missed.length)
+      gameHud.mail(
+        "event",
+        missed.length === 1 ? `${missed[0].name} was revealed` : `${missed.length} new Echoes revealed`,
+        `Since your last visit: ${missed.map((e) => e.name).join(", ")}. ${s.echoes.length} of ${s.total} Echoes are out, ${s.claimed} of ${s.public} through the public purge.`,
+        { label: "See them", fn: () => enterPlace("museum", 7) },
+      );
+  });
+  echoesFeed.onReveal((got, s) => {
+    const e = got[got.length - 1];
+    decor.alert({ kind: "game", title: "ECHO · ZILK ROAD", big: `ECHO #${e.echo}`, line: `${e.purged.length} PURGED · AFTER ${e.inspiration.toUpperCase()}`, color: "#e8e6ff" });
+    void ledTower.feature(e.item, `ECHO #${e.echo}`, `${e.purged.length} PURGED`);
+    gameHud.mail(
+      "event",
+      `${e.name} revealed`,
+      `${e.purged.length} zkSNARKs purged for it on Zilk Road. After ${e.inspiration} by FedosArt. ${s.echoes.length} of ${s.total} Echoes are out.`,
+      { label: "See it", fn: () => enterPlace("museum", 7) },
+    );
+  });
+}, 6000);
 const droneEye = new THREE.Vector3();
 const isoOff = new THREE.Vector3();
 
@@ -2659,6 +2686,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       nu7,
       anniversary,
       drones,
+      echoes: echoesFeed,
       titan,
       callTitan: (id = 9593, zec = 53, height: number | null = null) => titan.call({ id, zec, txid: "test-titan", height }),
       watchTitan,
