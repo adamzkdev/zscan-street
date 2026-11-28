@@ -145,11 +145,17 @@ export class Keys {
         h = Math.max(h, CURB + (SHELL_TOP + 0.3 - CURB) * near * near * (3 - 2 * near) * drop);
       }
     }
-    // your villa's plot: raised to the street's level over the north beach (its slabs just over
-    // this), the water deep along its sea wall for the yacht
-    // (under the pool: just under its floor, never under the sea's level — the sea would be drawn there)
-    if (inVilla(x, z, 0.6)) return villaPool(x, z) || villaPool(x - 0.7, z) || villaPool(x + 0.7, z) || villaPool(x, z - 0.7) || villaPool(x, z + 0.7) ? Math.max(VILLA.pool.floor - 0.05, BAY.water + 0.03) : CURB - 0.1;
-    if (z < VILLA.z0 && x > VILLA.x0 - 4 && x < VILLA.x1 + 4) h = Math.min(h, -5.2 + Math.max(0, Math.abs(x - (VILLA.x0 + VILLA.x1) / 2) - (VILLA.x1 - VILLA.x0) / 2) * 0.5);
+    // your villa's plot: raised to the street's level over the north beach (its court and gardens
+    // just over this; its terrace, pool and dock stand on their own sea wall out in the strait, north
+    // of this grid, the yacht's berth beyond it in the strait's deep water)
+    if (inVilla(x, z, 0.6)) return CURB - 0.1;
+    // (between the woods' shore and the plot's west sea wall the hill's foot goes down into the strait,
+    // under water by the town's north edge: no bank cut off where this grid ends)
+    if (x > F.x1 - 1 && x < VILLA.x0 + 1 && z < 624) {
+      const k = Math.max(0, Math.min(1, (z - KEYS.z0) / (624 - KEYS.z0)));
+      const low = BAY.water - 2.4;
+      h = Math.min(h, low + (h - low) * k * k * (3 - 2 * k));
+    }
     return h;
   }
 
@@ -457,6 +463,8 @@ export class Keys {
 
   /** Is (x, z) the town's to rule on foot (its land, its beaches, the tunnel)? */
   owns(x: number, z: number) {
+    // (your villa's plot, its sea half too: out in the strait past the town's box)
+    if (inVilla(x, z, 0.6)) return true;
     if (corridor(x, z)) return z > KTUNNEL.z0 - 0.4;
     if (!inKeys(x, z)) return false;
     return z >= F.z1 || x < F.x0 || x > F.x1;
@@ -556,24 +564,34 @@ export class Keys {
     return this.ground(x, z);
   }
 
-  /** On foot (without the game's solid shape), on your villa's plot: its walls, the house, the pool. */
+  /** On foot (without the game's solid shape), on your villa's plot: its walls, the house, the pool, the fountain, the palms. */
   private villaBlocked(x: number, z: number) {
-    return villaWall(x, z);
+    return villaWall(x, z) || !!this.circleAt(x, z, 0.25);
   }
 }
 
 const cellKey = (x: number, z: number) => Math.floor(x / 4) * 4096 + Math.floor(z / 4);
 
-/** (Keys.villaBlocked: the walls, the house, the pool) */
+/** (Keys.villaBlocked: the walls, the house, the pool, what stands on the terrace) */
 function villaWall(x: number, z: number) {
   const V = VILLA,
     H = V.house;
   const t = 0.45;
   if (x < V.x0 + t || x > V.x1 - t || z < V.z0 + t) return true;
   if (z > V.z1 - t && (x < V.gate.x0 || x > V.gate.x1)) return true;
-  // (the porch cut into the house's front: up to its door)
-  const porch = x > V.hall.x0 + 2.3 && x < V.hall.x1 - 2.3 && z > V.door.z - 0.2;
-  if (x > H.x0 && x < H.x1 && z > H.z0 && z < H.z1 && !porch) return true;
+  // (the porch before the house's front, between the entrance's blades: up to its door)
+  const porch = x > V.hall.x0 + 0.3 && x < V.hall.x1 - 0.3 && z > V.door.z - 0.2;
+  if (x > H.x0 - 0.3 && x < H.x1 + 0.3 && z > H.z0 - 0.3 && z < H.z1 + 0.3 && !porch) return true;
+  // (the entrance's stone blades either side of the porch)
+  if (z > H.z1 - 0.3 && z < H.z1 + 2.3 && ((x > V.hall.x0 - 1.5 && x < V.hall.x0 + 0.3) || (x > V.hall.x1 - 0.3 && x < V.hall.x1 + 1.5))) return true;
+  // the fountain's basin, the cabana's walls, the fire pit, the kitchen's counters, the loggia's table (./villa.ts)
+  if (Math.hypot(x - V.fountain.x, z - V.fountain.z) < V.fountain.r + 0.25) return true;
+  if (x < 251.8 && z < 582.4) return true;
+  if (z > 581.3 && z < 582.4 && x < 261.8) return true;
+  if (Math.hypot(x - 308, z - 579) < 1.25) return true;
+  if (x > 315.6 && x < 328.4 && z > 581.2 && z < 583) return true;
+  if (x > 317.4 && x < 326.6 && z > 577.3 && z < 579.1) return true;
+  if (x > 315.2 && x < 326.8 && z > 585.1 && z < 586.9) return true;
   return villaPool(x, z) !== null;
 }
 

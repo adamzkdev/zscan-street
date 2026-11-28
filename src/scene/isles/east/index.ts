@@ -6,6 +6,7 @@ import { carObject, type CarKind } from "../../real/cars";
 import { kBeachBar, kBeachSet, kLifeguard, kVolleyNet, type KSlot, type KW } from "../../real/keysreal";
 import { keysMat } from "../../real/keysmats";
 import { hex, Kit, type V2, type V3 } from "../../real/lmkit";
+import { emptyOut, front as martFront, frontFrame, MartDecals, store } from "../../real/marts";
 import { placeProps, type PropSpot } from "../../real/props";
 import { plantTrees, type TreeSpot } from "../../real/trees";
 import type { Box, IsleContent, IsleCtx, IsleFacade } from "../types";
@@ -23,7 +24,10 @@ import { ZB, ZBEACH, ZDX, ZLAND, ZX, ZZ } from "./plan";
  *  - Palette Town: the arcaded hall, and the Zaiba Wheel (a hundred metres, lit in rainbow at night);
  *  - Big Proof: the convention hall's four upturned pyramids on their stems;
  *  - the Telecom Gate (two towers joined high up), Hotel Zaiba, the Heights' residential towers,
- *    mid-rise flats along Ariake Street, shops along Seaside Road.
+ *    mid-rise flats along Ariake Street, shops along Seaside Road;
+ *  - the 24-hour stores (src/scene/real/marts.ts): ZK MART among the shops on Seaside Road, KONBINI Z
+ *    on the ground floor of a block of flats on Ariake Street, SHIELD 24 and its parking on Heights
+ *    Road; the two malls' doors open into their atriums (src/interior/islemall.ts).
  */
 
 type Face = "s" | "n" | "e" | "w";
@@ -104,6 +108,7 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
   for (const f of c.facades) (f.x0 += ZDX), (f.x1 += ZDX), (f.door.x += ZDX);
   for (const p of c.places) p.box = { ...p.box, x0: p.box.x0 + ZDX, x1: p.box.x1 + ZDX };
   for (const w of c.walks) (w[0] += ZDX), (w[2] += ZDX);
+  for (const l of c.lamps ?? []) l[0] += ZDX;
   return c;
 }
 
@@ -115,13 +120,16 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
   const signs = new THREE.Group();
   signs.name = "zaiba:signs";
   root.add(signs);
+  /** The stores' pictures (one draw), their doors, furniture and lights. */
+  const MA = new MartDecals();
+  const mo = emptyOut();
 
   /**
    * A front door on face `face` of a building whose front line is `front`, centred `at` along it:
    * a glazed lobby lit behind, the doors in their frame, a canopy with its light. The game's door
    * (a building type for the interiors) faces the street.
    */
-  const door = (K: Kit, face: Face, at: number, front: number, type: string, o: { w?: number; h?: number; tint?: string } = {}) => {
+  const door = (K: Kit, face: Face, at: number, front: number, type: string, o: { w?: number; h?: number; tint?: string; name?: string } = {}) => {
     const w = o.w ?? 10,
       h = o.h ?? 4.4;
     const [ox, oz] = OUT[face];
@@ -145,12 +153,12 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
     box("lm.Concrete034", -2.2, 2.2, Y0 - 0.02, Y0 + 0.06, 0, 1.2, hex("#cfcac2"));
     const d = P(0, 0, 0.35);
     const along = ox === 0 ? at : front;
-    facades.push({ type, face, x0: ox === 0 ? at - w / 2 : front, x1: ox === 0 ? at + w / 2 : front, z: ox === 0 ? front : at, out: { x: ox, y: 0, z: oz }, door: { x: d[0], z: d[2] } });
+    facades.push({ type, face, x0: ox === 0 ? at - w / 2 : front, x1: ox === 0 ? at + w / 2 : front, z: ox === 0 ? front : at, out: { x: ox, y: 0, z: oz }, door: { x: d[0], z: d[2] }, ...(o.name ? { name: o.name } : {}) });
     void along;
   };
 
   /** A building: its body in a photographed facade (`slot`, floors of 3.4 m), a roof parapet, its door. */
-  const building = (b: Box, h: number, slot: string, col: string, face: Face, type: string, o: { at?: number; roof?: string } = {}) => {
+  const building = (b: Box, h: number, slot: string, col: string, face: Face, type: string, o: { at?: number; roof?: string; noDoor?: boolean } = {}) => {
     const K = new Kit({ lod: 0 });
     K.box(slot as never, b.x0, Y0, b.z0, b.x1, Y0 + h, b.z1, hex(col), { fh: 3.4, skip: "-y" });
     // the parapet and the roof's plant
@@ -161,7 +169,7 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
     const [ox] = OUT[face];
     const front = face === "s" ? b.z1 : face === "n" ? b.z0 : face === "e" ? b.x1 : b.x0;
     const at = o.at ?? (ox === 0 ? cx : cz);
-    door(K, face, at, front, type);
+    if (!o.noDoor) door(K, face, at, front, type);
     S.add(kitGeos(K.out()), cx, cz);
   };
 
@@ -231,10 +239,13 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
       K.box("lm.glass", x0 - 6.05, Y0 + y, z0 + 2, x0 - 5.95, Y0 + y + 1.1, z1 - 2, hex("#8fa4b0"));
       for (let z = z0 + 4; z < z1 - 2; z += 6) K.box("lm.Wood049", x0 - 5.9, Y0, z - 0.2, x0 - 5.5, Y0 + y - 0.35, z + 0.2, hex("#8a6648"));
     }
-    door(K, "w", -112, x0, "shophouse", { w: 14, h: 4.8, tint: "#ffd9a0" });
-    door(K, "n", 741, z0, "shophouse", { w: 10 });
+    door(K, "w", -112, x0, "streetshop", { w: 14, h: 4.8, tint: "#ffd9a0", name: "ZAIBA DECKS" });
+    door(K, "n", 741, z0, "streetshop", { w: 10, name: "ZAIBA DECKS" });
     S.add(kitGeos(K.out()), 741, -112);
     signs.add(put(sign("ZAIBA DECKS", 26, 4, "#ffffff"), x0 - 0.3, Y0 + 19.5, -112, "w"));
+    // its banners down the west face, either side of the entrance
+    const F = frontFrame("w", x0, -112);
+    for (const u of [-24, -17, 17, 24]) MA.onFront(F, "banner:decks", u - 0.9, u + 0.9, Y0 + 5.6, Y0 + 15, 0.06);
     places.push({ name: "Zaiba Decks", box: { x0: 697, x1: 775, z0: -149, z1: -75 } });
   }
 
@@ -248,10 +259,13 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
     K.box("lm.glass", 810, Y0, -143, 840, Y0 + 24, -136, hex("#55708a"));
     for (let x = 810; x <= 840; x += 5) K.box("lm.Metal032.metal", x - 0.2, Y0, -143.25, x + 0.2, Y0 + 24, -142.9, hex("#f0f0ee"));
     for (const y of [6, 12, 18, 24]) K.box("lm.Metal032.metal", 810, Y0 + y - 0.25, -143.25, 840, Y0 + y + 0.25, -142.9, hex("#f0f0ee"));
-    door(K, "n", 825, -143.3, "shophouse", { w: 16, h: 5.6, tint: "#fff2dc" });
-    door(K, "w", -100, 790, "shophouse", { w: 10 });
+    door(K, "n", 825, -143.3, "streetshop", { w: 16, h: 5.6, tint: "#fff2dc", name: "SHIELD CITY" });
+    door(K, "w", -100, 790, "streetshop", { w: 10, name: "SHIELD CITY" });
     S.add(kitGeos(K.out()), 825, -110);
     signs.add(put(sign("SHIELD CITY", 28, 4.4, "#ffffff"), 825, Y0 + 26.6, -143.4, "n"));
+    // its banners down the north face, either side of the atrium
+    const F = frontFrame("n", -136, 825);
+    for (const u of [-30, -22, 22, 30]) MA.onFront(F, "banner:shield", u - 1, u + 1, Y0 + 8, Y0 + 22, 0.06);
     places.push({ name: "Shield City", box: { x0: 785, x1: 864, z0: -149, z1: -75 } });
   }
   await ctx.yieldFrame();
@@ -439,7 +453,22 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
     [-60, -26, "f020", "#ece2d2", "apartment"],
     [-20, 12, "f019", "#dad2c6", "apartment"],
   ];
-  for (const [z0, z1, slot, col, type] of east) building({ x0: 964, x1: 994, z0, z1 }, 18 + Math.abs(Math.round(z0)) % 3 * 3.4, slot, col, "w", type);
+  east.forEach(([z0, z1, slot, col, type], i) => {
+    // (one of them: KONBINI Z on its ground floor, its door the store's)
+    const konbini = i === 4;
+    building({ x0: 964, x1: 994, z0, z1 }, 18 + (Math.abs(Math.round(z0)) % 3) * 3.4, slot, col, "w", type, { noDoor: konbini });
+    if (konbini) {
+      const K = new Kit({ lod: 0 });
+      martFront(K, MA, { chain: "konbiniz", face: "w", front: 964, at: (z0 + z1) / 2, w: 15, y0: Y0 }, mo);
+      S.add(kitGeos(K.out()), 964, (z0 + z1) / 2);
+    }
+  });
+  // SHIELD 24 on Heights Road: the stand-alone store in the Heights' empty corner, its bays and pylon
+  {
+    const K = new Kit({ lod: 0 });
+    store(K, MA, { chain: "shield24", face: "s", front: ZZ.heights - 5, at: 718, w: 14, d: 11, bays: 3, pylon: 1, y0: Y0 }, mo);
+    S.add(kitGeos(K.out()), 718, ZZ.heights - 14);
+  }
   await ctx.yieldFrame();
 
   // ---------------------------------------------------------------------------------------------------
@@ -454,6 +483,11 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
       const b = { x0: x, x1: x + 20, z0: 29, z1: 38.5 };
       K.box("plaster", b.x0, Y0, b.z0, b.x1, Y0 + 7.4, b.z1, hex(cols[k % cols.length]), { skip: "-y" });
       K.box("lm.Concrete034", b.x0 - 0.15, Y0 + 7.4, b.z0 - 0.15, b.x1 + 0.15, Y0 + 8.1, b.z1 + 0.15, hex("#b0aaa0"));
+      if (trades[k % trades.length] === "KONBINI") {
+        // the konbini: ZK MART's front over the shop's ground floor (no awning, its own sign)
+        martFront(K, MA, { chain: "zkmart", face: "n", front: b.z0 - 0.08, at: x + 10, w: 16, y0: Y0 }, mo);
+        continue;
+      }
       // the shop window lit, the awning over it
       K.box("lm.glow", b.x0 + 1, Y0 + 0.5, b.z0 - 0.06, b.x1 - 1, Y0 + 3.4, b.z0 - 0.02, hex("#ffd9a0", 0.6));
       K.box("fabric", b.x0 + 0.6, Y0 + 3.6, b.z0 - 1.8, b.x1 - 0.6, Y0 + 3.8, b.z0, hex(["#c8442c", "#2e5a8a", "#3a7a4a", "#e0b030", "#7a3a6a"][k % 5]));
@@ -512,6 +546,8 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
     }
   }
 
+  // the stores' doors and their furniture in with the rest (before the lamps and trees look for room)
+  for (const f of mo.facades) facades.push(f);
   // ---------------------------------------------------------------------------------------------------
   // the streets' lamps, trees on the boulevards, a vending machine by the shops
   const juncs: [number, number][] = [];
@@ -546,6 +582,7 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
     [ZX.ariake - 9, 27.6],
   ])
     props.push({ type: "vending", args: ["red"], x, z, y: Y0, rot: Math.PI });
+  props.push(...mo.props);
   placeProps(near, props);
   plantTrees(near, trees);
   await ctx.yieldFrame();
@@ -640,9 +677,20 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
         }
       }
     }
+    // one in a bay of the store's forecourt
+    for (const b of mo.bays.slice(1, 2)) {
+      const obj = carObject("sedan", { paint: "#c8ccd4" });
+      obj.position.set(b.x, 0.012 + Y0, b.z);
+      obj.rotation.y = b.rot;
+      obj.userData.kind = "sedan";
+      near.add(obj);
+      parked.push({ obj, kind: "sedan" });
+    }
   }
 
   S.build(root);
+  const marts = MA.mesh("zaiba:marts");
+  if (marts) root.add(marts);
 
   let rot = 0;
   return {
@@ -650,6 +698,7 @@ async function buildLocal(ctx: IsleCtx, roots: unknown): Promise<IsleContent> {
     parked,
     walks,
     places,
+    lamps: mo.lamps,
     update(dt) {
       // the wheel: once round in a quarter of an hour
       rot += dt * ((Math.PI * 2) / 900);

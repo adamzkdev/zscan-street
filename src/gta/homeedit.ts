@@ -13,7 +13,8 @@ import { Home, storeTab, type HomeSite } from "./home";
  *   Q . / ,    (not furnishing) the radio: next station / the one before (and off)
  *
  * You carry a piece by walking: it stays in front of you on the floor, on a quarter-metre grid; a
- * print or a sign goes on the nearest wall. The layout is kept by home.ts (this browser).
+ * print or a sign goes on the nearest wall. Upstairs or down, it goes on the floor you are on. The
+ * layout is kept by home.ts (this browser).
  */
 
 type Mode = "idle" | "choose" | "carry";
@@ -182,7 +183,7 @@ export class HomeEdit {
     }
     const { x, z, rot } = this.spot;
     this.end();
-    Home.place(id, x, z, rot);
+    Home.place(id, x, z, rot, Home.room?.floor() ?? 0);
     this.h.blip();
     return true;
   }

@@ -110,6 +110,40 @@ export const BAY = {
 export const SHOTENGAI = { x: ST.shotengai, z0: -39.4 + 1, z1: 32 - 1, half: 4 + 2.6 };
 
 /**
+ * The 24-hour convenience stores on the city's corners (src/scene/real/marts.ts draws them, the chains
+ * are src/scene/real/martdata.ts): the block (its west and north edges), the row they front (s: the
+ * block's south side, n: its north side), the corner they take, their chain, parking bays on the
+ * forecourt (deep blocks only). The block's rows of buildings are kept clear of them.
+ */
+export const CITY_MARTS: { x0: number; z0: number; face: "s" | "n"; end: "w" | "e"; chain: "zkmart" | "shield24" | "konbiniz" | "zec24"; bays: number; form?: "front" }[] = [
+  // on the avenue: across from the hawker centre, and at its west end by the ring road
+  { x0: -187, z0: 2.6, face: "n", end: "e", chain: "zkmart", bays: 3 },
+  { x0: -218, z0: -39.4, face: "s", end: "w", chain: "shield24", bays: 3 },
+  // on Boulevard North: north of Central Park, in Midtown, by the ring road east
+  { x0: -50, z0: -146, face: "n", end: "w", chain: "konbiniz", bays: 0 },
+  { x0: 165, z0: -146, face: "n", end: "e", chain: "zec24", bays: 0 },
+  { x0: 201, z0: -185, face: "s", end: "e", chain: "shield24", bays: 0 },
+  // on the south bank, at the corner of the east boulevard
+  { x0: 93, z0: 77, face: "s", end: "e", chain: "zkmart", bays: 0 },
+  // on the ground floor of a block of flats ("front"): Boulevard North by Boulevard West, and uptown
+  { x0: -112, z0: -185, face: "s", end: "w", chain: "konbiniz", bays: 0, form: "front" },
+  { x0: -50, z0: -185, face: "s", end: "e", chain: "zkmart", bays: 0, form: "front" },
+];
+/** A store of CITY_MARTS, placed: its front line, its centre along it, its frontage and depth. */
+export interface CityMart {
+  chain: "zkmart" | "shield24" | "konbiniz" | "zec24";
+  face: "s" | "n";
+  front: number;
+  at: number;
+  w: number;
+  d: number;
+  bays: number;
+  pylon: -1 | 0 | 1;
+  /** "front": the konbini on a block of flats' ground floor; else the stand-alone store. */
+  form?: "front";
+}
+
+/**
  * The landmarks' lots: whole blocks (merged across the small streets inside them) kept for a
  * building of their own, placed like a city planner would.
  */
@@ -462,6 +496,7 @@ const SMALL = new Set(["bollard", "cone", "hydrant", "trashBin", "mailbox", "sto
 export function planCity() {
   const jobs: BuildingJob[] = [];
   const props: PropJob[] = [];
+  const marts: CityMart[] = [];
   const rects: [number, number, number, number][] = [];
   const circles: [number, number, number][] = [];
   let id = 0;
@@ -942,13 +977,31 @@ export function planCity() {
       };
       // the avenue's blocks get the neon (front row); the rest are the city around
       const onAvenue = (face: string) => (face === "s" && Math.abs(z1 - CITY.road.z0) < 0.1) || (face === "n" && Math.abs(z0 - CITY.road.z1) < 0.1);
-      if (south) fill("s", x0 + PAVE, x1 - PAVE, z1 - PAVE, onAvenue("s"));
+      // a 24-hour store on one of its corners (CITY_MARTS): its frontage kept from both rows, its depth
+      // from the side rows
+      const ms = CITY_MARTS.find((m) => Math.abs(m.x0 - x0) < 0.6 && Math.abs(m.z0 - z0) < 0.6 && !branchAt.has(`${x0},${z0}`));
+      let ra = x0 + PAVE,
+        rb = x1 - PAVE,
+        md = 0;
+      if (ms) {
+        const sw = ms.form === "front" ? 12 : 13,
+          sd = 9.5;
+        md = ms.form === "front" ? 1.2 + sd : (ms.bays ? 7.2 : 2.2) + sd;
+        // (the pylon at the corner's end: −u is west on a south front, east on a north one)
+        const west = ms.end === "w";
+        marts.push({ chain: ms.chain, face: ms.face, front: ms.face === "s" ? z1 - PAVE : z0 + PAVE, at: west ? ra + sw / 2 : rb - sw / 2, w: sw, d: sd, bays: ms.bays, pylon: ms.bays ? ((ms.face === "s") === west ? -1 : 1) : 0, ...(ms.form ? { form: ms.form } : {}) });
+        if (west) ra += sw + 0.6;
+        else rb -= sw + 0.6;
+      }
+      if (south) fill("s", ra, rb, z1 - PAVE, onAvenue("s"));
       // a shallow block still fronts its one street (the south bank faces the river)
-      if (north && (z1 - z0 > DEEP * 2 + 2 || !south)) fill("n", x0 + PAVE, x1 - PAVE, z0 + PAVE, onAvenue("n"));
+      if (north && (z1 - z0 > DEEP * 2 + 2 || !south)) fill("n", ra, rb, z0 + PAVE, onAvenue("n"));
       // corners are left to the s/n rows; the shōtengai's shops squeeze a little closer
       const corner = shotengaiFace ? 6.2 : DEEP;
-      const e0 = z0 + PAVE + (north ? corner : 0),
+      let e0 = z0 + PAVE + (north ? corner : 0),
         e1 = z1 - PAVE - (south ? corner : 0);
+      if (ms && ms.face === "s") e1 = Math.min(e1, z1 - PAVE - md - 0.6);
+      if (ms && ms.face === "n") e0 = Math.max(e0, z0 + PAVE + md + 0.6);
       if (e1 - e0 > 5) {
         if (east) fill("e", e0, e1, x1 - PAVE, false);
         if (west && x1 - x0 > DEEP * 2 + 2) fill("w", e0, e1, x0 + PAVE, false);
@@ -1273,6 +1326,7 @@ export function planCity() {
   return {
     jobs,
     props,
+    marts,
     rects: rects.map(([x0, z0, x1, z1], i) => (i < heartRects ? [x0, nz(z0), x1, nz(z1)] : [x0, z0, x1, z1]) as [number, number, number, number]),
     circles: circles.map(([x, z, r], i) => (i < heartCircles ? [x, nz(z), r] : [x, z, r]) as [number, number, number]),
   };

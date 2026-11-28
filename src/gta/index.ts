@@ -8,8 +8,8 @@ import { viaductBents } from "../scene/city/plan";
 import { Snark } from "../scene/snark";
 import { CAR_VIEWS, GtaCamera } from "./camera";
 import { StreetSolid } from "./collide";
-import { KEYS } from "../scene/keys/plan";
-import { ISLES } from "../scene/isles/plan";
+import { KEYS, SEA_Y, VILLA } from "../scene/keys/plan";
+import { ISLES, WORLD } from "../scene/isles/plan";
 import { F as WOODS } from "../scene/forest/land";
 import { doorDepth, doorHalf, Doors, type DoorSpot, type DoorStyle } from "./doors";
 import { clearTrees } from "../scene/real/trees";
@@ -45,6 +45,7 @@ import { DriveCar, SPECS, type CarBox, type VehicleKind } from "./vehicle";
 import { MOTO_SEAT } from "./models";
 import { Home } from "./home";
 import { HomeEdit, homeStart } from "./homeedit";
+import { Yacht } from "./boat";
 
 /**
  * ZStreet as an open-world game: you are a zkSNARK, in the third person, in the city as it is
@@ -273,6 +274,12 @@ export class GtaMode {
   /** Your home: furnishing it, its radio (homeedit.ts; the villa's rooms are interior/home). */
   readonly homeEdit: HomeEdit;
   readonly swim: SwimFx;
+  /** Your yacht at the villa's dock (src/gta/boat.ts): walked aboard (`aboard`), sailed from its helm (`helm`). */
+  readonly yacht = new Yacht();
+  private aboard = false;
+  private helm = false;
+  /** What E does about the yacht where you stand (board it, go ashore, dive in), and its prompt. */
+  private boatAct: { label: string; run: () => void } | null = null;
   readonly beach: Beach;
   /** The islands' cafés' customers and stallholders. */
   private sitters: Sitters;
@@ -335,6 +342,7 @@ export class GtaMode {
     this.settings = { ...DEFAULTS, ...this.loadSettings() };
     this.sound = new GtaSound(() => host.audio());
     this.swim = new SwimFx(host.scene, host.ui, () => host.audio(), (on) => host.underwater?.(on));
+    host.scene.add(this.yacht.group, this.yacht.wake);
     this.radio = new CarRadio(() => host.audio(), host.ui, { height: () => host.height(), mempool: () => host.mempool() });
     this.homeEdit = new HomeEdit({ ui: host.ui, paused: () => this.paused || !this.active, radio: this.radio, toast: (t, sub) => this.hud.toast(t, sub, "teal"), blip: () => this.sound.blip("door") });
     this.front = new FrontEnd({
@@ -668,6 +676,9 @@ export class GtaMode {
     }
     if (!this.parked.some((c) => c.kind === "gt")) this.spawnGt();
     if (home) this.parkHome(home.car, site?.bike);
+    // your yacht moored at the villa's dock, you ashore
+    this.aboard = this.helm = this.yacht.helm = false;
+    this.yacht.berth();
     this.scatterBikes();
     if (!GtaHud.coached()) this.hud.coach(0);
     else this.hud.toast(`zkSNARK #${id}`, "in ZStreet · the chain is live", "gold");
@@ -711,6 +722,8 @@ export class GtaMode {
     if (!this.active) return;
     const h = this.host;
     if (this.car) this.getOut(true);
+    this.aboard = this.helm = this.yacht.helm = false;
+    this.boatAct = null;
     this.active = false;
     this.paused = false;
     this.input.active = false;
@@ -1306,7 +1319,10 @@ export class GtaMode {
     else if (this.hud.mapOpen && inp.hit("Tab", "KeyM", "pad:back", "pad:b")) this.hud.toggleMap(false);
     if (this.car) this.drive(dt);
     else if (this.jack) this.jackStep(dt);
+    else if (this.helm) this.sail(dt);
     else this.walk(dt);
+    // (no one at the helm: the yacht carries its way to a stop, rides the swell, its wake fades)
+    if (!this.helm) this.yacht.idle(dt, this.boatWater);
     this.loose(dt);
     // the walker stands where you are: doors, talk, traffic, sound all follow
     const at = this.car ? this.car.group.position : this.player.pos;
@@ -1341,8 +1357,11 @@ export class GtaMode {
     }
     // (Enter is the coach card's: it must not also put you in a car)
     if (i.hit("KeyF", "pad:y", "touch:car")) {
-      if (this.car) this.getOut();
-      else this.getIn();
+      if (this.helm) this.leaveHelm();
+      else if (this.car) this.getOut();
+      else if (this.aboard) {
+        if (this.yacht.atHelm(this.player.pos.x, this.player.pos.z)) this.takeHelm();
+      } else this.getIn();
     }
     if (i.hit("KeyC", "pad:rb")) {
       if (this.car) {
@@ -1359,6 +1378,12 @@ export class GtaMode {
     if (this.car && i.hit("KeyQ", "Period", "pad:right")) this.radio.turn(1);
     if (this.car && i.hit("Comma", "pad:left")) this.radio.turn(-1);
     if (!this.car && this.wastedT < 0 && i.hit("KeyX", "Mouse0", "pad:x", "touch:hit")) this.player.punch();
+    // the yacht: aboard, ashore, into the sea (E)
+    const act = !this.car && !this.helm ? this.boatAct : null;
+    if (act && i.hit("KeyE", "pad:x", "touch:door")) {
+      act.run();
+      return;
+    }
     // someone to talk to (no door in reach): E, and the street's talk opens with them
     if (!this.car && !this.doors.at && this.talkable && !this.talkWith && i.hit("KeyE", "touch:door")) this.startTalk(this.talkable);
     // at a door: in
@@ -1418,16 +1443,23 @@ export class GtaMode {
       my = m.y < 0 ? m.y * 0.4 : m.y;
     }
     // the sea at your feet (Orchard Keys' beaches): how deep it is there; the camera may follow you under
-    const seaHere = h.sea?.(pl.pos.x, pl.pos.z) ?? null;
+    // (aboard your yacht: its decks are the floor, the sea under them is not yours)
+    const seaHere = this.aboard ? null : (h.sea?.(pl.pos.x, pl.pos.z) ?? null);
     {
       const c = this.camera.position;
-      const under = h.sea?.(c.x, c.z);
+      const under = this.aboard ? null : h.sea?.(c.x, c.z);
       this.cam.minY = under ? under.floor + 0.3 : seaHere ? seaHere.floor + 0.3 : 0.35;
     }
     pl.water = seaHere ? Math.max(0, seaHere.surface - seaHere.floor) : 0;
-    this.player.update(dt, mx, my, follow ? Math.abs(my) + (m.x !== 0 && my === 0 ? 0 : 0) : m.mag, !this.paused && i.sprint && my > 0, !this.paused && i.jump, ref, {
+    const deck = {
+      blocked: (x: number, z: number) => this.yacht.blocked(x, z, pl.floor),
+      floor: (x: number, z: number) => this.yacht.floorAt(x, z) ?? pl.floor,
+    };
+    this.player.update(dt, mx, my, follow ? Math.abs(my) + (m.x !== 0 && my === 0 ? 0 : 0) : m.mag, !this.paused && i.sprint && my > 0, !this.paused && i.jump, ref, this.aboard ? deck : {
       blocked: (x, z, feet) => {
         if (this.parkedAt(x, z) && feet < 1.2) return true;
+        // (the yacht's hull: swum round, not through)
+        if (this.yacht.over(x, z, 0.25)) return true;
         // the low sand and the sea: walked, waded, swum; what stands up out of them stops you (a
         // pier's pile, a tower's legs, a sandcastle), and the sea's far edge
         const sea = h.sea?.(x, z);
@@ -1491,13 +1523,14 @@ export class GtaMode {
     if (follow && i.idleLook > 0.6) this.cam.follow(dt, pl.facing, pl.speed);
     // (the camera stops at what would hide you: a building, a tree's crown; not a lamp post, a sign,
     // a bus shelter's roof or a stall, which it passes, the way the games' cameras do)
-    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (h.beyond(x, z) ? solid.ready && (solid.topAt(x, z) ?? -9) > this.player.pos.y + 0.85 && !solid.thinAt(x, z) : h.nav.wall(x, z)) || this.crown(x, z) });
+    const inSaloon = this.aboard && this.yacht.inSaloon(pl.pos.x, pl.pos.z);
+    this.cam.foot(dt, this.player.pos, { wall: (x, z) => this.aboard ? this.yacht.camWall(x, z, inSaloon) : (h.beyond(x, z) ? solid.ready && (solid.topAt(x, z) ?? -9) > this.player.pos.y + 0.85 && !solid.thinAt(x, z) : h.nav.wall(x, z)) || this.crown(x, z) });
     pl.group.visible = this.cam.armLength > 0.8;
     // in the sea: rings, splashes, the view under the surface
     {
-      const here = h.sea?.(pl.pos.x, pl.pos.z) ?? null;
+      const here = this.aboard ? null : (h.sea?.(pl.pos.x, pl.pos.z) ?? null);
       const c = this.camera.position;
-      const camSea = h.sea?.(c.x, c.z) ?? null;
+      const camSea = this.aboard ? null : (h.sea?.(c.x, c.z) ?? null);
       this.swim.update(dt, pl.pos, here ? Math.max(0, here.surface - here.floor) : 0, pl.speed, pl.facing, here?.surface ?? 0, this.camera, camSea ? camSea.surface - camSea.floor : null);
     }
     // sprinting into people: they go down
@@ -1517,14 +1550,21 @@ export class GtaMode {
     }
     // a door within reach first, then a car
     this.doors.update(dt, { x: pl.pos.x, z: pl.pos.z, heading: pl.facing });
-    const door = this.doors.at;
-    const r = door ? null : this.reachable();
+    // the yacht first of all where it is in reach: aboard, ashore, the helm
+    this.boatAct = this.wastedT >= 0 || this.talkWith ? null : this.boatAction();
+    const helmHere = this.aboard && this.yacht.atHelm(pl.pos.x, pl.pos.z);
+    const door = this.boatAct || helmHere || this.aboard ? null : this.doors.at;
+    const r = door || this.boatAct || this.aboard ? null : this.reachable();
     const touch = matchMedia("(pointer: coarse)").matches;
-    this.talkable = door || this.talkWith || this.wastedT >= 0 || pl.guard ? null : this.peds.talkable(pl.pos.x, pl.pos.z, -Math.sin(pl.facing), -Math.cos(pl.facing));
+    this.talkable = door || this.boatAct || this.aboard || this.talkWith || this.wastedT >= 0 || pl.guard ? null : this.peds.talkable(pl.pos.x, pl.pos.z, -Math.sin(pl.facing), -Math.cos(pl.facing));
     this.hud.prompt(
       this.wastedT >= 0 || this.talkWith
         ? null
-        : door
+        : helmHere
+          ? `<kbd>F</kbd> Take the helm`
+          : this.boatAct
+            ? `<kbd>${touch ? "Tap" : "E"}</kbd> ${this.boatAct.label}`
+            : door
           ? `<kbd>${touch ? "Tap" : "E"}</kbd> ${door.key.startsWith("ferry:") ? "Board" : "Enter"} · ${door.label}`
           : r
             ? `<kbd>F</kbd> ${r.car ? (r.kind === "gt" ? "Get in your ZK-GT" : `Get in the ${r.name.toLowerCase()}`) : `Take the ${r.name.toLowerCase()}`}`
@@ -1532,7 +1572,164 @@ export class GtaMode {
               ? `<kbd>${touch ? "Tap" : "E"}</kbd> Talk · zkSNARK #${this.talkable.id}`
               : null,
     );
-    this.hud.doorButton(!!door || !!this.talkable);
+    this.hud.doorButton(!!door || !!this.talkable || !!this.boatAct);
+    this.host.blur(0);
+  }
+
+  /** Deep enough for the yacht's hull at (x, z): the solid shape's hole (open water) or a floor well under the surface, inside the world. */
+  private boatWater = (x: number, z: number) => {
+    if (x < WORLD.x0 || x > WORLD.x1 || z < WORLD.z0 || z > WORLD.z1) return false;
+    if (!this.solid.ready) return true;
+    const t = this.solid.topAt(x, z);
+    if (t === undefined || t !== t) return !this.host.footSpecial(x, z) || !!this.host.sea?.(x, z);
+    // (deep: a floor well under the surface; or the bay's own water, drawn into the picture at its level)
+    return t < SEA_Y - 0.9 || Math.abs(t - SEA_Y) < 0.12;
+  };
+
+  /**
+   * The yacht where you stand: aboard (moored, from the dock by its stern; swimming, up its swim
+   * platform), ashore (the dock at its berth, or land within a few steps of the rail), into the sea
+   * off its side where it can be swum. Null when none is in reach.
+   */
+  private boatAction(): { label: string; run: () => void } | null {
+    const pl = this.player,
+      y = this.yacht;
+    const P = pl.pos;
+    if (!this.aboard) {
+      const plat = y.platform();
+      const B = VILLA.yacht.board;
+      const fromDock = y.moored && Math.hypot(P.x - B.x, P.z - B.z) < 2.6;
+      const swimming = pl.water > 0.9 && Math.hypot(P.x - plat.x, P.z - plat.z) < 4.5;
+      // (or from a quay, a pier, a beach she lies off: within a few steps of her rail, on the level)
+      const alongside = y.over(P.x, P.z, 3.5) && Math.abs(P.y - (SEA_Y + 1.6)) < 3.5;
+      if (!fromDock && !swimming && !alongside) return null;
+      return {
+        label: swimming ? "Climb aboard" : "Board your yacht",
+        run: () => {
+          const q = y.platform();
+          this.aboard = true;
+          this.swim.reset();
+          pl.water = 0;
+          pl.place(q.x, q.y, q.z, q.facing);
+          this.cam.behind(q.facing, -0.18);
+          this.cam.snap(pl.pos.clone().setY(pl.pos.y + 1.55));
+          this.sound.blip("door");
+          if (!this.yachtTold) {
+            this.yachtTold = true;
+            this.hud.toast("Your yacht", "up the steps · F at the helm in the saloon", "teal");
+          }
+        },
+      };
+    }
+    // aboard: the dock at the berth
+    if (y.moored) {
+      const B = VILLA.yacht.board;
+      if (Math.hypot(P.x - B.x, P.z - B.z) < 6) return { label: "Go ashore", run: () => this.ashore(B.x, B.z) };
+    }
+    // land within a few steps of where you stand (a quay, a pier, a beach): ashore there
+    if (this.solid.ready) {
+      let best: { x: number; z: number; d: number } | null = null;
+      for (let r = 1.5; r <= 6 && !best; r += 1.5)
+        for (let k = 0; k < 16; k++) {
+          const a = (k / 16) * Math.PI * 2;
+          const x = P.x + Math.cos(a) * r,
+            z = P.z + Math.sin(a) * r;
+          if (y.over(x, z, 0.4)) continue;
+          const t = this.solid.topAt(x, z);
+          if (t === undefined || t !== t || t < -0.35 || t > P.y + 1.2) continue;
+          if (!this.solid.foot(x, z, t).ok || this.host.footBlocked(x, z)) continue;
+          if (!best || r < best.d) best = { x, z, d: r };
+        }
+      if (best) {
+        const b = best;
+        return { label: "Go ashore", run: () => this.ashore(b.x, b.z) };
+      }
+    }
+    // the sea off the side, where it is swum (Orchard Keys' waters, the islands' beaches)
+    const [lx, lz] = y.local(P.x, P.z);
+    const side = lz >= 0 ? 1 : -1;
+    const [ox, oz] = y.world(lx, lz + side * 4.5);
+    const sea = this.host.sea?.(ox, oz);
+    if (sea && sea.surface - sea.floor > 1.2 && !y.over(ox, oz, 0.4)) return { label: "Dive in", run: () => this.overboard(ox, oz, sea.surface) };
+    return null;
+  }
+  private yachtTold = false;
+
+  /** Off the yacht onto land at (x, z). */
+  private ashore(x: number, z: number) {
+    this.aboard = false;
+    const t = this.solid.ready ? this.solid.topAt(x, z) : undefined;
+    const floor = this.host.ground(x, z) ?? (t !== undefined && t === t ? t : this.host.curb);
+    const away = Math.atan2(-(x - this.yacht.x), -(z - this.yacht.z));
+    this.player.place(x, floor, z, away);
+    this.cam.behind(away, -0.18);
+    this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.55));
+    this.sound.blip("door");
+  }
+
+  /** Off the yacht's side into the sea at (x, z). */
+  private overboard(x: number, z: number, surface: number) {
+    this.aboard = false;
+    const away = Math.atan2(-(x - this.yacht.x), -(z - this.yacht.z));
+    this.player.place(x, surface - 0.6, z, away);
+    this.cam.behind(away, -0.12);
+    this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.3));
+    this.swim.splashAt(x, surface, z);
+  }
+
+  /** At the helm: the yacht is yours to sail. */
+  private takeHelm() {
+    this.helm = this.yacht.helm = true;
+    this.boatAct = null;
+    this.swim.reset();
+    this.radio.car(true);
+    this.player.group.visible = false;
+    this.cam.behind(this.yacht.yaw - Math.PI / 2, -0.2);
+    this.sound.blip("door");
+    this.hud.toast("At the helm", "W ahead · S astern · A/D the rudder · F to stand up", "teal");
+  }
+
+  /** Up from the helm: on your feet beside it, the yacht carrying its way to a stop. */
+  private leaveHelm() {
+    this.helm = this.yacht.helm = false;
+    this.radio.car(false);
+    const s = this.yacht.helmSpot();
+    this.player.place(s.x, s.y, s.z, s.facing);
+    this.player.group.visible = true;
+    this.cam.behind(s.facing, -0.18);
+    this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.55));
+    this.sound.drive(null);
+    this.sound.hornOn(false);
+    this.horn = false;
+    this.host.blur(0);
+  }
+
+  /** Sailing: the helm's controls to the yacht, you at the wheel, the camera astern of her, the engines' note. */
+  private sail(dt: number) {
+    const y = this.yacht;
+    const i = this.input;
+    const d = this.paused ? { throttle: 0, brake: 0, steer: 0 } : i.drive();
+    y.update(dt, d, this.boatWater);
+    if (y.hit !== null && y.hit > 1.5) {
+      const k = Math.min(1, y.hit / 8);
+      this.cam.shake(k * 0.8);
+      this.sound.crash(k * 0.6);
+      if (y.hit > 4) this.hud.toast("Aground", "she touched — astern (S) to back off", "bad");
+    }
+    // you at the wheel (the walker, the doors, the map and the people all follow you there)
+    const s = y.helmSpot();
+    this.player.place(s.x, s.y, s.z, s.facing);
+    this.player.group.visible = false;
+    this.doors.update(dt, null);
+    this.hud.doorButton(false);
+    this.hud.prompt(null);
+    const horn = !this.paused && i.down("KeyE", "KeyH");
+    if (horn !== this.horn) this.sound.hornOn((this.horn = horn));
+    this.cam.back = !this.paused && i.down("KeyB");
+    // (the camera trails her from high astern: her length counts for the arm)
+    const at = new THREE.Vector3(y.x, SEA_Y + 5.2, y.z);
+    this.cam.car(dt, at, y.yaw, y.speed, y.v < 0, this.settings.follow ? Math.max(i.idleLook, i.idleLook > 0.5 ? 2 : 0) : i.idleLook, { wall: () => false }, 74);
+    this.sound.drive({ rpm: y.rpm * 0.45, throttle: d.throttle * 0.6, drift: Math.min(0.6, y.speed / 14), nitro: false, speed: y.speed });
     this.host.blur(0);
   }
 
@@ -2512,7 +2709,7 @@ export class GtaMode {
   /** What moves (left out of the street's solid shape and of a door's view). */
   private movers(): THREE.Object3D[] {
     const h = this.host;
-    return [...h.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, this.front.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])];
+    return [...h.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, this.front.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : []), this.yacht.group, this.yacht.wake];
   }
   /** The still things drawn round a spot (meshes, their world spheres), for a door's view; made once a second at most. */
   private stills: { at: number; list: { o: THREE.Mesh; c: THREE.Vector3; r: number; lo: number; hi: number }[] } | null = null;
@@ -3184,9 +3381,9 @@ export class GtaMode {
         z: at.z,
         camYaw: this.cam.yaw,
         heading,
-        inCar: !!car,
-        speed: car?.speed ?? this.player.speed,
-        rpm: car?.rpm ?? 0,
+        inCar: !!car || this.helm,
+        speed: car?.speed ?? (this.helm ? this.yacht.speed : this.player.speed),
+        rpm: car?.rpm ?? (this.helm ? this.yacht.rpm : 0),
         gear: car?.gear ?? 1,
         nos: car?.nos ?? 0,
         nosOn: car?.nosOn ?? false,
@@ -3203,6 +3400,7 @@ export class GtaMode {
           const gt = this.parked.find((c) => c.kind === "gt");
           return gt && gt !== this.car ? { x: gt.group.position.x, z: gt.group.position.z } : null;
         })(),
+        yacht: this.helm ? null : { x: this.yacht.x, z: this.yacht.z },
         people,
         cars,
         goal: this.missions.next(at.x, at.z),

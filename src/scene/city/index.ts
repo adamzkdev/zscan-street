@@ -7,6 +7,7 @@ import { GROUND, terrainMat } from "../real/ground";
 import { plantTrees, speciesOf, treeLod, type Species, type TreeSpot } from "../real/trees";
 import { placeProps, REAL_PROPS, type PropSpot } from "../real/props";
 import { realBoat, realFerry } from "../real/boats";
+import { cityMarts, type MartFacade } from "../real/marts";
 import { realIslands } from "../real/islands";
 import type { Extras } from "../real/landmarks";
 import { MATERIALS, ownMaterial, propDepthMaterial, sharedFor } from "../voxel/mesher";
@@ -153,6 +154,8 @@ export interface Facade {
 export interface City {
   group: THREE.Group;
   facades: Facade[];
+  /** The 24-hour stores on its corners (src/scene/real/marts.ts): their doors, each with the chain's name. */
+  marts: MartFacade[];
   lamps: Lamp[];
   nav: Nav;
   canopies: THREE.Sphere[];
@@ -442,7 +445,14 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   tunnels(g);
   wires(g, animated);
 
-  const { jobs, props: planned, rects, circles } = planCity();
+  const { jobs, props: planned, rects, circles, marts: martSpots } = planCity();
+  // the 24-hour stores on the corners the plan kept for them: drawn here, their street furniture
+  // with the rest (bins), their footprints for the walkers, their forecourts' lights with the lamps
+  const marts = cityMarts(martSpots, CURB);
+  g.add(marts.group);
+  for (const p of marts.out.props) planned.push({ ...p, district: "downtown" });
+  for (const b of marts.out.boxes) nav.addRect(b.x0, b.z0, b.x1, b.z1);
+  for (const [x, y, z, color] of marts.out.lamps) lamps.push({ pos: new THREE.Vector3(x, y, z), color });
   // the trees are realistic (src/scene/real/trees.ts: bark, leaf cards, palms' fronds), instanced
   // here; the rest of the street's furniture goes to the props worker as before
   const props = planned.filter((p) => p.type !== "tree" && p.type !== "maple" && !REAL_PROPS.has(p.type));
@@ -963,6 +973,7 @@ export async function buildCity(progress: (k: number) => void = () => {}): Promi
   return {
     group: g,
     facades,
+    marts: marts.out.facades,
     lamps,
     nav,
     canopies,
@@ -1381,7 +1392,10 @@ function coast(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   const shape = new THREE.Shape([new THREE.Vector2(-7000, -7000), new THREE.Vector2(7000, -7000), new THREE.Vector2(7000, 7000), new THREE.Vector2(-7000, 7000)]);
   // (the plane is turned flat with its y as −z; a hole over each undersea tunnel where its tube
   // breaks the surface, its inside under the water's level)
-  for (const H of [SEA_RECT, ...SEA_HOLES]) shape.holes.push(new THREE.Path([new THREE.Vector2(H.x0, -H.z0), new THREE.Vector2(H.x0, -H.z1), new THREE.Vector2(H.x1, -H.z1), new THREE.Vector2(H.x1, -H.z0)]));
+  // (Orchard Keys' hole a little smaller than its water: the two overlap by a metre and a half, no
+  // crack of sky between them)
+  const K = { x0: SEA_RECT.x0 + 1.5, x1: SEA_RECT.x1 - 1.5, z0: SEA_RECT.z0 + 1.5, z1: SEA_RECT.z1 - 1.5 };
+  for (const H of [K, ...SEA_HOLES]) shape.holes.push(new THREE.Path([new THREE.Vector2(H.x0, -H.z0), new THREE.Vector2(H.x0, -H.z1), new THREE.Vector2(H.x1, -H.z1), new THREE.Vector2(H.x1, -H.z0)]));
   const sea = new THREE.Mesh(new THREE.ShapeGeometry(shape), addDetail(new THREE.MeshStandardMaterial({ map: wt, color: "#2f7392", roughness: 0.16, metalness: 0.25, emissive: "#05263a", emissiveIntensity: 0.7 }), "water"));
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(0, BAY.water - 0.06, 0);

@@ -197,7 +197,8 @@ self.onmessage = (e: MessageEvent<{ hgt: Float32Array; nx: number; nz: number }>
     }
     const door = at(b.door[0], 0, b.door[1]);
     const type = l.type === "diner" || l.trade === "tacos" || l.trade === "icecream" ? "cafe" : l.trade === "lounge" ? "bar" : l.type === "shop" || l.type === "gas" ? "streetshop" : l.type === "hotel" || l.type === "motel" || l.type === "club" ? "office" : "house";
-    facades.push({ type, name: l.name ?? address(l.type, l.face, door.x, door.z), face: l.face, door: [door.x, door.z], out: faceOut(l.face) });
+    // (the gas station's door is its shop's: a SHIELD 24)
+    facades.push({ type, name: l.type === "gas" ? "SHIELD 24" : (l.name ?? address(l.type, l.face, door.x, door.z)), face: l.face, door: [door.x, door.z], out: faceOut(l.face) });
   }
 
   // ---- the street: palms and lamps along the kerbs, cars parked on the side streets ---------------

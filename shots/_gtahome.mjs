@@ -1,6 +1,6 @@
 // node shots/_gtahome.mjs [URL]: your home in the game (src/gta/home.ts, homeedit.ts, interior/home, scene/keys/villa.ts)
 //  - PLAY starts you in your villa on Orchard Keys (in the hall by the front door), the ZK-GT and a bike in its forecourt
-//  - looks round the house (day; night with NIGHT=1): shots/gtahome-*.png
+//  - looks round the house (day; night with NIGHT=1): shots/gta/villa/home-*.jpg
 //  - out through the front door: you stand on the porch, your car a few steps away; get in it
 //  - the GPS to the city: its way runs out of the gate, through the tunnel and over the Golden Gate; driven (DRIVE=0 skips it)
 //  - buy a piece through the API (economy.ts buy, as the STORE's HOME tab does), go home, place it with the keys (B, F)
@@ -15,7 +15,8 @@ p.on("pageerror", (e) => errs.push(e.message));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
 const ok = (c, what, extra = "") => { if (!c) fails++; console.log(c ? "ok  " : "FAIL", what, extra); };
-const shot = (n) => p.screenshot({ path: `shots/gtahome-${n}.png` });
+// (JPEGs in the villa's folder: the disk is short)
+const shot = (n) => p.screenshot({ path: `shots/gta/villa/home-${n}.jpg`, type: "jpeg", quality: 72 });
 const atHome = () => p.waitForFunction(() => street.interiors.active?.key === "home" && street.gta.homeEdit.home, { timeout: 120000, polling: 200 });
 const boot = async () => {
   await p.waitForFunction(() => window.__streetUp && window.street?.gta?.active, { timeout: 300000, polling: 300 });
@@ -41,6 +42,7 @@ await boot();
 await p.evaluate(() => {
   localStorage.removeItem("zstreet.home.v1");
   localStorage.removeItem("zstreet.home.v2");
+  localStorage.removeItem("zstreet.home.v3");
   const e = JSON.parse(localStorage.getItem("zstreet.economy") ?? "{}");
   delete e.home;
   localStorage.setItem("zstreet.economy", JSON.stringify(e));
@@ -63,7 +65,8 @@ if (process.env.NIGHT) {
   await p.evaluate(() => street.gta.host.setSky("night"));
   await sleep(1500);
 }
-for (const [n, x, z, yaw] of [["2-great", 0, -1.8, 0], ["3-living", -2.2, -2.6, -0.95], ["4-kitchen", -6.5, -2.4, 1.15], ["5-bedroom", 8.6, -5.0, -Math.PI / 2], ["6-glass", -3.5, -9.4, 0.25], ["6b-entry", 0, -8.5, Math.PI]]) {
+// (yaw: ahead is (−sin, −cos); 0 looks into the house, toward the sea)
+for (const [n, x, z, yaw] of [["2-great", 0, -1.8, 0], ["3-stair", 4, -16, 1.94], ["4-kitchen", -10, -10, 2.1], ["5-den", 11, -17, -2.4], ["6-glass", -3.5, -16.5, 0.25], ["6b-entry", 0, -16, Math.PI]]) {
   await stand(x, z, yaw);
   await sleep(1400);
   await shot(n);
@@ -290,17 +293,18 @@ const again = await p.evaluate(async () => {
   return { q, inScene };
 });
 ok(!!again.q && Math.abs(again.q.x - placed.x) < 0.01 && Math.abs(again.q.z - placed.z) < 0.01 && again.inScene, "reload: the sofa is where you put it", JSON.stringify(again));
-// the walk round the villa: every room reached from the front door (the walker's colliders, 0.25 m grid)
-const reach = await p.evaluate(() => {
+// the walk round the villa: every room reached from the front door (the walker's colliders, 0.25 m grid),
+// downstairs, then upstairs (walked up the stair: the level the house says, its walls)
+const reachFrom = (sx, sz, pts) => p.evaluate((sx, sz, pts) => {
   const w = street.interiors.walk;
-  const seen = new Set(["0,-6"]);
-  const q = [[0, -6]];
+  const seen = new Set([`${sx * 4},${sz * 4}`]);
+  const q = [[sx * 4, sz * 4]];
   const free = (x, z) => !w.blockedAt(x / 4, z / 4);
   while (q.length) {
     const [x, z] = q.pop();
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const k = `${x + dx},${z + dz}`;
-      if (seen.has(k) || x + dx < -80 || x + dx > 80 || z + dz < -100 || z + dz > -1 || !free(x + dx, z + dz)) continue;
+      if (seen.has(k) || x + dx < -140 || x + dx > 140 || z + dz < -100 || z + dz > -1 || !free(x + dx, z + dz)) continue;
       seen.add(k);
       q.push([x + dx, z + dz]);
     }
@@ -311,10 +315,54 @@ const reach = await p.evaluate(() => {
     const [x, z] = k.split(",").map(Number);
     x0 = Math.min(x0, x / 4), x1 = Math.max(x1, x / 4), z0 = Math.min(z0, z / 4);
   }
-  return { cells: seen.size, inside: x0 >= -17 && x1 <= 17 && z0 >= -10.4, x0, x1, z0, kitchen: at(-11.4, -2.0), dining: at(-8.5, -9.5), living: at(2.0, -9.5), great: at(0, -8), corridor: at(8.3, -2.0), bedroom: at(14.5, -8.5), bath: at(12, -2.6) };
-});
+  const rooms = {};
+  for (const [n, x, z] of pts) rooms[n] = at(x, z);
+  return { cells: seen.size, inside: x0 >= -23 && x1 <= 23 && z0 >= -19.3, x0, x1, z0, rooms };
+}, sx, sz, pts);
+const reach = await reachFrom(0, -6, [["hall", 0, -3], ["great", 5, -15], ["stair-foot", -8.1, -15.4], ["kitchen", -18, -6], ["dining", -19, -12], ["sitting", -12.6, -14.5], ["den", 16, -16], ["not-the-garage", 16, -4]]);
 ok(reach.inside, "no way out through the walls or the glass", JSON.stringify({ x0: reach.x0, x1: reach.x1, z0: reach.z0 }));
-ok(reach.kitchen && reach.dining && reach.living && reach.great && reach.corridor && reach.bedroom && reach.bath, "every room reached from the front door", JSON.stringify(reach));
+const R = reach.rooms;
+ok(R.hall && R.great && R["stair-foot"] && R.kitchen && R.dining && R.sitting && R.den && !R["not-the-garage"], "every room downstairs reached from the front door", JSON.stringify(R));
+// up the stair: from its foot, W held (its treads climb the great room's west wall to the gallery)
+await stand(-8.1, -15.6, Math.PI);
+await sleep(600);
+await p.keyboard.down("KeyW");
+const climbed = await p.evaluate(async () => {
+  let best = 0;
+  for (let i = 0; i < 160; i++) {
+    const g = street.gta;
+    g.player.facing = Math.PI;
+    g.cam.behind(Math.PI, -0.12);
+    best = Math.max(best, g.player.pos.y);
+    if (street.interiors.floor === 1 && g.player.pos.z > -6.4) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const g = street.gta;
+  return { floor: street.interiors.floor, y: +g.player.pos.y.toFixed(2), best: +best.toFixed(2), at: [+g.player.pos.x.toFixed(2), +g.player.pos.z.toFixed(2)] };
+});
+await p.keyboard.up("KeyW");
+ok(climbed.floor === 1 && climbed.y > 4.2 && climbed.at[1] > -7.4, "walked up the stair to the gallery", JSON.stringify(climbed));
+await shot("13-gallery");
+const reach1 = await reachFrom(0, -3.5, [["gallery", 0, -3.5], ["guest", -20, -13], ["study", -12.5, -12], ["master", 13, -14], ["bath", 20, -12], ["dressing", 18, -4], ["not-the-void", 0, -12]]);
+const R1 = reach1.rooms;
+ok(reach1.inside && R1.gallery && R1.guest && R1.study && R1.master && R1.bath && R1.dressing && !R1["not-the-void"], "upstairs: every room reached from the gallery, the great room's void railed off", JSON.stringify({ ...R1, x0: reach1.x0, x1: reach1.x1, z0: reach1.z0 }));
+// and down again: turned round at the stair's head, W held
+await p.evaluate(() => { const g = street.gta; g.player.place(-8.1, g.player.pos.y, -6.6, 0); g.player.facing = 0; g.cam.behind(0, -0.12); });
+await sleep(400);
+await p.keyboard.down("KeyW");
+const descended = await p.evaluate(async () => {
+  for (let i = 0; i < 160; i++) {
+    const g = street.gta;
+    g.player.facing = 0;
+    g.cam.behind(0, -0.12);
+    if (street.interiors.floor === 0 && g.player.pos.z < -15.2) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const g = street.gta;
+  return { floor: street.interiors.floor, y: +g.player.pos.y.toFixed(2), at: [+g.player.pos.x.toFixed(2), +g.player.pos.z.toFixed(2)] };
+});
+await p.keyboard.up("KeyW");
+ok(descended.floor === 0 && descended.y < 0.3, "and down again to the great room", JSON.stringify(descended));
 console.log("errors", errs.length, errs.slice(0, 3).join("\n"));
 console.log(fails ? `${fails} FAILED` : "ALL OK");
 await b.close();

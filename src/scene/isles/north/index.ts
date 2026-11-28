@@ -9,6 +9,7 @@ import { kBeachSet, kLifeguard, type KSlot, type KW } from "../../real/keysreal"
 import { keysMat } from "../../real/keysmats";
 import { hex, Kit, type V3 } from "../../real/lmkit";
 import { placeProps, type PropSpot } from "../../real/props";
+import { emptyOut, front as martFront, lot as carPark, mall as mallBox, MartDecals, store } from "../../real/marts";
 import { heightfield, natureMat } from "../../real/terrain";
 import { plantTrees, type TreeSpot, type Species } from "../../real/trees";
 import { markingsTexture } from "../../textures";
@@ -29,7 +30,10 @@ import { BAVE, NLAND, NX, NZ, ONSEN, relief, STATION, TERRACE, TOUGE, TOUGE_W, V
  *    ramen, izakaya, the sake brewery, the fish market; every front door faces its street;
  *  - the open-air hot spring on the slopes (a pool you can bathe in, its deck, its steam);
  *  - the harbour: piers into the sea, fishing boats; the beach west of the bridge;
- *  - forests on the lower slopes, lamps and vending machines, cars at the kerbs.
+ *  - forests on the lower slopes, lamps and vending machines, cars at the kerbs;
+ *  - the 24-hour stores (src/scene/real/marts.ts): KONBINI Z on the corner off the bridge, ZK MART
+ *    and its parking on Yumoto Street, SHIELD 24 on the ground floor of a house on Onsen Dori; and
+ *    ZUJI MALL on Onsen Dori, its car park along Minato Street.
  */
 
 type Face = "s" | "n" | "e" | "w";
@@ -360,6 +364,9 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
   const signs = new THREE.Group();
   signs.name = "zakone:signs";
   root.add(signs);
+  /** The stores' and the mall's pictures (one draw), their doors, furniture and lights. */
+  const MA = new MartDecals();
+  const mo = emptyOut();
   let seed = 7171;
   const rnd = () => ((seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x9e3779b9) >>> 0) / 4294967296);
   const inLand = (x: number, z: number, m = 0) => x > NLAND.x0 - m && x < NLAND.x1 + m && z > NLAND.z0 - m && z < NLAND.z1 + m;
@@ -961,23 +968,12 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
     // ---- the block east of Bridge Avenue (south): the konbini on the corner, ramen, izakaya ----
     {
       const [x0, x1] = xs[2];
-      // the konbini: glass front on the corner of Shore Road and Bridge Avenue (the first thing off the bridge)
+      // the konbini: KONBINI Z on the corner of Shore Road and Bridge Avenue (the first thing off the
+      // bridge), its forecourt's bays on Shore Road, its pylon at the avenue's corner
       const K = new Kit({ lod: 0 });
-      const b = { x0: x0 + 1, x1: x0 + 21, z0: shoreN - 16, z1: shoreN - 0.5 };
-      K.box("plaster", b.x0, Y0, b.z0, b.x1, Y0 + 4.6, b.z1, hex("#f2f2f0"), { skip: "-y" });
-      K.box("lm.glow", b.x0 + 0.5, Y0 + 0.1, b.z1 + 0.01, b.x1 - 0.5, Y0 + 3.2, b.z1 + 0.04, hex("#f4fbff", 0.7));
-      K.box("lm.glass", b.x0 + 0.5, Y0 + 0.1, b.z1 + 0.05, b.x1 - 0.5, Y0 + 3.2, b.z1 + 0.09, hex("#3a4a52"));
-      K.box("lm.paint", b.x0 - 0.1, Y0 + 3.3, b.z1 - 0.1, b.x1 + 0.1, Y0 + 3.8, b.z1 + 0.2, hex("#2aa05a"));
-      K.box("lm.paint", b.x0 - 0.1, Y0 + 3.8, b.z1 - 0.1, b.x1 + 0.1, Y0 + 4.2, b.z1 + 0.2, hex("#f4f4f2"));
-      K.box("lm.paint", b.x0 - 0.1, Y0 + 4.2, b.z1 - 0.1, b.x1 + 0.1, Y0 + 4.6, b.z1 + 0.2, hex("#2a6ab0"));
-      K.box("lm.Concrete034", b.x0 - 0.2, Y0 + 4.6, b.z0 - 0.2, b.x1 + 0.2, Y0 + 5.2, b.z1 + 0.2, hex("#c8c4bc"));
-      door(K, "s", b.x1 - 4, b.z1, "streetshop", { w: 2.4, noren: "#f4f4f2", lanterns: false });
-      S.add(kitGeos(K.out()), (b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2);
-      ob.box(b.x0, b.z0, b.x1, b.z1);
-      const sg = sign("ZK MART", 6, 1.2, "#ffffff", "rgba(42,106,176,0.0)");
-      put(sg, (b.x0 + b.x1) / 2 - 4, Y0 + 4.0, b.z1 + 0.25, "s");
-      signs.add(sg);
-      for (const dx of [2.5, 3.9]) props.push({ type: "vending", args: ["blue"], x: b.x0 + dx, z: b.z1 + 1.2, y: Y0, rot: 0 });
+      store(K, MA, { chain: "konbiniz", face: "s", front: shoreN, at: x0 + 11, w: 14, d: 9.5, bays: 3, pylon: -1, y0: Y0 }, mo);
+      S.add(kitGeos(K.out()), x0 + 11, shoreN - 9);
+      for (const dx of [1.4, 2.6]) props.push({ type: "vending", args: ["blue"], x: x0 + 2 + dx, z: shoreN - 15.6, y: Y0, rot: 0 });
       row("s", shoreN, x0 + 22, x1 - 1, 11, ["ラーメン  RAMEN", "", "居酒屋  IZAKAYA", ""], ["izakaya", "shophouse", "izakaya", "machiya"]);
       row("w", x0, shoreN - 70, shoreN - 17, 11, ["寿司  SUSHI", "", "酒  SAKE BAR", "", "宿  INN"], ["izakaya", "shophouse", "izakaya", "machiya", "machiya"]);
       row("n", fS, x0 + 14, x1 - 1, 11, ["蕎麦  SOBA", "", "", "工芸  CRAFTS"]);
@@ -1014,16 +1010,48 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
       row("e", x1, shoreN - 70, shoreN - 14, 11, ["", ""]);
       row("s", NZ.onsen - 6, x0 + 1, x1 - 1, 12, ["旅館  RYOKAN", "", "", ""], ["machiya"]);
       row("n", sandoS, x0 + 1, x1 - 1, 12, ["", "", "宿  INN", ""], ["machiya"]);
+      const K = new Kit({ lod: 0 });
+      store(K, MA, { chain: "zkmart", face: "w", front: x0, at: -1412, w: 14, d: 11, bays: 3, pylon: -1, y0: Y0 }, mo);
+      S.add(kitGeos(K.out()), x0 + 12, -1412);
     }
     // ---- north of Onsen Dori, east of Bridge Avenue: shrine-side shops on the Sando and on the avenue ----
     {
       const [x0, x1] = xs[2];
       row("n", sandoS, x0 + 1, x1 - 1, 11, ["御守  CHARMS", "", "団子  DANGO", ""], ["shophouse", "machiya", "izakaya"]);
       row("w", x0, sandoS + 13, fN - 13, 11, ["", "茶屋  TEA HOUSE", ""], ["machiya", "izakaya"]);
-      row("s", fN, x0 + 12, x1 - 1, 11, ["", "", ""]);
+      {
+        const K = new Kit({ lod: 0 });
+        const f = fN - 2,
+          cx = x0 + 19.5;
+        const b = { x0: cx - 7, x1: cx + 7, z0: f - 11, z1: f };
+        K.box("plaster", b.x0, Y0, b.z0, b.x1, Y0 + 7.2, b.z1, hex("#eeeae2"), { skip: "-y" });
+        for (const [x, z] of [
+          [b.x0, b.z1],
+          [b.x1, b.z1],
+        ])
+          K.box("wood", x - 0.16, Y0 + 4.2, z - 0.16, x + 0.16, Y0 + 7.2, z + 0.16, hex("#4a3426"));
+        // the upper floor: two lattice windows lit behind, a balcony rail
+        for (const wx of [b.x0 + 1.5, b.x0 + 8.2]) {
+          K.box("lm.glow", wx, Y0 + 4.8, b.z1 + 0.01, wx + 4.3, Y0 + 6.5, b.z1 + 0.04, hex("#ffe2bc", 0.3));
+          for (let u = wx; u < wx + 4.3; u += 0.25) K.box("wood", u, Y0 + 4.8, b.z1 + 0.04, u + 0.06, Y0 + 6.5, b.z1 + 0.09, hex("#4a3426"));
+        }
+        hipRoof(K, b.x0, b.z0, b.x1, b.z1, Y0 + 7.2, 2.4, 0.8, hex("#55585e"));
+        martFront(K, MA, { chain: "shield24", face: "s", front: f, at: cx, w: 13, y0: Y0 }, mo);
+        S.add(kitGeos(K.out()), cx, f - 5);
+        ob.box(b.x0, b.z0, b.x1, b.z1);
+      }
+      row("s", fN, x0 + 28, x1 - 1, 11, ["", "", ""]);
       const [y0, y1] = xs[3];
       row("n", sandoS, y0 + 1, y1 - 1, 11, ["", "", "", ""]);
-      row("s", fN, y0 + 1, y1 - 1, 11, ["", "居酒屋  IZAKAYA", "", ""], ["machiya", "izakaya"]);
+      // ZUJI MALL: its box behind a little plaza on Onsen Dori, the glass atrium over its doors, HALO
+      // DEPT. and FRESH PROOF either side; its car park along Minato Street
+      {
+        const K = new Kit({ lod: 0 });
+        mallBox(K, MA, { mall: "zuji", face: "s", front: fN - 10, at: y0 + 38, w: 50, d: 60, h: 15, y0: Y0, atrium: 18, anchors: [[-24, -12, 0, true], [12, 24, 1, false]], clad: "#e4e0d8" }, mo);
+        carPark(K, { face: "e", front: y1, at: fN - 37, w: 64, d: 26, y0: Y0 }, mo);
+        S.add(kitGeos(K.out()), y0 + 38, fN - 40);
+        places.push({ name: "Zuji Mall", box: { x0: y0 + 13, x1: y1, z0: fN - 70, z1: fN } });
+      }
       row("w", y0, sandoS + 13, fN - 13, 11, ["", ""]);
     }
     // ---- Yumoto Garden: the bathhouse on Onsen Dori, a pond's stones, lanterns, maples ----
@@ -1060,6 +1088,9 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
       places.push({ name: "Yumoto Garden", box: { x0, x1, z0: NZ.sando + 5, z1: fN } });
     }
     places.push({ name: "Zakone", box: NLAND });
+    for (const f of mo.facades) facades.push(f);
+    props.push(...mo.props);
+    for (const b of mo.boxes) ob.box(b.x0, b.z0, b.x1, b.z1);
   }
   await ctx.yieldFrame();
 
@@ -1374,6 +1405,17 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
         }
       }
     }
+    // a few in the stores' and the mall's bays
+    mo.bays.forEach((b, i) => {
+      if ((i * 7) % 5 > 1) return;
+      const kind = kinds[(i * 3) % kinds.length];
+      const obj = carObject(kind, { paint: paints[(i * 5 + 2) % paints.length] });
+      obj.position.set(b.x, 0.012 + Y0, b.z);
+      obj.rotation.y = b.rot;
+      obj.userData.kind = kind;
+      near.add(obj);
+      parked.push({ obj, kind });
+    });
     // a few at the Fifth Station
     for (let i = 0; i < 4; i++) {
       const kind: CarKind = (["sports", "sedan", "suv", "convertible"] as CarKind[])[i];
@@ -1388,6 +1430,8 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
 
   S.build(root, "zakone:buildings");
   B.build(root, "zakone:roads");
+  const marts = MA.mesh("zakone:marts");
+  if (marts) root.add(marts);
 
   // ---------------------------------------------------------------------------------------------------
   const O = ONSEN;
@@ -1397,6 +1441,7 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
     parked,
     walks,
     places,
+    lamps: mo.lamps,
     update(dt) {
       clock += dt;
       // the steam: each puff rises off the water, swells, drifts with the breeze and fades

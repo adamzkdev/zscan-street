@@ -65,6 +65,8 @@ export interface HudState {
   routeColor: string;
   waypoint: { x: number; z: number } | null;
   car: { x: number; z: number } | null;
+  /** Your yacht (when you are not at its helm). */
+  yacht?: { x: number; z: number } | null;
   /** Other people about (dots). */
   people: { x: number; z: number }[];
   cars: { x: number; z: number }[];
@@ -158,7 +160,7 @@ export class GtaHud {
   private mapDrag: { x: number; y: number; moved: number } | null = null;
   private shown = new Set<Kind>(["run", "ride", "board", "trap"]);
   /** The kinds of places shown on the big map. */
-  private cats = new Set<Cat>(["hq", "home", "sight", "fun", "shop", "food", "bar", "work", "metro", "ferry", "car"]);
+  private cats = new Set<Cat>(["hq", "home", "sight", "fun", "shop", "food", "bar", "work", "metro", "ferry", "car", "yacht"]);
   /** The map's fixed knowledge (from the game, once its streets are in). */
   mapData: () => MapData | null = () => null;
   private hoverAt: { x: number; z: number } | null = null;
@@ -494,6 +496,10 @@ export class GtaHud {
       const [rx, ry] = to(s.car.x, s.car.z);
       if (rx * rx + ry * ry < (R - 8 * dpr) ** 2) blip(g, "car", cx + rx, cy + ry, 6.5 * dpr, dpr);
     }
+    if (s.yacht) {
+      const [rx, ry] = to(s.yacht.x, s.yacht.z);
+      if (rx * rx + ry * ry < (R - 8 * dpr) ** 2) blip(g, "yacht", cx + rx, cy + ry, 6.5 * dpr, dpr);
+    }
     if (s.waypoint) {
       let [rx, ry] = to(s.waypoint.x, s.waypoint.z);
       const d = Math.hypot(rx, ry),
@@ -673,6 +679,7 @@ export class GtaHud {
     if (md?.lines.length) have.add("metro");
     if (md?.ferries.length) have.add("ferry");
     if (s.car) have.add("car");
+    if (s.yacht) have.add("yacht");
     const cats = (Object.keys(CAT) as Cat[]).filter((c) => have.has(c));
     this.$(".gh-legend").innerHTML =
       `<h3>On the map</h3>` +
@@ -829,6 +836,10 @@ export class GtaHud {
     if (s.car && this.cats.has("car")) {
       const [x, y] = at(s.car.x, s.car.z);
       if (inView(x, y)) blip(g, "car", x, y, 9 * dpr, dpr);
+    }
+    if (s.yacht && this.cats.has("yacht")) {
+      const [x, y] = at(s.yacht.x, s.yacht.z);
+      if (inView(x, y)) blip(g, "yacht", x, y, 9 * dpr, dpr);
     }
     for (const p of s.spots) {
       if (!this.shown.has(p.kind) && !p.goal) continue;

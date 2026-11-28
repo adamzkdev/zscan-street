@@ -141,6 +141,12 @@ export class SwimFx {
     }
   }
 
+  /** A body into the water at (x, z) from above (off a yacht's side): a big splash, its sound. */
+  splashAt(x: number, surface: number, z: number) {
+    this.splash(new THREE.Vector3(x, 0, z), surface, 22, 3);
+    this.sound(0.16, 520);
+  }
+
   /** Out of the water for good (the game stopped, a car): everything off. */
   reset() {
     this.state = "dry";

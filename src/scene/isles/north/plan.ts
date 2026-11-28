@@ -143,6 +143,7 @@ export const NORTH: Isle = {
     { name: "Brooklyn Bridge", x: NB.x + 40, z: -790 },
     { name: "Zuji Touge", x: 150, z: -1790 },
     { name: "Zuji Shrine", x: -122, z: -1640 },
+    { name: "Zuji Mall", x: 13, z: -1505 },
   ],
   sound: { tracks: ["piano-waltz", "jazz-combo"], level: 0.12 },
   crossing: {

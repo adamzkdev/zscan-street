@@ -1,5 +1,6 @@
 import type { KLot } from "../keys/plan";
 import { SHOP_CELLS, type Slot } from "./buildings";
+import { chainOf, CHAINS } from "./martdata";
 
 /**
  * ORCHARD KEYS, realistic (branch gta-real, wave 2): the beach town's houses, shops, hotels, the
@@ -699,6 +700,8 @@ function shop(K: KW, l: KLot, L: Layout, r: () => number, w: number, d: number) 
   const two = trade === "surf" || trade === "lounge" || trade === "pawn";
   const H = two ? 6.6 : 4.2;
   const paint = lin(l.paint ?? "#f2eee6");
+  // (a convenience store of one of the 24-hour chains: its fascia and awning in the chain's colours)
+  const chain = trade === "konbini" ? chainOf(l.name) : null;
   const fz = L.frontZ,
     z0 = Math.max(-d / 2 + 0.6, fz - 11);
   const x0 = -w / 2 + 0.15,
@@ -724,7 +727,7 @@ function shop(K: KW, l: KLot, L: Layout, r: () => number, w: number, d: number) 
   K.box("concrete", x0, 0, fz - 0.5, x1, 0.3, fz - 0.2, C.base);
   // the fascia (the sign's: its lightbox) and the parapet
   K.box("plaster", x0, gt + 0.08, fz - 0.3, x1, H, fz - 0.17, paint);
-  K.box("plaster", x0, gt + 0.17, fz - 0.17, x1, 3.83, fz + 0.04, lin(({ konbini: "#1f6a4a", tacos: "#7a2a1a", surf: "#1a4a7a", lounge: "#1a1622", laundry: "#2a5a8a", pawn: "#3a2a1a", icecream: "#f4c4d8" } as Record<string, string>)[trade] ?? "#2a2a30"));
+  K.box("plaster", x0, gt + 0.17, fz - 0.17, x1, 3.83, fz + 0.04, lin(chain?.band ?? ({ konbini: "#1f6a4a", tacos: "#7a2a1a", surf: "#1a4a7a", lounge: "#1a1622", laundry: "#2a5a8a", pawn: "#3a2a1a", icecream: "#f4c4d8" } as Record<string, string>)[trade] ?? "#2a2a30"));
   K.box("neon", x0, 3.83, fz - 0.1, x1, 3.9, fz + 0.04, lin(l.neon ?? "#ff4fa3").map((v) => v * 2.4) as V3);
   if (two) for (const wx of [x0 + 1, (x0 + x1) / 2 - 0.7, x1 - 2.4]) windowZ(K, wx, 4.4, fz, 1.4, 1.4, r, C.frame);
   K.box("plaster", x0 - 0.1, H, z0 - 0.1, x1 + 0.1, H + 0.5, z0 + 0.15, paint);
@@ -735,7 +738,7 @@ function shop(K: KW, l: KLot, L: Layout, r: () => number, w: number, d: number) 
   acUnit(K, x0 + 1, H, z0 + 1.2);
   acUnit(K, x1 - 2, H, z0 + 2.4);
   // the awning: canvas in the trade's colour
-  const aw = lin(({ konbini: "#2a8a5a", tacos: "#d8402a", surf: "#1f7ab8", lounge: "#2a1f3a", laundry: "#3a8ad8", pawn: "#7a5a2a", icecream: "#ff7fb0" } as Record<string, string>)[trade] ?? "#2a4a6a");
+  const aw = lin(chain?.stripe ?? ({ konbini: "#2a8a5a", tacos: "#d8402a", surf: "#1f7ab8", lounge: "#2a1f3a", laundry: "#3a8ad8", pawn: "#7a5a2a", icecream: "#ff7fb0" } as Record<string, string>)[trade] ?? "#2a4a6a");
   if (trade !== "pawn" && trade !== "lounge") {
     K.quad("cloth", [x0 + 0.5, gt + 0.1, fz + 0.05], [x1 - 0.5, gt + 0.1, fz + 0.05], [x1 - 0.5, gt - 0.4, fz + 1.05], [x0 + 0.5, gt - 0.4, fz + 1.05], null, aw);
     K.box("cloth", x0 + 0.5, gt - 0.62, fz + 1.04, x1 - 0.5, gt - 0.4, fz + 1.06, aw);
@@ -839,11 +842,12 @@ function gas(K: KW, l: KLot, L: Layout, r: () => number, w: number, d: number) {
     sx1 = w / 2 - 2.33,
     sz0 = -d / 2 + 0.67,
     sz1 = L.frontZ;
-  const mart = L.signs.find((s) => s.text === "FUEL MART");
+  // (its shop: a SHIELD 24, the 24-hour chain's, its fascia in the chain's red)
+  const mart = L.signs.find((s) => s.text === CHAINS.shield24.name);
   K.box("plaster", sx0, 0, sz0, sx1, 4, sz1, lin("#f2eee6"), "-y");
   interior(K, 1, sx0 + 1, sx1 - 5, 0.17, 2.67, sz1 + 0.012);
   for (let x = sx0 + 1; x <= sx1 - 5 + 0.01; x += 1.17) K.box("chrome", x - 0.04, 0.17, sz1 - 0.02, x + 0.04, 2.67, sz1 + 0.05, C.chrome);
-  K.box("plaster", sx0, 2.67, sz1, sx1, 4, sz1 + 0.17, lin("#1c6a8a"));
+  K.box("plaster", sx0, 2.67, sz1, sx1, 4, sz1 + 0.17, lin(CHAINS.shield24.band));
   K.box("neon", sx0, 4, sz1, sx1, 4.08, sz1 + 0.17, [3.2, 2.2, 0.4]);
   K.box("roof", sx0, 3.95, sz0, sx1, 4.05, sz1, lin("#9a968e"), "-y");
   acUnit(K, sx1 - 2, 4.05, sz0 + 1);
@@ -852,7 +856,7 @@ function gas(K: KW, l: KLot, L: Layout, r: () => number, w: number, d: number) {
   K.box("metal", sx1 - 4.33, 0, sz1 + 0.17, sx1 - 3, 1, sz1 + 0.83, lin("#e8f4ff"));
   K.box("metal", sx1 - 2.33, 0, sz1 + 0.33, sx1 - 1.83, 1.5, sz1 + 0.67, lin("#d8333f"));
   // the canopy (its sign the layout's, on its front)
-  const zs = L.signs.find((s) => s.text !== "FUEL MART" && s.text !== "ZEC" && s.y > 4.5);
+  const zs = L.signs.find((s) => s.text !== CHAINS.shield24.name && s.text !== "ZEC" && s.y > 4.5);
   const cz0 = sz1 + 3,
     cz1 = zs ? zs.z - 0.2 : d / 2 - 2.33;
   const cx0 = -w / 2 + 1.67,
@@ -1434,8 +1438,8 @@ const VOX_M = 1 / 6;
  * The Orchard Tunnel (len along z, centred; inside half width and ceiling in m; its floor at y 0, the
  * road's): a concrete shell 4 m thick, tiled walls with a dark plinth, raised walkways with their
  * rails (0.35 m: the walker's), the asphalt and its lines, a strip of lights down the ceiling and two
- * dimmer lines, jet fans, the portals' headwalls and cornices — and round the south one, the rainbow
- * in painted bands.
+ * dimmer lines, jet fans, the portals' headwalls and cornices (plain concrete both ends: the rainbow
+ * once painted round the south one is gone).
  */
 export function kTunnel(len: number, half: number, top: number): KW {
   const K = new KW();
@@ -1483,44 +1487,19 @@ export function kTunnel(len: number, half: number, top: number): KW {
       K.zcyl("rubber", z - 0.01, z + 1.68, x, top - 0.65, 0.42, C.black, 14);
       K.box("metal", x - 0.05, top - 0.2, z + 0.6, x + 0.05, top, z + 1.0, lin("#5a5864"));
     }
-  // the portals: headwalls (the frame round the opening), cornices, and the rainbow round the south one
+  // the portals: headwalls (the frame round the opening) and cornices
   for (const [z, sgn] of [
     [z0, -1],
     [z1, 1],
   ] as const) {
     const n: V3 = [0, 0, sgn];
-    const face = lin("#8a857c");
+    // (as pale as the wing walls beside them: the darker grey read as a black hole round the opening)
+    const face = lin("#d6d0c4");
     K.quad("concrete", [-half - S, -0.2, z], [-half, -0.2, z], [-half, H, z], [-half - S, H, z], n, face);
     K.quad("concrete", [half, -0.2, z], [half + S, -0.2, z], [half + S, H, z], [half, H, z], n, face);
     K.quad("concrete", [-half, top, z], [half, top, z], [half, H, z], [-half, H, z], n, face);
-    K.box("concrete", -half - S + 0.3, H - 0.5, sgn > 0 ? z : z - 0.5, half + S - 0.3, H, sgn > 0 ? z + 0.5 : z, lin("#7a766e"));
+    K.box("concrete", -half - S + 0.3, H - 0.5, sgn > 0 ? z : z - 0.5, half + S - 0.3, H, sgn > 0 ? z + 0.5 : z, lin("#bdb7ab"));
     K.box("concrete", -half - 0.3, top, sgn > 0 ? z : z - 0.2, half + 0.3, top + 0.3, sgn > 0 ? z + 0.2 : z, lin("#9a958c"));
-  }
-  {
-    // (round the south opening: six bands, rounded at the top corners (r 1.67 m), painted on the headwall)
-    const bands = ["#8a4ae8", "#3a8ae8", "#4dbf5a", "#f4d23a", "#f4893a", "#e8403a"].map(lin);
-    const rr = 1.67;
-    const z = z1 + 0.012;
-    for (let k = 0; k < bands.length; k++) {
-      const a = 0.5 + k * 0.5,
-        b = a + 0.5;
-      const path = (off: number): [number, number][] => {
-        const pts: [number, number][] = [[-half - off, 0]];
-        for (let i = 0; i <= 8; i++) {
-          const ang = Math.PI - (i / 8) * (Math.PI / 2);
-          pts.push([-half + rr + Math.cos(ang) * (rr + off), top - rr + Math.sin(ang) * (rr + off)]);
-        }
-        for (let i = 0; i <= 8; i++) {
-          const ang = Math.PI / 2 - (i / 8) * (Math.PI / 2);
-          pts.push([half - rr + Math.cos(ang) * (rr + off), top - rr + Math.sin(ang) * (rr + off)]);
-        }
-        pts.push([half + off, 0]);
-        return pts;
-      };
-      const ia = path(a),
-        ib = path(b);
-      for (let i = 1; i < ia.length; i++) K.quad("white", [ia[i - 1][0], ia[i - 1][1], z], [ia[i][0], ia[i][1], z], [ib[i][0], ib[i][1], z], [ib[i - 1][0], ib[i - 1][1], z], [0, 0, 1], bands[k]);
-    }
   }
   return K;
 }

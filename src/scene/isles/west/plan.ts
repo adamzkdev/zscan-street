@@ -100,6 +100,7 @@ export const WEST: Isle = {
     { name: "St. Proof's", x: -2055, z: -90 },
     { name: "Grote Markt", x: -1968, z: -98 },
     { name: "the castle", x: GCASTLE.x, z: GCASTLE.z },
+    { name: "Gamla Galleria", x: -1976, z: 0 },
   ],
   // (an old town's street music: a waltz, Bach on a violin, the Danube, Vivaldi)
   sound: { tracks: ["piano-waltz", "violin-bach", "op-danube", "op-vivaldi"], level: 0.16, bells: true },

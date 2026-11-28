@@ -643,7 +643,8 @@ function gas(l: KLot): KBuilt {
   for (let k = 0; k < 2; k++) m.box(py.x - 8, 58 + k * 6, py.z + 2, py.x + 8, 62 + k * 6, py.z + 3, E(k ? "#ff8a3a" : "#4dffb8", 1.6));
   const signs: KSign[] = [
     { text: l.name ?? "ZEC FUEL", color: l.neon ?? "#f4b728", x: Math.floor((cx0 + cx1) / 2), y: 35, z: cz1 + 1.2, w: cx1 - cx0 - 30, h: 4, vertical: false, facing: "front" },
-    { text: "FUEL MART", color: "#34e7ff", x: Math.floor((sx0 + sx1) / 2), y: 20, z: sz1 + 1.2, w: sx1 - sx0 - 12, h: 7, vertical: false, facing: "front" },
+    // (the station's shop: a SHIELD 24, src/scene/real/martdata.ts)
+    { text: "SHIELD 24", color: "#ffffff", x: Math.floor((sx0 + sx1) / 2), y: 20, z: sz1 + 1.2, w: sx1 - sx0 - 12, h: 7, vertical: false, facing: "front" },
     { text: "ZEC", color: "#f4b728", x: py.x, y: 75, z: py.z + 2.2, w: 18, h: 6, vertical: false, facing: "front" },
   ];
   return { model: m, signs, door: [Math.floor((sx0 + sx1) / 2) - 12, sz1], lights: [[Math.floor((cx0 + cx1) / 2), 30, mid, "#f4fbff"]] };
@@ -1010,7 +1011,7 @@ export function pier(len: number, half: number, deckY: number, floorY: number) {
 /**
  * The tunnel under the headland, from portal to portal along z (its length, inside half width and
  * ceiling, metres): tiled walls, the raised walkways, a line of lights down the middle, fans, the
- * portals' concrete headwalls — and round the south one, the rainbow. Returns the model and the
+ * portals' concrete headwalls. Returns the model and the
  * width of concrete either side of the inside (voxels).
  */
 export function tunnel(len: number, half: number, top: number) {
@@ -1053,18 +1054,6 @@ export function tunnel(len: number, half: number, top: number) {
     for (let x = i0 - 3; x < i1 + 3; x++) for (let y = 1; y < T + 3; y++) if ((x < i0 || x >= i1 || y >= T) && m.get(x, y, z)) m.set(x, y, z, C("#8a857c"));
     m.box(2, H - 3, z, W - 2, H, z + (z ? 1 : 3), C("#7a766e"));
   }
-  // the rainbow round the south portal (its face at +z): bands round the opening, rounded at the top
-  const bands = ["#8a4ae8", "#3a8ae8", "#4dbf5a", "#f4d23a", "#f4893a", "#e8403a"];
-  const rr = 10;
-  for (let x = 0; x < W; x++)
-    for (let y = 0; y < H - 3; y++) {
-      if (!m.get(x, y, L - 1)) continue;
-      const dx = Math.max(0, Math.abs(x + 0.5 - cx) - (hw - rr)),
-        dy = Math.max(0, y + 0.5 - (T - rr));
-      const d = Math.hypot(dx, dy) - rr;
-      const k = Math.floor((d - 3) / 3);
-      if (d > 0 && k >= 0 && k < bands.length) m.set(x, y, L - 1, C(bands[k]));
-    }
   return { model: m, side: S };
 }
 

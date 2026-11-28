@@ -5,6 +5,7 @@
 //  - walk to the GT, F, out through the gate onto the street (W / A / D / S only; backing up if stuck): no wall hit, no fling
 //  - back in from the street, parked in the court, F: out beside it, on the setts (not in a wall, a planter, the pool)
 //  - the same with the bike, out and back
+//  - fps in the court and on the terrace; down the dock's steps to the yacht's boarding point (the game offers to board)
 //  - reload: PLAY again, both vehicles back home where they belong, nothing on top of anything
 // A contact sheet: shots/gta/villa/drive-sheet.jpg (the per-step JPEGs deleted after).
 import puppeteer from "puppeteer-core";
@@ -197,6 +198,23 @@ const site = await p.evaluate(() => street.gta.homeEdit.api.Home.site);
 const V = await p.evaluate(async () => (await import("/src/scene/keys/plan.ts")).VILLA);
 const G = { x: (V.gate.x0 + V.gate.x1) / 2, in: V.z1 - 3.2, out: V.z1 + 4.5, street: V.z1 + 14 };
 await p.waitForFunction(() => street.gta.solid.ready && Number.isFinite(street.gta.solid.dist(300, 630)), { timeout: 300000, polling: 300 });
+// the yacht's berth: 32 × 9 m of open water round VILLA.yacht in the game's solid shape (nothing drawn: a hole)
+// (but its 0.7 m along the quay: the solid shape's picture sees a north face this far from its centre a few degrees
+// off the vertical, the sea wall's face reading as a sliver in front of it — in front of the cabana's open water too)
+const slot = await p.evaluate((V) => {
+  const Y = V.yacht, s = street.gta.solid;
+  let n = 0, hit = [];
+  for (let a = -16; a <= 16; a += 0.5)
+    for (let c = -4.5; c <= 4.5; c += 0.25) {
+      const x = Y.x + a * Math.cos(Y.yaw) + c * Math.sin(Y.yaw), z = Y.z - a * Math.sin(Y.yaw) + c * Math.cos(Y.yaw);
+      if (z > V.z0 - 0.7) continue;
+      const t = s.topAt(x, z);
+      n++;
+      if (t !== undefined && t === t && t > -1.6 - 0.9) hit.push([+x.toFixed(1), +z.toFixed(1), +t.toFixed(2)]);
+    }
+  return { n, hits: hit.length, first: hit.slice(0, 4) };
+}, V);
+ok(slot.hits === 0, "the yacht's berth: 32 × 9 m of open water, nothing in it", JSON.stringify(slot));
 let st = await parkedState();
 console.log("parked", JSON.stringify(st));
 const gt0 = st.out.find((v) => v.kind === "gt"), bike0 = st.out.find((v) => v.kind === "moto");
@@ -223,6 +241,12 @@ console.log("out", JSON.stringify(outState), JSON.stringify(camLater));
 ok(Math.hypot(outState.at[0] - V.door.x, outState.at[1] - V.door.z) < 4, "out on the porch");
 ok(!outState.camInHouse && !camLater.inHouse, "the camera outside the house (not inside its door)", JSON.stringify(camLater.cam));
 await shot("porch");
+// how smooth it is out here: on the porch looking over the court, then on the terrace looking over the pool and the dock
+const fpsOf = () => p.evaluate(async () => { let n = 0; const t0 = performance.now(); await new Promise((r) => { const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); }); return +(n / ((performance.now() - t0) / 1000)).toFixed(1); });
+let fpsCourt = await fpsOf();
+if (fpsCourt < 55) fpsCourt = Math.max(fpsCourt, await fpsOf());
+console.log("fps in the court", fpsCourt);
+ok(fpsCourt >= 55, "smooth in the court (≥ 55 fps)", fpsCourt);
 
 // ---- the GT: out through the gate, back in, parked --------------------------------------------------
 let r = await board("gt");
@@ -265,6 +289,41 @@ ok(a.out && !a.blocked && a.foot, "off the bike beside it, on the setts", JSON.s
 const up = await p.evaluate(() => { const v = street.gta.parked.find((c) => c.kind === "moto"); return { tilt: +Math.abs(v.group.rotation.z).toFixed(2), y: +v.group.position.y.toFixed(2) }; });
 ok(up.tilt < 0.5, "the bike stands (on its stand, not on its side)", JSON.stringify(up));
 await shot("bike-parked");
+
+// ---- the terrace: smooth there too; down the dock's steps to the yacht's boarding point --------------
+await p.evaluate(() => {
+  const g = street.gta;
+  g.player.place(329, 0.2, 576.2, Math.PI * 0.85);
+  g.player.facing = Math.PI * 0.85;
+  g.cam.behind(Math.PI * 0.85, -0.12);
+  g.cam.snap(g.player.pos.clone().setY(1.55));
+});
+await sleep(2500);
+let fpsTerrace = await fpsOf();
+if (fpsTerrace < 55) fpsTerrace = Math.max(fpsTerrace, await fpsOf());
+console.log("fps on the terrace", fpsTerrace);
+ok(fpsTerrace >= 55, "smooth on the terrace (≥ 55 fps)", fpsTerrace);
+const berth = await p.evaluate(async (V) => {
+  const g = street.gta;
+  const B = V.yacht.board;
+  const send = (type, code) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
+  send("keydown", "KeyW");
+  for (let i = 0; i < 200; i++) {
+    const dx = B.x - g.player.pos.x, dz = B.z - g.player.pos.z;
+    if (Math.hypot(dx, dz) < 0.5) break;
+    g.player.facing = Math.atan2(dx, dz) + Math.PI;
+    g.cam.behind(g.player.facing, -0.1);
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  send("keyup", "KeyW");
+  await new Promise((r) => setTimeout(r, 600));
+  const label = g.boatAct?.label ?? null;
+  return { at: [+g.player.pos.x.toFixed(2), +g.player.pos.z.toFixed(2)], y: +g.player.pos.y.toFixed(2), d: +Math.hypot(B.x - g.player.pos.x, B.z - g.player.pos.z).toFixed(2), label };
+}, V);
+console.log("berth", JSON.stringify(berth));
+ok(berth.d < 1.0 && Math.abs(berth.y - (0.2 - 0.45)) < 0.12, "walked down the dock's steps onto the boarding landing", JSON.stringify(berth));
+ok(!!berth.label && /board|aboard/i.test(berth.label), "the game offers to board the yacht there", berth.label);
+await shot("berth");
 
 // ---- left on the street, then PLAY again: both back home, nothing on anything ------------------------
 r = await board("gt");

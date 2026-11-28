@@ -2,6 +2,10 @@ import * as THREE from "three";
 import { box, glowMat, makeScene, room, std, textPlane, wall } from "./kit";
 import { armchair, backBar, barCounter, bench, bookshelf, chair, coffeeMachine, coffeeTable, desk, diningTable, floorLamp, fridge, nightstand, pendant, place, plant, rug, sconce, sofa, stool } from "./furniture";
 import type { Interior, InteriorContext, Rect } from "./types";
+import { chainOf, mallOf } from "../scene/real/martdata";
+import type { Snark } from "../scene/snark";
+import { dressMart } from "./mart";
+import { dressMall } from "./islemall";
 
 /**
  * Any building of the city, walked into from the game (src/gta): one place whose ground floor is
@@ -9,6 +13,9 @@ import type { Interior, InteriorContext, Rect } from "./types";
  * shop, an office lobby, an apartment block's hall, a café or a bar — its colours and layout drawn
  * from the building's own seed, its name over the counter. Every piece of furniture is its own
  * thing: it stops you, and it breaks when you hit it (src/gta/breakables.ts).
+ *
+ * A shop whose door carries a convenience-store chain's name or a mall's (src/scene/real/martdata.ts)
+ * is that chain's store (./mart.ts) or that mall's atrium (./islemall.ts, a bigger room).
  */
 
 export type BuildingKind = "shop" | "office" | "home" | "cafe" | "bar";
@@ -124,8 +131,8 @@ const rnd = (seed: number) => {
   };
 };
 
-const W = 7;
-const D = 13;
+const W0 = 7;
+const D0 = 13;
 
 export function buildBuilding(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#0d0e13");
@@ -138,6 +145,10 @@ export function buildBuilding(ctx: InteriorContext): Interior {
   const own: (THREE.BufferGeometry | THREE.Material | THREE.Texture)[] = [];
   let title = "BUILDING";
   const lights: THREE.PointLight[] = [];
+  /** The zkSNARKs of the current dress (a store's cashier, a mall's shoppers), ticked while inside. */
+  let people: Snark[] = [];
+  const camQuat = new THREE.Quaternion(),
+    camRight = new THREE.Vector3();
   for (let i = 0; i < 3; i++) {
     const l = new THREE.PointLight("#fff0d6", 14, 16, 1.6);
     l.position.set(0, 3, -2 - i * 4);
@@ -149,6 +160,11 @@ export function buildBuilding(ctx: InteriorContext): Interior {
     const v = next;
     const r = rnd(v.seed * 7919 + v.kind.length);
     title = v.name.toUpperCase();
+    // a chain's store or a mall, by the name on the door
+    const chain = v.kind === "shop" ? chainOf(v.name) : null;
+    const mall = v.kind === "shop" ? mallOf(v.name) : null;
+    for (const s of people) s.dispose();
+    people = [];
     // the old fit-out out
     for (const g of [shell, fit])
       for (const c of [...g.children]) {
@@ -173,9 +189,12 @@ export function buildBuilding(ctx: InteriorContext): Interior {
       cafe: { floor: ["#7a5236", "#5c4030", "#b08a64"], wall: ["#efe4d2", "#2f4a3e", "#e8d8c0"], ceil: "#3a2c22", light: "#ffd9a0" },
       bar: { floor: ["#2a2024", "#1e1c24"], wall: ["#3a2630", "#232634"], ceil: "#141218", light: "#ff9f6a" },
     };
-    const P = palettes[v.kind];
+    const P = mall ? { floor: [mall.floor], wall: [mall.wall], ceil: "#f6f4f0", light: "#fff2dc" } : chain ? { floor: [chain.floor], wall: ["#f4f6f8"], ceil: "#f4f4f2", light: "#f6fbff" } : palettes[v.kind];
     const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
-    const H = v.kind === "office" ? 4.4 : 3.5;
+    const H = mall ? 13 : v.kind === "office" ? 4.4 : 3.5;
+    // (a mall's atrium: a much bigger room; the rest the shop's own)
+    const W = mall ? 12 : W0,
+      D = mall ? 46 : D0;
     const floorM = mat(pick(P.floor), v.kind === "office" ? 0.2 : 0.6, 0.05);
     const wallM = mat(pick(P.wall), 0.85);
     rects.push(...room(shell, { x0: -W, z0: -D, x1: W, z1: 0, h: H, floor: floorM, wall: wallM, ceiling: mat(P.ceil, 0.9), door: [-1.3, 1.3] }));
@@ -187,7 +206,7 @@ export function buildBuilding(ctx: InteriorContext): Interior {
     own.push(glassM, streetT);
     for (const sx of [-1, 1]) {
       const gw = W - 2.2,
-        gh = H - 1.4,
+        gh = Math.min(H - 1.4, 4.2),
         gx = sx * (W / 2 + 0.9);
       const g = box(shell, gw, gh, 0.06, glassM, gx, 0.6, -0.12);
       g.name = "window";
@@ -196,14 +215,17 @@ export function buildBuilding(ctx: InteriorContext): Interior {
       box(shell, gw + 0.1, 0.08, 0.12, frameM, gx, 0.6 + gh - 0.04, -0.16);
       for (const k of [-0.5, 0, 0.5]) box(shell, 0.06, gh, 0.12, frameM, gx + k * gw, 0.6, -0.16);
     }
-    for (const l of lights) {
+    lights.forEach((l, i) => {
       l.color.set(P.light);
-      l.intensity = v.kind === "shop" ? 6 : v.kind === "bar" ? 9 : 11;
-    }
+      l.intensity = mall ? 16 : chain ? 8 : v.kind === "shop" ? 6 : v.kind === "bar" ? 9 : 11;
+      l.distance = mall ? 30 : 16;
+      l.decay = mall ? 1.3 : 1.6;
+      l.position.set(0, mall ? 9 : 3, mall ? -8 - i * 14 : -2 - i * 4);
+    });
     // the ceiling's light panels
     const panel = glowMat(P.light, v.kind === "bar" ? 0.8 : v.kind === "shop" ? 1.2 : 1.6);
     own.push(panel);
-    for (let z = -2; z > -D + 1; z -= 3.5)
+    for (let z = -2; z > -D + 1 && !mall; z -= 3.5)
       for (const x of [-3, 3]) {
         const p = box(shell, 1.6, 0.04, 0.6, panel, x, H - 0.05, z);
         p.name = "ceiling-light";
@@ -212,7 +234,8 @@ export function buildBuilding(ctx: InteriorContext): Interior {
     const sign = textPlane(title, { h: v.kind === "office" ? 0.55 : 0.48, color: v.kind === "bar" ? "#ff5aa8" : "#f4b728", glow: v.kind === "bar" || v.kind === "cafe", font: '800 96px Archivo, "Roboto", sans-serif' });
     sign.position.set(0, H - 0.9, -D + 0.12);
     sign.name = "wall-sign";
-    shell.add(sign);
+    // (a chain's store and a mall have their own signs)
+    if (!chain && !mall) shell.add(sign);
     own.push(sign.geometry, sign.material as THREE.Material, (sign.material as THREE.MeshBasicMaterial).map!);
     const solid = (x0: number, z0: number, x1: number, z1: number) => rects.push([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]);
     const put = (key: string, build: Parameters<typeof place>[2], x: number, z: number, rot: number, w: number, d: number) => {
@@ -221,7 +244,11 @@ export function buildBuilding(ctx: InteriorContext): Interior {
       solid(x - (sw ? d : w) / 2, z - (sw ? w : d) / 2, x + (sw ? d : w) / 2, z + (sw ? w : d) / 2);
     };
     const goods = ["#e8463a", "#f4b728", "#3fa8ff", "#43d17a", "#ff8a1f", "#b07bff", "#f2f0ea", "#ff5aa8"];
-    if (v.kind === "shop") {
+    const mine = people;
+    const env = { shell, fit, own, solid, mat, r, W, D, H, people, live: () => people === mine };
+    if (mall) dressMall(env, mall, v.seed);
+    else if (chain) dressMart(env, chain, v.seed);
+    else if (v.kind === "shop") {
       // aisles of gondola shelving (a base, a pegboard spine, four shelves each side, a price rail)
       // filled shelf by shelf with packs, cans and bottles; the fridges along the left wall; the
       // counter by the door
@@ -405,7 +432,12 @@ export function buildBuilding(ctx: InteriorContext): Interior {
     colliders: () => rects,
     pickables: () => [],
     pick: () => null,
-    update: () => {},
+    update: (dt: number, t: number, camera: THREE.Camera) => {
+      if (!people.length) return;
+      camera.getWorldQuaternion(camQuat);
+      camRight.set(1, 0, 0).applyQuaternion(camQuat);
+      for (const s of people) s.update(dt, t, camQuat, camRight);
+    },
     setTheme: () => dress(),
   } as Interior;
 }

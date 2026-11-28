@@ -166,10 +166,16 @@ export function smoothGroundMesh(land: Land) {
     z1: F.z1,
     step: 0.5,
     height: (x, z) => land.raw(x, z),
-    keep: (x, z, h) => z > shoreZ(x) - 6 && h > base + 0.1,
+    // (not across the tunnel's north mouth: the road's level gives way to the hill over the tube
+    // there in one step, and the slope between them stood in the opening, a rock curtain the road
+    // ran into; the portal's headwall and the tube's roof close that gap)
+    keep: (x, z, h) => z > shoreZ(x) - 6 && h > base + 0.1 && !(Math.abs(x - KTUNNEL.x) < 8 && z > KTUNNEL.z0 + 0.2 && z < KTUNNEL.z0 + 1.1),
     paint: (c, x, z, h, slope) => paint(c, land, x, z, h, slope),
     skirtTo: base - 0.4,
     skirts: { x1: true, z1: true },
+    // (the board's south edge crosses the Orchard Tunnel: its cliff stops on the tube's roof, never
+    // hangs down across the road inside — a dark wall the cars drove through)
+    skirtFloor: (x, z) => (overTunnel(x, z) ? KTUNNEL.top + 4.1 : -Infinity),
   });
   const geo = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)), false)!;
   const mesh = new THREE.Mesh(geo, natureMat());

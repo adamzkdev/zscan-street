@@ -13,7 +13,7 @@ import { VILLA } from "../scene/keys/plan";
  *   Home.catalog()                 every piece for sale
  *   Home.owned() / Home.owns(id)   what you have (Economy.owned("home"))
  *   Home.placed()                  where the placed ones stand (local metres in the villa)
- *   Home.place(id, x, z, rot)      put a piece there (moves it if placed already)
+ *   Home.place(id, x, z, rot, f)   put a piece there, on floor f (moves it if placed already)
  *   Home.store(id)                 back into storage
  *   Home.onChange(fn)              any change of the layout or of what you own
  */
@@ -100,39 +100,43 @@ export interface Placed {
   x: number;
   z: number;
   rot: number;
+  /** The floor it stands on (0 the ground floor, 1 upstairs; none: the ground floor). */
+  f?: number;
 }
 
 /**
  * The villa comes furnished, a mansion's way: these are yours and in place on the first visit.
- * The great room's lounge faces the sea (the long sofa, its two armchairs either side of the low
- * marble table on the gold-edged rug, a lamp at each end); by the bedroom wing's wall the TV, its
- * sofa and the terracotta rug; the bookshelf, an olive tree and a cactus by the door; the dining
- * table for six by the kitchen's glass; the king bed against the bedroom's wall, its foot to the sea,
- * its nightstand and the wardrobe; zkSNARK #1 and #9593 framed on the walls; plants at the glass.
- * What you buy in the store joins them (B at home to place it).
+ * Downstairs the great room's lounge faces the sea through its two storeys of glass (the long sofa,
+ * its two armchairs either side of the low marble table on the gold-edged rug, a lamp at each end);
+ * in the den the TV against the garage's wall, its sofa and the terracotta rug; the bookshelf, an
+ * olive tree and a cactus in the hall by the door; the dining table for six by the west wing's
+ * glass; plants at the great room's glass; zkSNARK #1 framed in the hall. Upstairs in the master
+ * suite the king bed against the dressing room's wall, its foot to the sea, its nightstand, the
+ * wardrobe in the dressing room, zkSNARK #9593 over the bed's side. What you buy in the store joins
+ * them (B at home to place it, on the floor you are on).
  */
 const STARTER: Placed[] = [
-  { id: "sofa-charcoal", x: -1.0, z: -4.5, rot: Math.PI },
-  { id: "coffee-table", x: -1.0, z: -6.1, rot: 0 },
-  { id: "rug-gold", x: -1.0, z: -6.0, rot: 0 },
-  { id: "armchair-grey", x: -3.7, z: -6.0, rot: Math.PI / 2 },
-  { id: "velvet-chair", x: 1.5, z: -6.2, rot: -Math.PI / 2 },
-  { id: "floor-lamp", x: -3.6, z: -4.4, rot: 0 },
-  { id: "side-lamp", x: 0.85, z: -4.45, rot: 0 },
-  { id: "tv-wall", x: 6.66, z: -6.0, rot: -Math.PI / 2 },
-  { id: "sofa-sand", x: 4.4, z: -6.0, rot: Math.PI / 2 },
-  { id: "rug-terracotta", x: 5.3, z: -6.0, rot: Math.PI / 2 },
-  { id: "bookshelf", x: -5.85, z: -0.31, rot: Math.PI },
-  { id: "indoor-tree", x: -5.6, z: -1.6, rot: 0 },
-  { id: "cactus", x: 5.9, z: -1.0, rot: 0 },
-  { id: "dining-6", x: -10.6, z: -7.4, rot: 0 },
-  { id: "bed-king", x: 12.6, z: -5.45, rot: Math.PI },
-  { id: "nightstand", x: 11.15, z: -4.6, rot: Math.PI },
-  { id: "wardrobe", x: 7.4, z: -7.6, rot: Math.PI / 2 },
-  { id: "monstera", x: -6.4, z: -9.7, rot: 0 },
-  { id: "ficus", x: 6.4, z: -9.7, rot: 0 },
-  { id: "print-1", x: 5.8, z: -0.1, rot: Math.PI },
-  { id: "print-9593", x: 15.6, z: -4.3, rot: Math.PI },
+  { id: "sofa-charcoal", x: 0, z: -11.6, rot: Math.PI },
+  { id: "coffee-table", x: 0, z: -13.3, rot: 0 },
+  { id: "rug-gold", x: 0, z: -13.2, rot: 0 },
+  { id: "armchair-grey", x: -2.8, z: -13.3, rot: Math.PI / 2 },
+  { id: "velvet-chair", x: 2.6, z: -13.4, rot: -Math.PI / 2 },
+  { id: "floor-lamp", x: -2.4, z: -11.4, rot: 0 },
+  { id: "side-lamp", x: 1.9, z: -11.45, rot: 0 },
+  { id: "tv-wall", x: 17.2, z: -9.45, rot: Math.PI },
+  { id: "sofa-sand", x: 17.2, z: -13.2, rot: 0 },
+  { id: "rug-terracotta", x: 17.2, z: -11.4, rot: 0 },
+  { id: "bookshelf", x: -5.4, z: -0.31, rot: Math.PI },
+  { id: "indoor-tree", x: -7.4, z: -1.4, rot: 0 },
+  { id: "cactus", x: 5.9, z: -0.9, rot: 0 },
+  { id: "dining-6", x: -19, z: -15.2, rot: 0 },
+  { id: "monstera", x: -6.6, z: -18.5, rot: 0 },
+  { id: "ficus", x: 6.6, z: -18.5, rot: 0 },
+  { id: "print-1", x: 8.9, z: -3.6, rot: -Math.PI / 2 },
+  { id: "bed-king", x: 15, z: -10.25, rot: Math.PI, f: 1 },
+  { id: "nightstand", x: 13.75, z: -9.45, rot: Math.PI, f: 1 },
+  { id: "wardrobe", x: 18, z: -0.5, rot: Math.PI, f: 1 },
+  { id: "print-9593", x: 9.1, z: -13, rot: Math.PI / 2, f: 1 },
 ];
 
 /** Where your home is: its front door on the plot, the way out of it, where your car waits, the rooms' view. */
@@ -166,14 +170,15 @@ export function villaSite(): HomeSite {
 }
 
 /**
- * The layout is kept per house: v1 was the penthouse on Park Row (its own metres), v2 is the villa.
- * Moving in: what you owned stays yours — the starter set goes where the villa has room for it,
- * everything else waits in storage (B at home to place it).
+ * The layout is kept per house: v1 was the penthouse on Park Row (its own metres), v2 the villa's
+ * first house (one floor), v3 the mansion (two). Moving in: what you owned stays yours — the starter
+ * set goes where the new house has room for it, everything else waits in storage (B at home to
+ * place it).
  */
-const KEY = "zstreet.home.v2";
-const OLD_KEY = "zstreet.home.v1";
+const KEY = "zstreet.home.v3";
+const OLD_KEYS = ["zstreet.home.v2", "zstreet.home.v1"];
 interface Saved {
-  v: 2;
+  v: 3;
   placed: Placed[];
   /** The starter set has been given (once). */
   given: boolean;
@@ -182,18 +187,20 @@ interface Saved {
 function load(): Saved {
   try {
     const o = JSON.parse(localStorage.getItem(KEY) ?? "null") as Saved | null;
-    if (o && o.v === 2 && Array.isArray(o.placed)) return o;
-    // moving in from the penthouse: its layout's metres mean nothing here
-    const old = JSON.parse(localStorage.getItem(OLD_KEY) ?? "null") as { given?: boolean } | null;
-    if (old) {
-      // (the villa's furnished set given — the pieces already owned stay owned — and placed)
-      const moved: Saved = { v: 2, placed: [], given: false };
+    if (o && o.v === 3 && Array.isArray(o.placed)) return o;
+    // moving in from an older house: its layout's metres mean nothing here
+    for (const k of OLD_KEYS) {
+      const old = JSON.parse(localStorage.getItem(k) ?? "null") as { v?: number; given?: boolean } | null;
+      if (!old) continue;
+      // (from the villa's first house: the starter set, already owned, stands where this one has it;
+      // from the penthouse: the villa's furnished set is given — what was owned stays owned)
+      const moved: Saved = old.v === 2 && old.given ? { v: 3, placed: STARTER.map((q) => ({ ...q })), given: true } : { v: 3, placed: [], given: false };
       localStorage.setItem(KEY, JSON.stringify(moved));
-      localStorage.removeItem(OLD_KEY);
+      for (const r of OLD_KEYS) localStorage.removeItem(r);
       return moved;
     }
   } catch {}
-  return { v: 2, placed: [], given: false };
+  return { v: 3, placed: [], given: false };
 }
 let saved = load();
 function save() {
@@ -215,7 +222,9 @@ Economy.onChange((e) => {
 export interface HomeRoomHooks {
   /** The villa's scene (you are home when the place you are in shows it). */
   scene: object;
-  /** Can `id` stand at (x, z) turned `rot` (not in a wall, not on another piece, inside the house)? */
+  /** The floor you are on in it (pieces are placed and found on it). */
+  floor(): number;
+  /** Can `id` stand at (x, z) turned `rot` on the floor you are on (not in a wall, not on another piece, inside the house)? */
   canPlace(id: string, x: number, z: number, rot: number): boolean;
   /** A wall piece near (x, z): the point on the nearest wall and the way it faces, or null. */
   snapWall(x: number, z: number): { x: number; z: number; rot: number } | null;
@@ -269,10 +278,10 @@ export const Home = {
   stored(): string[] {
     return this.owned().filter((id) => !this.isPlaced(id));
   },
-  place(id: string, x: number, z: number, rot: number) {
+  place(id: string, x: number, z: number, rot: number, f = 0) {
     if (!this.owns(id)) return false;
     const i = saved.placed.findIndex((q) => q.id === id);
-    const q = { id, x: +x.toFixed(3), z: +z.toFixed(3), rot: +rot.toFixed(4) };
+    const q: Placed = { id, x: +x.toFixed(3), z: +z.toFixed(3), rot: +rot.toFixed(4), ...(f ? { f } : {}) };
     if (i >= 0) saved.placed[i] = q;
     else saved.placed.push(q);
     save();
@@ -300,7 +309,7 @@ export const Home = {
   },
   /** For tests: forget the layout (the starter set is given again). */
   reset() {
-    saved = { v: 2, placed: [], given: false };
+    saved = { v: 3, placed: [], given: false };
     save();
     changed();
   },

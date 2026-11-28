@@ -166,6 +166,8 @@ export interface IsleFacade {
   /** Which way the front faces (unit, on the ground). */
   out: { x: number; y: number; z: number };
   door: { x: number; z: number };
+  /** Its own name on the door (a convenience store's chain, a mall: the interior is dressed after it). */
+  name?: string;
 }
 
 /** What a content builder hands back. */

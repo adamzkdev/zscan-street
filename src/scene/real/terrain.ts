@@ -169,6 +169,8 @@ export function heightfield(o: {
   skirtTo?: number;
   /** Edges of the board to drop a skirt from (the others meet other ground). */
   skirts?: { x0?: boolean; x1?: boolean; z0?: boolean; z1?: boolean };
+  /** Where the skirt must stop higher than `skirtTo` (over a tunnel: its roof), the lowest it goes at (x, z). */
+  skirtFloor?: (x: number, z: number) => number;
 }) {
   const nx = Math.round((o.x1 - o.x0) / o.step) + 1,
     nz = Math.round((o.z1 - o.z0) / o.step) + 1;
@@ -243,16 +245,18 @@ export function heightfield(o: {
         if (!K[ka] || !K[kb]) continue;
         const ha = H[ka],
           hb = H[kb];
-        if (ha <= o.skirtTo! && hb <= o.skirtTo!) continue;
         const xa = o.x0 + i0 * o.step,
           za = o.z0 + j0 * o.step,
           xb = o.x0 + i1 * o.step,
           zb = o.z0 + j1 * o.step;
+        const ba = Math.max(o.skirtTo!, o.skirtFloor?.(xa, za) ?? -Infinity),
+          bb = Math.max(o.skirtTo!, o.skirtFloor?.(xb, zb) ?? -Infinity);
+        if (ha <= ba && hb <= bb) continue;
         const quad = [
           [xa, ha, za],
           [xb, hb, zb],
-          [xb, o.skirtTo!, zb],
-          [xa, o.skirtTo!, za],
+          [xb, Math.min(bb, hb), zb],
+          [xa, Math.min(ba, ha), za],
         ];
         for (const q of [0, 2, 1, 0, 3, 2]) {
           sp.push(...quad[q]);

@@ -4,7 +4,7 @@
  * Drawn on a 2D canvas: the radar and the big map share them.
  */
 
-export type Cat = "hq" | "home" | "sight" | "fun" | "shop" | "food" | "bar" | "work" | "metro" | "ferry" | "car";
+export type Cat = "hq" | "home" | "sight" | "fun" | "shop" | "food" | "bar" | "work" | "metro" | "ferry" | "car" | "yacht";
 
 export const CAT: Record<Cat, { color: string; label: string }> = {
   hq: { color: "#f4b728", label: "MEMPOOL HQ" },
@@ -18,6 +18,7 @@ export const CAT: Record<Cat, { color: string; label: string }> = {
   metro: { color: "#232a3a", label: "Metro" },
   ferry: { color: "#1ea896", label: "Ferry" },
   car: { color: "#f4b728", label: "Your ZK-GT" },
+  yacht: { color: "#2f7fe0", label: "Your yacht" },
 };
 
 /** The walk-in places by their key: what kind of place each is. */
@@ -147,6 +148,25 @@ export function glyph(g: CanvasRenderingContext2D, cat: Cat, x: number, y: numbe
       g.textAlign = "center";
       g.textBaseline = "middle";
       g.fillText("M", 0, 0.6 * u);
+      break;
+    }
+    case "yacht": {
+      // a yacht in profile: a long hull, the saloon, the flybridge's hardtop
+      g.beginPath();
+      g.moveTo(-7.5 * u, 0.5 * u);
+      g.lineTo(7.5 * u, 0.5 * u);
+      g.lineTo(5 * u, 4.5 * u);
+      g.lineTo(-6.5 * u, 4.5 * u);
+      g.closePath();
+      g.fill();
+      g.beginPath();
+      g.moveTo(-4.5 * u, 0.5 * u);
+      g.lineTo(-4.5 * u, -2.5 * u);
+      g.lineTo(2 * u, -2.5 * u);
+      g.lineTo(4.5 * u, 0.5 * u);
+      g.closePath();
+      g.fill();
+      g.fillRect(-3.5 * u, -5 * u, 5 * u, 1.3 * u);
       break;
     }
     case "ferry": {

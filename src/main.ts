@@ -778,6 +778,11 @@ const walletCrowns = new WalletCrowns(scene, city);
 const forest = new Forest(scene, city, director, (z) => goldenGate.deckAt(z));
 // Orchard Keys: the beach town across the bridge, through the tunnel under the woods (built off the main thread)
 const keys = new Keys(city, forest.land, () => theme === "day");
+// the city's sea in Orchard Keys' water (one look across the strait, no dark slab against the clear water)
+{
+  const sea = scene.getObjectByName("sea");
+  if (sea instanceof THREE.Mesh) KeysSea.dress(sea, () => theme === "day");
+}
 // cars parked at the kerbs of the wider streets (and Orchard Keys' once it is up): the game takes and shoves them
 const parking = new Parking(scene);
 // the ZK Cemetery: zombie zkSNARKs rising from their graves (more of them at night)
@@ -3500,7 +3505,7 @@ gta = new GtaMode({
   enter: (key) => {
     if (!jumping && !closeChoice) enterPlace(key);
   },
-  facades: () => [...city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out!, door: f.door })), ...keys.facades, ...isles.facades.map((f) => ({ ...f, out: new THREE.Vector3(f.out.x, 0, f.out.z) }))],
+  facades: () => [...city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out!, door: f.door })), ...keys.facades, ...[...city.marts, ...isles.facades].map((f) => ({ ...f, out: new THREE.Vector3(f.out.x, 0, f.out.z) }))],
   // across the Golden Gate: the deck under the wheels (and its railings), the tunnel, the town's sand
   carSurface: (x, z) => (goldenGate.onDeck(x, z) ? goldenGate.deckAt(z) : (isles.carSurface(x, z) ?? keys.carSurface(x, z))),
   carHold: (p, r) => goldenGate.holdCar(p, r) || isles.holdCar(p, r) || (keys.pushCar(p, r), false),

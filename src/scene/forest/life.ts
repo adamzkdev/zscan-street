@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ACROSS } from "../city/plan";
+import { ACROSS, BAY } from "../city/plan";
 import { toObject } from "../voxel/mesher";
 import { C, VoxelModel } from "../voxel/model";
 import { realBird, realDeer } from "../real/animals";
@@ -325,9 +325,11 @@ export class Wildlife {
       if (s.position.x > F.x1 - 10) s.position.x = F.x0 + 10;
       // thin out towards the ends of the headland so nothing hangs past the board
       const edge = Math.min(1, (s.position.x - F.x0 - 10) / 14, (F.x1 - 10 - s.position.x) / 14);
+      // (and never over the road off the bridge: a bank across it was a grey curtain the cars drove into)
+      const road = Math.max(0, Math.min(1, (Math.abs(s.position.x - BAY.bridge.x) - s.scale.x * 0.5 - 8) / 10));
       const gx = Math.min(F.x1 - 1, Math.max(F.x0 + 1, s.position.x));
       s.position.y += (this.land.raw(gx, s.position.z) + s.userData.hy - s.position.y) * Math.min(1, dt * 0.5);
-      (s.material as THREE.SpriteMaterial).opacity = Math.max(0, edge) * (this.night ? 0.22 : 0.3) * (0.75 + 0.25 * Math.sin(t * 0.2 + s.userData.v * 10));
+      (s.material as THREE.SpriteMaterial).opacity = Math.max(0, edge) * road * (this.night ? 0.22 : 0.3) * (0.75 + 0.25 * Math.sin(t * 0.2 + s.userData.v * 10));
     }
     // fire
     this.flames.forEach((s, i) => {

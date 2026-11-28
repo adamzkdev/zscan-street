@@ -52,6 +52,15 @@ descriptor and a content folder; everything else reads the list.
    (`src/audio/street.ts`: an island layer and a crossing layer), main.ts's hooks (deck, sea, doors,
    traffic, carjacking) all read the list.
 
+## Stores and malls
+
+An island's 24-hour stores and malls come from `src/scene/real/marts.ts` (`store`, `front`, `kiosk`
+through `front`, `mall`, `parkade`, `lot`): the content keeps a `MartDecals` (their pictures, one mesh
+added to `root`) and an `emptyOut()` (their doors with their names, bins and bicycles for `placeProps`,
+footprints, forecourt lights for `lamps`, parking bays for parked cars), builds each into a `Kit` added
+to its sectors, and pushes the doors with its facades before its lamps and trees look for room. The
+door's name is what the interior is dressed after (a chain's store, a mall's atrium).
+
 ## Notes for tunnels
 
 - The profile goes below the sea (`y` < −2): the tube is drawn from `tube[0]` to `tube[1]`, retaining

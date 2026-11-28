@@ -5,6 +5,7 @@ import { carObject, type CarKind } from "../../real/cars";
 import { terrainMat } from "../../real/ground";
 import { kitGeos, kitMeshes, mergeKit, type KitGeos } from "../../real/kitobj";
 import { hex, Kit, type V2, type V3 } from "../../real/lmkit";
+import { emptyOut, front as martFront, mall as mallBox, MartDecals, parkade } from "../../real/marts";
 import { placeProps, type PropSpot } from "../../real/props";
 import { plantTrees, type TreeSpot } from "../../real/trees";
 import type { Box, IsleContent, IsleCtx, IsleFacade, IsleSeat } from "../types";
@@ -20,8 +21,14 @@ import { cells, type Face, frame, house, onlyFront, rowOf, type HouseSpot } from
  *  - the Grote Markt: the Belfort over the cloth hall, market stalls, terraces, the guild houses;
  *  - the canals' quays: elms, lamps, bollards, bicycles, boats moored, stairs down to the water;
  *  - the castle on its hill (curtain walls, round towers, the keep), the path up to its gate;
- *  - the harbour quay along the north shore, its boats; the gabled houses everywhere else (./town.ts).
+ *  - the harbour quay along the north shore, its boats; the gabled houses everywhere else (./town.ts);
+ *  - 24/ZEC's kiosks (src/scene/real/marts.ts) in three houses' ground floors (on Øresund Boulevard,
+ *    Kongensgade, Slotsgade), and GAMLA GALLERIA, the department store facing the Grote Markt across
+ *    Markt, its multi-storey car park behind it on Zuidkade.
  */
+
+/** The Galleria's block: between Markt and Zuidkade, Kongensgade and Havnegade. */
+const GGALL = { x0: -2005, x1: -1930, z0: -35, z1: 70 };
 
 const Y0 = CURB;
 const WATER = BAY.water;
@@ -93,6 +100,9 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
   const signs = new THREE.Group();
   signs.name = "gamla:signs";
   root.add(signs);
+  /** The kiosks' and the Galleria's pictures (one draw), their doors, furniture and lights. */
+  const MA = new MartDecals();
+  const mo = emptyOut();
 
   islet(root, near, props, trees);
   await ctx.yieldFrame();
@@ -104,7 +114,7 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
     const cx = (x0 + x1) / 2,
       cz = (z0 + z1) / 2;
     if (Math.hypot(cx - GCASTLE.x, cz - GCASTLE.z) < GCASTLE.r + 6) return true;
-    if (inBox(GCATH, cx, cz, 14) || inBox(GSQUARE, cx, cz) || inBox(GMARKT, cx, cz)) return true;
+    if (inBox(GCATH, cx, cz, 14) || inBox(GSQUARE, cx, cz) || inBox(GMARKT, cx, cz) || inBox(GGALL, cx, cz)) return true;
     return false;
   };
   const spots: HouseSpot[] = [];
@@ -169,6 +179,30 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
   spots.push(...rowOf("s", GSQUARE.z0 + 13, GSQUARE.x0 + 0.5, GSQUARE.x1 - 0.5, 12, 4401, (k) => (["cafe", "bar", "cafe", "shop", "cafe"] as const)[k % 5], 1));
   // the Grote Markt: the guild houses along its east side facing it, their backs to Havnegade's quay
   spots.push(...rowOf("w", GMARKT.x1 - 13, GMARKT.z0 + 0.5, GMARKT.z1 - 26, 12, 5501, (k) => (["cafe", "shop", "bar", "cafe"] as const)[k % 4], 1));
+  // the Galleria's block keeps its houses along Havnegade (the waterfront's row)
+  spots.push(...rowOf("e", GGALL.x1 - 2.4, GGALL.z0 + 0.4, GGALL.z1 - 0.4, 10, 6601, (k) => (["shop", "house", "cafe", "house"] as const)[k % 4], 2));
+  // 24/ZEC's kiosks: the house nearest each spot on its street, its ground floor taken over (its own
+  // door left out: the kiosk's is the way in)
+  const kiosks: HouseSpot[] = [];
+  for (const [face, x, z] of [
+    ["s", -1952, -165.4],
+    ["e", -2017.4, -16],
+    ["s", -2176, -307.4],
+  ] as [Face, number, number][]) {
+    let best: HouseSpot | null = null,
+      bd = Infinity;
+    for (const h of spots) {
+      if (h.face !== face || h.u1 - h.u0 < 5.4) continue;
+      const along = face === "s" || face === "n" ? x : z,
+        line = face === "s" || face === "n" ? z : x;
+      const d = Math.abs(h.front - line) * 4 + Math.abs((h.u0 + h.u1) / 2 - along);
+      if (d < bd) (bd = d), (best = h);
+    }
+    if (!best || bd > 40) continue;
+    best.kind = "house";
+    best.door = false;
+    kiosks.push(best);
+  }
   {
     let k = 0;
     const per = 60;
@@ -188,6 +222,22 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
       await ctx.yieldFrame();
     }
     void k;
+  }
+  {
+    const K = new Kit({ lod: 0 });
+    for (const h of kiosks) {
+      const sg = h.face === "s" || h.face === "e" ? 1 : -1;
+      martFront(K, MA, { chain: "zec24", face: h.face, front: h.front + 0.12 * sg, at: (h.u0 + h.u1) / 2, w: h.u1 - h.u0 - 0.7, y0: Y0, kiosk: true }, mo);
+    }
+    // GAMLA GALLERIA: five storeys of warm plaster over a stone plinth, the glass atrium facing the
+    // market across Markt, STORHUSET and MARKT FOODS at its ends; the car park's decks behind it
+    const G = GGALL;
+    mallBox(K, MA, { mall: "gamla", face: "n", front: G.z0 + 9.4, at: -1976, w: 52, d: 48, h: 18, y0: Y0, atrium: 16, anchors: [[-25, -13, 0, true], [13, 25, 1, false]], clad: "#e8d6b6", cladSlot: "plaster" }, mo);
+    parkade(K, MA, { face: "s", front: G.z1 - 2.4, at: -1976, w: 52, d: 40, levels: 3, y0: Y0 }, mo);
+    S.add(kitGeos(K.out()), -1976, 10);
+    places.push({ name: "Gamla Galleria", box: { x0: -2002, x1: -1950, z0: G.z0, z1: G.z1 } });
+    for (const f of mo.facades) facades.push(f);
+    props.push(...mo.props);
   }
   // the cafés' terraces on Domplein (along its guild houses) and on the Grote Markt — an aisle left
   // clear in front of every door (the tables and their parasols stood on the doorsteps)
@@ -290,6 +340,8 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
 
   S.build(root, "gamla:town");
   places.push({ name: "Gamla", box: GLAND });
+  const marts = MA.mesh("gamla:marts");
+  if (marts) root.add(marts);
 
   // the hill's own floor (the castle's: walked up; the game's solid shape sees only the paving)
   const hillAt = (x: number, z: number) => {
@@ -310,7 +362,7 @@ export default async function build(ctx: IsleCtx, roots: unknown): Promise<IsleC
     },
     // (on foot up the hill the game asks the island, not its solid shape: the castle's walls and towers)
     blocked: (x: number, z: number) => castleBlocked(x, z),
-    lamps,
+    lamps: [...lamps, ...mo.lamps],
     seats,
   };
 }

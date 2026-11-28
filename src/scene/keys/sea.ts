@@ -180,6 +180,62 @@ export class KeysSea {
     };
   }
 
+  /**
+   * The city's own sea (city/index.ts coast(): the plane round the city, the strait, the islands)
+   * dressed in this water: the same deep blue, swell, ripples, glints and sky in it, so where the two
+   * meet off Orchard Keys (by your villa's sea wall) no seam shows — the plain blue sheet it was read
+   * as a dark, near-black slab against the clear water, a curtain across the strait. Deep everywhere
+   * (no floor seen through it), drawn opaque like the plane it replaces.
+   */
+  static dress(sea: THREE.Mesh, day: () => boolean) {
+    const g = sea.geometry;
+    // (its turn flat baked in: the shader's world position is its own)
+    sea.updateMatrix();
+    g.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(sea.rotation));
+    sea.rotation.set(0, 0, 0);
+    g.setAttribute("aDepth", new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute("position").count).fill(4), 1));
+    g.computeBoundingSphere();
+    const mat = new THREE.ShaderMaterial({
+      name: "CitySea",
+      vertexShader: VERT,
+      fragmentShader: FRAG,
+      transparent: false,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+      fog: true,
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.fog,
+        {
+          uTime: { value: 0 },
+          uNight: { value: 0 },
+          uSun: { value: new THREE.Vector3(0.45, 0.8, 0.35) },
+          uSky: { value: new THREE.Color("#b9d6ee") },
+          uShallow: { value: new THREE.Color("#56d4cb") },
+          uDeep: { value: new THREE.Color("#1a6584") },
+          uFoam: { value: new THREE.Color("#f7f5ee") },
+        },
+      ]),
+    });
+    const old = sea.material as THREE.Material;
+    sea.material = mat;
+    old.dispose();
+    sea.userData.noField = true;
+    const t0 = performance.now();
+    let night = -1;
+    sea.onBeforeRender = () => {
+      const u = mat.uniforms;
+      u.uTime.value = (performance.now() - t0) / 1000;
+      const n = day() ? 0 : 1;
+      if (n !== night) {
+        night = n;
+        u.uNight.value = n;
+        u.uSky.value.set(n ? "#1a2238" : "#b9d6ee");
+        u.uShallow.value.set(n ? "#1c5664" : "#56d4cb");
+        u.uDeep.value.set(n ? "#082636" : "#1a6584");
+      }
+    };
+  }
+
   /** The water's depth at (x, z) on this sea (≤ 0: dry), or null off it. */
   static inside(x: number, z: number) {
     const R = SEA_RECT;
