@@ -953,6 +953,34 @@ interface Shell {
   glass?: boolean;
 }
 
+const OPV = new THREE.Vector3();
+/** Where the Concert Hall's foyer opens on the top of the steps (model voxels): the door, its floor. */
+const OPERA_DOOR = { x: 46, y: 14, z: 76.2 };
+
+/**
+ * The opera house's own floors in its model voxels (operaBase's): the podium's deck (y 14), the
+ * Monumental Steps down from its south edge (one voxel a step, two deep), the Bennelong wing's
+ * terrace beside them; null where the broadwalk (the street's level) is.
+ */
+function operaFloor(x: number, z: number): number | null {
+  const { W } = OP;
+  const PX0 = 7,
+    PX1 = W - 7,
+    PZ0 = 5,
+    PZ1 = 78,
+    PT = 14,
+    SX0 = 34,
+    NSTEP = 13,
+    BZ1 = PZ1 + 20;
+  if (x >= PX0 && x <= PX1 && z >= PZ0 && z <= PZ1) return PT;
+  if (x >= SX0 && x <= PX1 && z > PZ1 && z < PZ1 + NSTEP * 2) {
+    const i = Math.floor((z - PZ1) / 2);
+    return PT - i;
+  }
+  if (x >= PX0 && x < SX0 && z > PZ1 && z <= BZ1) return PT;
+  return null;
+}
+
 /** The halls' shells (opera.ts), in its model voxels. */
 function operaShells(): Shell[] {
   const PZ1 = 78,
@@ -1105,6 +1133,9 @@ function shell(P: Parts, m: Mats, s: Shell, lod: 0 | 1) {
 /** The statue and the opera house, put where the city laid out their lots; lit by the evening. */
 export class BayMarks {
   readonly group = new THREE.Group();
+  /** The opera house's model frame: world → its voxels (to walk its steps and podium). */
+  private operaInv: THREE.Matrix4 | null = null;
+  private operaMat: THREE.Matrix4 | null = null;
   constructor(city: City) {
     this.group.name = "baymarks";
     const m = (M ??= makeMats());
@@ -1130,6 +1161,10 @@ export class BayMarks {
       holder.add(lod);
       (full.parent ?? this.group).add(holder);
       holder.updateMatrixWorld(true);
+      if (kind === "opera") {
+        this.operaMat = holder.matrixWorld.clone().multiply(frame);
+        this.operaInv = this.operaMat.clone().invert();
+      }
       // the occluder: its box (hover, the walls-down view) is the real model's now, and an unseen
       // box in the landmark's own group answers the mouse (hover and click in the city's view)
       lm.occluder.box.setFromObject(holder);
@@ -1153,6 +1188,48 @@ export class BayMarks {
       for (const s of operaShells()) shell(P, m, s, lod);
     });
     void BAY;
+  }
+
+  /** (x, z) in the opera house's model voxels (x across, z from the harbour end to the forecourt), or null. */
+  private opModel(x: number, z: number) {
+    if (!this.operaInv) return null;
+    const v = OPV.set(x, 0, z).applyMatrix4(this.operaInv);
+    return v.x < -2 || v.x > OP.W + 2 || v.z < -2 || v.z > OP.D + 2 ? null : v;
+  }
+
+  /**
+   * On foot on the opera house (its own floors, over what the street's plan knows): the Monumental Steps
+   * a step at a time, the podium's deck under the shells, the Bennelong wing's terrace. Null elsewhere.
+   */
+  groundAt(x: number, z: number): number | null {
+    const v = this.opModel(x, z);
+    if (!v) return null;
+    const y = operaFloor(v.x, v.z);
+    if (y === null) return null;
+    return OPV.set(0, y, 0).applyMatrix4(this.operaMat!).y;
+  }
+
+  /** Up on the opera house's podium: the shells (its halls, its foyers' glass) stop a body. */
+  blocked(x: number, z: number) {
+    const v = this.opModel(x, z);
+    if (!v || operaFloor(v.x, v.z) === null) return false;
+    for (const s of operaShells()) {
+      const z0 = Math.min(s.zt, s.zb),
+        z1 = Math.max(s.zt, s.zb);
+      // (the foyer's glass set back in a south shell's mouth: the last metre and a half under its lid open)
+      const mouth = s.dir > 0 ? 4.5 : 0;
+      if (Math.abs(v.x - s.cx) < s.w * 0.92 && v.z > z0 - 0.5 && v.z < z1 - mouth) return true;
+    }
+    return false;
+  }
+
+  /** The opera house's front door: in the Concert Hall's foyer glass at the top of the Monumental Steps, facing down them. */
+  operaDoor(): { x: number; y: number; z: number; fx: number; fz: number } | null {
+    if (!this.operaMat) return null;
+    const p = new THREE.Vector3(OPERA_DOOR.x, OPERA_DOOR.y, OPERA_DOOR.z).applyMatrix4(this.operaMat);
+    const q = new THREE.Vector3(OPERA_DOOR.x, OPERA_DOOR.y, OPERA_DOOR.z + 6).applyMatrix4(this.operaMat);
+    const f = q.sub(p).setY(0).normalize();
+    return { x: p.x, y: p.y, z: p.z, fx: f.x, fz: f.z };
   }
 
   /** The eyes, the torch, the lamps and the foyers by the evening's light. */

@@ -87,6 +87,23 @@ const mid = new THREE.Vector3();
 const eye3 = new THREE.Vector3();
 const nm = new THREE.Matrix3();
 
+/**
+ * A material's userData as a key: its values, and whatever has a uuid (a texture, another material)
+ * by its uuid. (Not JSON.stringify: a texture in it is turned into JSON by its own toJSON, which
+ * encodes the whole picture as a PNG — the merge froze the street for three seconds.)
+ */
+function dataKey(v: unknown, depth = 0): string {
+  if (v === null || typeof v !== "object") return typeof v === "function" ? "fn" : String(v);
+  const o = v as Record<string, unknown>;
+  if (typeof o.uuid === "string") return `#${o.uuid}`;
+  if (depth > 3) return "…";
+  if (Array.isArray(v)) return `[${v.map((x) => dataKey(x, depth + 1)).join(",")}]`;
+  if (ArrayBuffer.isView(v)) return `<${(v as unknown as ArrayLike<number>).length}>`;
+  return `{${Object.keys(o)
+    .map((k) => `${k}:${dataKey(o[k], depth + 1)}`)
+    .join(",")}}`;
+}
+
 export class Thrift {
   private kept: Kept[] = [];
   private keptOf = new Set<THREE.Object3D>();
@@ -106,7 +123,8 @@ export class Thrift {
     const m = o as THREE.Mesh;
     if (!m.isMesh || (m as unknown as THREE.InstancedMesh).isInstancedMesh || (m as unknown as THREE.BatchedMesh).isBatchedMesh) return false;
     // (a downtown building's mesh: the city's own batch draws it, see cityBatch)
-    if (this.refused.has(o) || this.keptOf.has(o) || Array.isArray(m.material) || m.userData.cityBatch) return false;
+    // (or one that asks to keep its own draw: it is hidden by `visible` at times, which a merged copy would not follow)
+    if (this.refused.has(o) || this.keptOf.has(o) || Array.isArray(m.material) || m.userData.cityBatch || m.userData.noThrift) return false;
     const mat = m.material as Plain;
     if (mat.transparent || mat.alphaTest > 0 || !mat.visible) return false;
     if (m.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || m.renderOrder !== 0 || m.morphTargetInfluences || m.layers.mask !== 1) return false;
@@ -132,7 +150,7 @@ export class Thrift {
   private look(mat: Plain) {
     const m = mat as THREE.MeshStandardMaterial;
     const maps = MAPS.map((k) => ((m as unknown as Record<string, THREE.Texture | null>)[k]?.uuid ?? "")).join("/");
-    return [maps, fnId(m.onBeforeCompile), m.name, m.normalScale?.x, m.aoMapIntensity, m.type, m.color.getHex(), m.emissive?.getHex(), m.emissiveIntensity, m.roughness, m.metalness, m.vertexColors, m.side, m.shadowSide, m.flatShading, m.toneMapped, m.fog, m.depthWrite, m.depthTest, m.colorWrite, m.polygonOffset, m.polygonOffsetFactor, m.polygonOffsetUnits, m.opacity, m.envMapIntensity, m.alphaTest, m.blending, m.dithering, m.wireframe, m.clipShadows, m.customProgramCacheKey(), JSON.stringify(m.userData)].join();
+    return [maps, fnId(m.onBeforeCompile), m.name, m.normalScale?.x, m.aoMapIntensity, m.type, m.color.getHex(), m.emissive?.getHex(), m.emissiveIntensity, m.roughness, m.metalness, m.vertexColors, m.side, m.shadowSide, m.flatShading, m.toneMapped, m.fog, m.depthWrite, m.depthTest, m.colorWrite, m.polygonOffset, m.polygonOffsetFactor, m.polygonOffsetUnits, m.opacity, m.envMapIntensity, m.alphaTest, m.blending, m.dithering, m.wireframe, m.clipShadows, m.customProgramCacheKey(), dataKey(m.userData)].join();
   }
 
   /** Only a colour, with nothing that makes its material its own. */

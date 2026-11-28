@@ -91,6 +91,12 @@ export class Horns {
     this.arresting = false;
   }
 
+  /** You (or your car) just in front of it. */
+  private mine(group: THREE.Object3D) {
+    const p = this.player();
+    return !!p && Math.hypot(p.x - group.position.x, p.z - group.position.z) < 9;
+  }
+
   private annoy(k: number) {
     if (!this.player() || this.arresting) return;
     this.annoyance += k;
@@ -128,12 +134,13 @@ export class Horns {
     }
     // stay in front of it and the driver gets out
     // blocking the police car: they don't like that at all
+    // (only when it is you in its way: not a jaywalker, nor a passer-by or a wreck in the game)
     if (kind === "police" && v.blocked > 2.5 && st.honks === 2) {
       st.honks++;
-      this.annoy(2);
+      if (this.mine(group)) this.annoy(2);
     }
     if (v.blocked > 5.5 && !st.driver && kind !== "bus" && kind !== "scooter") {
-      if (this.player()) this.annoy(1);
+      if (this.mine(group)) this.annoy(1);
       st.driver = true;
       void this.driverOut(v, group).finally(() => setTimeout(() => (st!.driver = false), 6000));
     }

@@ -119,7 +119,9 @@ float dtH = 0.0, dtFade = 0.0, dtRough = -1.0, dtBump = 0.004;
     vec2 w1 = q * 0.9 + vec2(uDetTime * 0.12, uDetTime * 0.05);
     vec2 w2 = q * 2.3 - vec2(uDetTime * 0.07, -uDetTime * 0.11);
     dtH = dtNoise(w1) * 0.6 + dtNoise(w2) * 0.4;
-    dtFade = far;
+    // (gone before its swells are finer than a pixel: far off, at a grazing angle, they would alias
+    // into bright streaks along the horizon)
+    dtFade = 1.0 - smoothstep(0.06, 0.22, px);
     dtBump = 0.09;
   } else if (k == 5) {
     // plaster: a soft, uneven trowel finish

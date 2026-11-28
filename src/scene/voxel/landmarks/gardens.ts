@@ -303,12 +303,13 @@ export function gardens(seed: number, o: LandmarkOpts): Built {
   lights.push([f.cx, 14, f.cz + 12, "#ffd8f0"]);
 
   const signs: SignSpot[] = [
-    { text: "GARDENS BY THE BAY · 庭園", color: "#c060ff", x: 140, y: 6, z: D - 15.9, w: 60, h: 4, vertical: false, facing: "front" },
+    // (the name runs high along the front, over the entrance: not a band across its doors)
+    { text: "GARDENS BY THE BAY · 庭園", color: "#c060ff", x: 140, y: 19, z: D - 15.9, w: 60, h: 4, vertical: false, facing: "front" },
     { text: "FLOWER DOME", color: "#ff8ac8", x: f.cx, y: 14.5, z: Math.round(f.cz + f.rz) + 5.1, w: 14, h: 2, vertical: false, facing: "front" },
     { text: "CLOUD FOREST", color: "#3ef0d0", x: cf.cx - 18, y: 14.5, z: Math.round(cf.cz + cf.rz * 0.8) + 5.1, w: 14, h: 2, vertical: false, facing: "front" },
   ];
   // the name sign stands on a low stone plinth in the flower bed
-  m.box(110, 1, D - 17, 170, 9, D - 16, C("#3a2a3a"));
+  m.box(110, 1, D - 17, 170, 3, D - 16, C("#3a2a3a"));
   m.box(109, 0, D - 18, 171, 1, D - 15, C("#8a8478"));
 
   points.camPos = [140, 70, D + 120];

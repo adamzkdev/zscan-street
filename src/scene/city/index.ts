@@ -15,6 +15,7 @@ import type { SignSpot } from "../voxel/parts";
 import { mat } from "./kit";
 import { AREAS, BAY, CITY, CORE, CURB, DISTRICTS, GRID, gridCells, nz, PARK, planCity, polePositions, RIVER, SHOTENGAI, ST, streetSegments, type BuildingJob, type DistrictKey } from "./plan";
 import { SEA_RECT } from "../keys/sea";
+import { SEA_HOLES } from "../isles/plan";
 import type { Geos } from "./worker";
 import { CUT_VOX } from "./plan";
 import { tunnels } from "./tunnel";
@@ -298,7 +299,8 @@ function objectFrom(geos: Geos, own: boolean) {
     mesh.raycast = raycastOnPositions;
     if (NO_FIELD.has(kind)) mesh.userData.noField = true;
     const lit = kind === "emit" || (kind as string) === "neon";
-    mesh.castShadow = !lit;
+    // (a glasshouse's clear panes cast no shadow on what grows under them)
+    mesh.castShadow = !lit && (kind as string) !== "lm.glass.clear";
     mesh.receiveShadow = !lit;
     o.add(mesh);
   }
@@ -366,7 +368,7 @@ function extBatch(g: THREE.Group, lods: LodSet[], shadows = false, use: "batched
       mesh.name = "props";
     }
     // (the far level never casts: shadows are drawn round the focus only, where the near one is)
-    mesh.castShadow = shadows && kind !== "emit" && (kind as string) !== "neon";
+    mesh.castShadow = shadows && kind !== "emit" && (kind as string) !== "neon" && (kind as string) !== "lm.glass.clear";
     mesh.receiveShadow = kind !== "emit" && (kind as string) !== "neon";
     // opaque, and drawn from above: depth sorting would only cost time
     mesh.sortObjects = false;
@@ -1375,10 +1377,11 @@ function coast(g: THREE.Group, animated: ((t: number, dt: number) => void)[]) {
   wt.wrapS = wt.wrapT = THREE.RepeatWrapping;
   // (a hole where Orchard Keys' own clear water lies: scene/keys/sea.ts; the UVs in metres)
   wt.repeat.set(1 / 8, 1 / 8);
-  const shape = new THREE.Shape([new THREE.Vector2(-2500, -2500), new THREE.Vector2(2500, -2500), new THREE.Vector2(2500, 2500), new THREE.Vector2(-2500, 2500)]);
-  const H = SEA_RECT;
-  // (the plane is turned flat with its y as −z)
-  shape.holes.push(new THREE.Path([new THREE.Vector2(H.x0, -H.z0), new THREE.Vector2(H.x0, -H.z1), new THREE.Vector2(H.x1, -H.z1), new THREE.Vector2(H.x1, -H.z0)]));
+  // (out to the islands round the city and well past them: src/scene/isles)
+  const shape = new THREE.Shape([new THREE.Vector2(-7000, -7000), new THREE.Vector2(7000, -7000), new THREE.Vector2(7000, 7000), new THREE.Vector2(-7000, 7000)]);
+  // (the plane is turned flat with its y as −z; a hole over each undersea tunnel where its tube
+  // breaks the surface, its inside under the water's level)
+  for (const H of [SEA_RECT, ...SEA_HOLES]) shape.holes.push(new THREE.Path([new THREE.Vector2(H.x0, -H.z0), new THREE.Vector2(H.x0, -H.z1), new THREE.Vector2(H.x1, -H.z1), new THREE.Vector2(H.x1, -H.z0)]));
   const sea = new THREE.Mesh(new THREE.ShapeGeometry(shape), addDetail(new THREE.MeshStandardMaterial({ map: wt, color: "#2f7392", roughness: 0.16, metalness: 0.25, emissive: "#05263a", emissiveIntensity: 0.7 }), "water"));
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(0, BAY.water - 0.06, 0);

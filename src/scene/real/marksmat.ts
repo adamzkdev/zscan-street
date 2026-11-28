@@ -35,6 +35,13 @@ function make(slot: string): THREE.Material {
     case "dark":
       return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.6, envMapIntensity: 0.7 });
     case "glass": {
+      // `lm.glass.clear`: a glasshouse's panes (the gardens' domes): light, seen through to the beds,
+      // the trees and the mountain inside — not a tower's dark mirror
+      if (flavour === "clear") {
+        const m = new THREE.MeshStandardMaterial({ vertexColors: true, color: "#e8f4f6", roughness: 0.08, metalness: 0.1, envMapIntensity: 1.4, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+        m.customProgramCacheKey = () => "lm.glass.clear";
+        return m;
+      }
       // (a dark base, as the buildings' glass (real/mats.ts): a light tint on a metal would mirror the night sky's glow back white)
       const m = new THREE.MeshStandardMaterial({ vertexColors: true, color: "#3c4652", roughness: 0.06, metalness: 0.85, envMapIntensity: 1.25 });
       m.onBeforeCompile = (sh) => {

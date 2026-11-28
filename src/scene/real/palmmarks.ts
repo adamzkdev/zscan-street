@@ -282,7 +282,8 @@ function palm(c: Ctx) {
     for (let zz = TZ0 + TH + 4; zz < DL - 8; zz += 9) if (!roadAt(Math.round(CX + s * 14), zz)) palmAt(CX + s * 13.5, 2.4, zz, zz);
     if (!lod) for (let zz = TZ0 + TH + 2; zz < D - 2; zz += 10) c.props.push(["lamp", ...P(CX + s * 6.2, ramp(zz), zz), s > 0 ? Math.PI / 2 : -Math.PI / 2, "#ffe6b8"]);
   }
-  for (let z = TZ0 + TH + 6; z < DL - 4; z += 14) palmAt(CX, 3, z, z);
+  // (down the middle of the trunk road, stopping short of the gateway: its way through is clear)
+  for (let z = TZ0 + TH + 6; z < DL - 18; z += 14) palmAt(CX, 3, z, z);
   // ---- the monorail: its beam on piers down the median and over the water to Atlantis ----
   const atlFront = zOut(CX) + 3 + 12;
   const MZ0 = Math.round(atlFront + 8),
@@ -780,7 +781,8 @@ function burj(c: Ctx) {
     K.box("lm.paint", p[0], p[1], p[2], M(22), M(7), M(8), WHITE);
     if (!lod) K.box("glass", p[0], p[1] + M(1), p[2] + M(0.05), M(20), M(3.5), M(8), hex("#4a6a82"));
     K.box("lm.chrome", p[0], p[1] + M(7), p[2] + M(0.5), M(24), M(1), M(9), GOLD);
-    const cz = P(cx, TOPY + 5, z1 + 2.5);
+    // (the porte-cochère: high enough to walk and look under at the doors, not a table across them)
+    const cz = P(cx, TOPY + 13, z1 + 2.5);
     K.box("lm.chrome", cz[0], cz[1], cz[2], M(10), M(1), M(5), GOLD);
     for (const sx of [-1, 1]) K.cyl("lm.chrome", cz[0] + sx * M(4.5), Y0, cz[2] + M(2), M(0.5), M(0.5), cz[1] - Y0, 12, GOLD);
     // the fountain court

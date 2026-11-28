@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { faces, type Look } from "./faces";
 import { bodyMatrix, figureMaterials, headMatrix, JOINTS, newAct, NPARTS, PART_KINDS, PARTS, partColor, partMatrix, partShape, partShapeFar, pose, stride, type Act } from "./figure";
 import type { PartKind } from "./snarkgeo";
-import { flushArt } from "./snarkmat";
+import { flushArt, snarkNight } from "./snarkmat";
 
 /**
  * The street's zkSNARKs in 3D (src/gta): round you, every zkSNARK — the game's own passers-by first,
@@ -126,6 +126,8 @@ export class People3D {
 
   /** Where the people come from instead (inside a place), or null: the street's. */
   source: ((x: number, z: number, r: number) => Person3[]) | null = null;
+  /** Is it night (the eyes, the lenses, the halos glow: snarkmat.ts snarkNight, eased over a few seconds). */
+  night: (() => boolean) | null = null;
 
   constructor(
     scene: THREE.Scene,
@@ -199,6 +201,8 @@ export class People3D {
   update(dt: number, x: number, z: number, me: THREE.Vector3 | null = null, eye: THREE.Vector3 | null = null, view: THREE.Vector3 | null = null) {
     this.eye = eye;
     if (view) this.view.set(view.x, 0, view.z).normalize();
+    // (every figure shares the one material: you and the title's crew glow with the crowd)
+    if (this.night) snarkNight.value += ((this.night() ? 1 : 0) - snarkNight.value) * Math.min(1, dt * 0.6);
     if (!this.group.visible || !this.enabled) return;
     // the frame rate decides how many: under ~45 fps a few go back, over ~57 a few come in
     // (not while it is still building the busts it just met: those frames are the building's, not the drawing's)

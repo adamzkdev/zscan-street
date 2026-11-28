@@ -68,6 +68,22 @@ THREE.Object3D.prototype.updateMatrixWorld = function (this: Kept, force?: boole
 };
 
 /**
+ * three.js's other walk (updateWorldMatrix: lookAt, getWorldPosition…) writes the matrices without
+ * the cache above: an object it ran on while detached got its world matrix from its own matrix
+ * alone, and once put back under its parent with nothing changed, the lazy pass above kept that
+ * wrong world matrix. A cube camera's north face (lookAt(0, 0, −1): the same rotation it started
+ * with) was drawn from the world's origin — every window's panorama showed the heart's street
+ * northward. A detached object this walk touches is made again by the next pass.
+ */
+const updateWorldMatrix = THREE.Object3D.prototype.updateWorldMatrix;
+THREE.Object3D.prototype.updateWorldMatrix = function (this: Kept, updateParents: boolean, updateChildren: boolean) {
+  updateWorldMatrix.call(this, updateParents, updateChildren);
+  // (only a detached object's: under a parent, this walk agrees with the pass above — and clearing
+  // the whole chain up to the scene each time someone asks a position would undo the laziness)
+  if (this.parent === null && !(this as unknown as THREE.Scene).isScene) this.kept = undefined;
+};
+
+/**
  * The branches of `root` that may nap (see naps): every one with something under it, but none that
  * holds a camera or a light (their matrices are read as the frame is drawn).
  */

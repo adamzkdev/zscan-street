@@ -69,6 +69,8 @@ const HOUSE_X0 = -145.5,
 const HOUSE_X1 = HOUSE_X0 + HOUSE.w * VOX,
   HOUSE_Z1 = HOUSE_Z0 + HOUSE.d * VOX;
 const PORTICO = { x0: HOUSE_X1, x1: HOUSE_X1 + HOUSE.portico * VOX, z0: HOUSE_Z0 + 8 * VOX, z1: HOUSE_Z1 - 8 * VOX };
+/** The cell house's front door: under its portico, facing east down the path from the sally port (the visitor's way in). */
+export const PRISON_DOOR = { x: PORTICO.x1, z: (PORTICO.z0 + PORTICO.z1) / 2 };
 /** The cell wing: west wall of the first cell, cell pitch, the bars, the plates. */
 const WING_X0 = -142;
 const CELL_W = WING.cell * VOX;

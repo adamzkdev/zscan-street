@@ -2339,12 +2339,20 @@ function needle(c: Ctx) {
     pale = hex("#e4e2dc");
   // ---- the plaza: granite with gold inlays radiating from the tower
   K.box("lm.PavingStones128", 0, -0.06, 0, F.w, 0.08, F.d, hex("#d2ccc2"));
+  // (between the wings, from the core's foot out to a pace short of the lot's edge: never past it —
+  // out there they lay on the pavement round the lot)
   if (!lod)
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
-      const r0 = m(L0 + 6),
-        r1 = Math.min(F.w, F.d) / 2 - 1;
-      K.beam("lm.glow", [cx + Math.cos(a) * r0, 0.025, cz + Math.sin(a) * r0], [cx + Math.cos(a) * r1, 0.025, cz + Math.sin(a) * r1], 0.08, gold, 0.02);
+      const ca = Math.cos(a),
+        sa = Math.sin(a);
+      if (wingA.some((w) => Math.abs(Math.atan2(Math.sin(a - w), Math.cos(a - w))) < 0.45)) continue;
+      // (the plaza, the lot: F.w × F.d centred on the frame's origin)
+      const edge = Math.min(Math.abs(ca) > 1e-6 ? ((ca > 0 ? 1 : -1) * (F.w / 2) - cx) / ca : Infinity, Math.abs(sa) > 1e-6 ? ((sa > 0 ? 1 : -1) * (F.d / 2) - cz) / sa : Infinity);
+      const r0 = m(coreR(1)) + 1.4,
+        r1 = edge - 0.9;
+      if (r1 - r0 < 1) continue;
+      K.beam("lm.glow", [cx + ca * r0, 0.025, cz + sa * r0], [cx + ca * r1, 0.025, cz + sa * r1], 0.08, gold, 0.02);
     }
   // ---- the breakpoints: every height where a wing steps back (or the width does, a little)
   const ys = new Set<number>([1, 20, deckY, deckY + 18, top]);

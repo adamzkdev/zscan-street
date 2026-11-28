@@ -14,12 +14,16 @@ import * as THREE from "three";
  *    cloth's sheen at grazing angles (MeshPhysicalMaterial's sheen) — no texture to load, sharp at any
  *    distance, fading out where it would shimmer.
  *
- * Every geometry carries: position, normal, color, uv (the art atlas), aFab (the fabric's own metres)
- * and `aMix` (x: how much of the picture shows, 0…1; y: the fabric: MAT below; z: the light it gets —
- * the hood's opening, the collar, under the arms darker: a baked occlusion).
+ * Every geometry carries: position, normal, color, uv (the art atlas), aUv2 (the art again, mirrored:
+ * the side its painter could not see), aFab (the fabric's own metres) and `aMix` (x: how much of the
+ * picture shows, 0…1; y: the fabric: MAT below; z: the light it gets — the hood's opening, under the
+ * arms darker: a baked occlusion; w: how much of the mirrored reading shows).
+ *
+ * The atlas's alpha is where the picture shines: its eyes, its lenses (lit a little by day, glowing at
+ * night: `snarkNight`), and MAT.glow (a halo) is a light of its own colour.
  */
 
-export const MAT = { art: 0, jersey: 1, rib: 2, denim: 3, skin: 4, rubber: 5, upper: 6, knit: 7 } as const;
+export const MAT = { art: 0, jersey: 1, rib: 2, denim: 3, skin: 4, rubber: 5, upper: 6, knit: 7, twill: 8, gloss: 9, glow: 10 } as const;
 
 const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 export const SLOT = 128;
@@ -165,10 +169,9 @@ function epx(src: Int32Array, w: number, h: number) {
 /**
  * A look's picture as the atlas wants it: 26 × 26 cells (−1 nothing) → ART × ART RGBA. The empty
  * round the figure takes the nearest drawn colour (the projection and the mipmaps never meet black),
- * then twice EPX. Its alpha is `mask` (cells): where the picture is shown rather than the cloth —
- * per texel, so its edge is as smooth as the picture, not as coarse as the mesh.
+ * then twice EPX. Its alpha is `mask` (cells): where the picture shines (its eyes, its lenses).
  */
-export function artPixels(cells: Int32Array, mask: (cx: number, cy: number) => number) {
+export function artPixels(cells: Int32Array, mask: (cx: number, cy: number) => number, soft: (cx: number, cy: number) => number = () => 0) {
   const N = 26;
   const c = new Int32Array(cells);
   // fill the empty from the drawn, ring by ring
@@ -204,13 +207,36 @@ export function artPixels(cells: Int32Array, mask: (cx: number, cy: number) => n
   const out = new Uint8Array(W * W * 4);
   for (let y = 0; y < W; y++)
     for (let x = 0; x < W; x++) {
-      // (no blur: the scale-up's diagonals and the GPU's filtering are the smoothing; the eyes stay sharp)
+      // (no blur where it carries the likeness: the scale-up's diagonals and the GPU's filtering are
+      // the smoothing, the eyes stay sharp; cloth where it is `soft`: the drawing's blocks of shading
+      // blended cell to cell, folds rather than pixels)
       const v = x4[y * W + x];
       const o = (y * W + x) * 4;
-      out[o] = (v >> 16) & 255;
-      out[o + 1] = (v >> 8) & 255;
-      out[o + 2] = v & 255;
-      // alpha: where the picture shows (the hood's opening, a hat's front), sharp at the texel
+      const cx = (x + 0.5) / 4,
+        cy = (y + 0.5) / 4;
+      const k = soft(cx, cy);
+      if (k > 0) {
+        const fx = Math.min(N - 1.001, Math.max(0, cx - 0.5)),
+          fy = Math.min(N - 1.001, Math.max(0, cy - 0.5));
+        const x0 = Math.floor(fx),
+          y0 = Math.floor(fy),
+          tx = fx - x0,
+          ty = fy - y0;
+        const a = c[y0 * N + x0],
+          b = c[y0 * N + x0 + 1],
+          d = c[(y0 + 1) * N + x0],
+          e = c[(y0 + 1) * N + x0 + 1];
+        for (let ch = 0; ch < 3; ch++) {
+          const sh = 16 - ch * 8;
+          const bil = (((a >> sh) & 255) * (1 - tx) + ((b >> sh) & 255) * tx) * (1 - ty) + (((d >> sh) & 255) * (1 - tx) + ((e >> sh) & 255) * tx) * ty;
+          out[o + ch] = Math.round(((v >> sh) & 255) * (1 - k) + bil * k);
+        }
+      } else {
+        out[o] = (v >> 16) & 255;
+        out[o + 1] = (v >> 8) & 255;
+        out[o + 2] = v & 255;
+      }
+      // alpha: where it shines, sharp at the texel
       out[o + 3] = Math.round(Math.min(1, Math.max(0, mask((x + 0.5) / 4, (y + 0.5) / 4))) * 255);
     }
   return out;
@@ -219,23 +245,28 @@ export function artPixels(cells: Int32Array, mask: (cx: number, cy: number) => n
 // ---- the material ---------------------------------------------------------------------------------------
 
 const VERT_HEAD = /* glsl */ `
-attribute vec3 aMix;
+attribute vec4 aMix;
 attribute vec2 aFab;
-varying vec3 vMix;
+attribute vec2 aUv2;
+varying vec4 vMix;
 varying vec2 vFab;
+varying vec2 vUv2;
 // (the fabric's id is not blended across a triangle: halfway between knit and jersey is no fabric)
 flat varying float vMat;
 `;
 const VERT_BODY = /* glsl */ `
 vMix = aMix;
 vFab = aFab;
+vUv2 = aUv2;
 vMat = aMix.y;
 `;
 const FRAG_HEAD = /* glsl */ `
-varying vec3 vMix;
+varying vec4 vMix;
 varying vec2 vFab;
+varying vec2 vUv2;
 flat varying float vMat;
 uniform float uArtOn;
+uniform float uNight;
 float sHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float sNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -265,9 +296,14 @@ float fabricH(vec2 uv, float mat, float fw) {
     h = (sNoise(uv * 220.0) - 0.5) * 0.0002;
   } else if (mat < 6.5) {
     h = (sNoise(uv * 120.0) - 0.5) * 0.0003 + folds * 0.2;
-  } else {
+  } else if (mat < 7.5) {
+    // knit: a beanie's ribs
     float k = 1.0 - smoothstep(0.003, 0.008, fw);
-    h = k * 0.0008 * abs(sin(uv.x * 520.0));
+    h = k * 0.0008 * abs(sin(uv.x * 520.0)) + folds * 0.3;
+  } else if (mat < 8.5) {
+    // twill: a cap's cotton, its fine diagonals
+    float k = 1.0 - smoothstep(0.0015, 0.004, fw);
+    h = k * 0.0002 * sin((uv.x + uv.y) * 1700.0) + folds * 0.15;
   }
   return h;
 }
@@ -282,32 +318,39 @@ vec3 sBump(vec3 surfPos, vec3 n, float h, float faceDir) {
 `;
 const FRAG_MAP = /* glsl */ `
 {
-  vec4 art = texture2D(map, vMapUv);
+  vec4 art = mix(texture2D(map, vMapUv), texture2D(map, vUv2), vMix.w);
   float fabLum = 1.0;
   if (vMat > 2.5 && vMat < 3.5) fabLum = 0.92 + 0.16 * sNoise(vFab * 9.0) + 0.05 * sNoise(vFab * 60.0);
-  else if (vMat < 2.5) fabLum = 0.96 + 0.08 * sNoise(vFab * 12.0);
-  sArtK = vMix.x * art.a * uArtOn;
-  diffuseColor.rgb *= mix(vec3(fabLum), art.rgb, sArtK) * vMix.z;
+  else if (vMat < 2.5 || (vMat > 6.5 && vMat < 8.5)) fabLum = 0.96 + 0.08 * sNoise(vFab * 12.0);
+  sArtK = vMix.x * uArtOn;
+  sGlow = art.a * sArtK;
+  sArtRGB = art.rgb;
+  diffuseColor.rgb *= mix(vec3(1.0), art.rgb, sArtK) * fabLum * vMix.z;
 }
 `;
 const FRAG_ROUGH = /* glsl */ `
 {
   float m = vMat;
-  float r = m < 1.5 ? 0.86 : m < 2.5 ? 0.9 : m < 3.5 ? 0.82 : m < 4.5 ? 0.55 : m < 5.5 ? 0.72 : m < 6.5 ? 0.5 : 0.92;
-  roughnessFactor = mix(r, 0.48, sArtK);
+  float r = m < 1.5 ? 0.86 : m < 2.5 ? 0.9 : m < 3.5 ? 0.82 : m < 4.5 ? 0.5 : m < 5.5 ? 0.72 : m < 6.5 ? 0.5 : m < 7.5 ? 0.92 : m < 8.5 ? 0.78 : m < 9.5 ? 0.14 : 0.3;
+  // (the eyes wet, whatever they are on)
+  roughnessFactor = mix(r, 0.2, sGlow);
 }
 `;
 const FRAG_NORMAL = /* glsl */ `
 {
   float fw = length(fwidth(vFab));
-  float h = fabricH(vFab, vMat, fw) * (1.0 - sArtK);
+  float h = fabricH(vFab, vMat, fw) * (1.0 - sGlow);
   normal = sBump(-vViewPosition, normal, h, faceDirection);
 }
 `;
+const FRAG_GLOW = /* glsl */ `
+totalEmissiveRadiance += sArtRGB * sGlow * (0.3 + 2.4 * uNight);
+if (vMat > 9.5) totalEmissiveRadiance += diffuseColor.rgb * (0.9 + 2.2 * uNight);
+`;
 const FRAG_SHEEN = /* glsl */ `
 #ifdef USE_SHEEN
-  float sk = vMat < 3.5 ? 1.0 : vMat > 6.5 ? 1.0 : 0.0;
-  material.sheenColor *= sk * (1.0 - sArtK) * diffuseColor.rgb * 2.2;
+  float sk = vMat < 3.5 ? 1.0 : (vMat > 6.5 && vMat < 8.5) ? 1.0 : 0.0;
+  material.sheenColor *= sk * diffuseColor.rgb * 2.2;
 #endif
 `;
 
@@ -315,6 +358,8 @@ const FRAG_SHEEN = /* glsl */ `
 let mat: THREE.MeshPhysicalMaterial | null = null;
 /** (development: 0 shows the figures without their pictures) */
 export const artOn = { value: 1 };
+/** 0 by day, 1 at night: the eyes, the lenses, a halo glow (people3d.ts eases it with the sky). */
+export const snarkNight = { value: 0 };
 
 /** The figures' one material (shared: the batch, every single figure). */
 export function snarkMaterial() {
@@ -331,17 +376,19 @@ export function snarkMaterial() {
   });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uArtOn = artOn;
+    sh.uniforms.uNight = snarkNight;
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + VERT_HEAD).replace("#include <uv_vertex>", "#include <uv_vertex>\n" + VERT_BODY);
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", "#include <common>\n" + FRAG_HEAD)
-      .replace("void main() {", "void main() {\n  float sArtK = 0.0;")
+      .replace("void main() {", "void main() {\n  float sArtK = 0.0;\n  float sGlow = 0.0;\n  vec3 sArtRGB = vec3(0.0);")
       .replace("#include <map_fragment>", FRAG_MAP)
       .replace("#include <color_fragment>", "#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA ) || defined( USE_BATCHING_COLOR )\n  diffuseColor.rgb *= mix(vColor.rgb, vec3(1.0), sArtK);\n#endif")
       .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + FRAG_ROUGH)
       .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + FRAG_NORMAL)
-      .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\n" + FRAG_SHEEN);
+      .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\n" + FRAG_SHEEN)
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + FRAG_GLOW);
   };
-  m.customProgramCacheKey = () => "zksnark-real";
+  m.customProgramCacheKey = () => "zksnark-faithful";
   m.userData.shared = true;
   mat = m;
   return m;

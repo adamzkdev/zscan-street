@@ -561,6 +561,12 @@ export function spinWheels(g: THREE.Object3D, metres: number) {
     }
 }
 
+/** Turn a vehicle's front wheels (radians, + to the left), as the traffic takes a corner. */
+export function steerWheels(g: THREE.Object3D, angle: number) {
+  for (const c of g.children)
+    if (c.name === "wheel" && (c.userData.wheel as { front?: boolean }).front) c.rotation.y = angle;
+}
+
 /**
  * A car's cabin seen into (its glass tinted and see-through: the hollow cabin and whoever drives show)
  * or not (dark opaque glass, no blending, no sorting): the game opens only the cars near you.

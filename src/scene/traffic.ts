@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { CITY } from "./city";
 import { TUNNEL } from "./city/plan";
+import { reach, type TrafficBlocker } from "./goldengate";
 
 /** Anything that drives: a body to move, a length, and wheels to turn by the distance covered. */
 export interface Mover {
@@ -153,17 +154,18 @@ export class Traffic {
    */
   readonly crossings: { x: number; half: number; busy: () => boolean }[] = [];
 
-  /** People standing (or walking) in the road off the crossings: the player, jaywalkers. */
-  blockers: () => { x: number; z: number }[] = () => [];
+  /** People standing (or walking) in the road off the crossings: the player, jaywalkers; cars' bodies standing in it (yours in the game, wrecks). */
+  blockers: () => TrafficBlocker[] = () => [];
 
-  /** The nearest blocker in this vehicle's lane, close ahead: a stop just short of them. */
-  private blockerAhead(v: Vehicle, list: { x: number; z: number }[]) {
+  /** The nearest blocker in this vehicle's lane, close ahead: a stop just short of them (of a car's body, by its turned extents). */
+  private blockerAhead(v: Vehicle, list: TrafficBlocker[]) {
     let best: { rear: number; v: number } | null = null;
     for (const b of list) {
-      if (Math.abs(b.z - v.laneZ) > 1.3) continue;
-      const ahead = (b.x - v.front) * v.dir;
-      if (ahead < -0.6 || ahead > 9 + v.v * 0.8) continue;
-      const rear = b.x - v.dir * 0.9;
+      const [ra, rc] = b.hl === undefined ? [0, 0] : reach(b, v.dir, 0);
+      if (Math.abs(b.z - v.laneZ) > (b.hl === undefined ? 1.3 : rc + 1.2)) continue;
+      const ahead = (b.x - v.front) * v.dir - ra;
+      if (ahead < (b.hl === undefined ? -0.6 : -1.5) || ahead > 9 + ra + v.v * 0.8) continue;
+      const rear = b.x - v.dir * (b.hl === undefined ? 0.9 : ra + 0.6);
       if (!best || (rear - best.rear) * v.dir < 0) best = { rear, v: 0 };
     }
     return best;

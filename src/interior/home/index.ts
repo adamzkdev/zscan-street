@@ -39,27 +39,34 @@ import { Home, type Placed } from "../../gta/home";
 import type { Interior, InteriorContext, PickInfo, Rect } from "../types";
 
 /**
- * YOUR PENTHOUSE (src/gta/home.ts): the top floor of an apartment tower on Park Row, facing
- * Central Park — its glass over the park, the heart's towers and the bay beyond: the city itself,
- * rendered from up there (ctx.cityView, turned to the flat). One open floor: the private lift's doors (the way back down to the street), a
- * great room (the kitchen and its island, the dining table, the living room round the TV), a
- * hallway to the bathroom and the bedroom, glass on three sides.
+ * YOUR VILLA (src/gta/home.ts): Shielded Point, your house on Orchard Keys' north point (its outside:
+ * scene/keys/villa.ts) — one level under high ceilings, glass the whole length of its back on the
+ * strait: the Golden Gate and the city across the water, rendered from here (ctx.cityView, the house
+ * itself hidden). Through the teak front door, the hall opens on the great room (the tall pavilion,
+ * 6.8 m to its ceiling); the kitchen's wing to the west (its run of cabinets, the island, where the
+ * dining table goes by the glass); the bedroom's wing to the east (a corridor, the bathroom on the
+ * street side, the bedroom on the sea).
  *
  * The furniture is yours: what you own (economy.ts, "home") stands where you put it (home.ts keeps
  * the layout), built from the realistic pieces (realfurn2.ts); the kitchen, the bathroom and the
- * hi-fi come with the flat. The TV shows the chain live, the hi-fi plays the game's radio while you
+ * hi-fi come with the house. The TV shows the chain live, the hi-fi plays the game's radio while you
  * are home (gta/homeedit.ts), the light follows the day and the night outside.
  *
- * Local frame: metres, the lift's doors at z = 0 (the street side, +z), the flat toward −z.
+ * Local frame: metres, the front door at z = 0 (the street side, +z), the house toward −z (the sea).
  */
 
-const X0 = -9,
-  X1 = 9,
-  Z0 = -14,
-  Z1 = 0,
-  H = 3.4;
-/** The private lift's opening in the front wall. */
-const DOOR = 1.3;
+const X0 = -17,
+  X1 = 17,
+  Z0 = -10.4,
+  Z1 = 0;
+/** The wings' ceiling, the great room's (the pavilion between x −HALL and HALL). */
+const H = 4.0,
+  HH = 6.8,
+  HALL = 7;
+/** The front door's half width; the corridor of the bedroom's wing (x HALL…CORR, z WING_Z…0). */
+const DOOR = 0.85,
+  CORR = 9.6,
+  WING_Z = -4.2;
 
 // ---- the pieces ------------------------------------------------------------------------------------
 
@@ -244,115 +251,175 @@ const overlap = (a: Rect, b: Rect) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] 
 
 /** The walls a print or a sign can hang on: their inner faces (a line, the way the piece faces). */
 const FACES: { x0: number; z0: number; x1: number; z1: number; rot: number }[] = [
-  // the front wall, beside the lift (the great room, the hallway)
-  { x0: -8.1, z0: -0.1, x1: -1.7, z1: -0.1, rot: Math.PI },
-  { x0: 1.7, z0: -0.1, x1: 5.2, z1: -0.1, rot: Math.PI },
-  // the TV wall (the living room's side) and its back (the bedroom's)
-  { x0: 2.9, z0: -13.7, x1: 2.9, z1: -6.3, rot: -Math.PI / 2 },
-  { x0: 3.1, z0: -13.7, x1: 3.1, z1: -6.3, rot: Math.PI / 2 },
-  // the bedroom's wall with its door
-  { x0: 4.9, z0: -6.1, x1: 8.8, z1: -6.1, rot: Math.PI },
+  // the front wall: the kitchen's wing (clear of the fridge), beside the door's glass, the corridor
+  { x0: -15.6, z0: -0.1, x1: -7.2, z1: -0.1, rot: Math.PI },
+  { x0: -6.8, z0: -0.1, x1: -5.2, z1: -0.1, rot: Math.PI },
+  { x0: 5.2, z0: -0.1, x1: 6.8, z1: -0.1, rot: Math.PI },
+  { x0: 7.3, z0: -0.1, x1: 9.3, z1: -0.1, rot: Math.PI },
+  // the bedroom wing's wall: the great room's side (the TV's), the bedroom's side
+  { x0: HALL - 0.1, z0: -10.2, x1: HALL - 0.1, z1: -2.9, rot: -Math.PI / 2 },
+  { x0: HALL + 0.1, z0: -10.2, x1: HALL + 0.1, z1: WING_Z - 0.2, rot: Math.PI / 2 },
+  // the bedroom's wall to the street, its side
+  { x0: 9.1, z0: WING_Z - 0.1, x1: 16.8, z1: WING_Z - 0.1, rot: Math.PI },
 ];
 
-// ---- the flat --------------------------------------------------------------------------------------
+/**
+ * A large canvas of the house's own (not one of yours): broad bands of a Vice City evening — coral,
+ * ochre, teal and cream, laid on with a dry brush — on a thin oak frame. Drawn once per seed.
+ */
+function canvasArt(w: number, h: number, seed: number) {
+  const c = document.createElement("canvas");
+  c.width = 768;
+  c.height = Math.round((768 * h) / w);
+  const g = c.getContext("2d")!;
+  let s = seed * 9301 + 49297;
+  const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const P = ["#f2a07b", "#e8c27a", "#3f8f8a", "#efe4d0", "#c85a4e", "#24414e", "#f6d3b3"];
+  g.fillStyle = "#efe6d6";
+  g.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < 9; i++) {
+    g.globalAlpha = 0.55 + rnd() * 0.4;
+    g.fillStyle = P[Math.floor(rnd() * P.length)];
+    const x = rnd() * c.width * 0.8,
+      y = rnd() * c.height * 0.7,
+      ww = c.width * (0.2 + rnd() * 0.5),
+      hh = c.height * (0.15 + rnd() * 0.4);
+    g.fillRect(x, y, ww, hh);
+    // the dry brush's streaks along the band
+    g.globalAlpha = 0.18;
+    g.fillStyle = "#ffffff";
+    for (let k = 0; k < 14; k++) g.fillRect(x, y + rnd() * hh, ww * (0.4 + rnd() * 0.6), 1 + rnd() * 2);
+  }
+  // a low sun
+  g.globalAlpha = 0.9;
+  g.fillStyle = "#f7c66b";
+  g.beginPath();
+  g.arc(c.width * (0.25 + rnd() * 0.5), c.height * (0.35 + rnd() * 0.2), c.height * 0.12, 0, Math.PI * 2);
+  g.fill();
+  g.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  const grp = new THREE.Group();
+  const frame = new THREE.MeshStandardMaterial({ color: "#8a6440", roughness: 0.5 });
+  grp.add(mesh(new THREE.BoxGeometry(w + 0.08, h + 0.08, 0.04), frame, 0, h / 2, 0.02));
+  const art = mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 }), 0, h / 2, 0.042);
+  grp.add(art);
+  return grp;
+}
+
+// ---- the villa --------------------------------------------------------------------------------------
 
 export function buildHome(ctx: InteriorContext): Interior {
   const scene = makeScene(ctx.renderer, "#9fb4c8");
-  scene.environmentIntensity = 0.5;
+  scene.environmentIntensity = 0.55;
   const hemi = scene.children.find((o) => (o as THREE.HemisphereLight).isHemisphereLight) as THREE.HemisphereLight;
   const shell = new THREE.Group();
   scene.add(shell);
 
-  const floorMat = groundMat({ set: "WoodFloor051", tint: "#d8b48c", tile: 1, rough: 0.5, normal: 0.5, anti: 0.15, patches: 0 });
-  const wallMat = groundMat({ set: "Plaster001", tint: "#eeebe4", tile: 3, rough: 0.9, normal: 0.12, anti: 0.1, patches: 0 });
-  const panelMat = groundMat({ set: "Wood049", tint: "#5a3e2c", tile: 1.1, rough: 0.6, normal: 0.6, anti: 0.15, patches: 0 });
-  const tileMat = groundMat({ set: "Tiles074", tint: "#e9e8e4", tile: 1.2, rough: 0.3, normal: 0.4, anti: 0.2, patches: 0 });
+  const stoneMat = groundMat({ set: "Marble012", tint: "#f1ece2", tile: 1.8, rough: 0.28, normal: 0.25, anti: 0.3, patches: 0 });
+  const oakMat = groundMat({ set: "WoodFloor051", tint: "#d8b48c", tile: 1, rough: 0.5, normal: 0.5, anti: 0.15, patches: 0 });
+  const wallMat = groundMat({ set: "Plaster001", tint: "#f2efe8", tile: 3, rough: 0.9, normal: 0.12, anti: 0.1, patches: 0 });
+  const oakMat2 = groundMat({ set: "Wood049", tint: "#b08058", tile: 1.1, rough: 0.55, normal: 0.6, anti: 0.15, patches: 0 });
+  // (the porch's limestone, inside too: large smooth panels)
+  const travMat = groundMat({ set: "Marble021", tint: "#e4d3b8", tile: 3.4, rough: 0.6, normal: 0.12, anti: 0.3, patches: 0.05 });
   const bathWall = groundMat({ set: "Marble021", tint: "#e8e4de", tile: 1.6, rough: 0.25, normal: 0.3, anti: 0.2, patches: 0 });
   const ceilMat = new THREE.MeshStandardMaterial({ color: "#f3f1ec", roughness: 0.95 });
+  const teakMat = groundMat({ set: "Wood049", tint: "#8a5a3a", tile: 1.5, rough: 0.55, normal: 0.6, anti: 0.2, patches: 0 });
 
-  // the floor (oak boards; the bathroom's tiles) and the ceiling
-  const fl = mesh(new THREE.PlaneGeometry(X1 - X0, Z1 - Z0), floorMat, 0, 0, (Z0 + Z1) / 2);
-  fl.rotation.x = -Math.PI / 2;
-  fl.receiveShadow = true;
-  const bathFl = mesh(new THREE.PlaneGeometry(3.5, 5.8), tileMat, 7.2, 0.004, -3);
-  bathFl.rotation.x = -Math.PI / 2;
-  const ceil = mesh(new THREE.PlaneGeometry(X1 - X0, Z1 - Z0), ceilMat, 0, H, (Z0 + Z1) / 2);
-  ceil.rotation.x = Math.PI / 2;
-  shell.add(fl, bathFl, ceil);
+  // the floors: pale stone in the hall, the great room and the kitchen's wing; oak in the bedroom's
+  // wing, marble in the bath; the ceilings (the great room's high under the pavilion's roof)
+  const plane = (m: THREE.Material, x0: number, x1: number, z0: number, z1: number, y: number, down = false) => {
+    const o = mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), m, (x0 + x1) / 2, y, (z0 + z1) / 2);
+    o.rotation.x = down ? Math.PI / 2 : -Math.PI / 2;
+    o.receiveShadow = !down;
+    shell.add(o);
+  };
+  plane(stoneMat, X0, HALL, Z0, Z1, 0);
+  plane(oakMat, HALL, X1, Z0, Z1, 0);
+  plane(bathWall, CORR, X1, WING_Z, Z1, 0.004);
+  plane(ceilMat, X0, -HALL, Z0, Z1, H, true);
+  plane(ceilMat, HALL, X1, Z0, Z1, H, true);
+  plane(ceilMat, -HALL, HALL, Z0, Z1, HH, true);
 
   const walls: Rect[] = [];
-  /** A wall from (x0, z0) to (x1, z1) (one of them equal), `m` both sides unless `m2`. */
-  const wall = (x0: number, z0: number, x1: number, z1: number, m: THREE.Material, t = 0.2) => {
+  /** A wall from (x0, z0) to (x1, z1) (one of them equal), `h` high, `y` up. */
+  const wall = (x0: number, z0: number, x1: number, z1: number, m: THREE.Material, h = H, t = 0.2, y = 0, solid = true) => {
     const w = Math.max(Math.abs(x1 - x0), t),
       d = Math.max(Math.abs(z1 - z0), t);
-    box(shell, w, H, d, m, (x0 + x1) / 2, 0, (z0 + z1) / 2);
-    walls.push([Math.min(x0, x1) - (x0 === x1 ? t / 2 : 0), Math.min(z0, z1) - (z0 === z1 ? t / 2 : 0), Math.max(x0, x1) + (x0 === x1 ? t / 2 : 0), Math.max(z0, z1) + (z0 === z1 ? t / 2 : 0)]);
+    box(shell, w, h, d, m, (x0 + x1) / 2, y, (z0 + z1) / 2);
+    if (solid) walls.push([Math.min(x0, x1) - (x0 === x1 ? t / 2 : 0), Math.min(z0, z1) - (z0 === z1 ? t / 2 : 0), Math.max(x0, x1) + (x0 === x1 ? t / 2 : 0), Math.max(z0, z1) + (z0 === z1 ? t / 2 : 0)]);
   };
-  // the front wall, both sides of the lift; the kitchen's (west) and the bathroom's (east) solid ends
-  wall(X0, 0, -DOOR, 0, wallMat);
-  wall(DOOR, 0, X1, 0, wallMat);
-  wall(X0, -7, X0, 0, wallMat);
-  wall(X1, -6, X1, 0, bathWall);
-  // the TV wall between the living room and the bedroom: walnut panels on the living side
-  wall(3, Z0, 3, -6, wallMat);
-  const panel = mesh(new THREE.BoxGeometry(0.03, H - 0.02, 7.6), panelMat, 2.885, H / 2, -10);
-  shell.add(panel);
-  // the bedroom's wall and its door; the bathroom's and its door
-  wall(3, -6, 3.5, -6, wallMat);
-  wall(4.7, -6, X1, -6, wallMat);
-  wall(5.4, -6, 5.4, -4.4, bathWall);
-  wall(5.4, -3.2, 5.4, 0, bathWall);
-  // lintels over the two doors
-  for (const [x, z, w, d] of [
-    [4.1, -6, 1.2, 0.2],
-    [5.4, -3.8, 0.2, 1.2],
-  ])
-    box(shell, w, H - 2.25, d, wallMat, x, 2.25, z);
+  // the front wall: the wings', the pavilion's beside the door's glass, over it to the high ceiling
+  const SIDE = 4.7;
+  wall(X0, 0, -HALL, 0, wallMat);
+  wall(HALL, 0, X1, 0, wallMat);
+  wall(-HALL, 0, -SIDE, 0, wallMat, HH);
+  wall(SIDE, 0, HALL, 0, wallMat, HH);
+  wall(-SIDE, 0, SIDE, 0, travMat, HH - 3.6, 0.2, 3.6, false);
+  // the ends: the kitchen's (solid by its cabinets), the bath's; glass on the gardens beyond
+  wall(X0, -6, X0, 0, wallMat);
+  wall(X1, WING_Z, X1, 0, bathWall);
+  // over the great room's west side the wing's lower ceiling meets the pavilion's wall
+  wall(-HALL, Z0, -HALL, Z1, wallMat, HH - H, 0.3, H, false);
+  // the bedroom wing's wall on the great room, walnut panels on its TV side, the way through by the front
+  wall(HALL, Z0, HALL, -2.7, wallMat, HH);
+  wall(HALL, -1.3, HALL, 0, wallMat, HH);
+  box(shell, 0.2, HH - 2.4, 1.4, wallMat, HALL, 2.4, -2.0);
+  // the TV's wall: a feature wall of pale limestone the room's full height, oak battens either side
+  shell.add(mesh(new THREE.BoxGeometry(0.05, HH - 0.25, 5.2), travMat, HALL - 0.125, (HH - 0.25) / 2, -6.0));
+  for (const z0 of [-9.9, -3.35])
+    for (let k = 0; k < 6; k++) shell.add(mesh(new THREE.BoxGeometry(0.06, HH - 0.25, 0.07), oakMat2, HALL - 0.13, (HH - 0.25) / 2, z0 + k * 0.12));
+  // the bedroom's wall to the corridor, its door; the bathroom's wall, its door; their lintels
+  wall(HALL, WING_Z, 7.6, WING_Z, wallMat);
+  wall(8.9, WING_Z, X1, WING_Z, wallMat);
+  wall(CORR, WING_Z, CORR, -2.9, bathWall);
+  wall(CORR, -1.5, CORR, 0, bathWall);
+  box(shell, 1.3, H - 2.25, 0.2, wallMat, 8.25, 2.25, WING_Z);
+  box(shell, 0.2, H - 2.25, 1.4, bathWall, CORR, 2.25, -2.2);
 
-  // ---- glass on three sides: the city is the scene's background (its panorama, from up here) ----
+  // ---- glass the length of the back (the sea, the bridge, the city): the scene's background ----
   const glassMat = new THREE.MeshPhysicalMaterial({ color: "#dfeaf2", roughness: 0.04, metalness: 0, transparent: true, opacity: 0.07, depthWrite: false, envMapIntensity: 1.4 });
   glassMat.userData.noReal = true;
   const frameMat = new THREE.MeshStandardMaterial({ color: "#1b1d22", roughness: 0.45, metalness: 0.6 });
   frameMat.userData.noReal = true;
-  /** A run of glass from (x0, z0) to (x1, z1): mullions every ~1.5 m, a sill and a head. */
-  const glass = (x0: number, z0: number, x1: number, z1: number) => {
+  /** A run of glass from (x0, z0) to (x1, z1), `h` high: mullions every ~2 m, a sill and a head. */
+  const glass = (x0: number, z0: number, x1: number, z1: number, h = H, solid = true) => {
     const len = Math.hypot(x1 - x0, z1 - z0),
       alongX = z0 === z1;
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(len, H), glassMat);
-    pane.position.set((x0 + x1) / 2, H / 2, (z0 + z1) / 2);
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(len, h), glassMat);
+    pane.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2);
     if (!alongX) pane.rotation.y = Math.PI / 2;
     shell.add(pane);
-    const n = Math.max(1, Math.round(len / 1.5));
+    const n = Math.max(1, Math.round(len / 2.1));
     for (let i = 0; i <= n; i++) {
       const f = i / n;
-      box(shell, alongX ? 0.06 : 0.12, H, alongX ? 0.12 : 0.06, frameMat, x0 + (x1 - x0) * f, 0, z0 + (z1 - z0) * f);
+      box(shell, alongX ? 0.07 : 0.12, h, alongX ? 0.12 : 0.07, frameMat, x0 + (x1 - x0) * f, 0, z0 + (z1 - z0) * f);
     }
-    box(shell, alongX ? len : 0.16, 0.08, alongX ? 0.16 : len, frameMat, (x0 + x1) / 2, 0, (z0 + z1) / 2);
-    box(shell, alongX ? len : 0.16, 0.14, alongX ? 0.16 : len, frameMat, (x0 + x1) / 2, H - 0.14, (z0 + z1) / 2);
-    walls.push([Math.min(x0, x1) - 0.1, Math.min(z0, z1) - 0.1, Math.max(x0, x1) + 0.1, Math.max(z0, z1) + 0.1]);
+    box(shell, alongX ? len : 0.16, 0.06, alongX ? 0.16 : len, frameMat, (x0 + x1) / 2, 0, (z0 + z1) / 2);
+    box(shell, alongX ? len : 0.16, 0.12, alongX ? 0.16 : len, frameMat, (x0 + x1) / 2, h - 0.12, (z0 + z1) / 2);
+    if (h > 5) box(shell, alongX ? len : 0.14, 0.09, alongX ? 0.14 : len, frameMat, (x0 + x1) / 2, 3.6, (z0 + z1) / 2);
+    if (solid) walls.push([Math.min(x0, x1) - 0.1, Math.min(z0, z1) - 0.1, Math.max(x0, x1) + 0.1, Math.max(z0, z1) + 0.1]);
   };
-  glass(X0, Z0, X1, Z0);
-  glass(X0, Z0, X0, -7);
-  glass(X1, Z0, X1, -6);
+  glass(X0, Z0, -HALL, Z0);
+  glass(-HALL, Z0, HALL, Z0, HH);
+  glass(HALL, Z0, X1, Z0);
+  glass(X0, Z0, X0, -6);
+  glass(X1, Z0, X1, WING_Z);
+  // the front: the glass either side of the door, the door itself (the way out: the green sign over it)
+  glass(-SIDE, 0, -DOOR - 0.07, 0, 3.6);
+  glass(DOOR + 0.07, 0, SIDE, 0, 3.6);
+  const door = new THREE.Group();
+  box(door, DOOR * 2, 3.2, 0.12, teakMat, 0, 0, 0.0);
+  box(door, 0.06, 2.0, 0.08, mat.gold, -DOOR + 0.3, 0.6, -0.1);
+  box(door, DOOR * 2 + 0.14, 0.4, 0.14, frameMat, 0, 3.2, 0);
+  for (const s of [-1, 1]) box(door, 0.07, 3.2, 0.14, frameMat, s * (DOOR + 0.035), 0, 0);
+  shell.add(door);
+  walls.push([-DOOR - 0.1, -0.1, DOOR + 0.1, 0.12]);
+  // a runner inside the door, in sand and walnut
+  shell.add(at(rugReal(2.2, 1.1, "#cbb38c", "#7a5a3a"), 0, 0.002, -1.0));
 
-  // ---- the private lift: its car behind the opening, doors slid open ----------------------------
-  const lift = new THREE.Group();
-  const liftWall = new THREE.MeshStandardMaterial({ color: "#6d7078", roughness: 0.5, metalness: 0.7 });
-  liftWall.userData.noReal = true;
-  box(lift, 2.4, 0.02, 1.8, mat.black, 0, 0, 1.0);
-  box(lift, 2.4, 0.02, 1.8, liftWall, 0, 2.6, 1.0);
-  box(lift, 0.05, 2.6, 1.8, liftWall, -1.2, 0, 1.0);
-  box(lift, 0.05, 2.6, 1.8, liftWall, 1.2, 0, 1.0);
-  box(lift, 2.4, 2.6, 0.05, liftWall, 0, 0, 1.9);
-  for (const s of [-1, 1]) box(lift, 0.66, 2.3, 0.04, mat.steel, s * 1.0, 0, 0.12);
-  box(lift, DOOR * 2 + 0.2, H - 2.3, 0.24, wallMat, 0, 2.3, 0);
-  const plate = textPlane("PH · 家", { h: 0.16, color: "#f4b728", bg: "#141418" });
-  plate.position.set(1.65, 1.5, -0.105);
-  plate.rotation.y = Math.PI;
-  lift.add(plate);
-  scene.add(lift);
-
-  // ---- what comes with the flat: the kitchen, the island, the bathroom, the hi-fi ---------------
+  // ---- what comes with the house: the kitchen, the island, the bathroom, the hi-fi ----------------
   const fixed: Rect[] = [];
   const fit = (o: THREE.Object3D, x: number, z: number, r: number, w: number, d: number, y = 0) => {
     shell.add(at(o, x, y, z, r));
@@ -361,23 +428,29 @@ export function buildHome(ctx: InteriorContext): Interior {
       hd = (side ? w : d) / 2;
     fixed.push([x - hw, z - hd, x + hw, z + hd]);
   };
-  fit(kitchenReal(4.2, "#24302e", "#ffffff"), -8.56, -3.0, Math.PI / 2, 4.2, 0.67);
-  fit(fridgeReal(), -8.56, -5.6, Math.PI / 2, 0.75, 0.67);
+  fit(kitchenReal(4.2, "#24302e", "#ffffff"), X0 + 0.44, -3.2, Math.PI / 2, 4.2, 0.67);
+  fit(fridgeReal(), X0 + 0.44, -0.62, Math.PI / 2, 0.75, 0.67);
   // the island: walnut under a marble slab, three stools
   const island = new THREE.Group();
-  island.add(mesh(new THREE.BoxGeometry(0.9, 0.86, 2.3), mat.walnut(), 0, 0.45, 0));
-  island.add(mesh(new THREE.BoxGeometry(1.04, 0.05, 2.5), mat.marble(), 0, 0.905, 0));
-  island.add(mesh(new THREE.BoxGeometry(0.86, 0.04, 2.26), mat.black, 0, 0.02, 0));
-  fit(island, -6.3, -3.0, 0, 1.04, 2.5);
-  for (const z of [-3.8, -3.0, -2.2]) shell.add(at(stoolReal("#2a2a30"), -5.45, 0, z));
-  fixed.push([-5.75, -4.1, -5.15, -1.9]);
-  for (const z of [-3.8, -3.0, -2.2]) shell.add(at(pendantReal(1.1, "#26262c"), -6.3, H - 1.1, z));
-  // a pendant over where the dining table goes
-  shell.add(at(pendantReal(1.3, "#c9a227"), -5.6, H - 1.3, -10.4));
+  island.add(mesh(new THREE.BoxGeometry(0.9, 0.86, 2.6), mat.walnut(), 0, 0.45, 0));
+  island.add(mesh(new THREE.BoxGeometry(1.04, 0.05, 2.8), mat.marble(), 0, 0.905, 0));
+  island.add(mesh(new THREE.BoxGeometry(0.86, 0.04, 2.56), mat.black, 0, 0.02, 0));
+  fit(island, -13.7, -3.2, 0, 1.04, 2.8);
+  for (const z of [-4.1, -3.2, -2.3]) shell.add(at(stoolReal("#2a2a30"), -12.85, 0, z));
+  fixed.push([-13.15, -4.4, -12.55, -2.0]);
+  for (const z of [-4.1, -3.2, -2.3]) shell.add(at(pendantReal(1.1, "#26262c"), -13.7, H - 1.1, z));
+  // a pendant over where the dining table goes, a cluster of them in the great room
+  shell.add(at(pendantReal(1.3, "#c9a227"), -10.6, H - 1.3, -7.4));
+  for (const [x, z, d] of [
+    [-1.2, -5.2, 2.6],
+    [0.4, -6.0, 3.0],
+    [1.6, -5.0, 2.4],
+  ] as const)
+    shell.add(at(pendantReal(d, "#c9a227"), x, HH - d, z));
   // the bathroom
-  fit(bathtubReal(), 8.47, -4.6, 0, 0.75, 1.66);
-  fit(vanityReal("#f2efe8"), 7.1, -0.35, Math.PI, 1, 0.5);
-  fit(toiletReal(), 6.1, -5.55, 0, 0.45, 0.7);
+  fit(bathtubReal(), X1 - 0.6, -2.3, 0, 0.75, 1.66);
+  fit(vanityReal("#f2efe8"), 13.2, -0.35, Math.PI, 1, 0.5);
+  fit(toiletReal(), 10.4, WING_Z + 0.45, 0, 0.45, 0.7);
   // the hi-fi on a walnut credenza against the front wall: a turntable, two speakers, ZSTREET FM lit
   const hifi = new THREE.Group();
   hifi.add(mesh(new THREE.BoxGeometry(2.1, 0.58, 0.46), mat.walnut(), 0, 0.33, 0));
@@ -399,54 +472,72 @@ export function buildHome(ctx: InteriorContext): Interior {
   const fm = textPlane("ZSTREET FM", { h: 0.06, color: "#3ef0ff", bg: "#05080c", glow: true });
   fm.position.set(0.3, 0.68, 0.181);
   hifi.add(fm);
-  fit(hifi, -3.2, -0.36, Math.PI, 2.1, 0.46);
+  fit(hifi, -9.6, -0.36, Math.PI, 2.1, 0.46);
 
   // the bedroom's curtains, drawn to the glass's ends
   for (const [x, z, r] of [
-    [8.75, -13.6, -Math.PI / 2],
-    [8.75, -6.5, -Math.PI / 2],
+    [X1 - 0.25, Z0 + 0.4, -Math.PI / 2],
+    [X1 - 0.25, WING_Z - 0.5, -Math.PI / 2],
+    [HALL + 0.5, Z0 + 0.25, Math.PI],
   ] as const)
     shell.add(at(curtainReal("#d9d2c4", H - 0.1), x, 0, z, r));
+  // sheers at the great room's glass, its full height
+  for (const x of [-HALL + 0.55, HALL - 0.55]) shell.add(at(curtainReal("#f1ebe0", HH - 0.12), x, 0, Z0 + 0.25, Math.PI));
+  // the house's own art, high on the great room's walls (out of reach of what you hang): a long
+  // canvas over the door, another on the kitchen wing's side over its lower ceiling
+  shell.add(at(canvasArt(4.6, 2.0, 11), 0, 4.15, -0.13, Math.PI));
+  shell.add(at(canvasArt(4.2, 2.0, 23), -HALL + 0.17, 4.35, -5.2, Math.PI / 2));
+  // and a pair of tall plants by the great room's glass
+  for (const [x, z] of [
+    [-4.7, Z0 + 0.7],
+    [4.7, Z0 + 0.7],
+  ] as const)
+    fit(plantReal("ficus", 7 + x), x, z, 0, 0.6, 0.6);
 
   // ---- light: day through the glass, lamps at night ---------------------------------------------
   const sun = new THREE.DirectionalLight("#fff3e0", 1.8);
-  sun.position.set(-4, 9, -22);
-  sun.target.position.set(0, 0, -6);
+  sun.position.set(-6, 12, -26);
+  sun.target.position.set(0, 0, -4);
   scene.add(sun, sun.target);
   const lamps: THREE.PointLight[] = [];
-  const lamp = (x: number, y: number, z: number, color: string, k: number, dist = 9) => {
+  const lamp = (x: number, y: number, z: number, color: string, k: number, dist = 10) => {
     const l = new THREE.PointLight(color, k, dist, 1.6);
     l.position.set(x, y, z);
     scene.add(l);
     lamps.push(l);
     return l;
   };
-  lamp(-6.3, 2.4, -3.0, "#ffe3c0", 7);
-  lamp(-5.6, 2.0, -10.4, "#ffd6a0", 6.5);
-  lamp(0.6, 2.6, -10, "#ffe7cc", 6);
-  lamp(0, 2.6, -2.6, "#fff0dc", 4.5);
-  lamp(6.3, 2.6, -10, "#ffdcb0", 5.5);
-  lamp(7.2, 2.6, -3, "#fff4e6", 5);
-  // recessed downlights and the cove along the glass (lit at night)
+  lamp(-13.7, 2.6, -3.2, "#ffe3c0", 7);
+  lamp(-10.6, 2.2, -7.4, "#ffd6a0", 6.5);
+  lamp(0.4, 4.2, -5.4, "#ffe7cc", 9, 14);
+  lamp(0, 3.0, -1.6, "#fff0dc", 4.5);
+  lamp(12.6, 3.0, -7.2, "#ffdcb0", 6);
+  lamp(13.2, 3.0, -2.2, "#fff4e6", 5);
+  // recessed downlights (lit at night), a cove of light along the great room's glass
   const dl = glowMat("#fff3df", 1.6);
-  for (const [x, z] of [
-    [-6.3, -1.4],
-    [-1.6, -2.6],
-    [1.6, -2.6],
-    [-1.2, -8],
-    [2, -8],
-    [-1.2, -12],
-    [2, -12],
-    [-7.5, -8.5],
-    [-3.6, -8.5],
-    [5, -9],
-    [7.5, -12],
-    [4.2, -3],
-    [7.2, -2.2],
+  for (const [x, z, y] of [
+    [-15.2, -1.6, H],
+    [-13.7, -5.6, H],
+    [-10.6, -4.6, H],
+    [-9.2, -9.0, H],
+    [-12.4, -9.0, H],
+    [-15.4, -8.6, H],
+    [-4.8, -2.0, HH],
+    [4.8, -2.0, HH],
+    [-4.8, -8.6, HH],
+    [4.8, -8.6, HH],
+    [8.3, -1.4, H],
+    [8.3, -3.2, H],
+    [11.2, -1.6, H],
+    [15.0, -1.6, H],
+    [10.6, -7.0, H],
+    [14.6, -7.0, H],
+    [10.6, -9.4, H],
+    [14.6, -9.4, H],
   ])
-    shell.add(at(new THREE.Mesh(new THREE.CircleGeometry(0.07, 16), dl), x, H - 0.005, z).rotateX(Math.PI / 2));
+    shell.add(at(new THREE.Mesh(new THREE.CircleGeometry(0.07, 16), dl), x, y - 0.005, z).rotateX(Math.PI / 2));
   const cove = glowMat("#ffcf8a", 1.2);
-  const coveMeshes = [mesh(new THREE.BoxGeometry(X1 - X0 - 0.4, 0.02, 0.05), cove, 0, H - 0.12, Z0 + 0.3)];
+  const coveMeshes = [mesh(new THREE.BoxGeometry(HALL * 2 - 0.4, 0.02, 0.05), cove, 0, HH - 0.12, Z0 + 0.3), mesh(new THREE.BoxGeometry(X1 - X0 - 0.4, 0.02, 0.05), cove, 0, H - 0.12, Z0 + 0.3)];
   for (const o of coveMeshes) shell.add(o);
   const tvGlow = new THREE.PointLight("#7fb4ff", 0, 4.5, 1.8);
   scene.add(tvGlow);
@@ -541,8 +632,8 @@ export function buildHome(ctx: InteriorContext): Interior {
     for (const r of walls) if (overlap(g, r)) return false;
     if (s.walk) return true;
     for (const r of fixed) if (overlap(g, r)) return false;
-    // the way in and out stays clear
-    if (overlap(g, [-1.5, -2.2, 1.5, 0])) return false;
+    // the ways in and out stay clear: the front door, the bedroom wing's corridor
+    if (overlap(g, [-1.5, -2.2, 1.5, 0]) || overlap(g, [HALL - 0.6, WING_Z, CORR, 0]) || overlap(g, [7.4, WING_Z - 0.8, 9.1, WING_Z])) return false;
     for (const q of Home.placed()) {
       if (q.id === id) continue;
       const o = SPECS[q.id];
@@ -600,7 +691,7 @@ export function buildHome(ctx: InteriorContext): Interior {
       return null;
     },
   });
-  // (the flat lives as long as the page: its listener too)
+  // (the villa lives as long as the page: its listener too)
   Home.onChange(sync);
 
   // ---- life: the TV, day and night ---------------------------------------------------------------
@@ -615,7 +706,7 @@ export function buildHome(ctx: InteriorContext): Interior {
     blockAt = performance.now();
   });
   function refreshLights() {
-    for (const l of lamps) l.intensity = night ? (l.userData.k ??= l.intensity) : (l.userData.k ??= l.intensity) * 0.35;
+    for (const l of lamps) l.intensity = night ? (l.userData.k ??= l.intensity) : (l.userData.k ??= l.intensity) * 0.55;
     for (const [id, l] of lights) l.intensity = night && Home.isPlaced(id) ? (l.userData.k ??= l.intensity) : 0;
     tvGlow.intensity = tvOn ? (night ? 1.6 : 0.4) : 0;
     const tv = Home.placed().find((q) => q.id === "tv-wall");
@@ -629,10 +720,9 @@ export function buildHome(ctx: InteriorContext): Interior {
     scene.environmentIntensity = night ? 0.22 : 0.5;
     (cove as THREE.MeshBasicMaterial).color.set(new THREE.Color("#ffcf8a").multiplyScalar(night ? 1.4 : 0.6));
     refreshLights();
-    const site = Home.site;
-    // the panorama from up there: the tower's top floor, turned so the glass looks where it does
-    const v = site?.view ?? { yaw: 0, side: 0, back: 6 };
-    const view = ctx.cityView("home", (site?.height ?? 30) + 1.6, v.back, v.side);
+    // the panorama from the great room by its glass (the villa hidden), turned so the glass looks where it does
+    const v = Home.site?.view ?? { up: 1.6, back: 9, side: 0, yaw: 0 };
+    const view = ctx.cityView("home", v.up, v.back, v.side);
     if (view) {
       scene.background = view;
       scene.backgroundRotation.set(0, v.yaw, 0);
@@ -642,7 +732,7 @@ export function buildHome(ctx: InteriorContext): Interior {
   let tvT = 0,
     t0 = performance.now();
   const ticker =
-    "MISSIONS PAY ⓩ — BLOCK RUN · SHIELDED RIDE · PROOF BOARDS · SPEED TRAPS    ·    YOUR FLAT: PRESS B TO FURNISH IT    ·    THE STORE SELLS FURNITURE, PAINT, RIMS AND NEON    ·    SHIELD YOUR ZEC    ·    ";
+    "MISSIONS PAY ⓩ — BLOCK RUN · SHIELDED RIDE · PROOF BOARDS · SPEED TRAPS    ·    YOUR VILLA: PRESS B TO FURNISH IT    ·    THE STORE SELLS FURNITURE, PAINT, RIMS AND NEON    ·    SHIELD YOUR ZEC    ·    ";
   const drawTv = (t: number) => {
     const g = tvCanvas.getContext("2d")!;
     const W = tvCanvas.width,
@@ -706,16 +796,16 @@ export function buildHome(ctx: InteriorContext): Interior {
   const picks = new Map<THREE.Object3D, { label: string; info: () => PickInfo }>();
   picks.set(hifi, {
     label: "ZSTREET FM · the hi-fi",
-    info: () => ({ eyebrow: "Your penthouse · the hi-fi", title: "ZSTREET FM", body: "<p>The radio plays while you're home, the same stations as in your car. <kbd>Q</kbd> or <kbd>.</kbd> the next station, <kbd>,</kbd> the one before (and off).</p>" }),
+    info: () => ({ eyebrow: "Your villa · the hi-fi", title: "ZSTREET FM", body: "<p>The radio plays while you're home, the same stations as in your car. <kbd>Q</kbd> or <kbd>.</kbd> the next station, <kbd>,</kbd> the one before (and off).</p>" }),
   });
   const find = (o: THREE.Object3D | null) => {
     for (let x = o; x; x = x.parent) {
       const p = picks.get(x);
       if (p) return p;
-      if (x.name === "tv-screen") return { label: "ZSTREET TV · live", info: (): PickInfo => ({ eyebrow: "Your penthouse · the TV", title: "ZSTREET TV", stats: [["Block", height ? height.toLocaleString("en-US") : "—"], ["Mined by", pool ?? "—"]], body: "<p>The chain, live: every block as it lands, and the city's news on the ticker.</p>" }) };
+      if (x.name === "tv-screen") return { label: "ZSTREET TV · live", info: (): PickInfo => ({ eyebrow: "Your villa · the TV", title: "ZSTREET TV", stats: [["Block", height ? height.toLocaleString("en-US") : "—"], ["Mined by", pool ?? "—"]], body: "<p>The chain, live: every block as it lands, and the city's news on the ticker.</p>" }) };
       if (x.name.startsWith("print:")) {
         const id = Number(x.name.slice(6));
-        return { label: `zkSNARK #${id} · framed`, info: (): PickInfo => ({ eyebrow: "Your penthouse · art", title: `zkSNARK #${id}`, mono: true, image: ZScan.zkSnarkImage(id), stats: [["zkSNARK", `#${id}`]] }) };
+        return { label: `zkSNARK #${id} · framed`, info: (): PickInfo => ({ eyebrow: "Your villa · art", title: `zkSNARK #${id}`, mono: true, image: ZScan.zkSnarkImage(id), stats: [["zkSNARK", `#${id}`]] }) };
       }
     }
     return null;
@@ -726,9 +816,9 @@ export function buildHome(ctx: InteriorContext): Interior {
 
   return {
     key: "home",
-    title: "YOUR PENTHOUSE",
+    title: "YOUR VILLA",
     scene,
-    floors: [{ label: "PH", name: "Penthouse", y: 0, spawn: new THREE.Vector3(0, 0, -1.6), yaw: 0 }],
+    floors: [{ label: "G", name: "Shielded Point", y: 0, spawn: new THREE.Vector3(0, 0, -1.6), yaw: 0 }],
     colliders: () => rects,
     pickables: () => [hifi, furn],
     pick: (hit) => find(hit.object)?.info() ?? null,

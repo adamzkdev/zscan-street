@@ -1992,10 +1992,7 @@ def("gamehouse", (c) => {
     glacier = hex("#a8d8e8"),
     bulbC = hex("#fff1d6");
   K.box("lm.PavingStones111", -c.W / 2, 0, -c.D / 2, c.W / 2, 0.12, c.D / 2, hex("#2a282e"), { skip: "-y" });
-  // the flare carpet to the doors, bulbs either side
-  K.box("fabric", cx - 5 * u, 0.12, FZ, cx + 5 * u, 0.15, c.D / 2 - 0.66, hex("#8a2f14"));
-  for (const sx of [-1, 1]) K.box("lm.glow", cx + sx * 4.6 * u - 0.08, 0.12, FZ, cx + sx * 4.6 * u + 0.08, 0.16, c.D / 2 - 0.66, flare);
-  if (!c.far) for (let z = FZ + 0.66; z < c.D / 2 - 1; z += 1) for (const sx of [-1, 1]) K.sphere("lm.glow", cx + sx * 6.5 * u, 0.16, z, 0.09, bulbC, { segs: 4 });
+  // (the forecourt is plain paving up to the doors: no carpet laid out to them)
   // the body: matt black walls, lilac pilasters, floor bands, a few lit windows up the sides
   K.box("lm.Concrete034", x0, 0.12, bz, x1, TOP, FZ - 0.66, hex("#141218"), { skip: "-y" });
   for (const y of [13 * u, 24 * u]) K.box("lm.dark", x0 - 0.05, y, bz - 0.05, x1 + 0.05, y + 0.33, FZ - 0.6, hex("#2c2834"), { skip: "-y+y" });
@@ -2579,7 +2576,7 @@ function conservatory(c: LmCtx, cx: number, cz: number, rx: number, rz: number, 
     const s = Math.cos(t);
     rings.push({ y: y0 + Math.sin(t) * h, pts: circle(0, 0, 1, NS).map(([a, b2]) => [cx + a * rx * s, cz + b2 * rz * s] as V2) });
   }
-  K.loft("lm.glass", rings, hex("#d8eef4"), { smooth: true, lid: "lm.glass", lidCol: hex("#d8eef4") });
+  K.loft("lm.glass.clear", rings, hex("#d8eef4"), { smooth: true, lid: "lm.glass.clear", lidCol: hex("#d8eef4") });
   if (c.far) return;
   for (let i = 0; i < 28; i++) {
     const a = (i / 28) * Math.PI * 2;
@@ -2796,8 +2793,9 @@ def("gardens", (c) => {
           for (const sz of [1, -1]) K.quad("lm.glass", [x + wo * u * dir, y + 0.15, z], [x + (wo + 1.2) * u * dir, y + 0.15, z], [x + (wo + 1) * u * dir, y + 0.2, z + sz * 6 * u], [x + (wo + 0.2) * u * dir, y + 0.2, z + sz * 6 * u], [0, 1, 0], (p) => [p[0], p[2]], hex("#a8d8e0"));
       }
   }
-  // the name sign's plinth in the flower bed
-  K.box("lm.dark", X(110), 0.12, Z(md - 17), X(170), 9 * u, Z(md - 16), hex("#3a2a3a"));
+  // the name sign's plinth in the flower bed: a low dark kerb now the name hangs high under the
+  // skyway (a black wall there stood across the way in, and the game took it for the facade)
+  K.box("lm.dark", X(110), 0.12, Z(md - 17), X(170), 0.7, Z(md - 16), hex("#3a2a3a"));
   K.box("lm.Marble021", X(109), 0.12, Z(md - 18), X(171), 0.45, Z(md - 15), hex("#8a8478"));
   // lawn life: trees, palms, benches, lamps along the promenade
   for (const [x, z] of [

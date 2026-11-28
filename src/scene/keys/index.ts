@@ -10,7 +10,8 @@ import { plantTrees, type Species } from "../real/trees";
 import { placeProps } from "../real/props";
 import { keysMat } from "../real/keysmats";
 import type { KSlot } from "../real/keysreal";
-import { beachY, corridor, inKeys, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, shoreDist } from "./plan";
+import { beachY, corridor, inKeys, inVilla, KEYS, KGRID, KPARK, KPIER, kLots, kStreets, KTUNNEL, KX, shoreDist, VILLA, villaFloor, villaPool } from "./plan";
+import { buildVilla } from "./villa";
 import { KeysSea } from "./sea";
 import type { KGeo, KOut } from "./worker";
 
@@ -30,6 +31,18 @@ const SHELL = 4;
 const SHELL_TOP = KTUNNEL.top + 4.1;
 /** The wing walls either side of the south portal reach this far from the road's centre (m). */
 const WING = 22;
+/**
+ * Orchard Boulevard (14 m) is wider than the tunnel (11.2 m inside): over FUNNEL m before the south
+ * portal two low concrete barriers taper it in, and a car is eased along them into the tube instead
+ * of meeting the wing wall head on. The barrier's inner face at z: KX ± funnelAt(z).
+ * (Only up to Note Street's kerb line: the barriers once ran on across the junction and closed Note
+ * Street off from the boulevard — your car held back at them, the loops' cars driving through them.)
+ */
+const FUNNEL = KGRID.zs[0] - KGRID.zw[0] / 2 - KTUNNEL.z1 - 0.4;
+const funnelAt = (z: number) => {
+  const t = Math.min(1, Math.max(0, (z - KTUNNEL.z1) / FUNNEL));
+  return KTUNNEL.half + (KGRID.xw[1] / 2 - KTUNNEL.half) * t * t * (3 - 2 * t);
+};
 
 export interface KeysFacade {
   type: string;
@@ -51,6 +64,9 @@ export class Keys {
   palms: { x: number; z: number }[] = [];
   /** The parked cars along its streets (the game can take them: main.ts hands them to Parking). */
   parkedCars: { obj: THREE.Group; kind: CarKind }[] = [];
+  /** Your villa on the north point (./villa.ts), and its house (hidden from its own rooms' view of the city). */
+  readonly villa: THREE.Group;
+  readonly villaHouse: THREE.Group;
   private land: Land | null;
   /** The ground's height every metre over the town's box (NaN: open sea, or the town's own slabs). */
   private hgt: Float32Array;
@@ -78,6 +94,15 @@ export class Keys {
     }, day);
     this.group.add(this.sea.mesh);
     this.streets();
+    // your villa (src/gta/home.ts), on its plot raised over the north beach
+    const v = buildVilla(city.lamps);
+    this.villa = v.group;
+    this.villaHouse = v.house;
+    this.group.add(v.group);
+    for (const c of v.circles) {
+      const k = cellKey(c[0], c[1]);
+      (this.circles.get(k) ?? this.circles.set(k, []).get(k)!).push(c);
+    }
     for (const l of kLots()) {
       const along = l.face === "n" || l.face === "s";
       const hw = (along ? l.w : l.d) / 2,
@@ -120,6 +145,11 @@ export class Keys {
         h = Math.max(h, CURB + (SHELL_TOP + 0.3 - CURB) * near * near * (3 - 2 * near) * drop);
       }
     }
+    // your villa's plot: raised to the street's level over the north beach (its slabs just over
+    // this), the water deep along its sea wall for the yacht
+    // (under the pool: just under its floor, never under the sea's level — the sea would be drawn there)
+    if (inVilla(x, z, 0.6)) return villaPool(x, z) || villaPool(x - 0.7, z) || villaPool(x + 0.7, z) || villaPool(x, z - 0.7) || villaPool(x, z + 0.7) ? Math.max(VILLA.pool.floor - 0.05, BAY.water + 0.03) : CURB - 0.1;
+    if (z < VILLA.z0 && x > VILLA.x0 - 4 && x < VILLA.x1 + 4) h = Math.min(h, -5.2 + Math.max(0, Math.abs(x - (VILLA.x0 + VILLA.x1) / 2) - (VILLA.x1 - VILLA.x0) / 2) * 0.5);
     return h;
   }
 
@@ -301,6 +331,21 @@ export class Keys {
         add(conc, new THREE.BoxGeometry(Math.abs(x1 - x0), top + 0.3, 1.5).translate((x0 + x1) / 2, (top - 0.3) / 2, KTUNNEL.z1 - 0.45));
         add(conc, new THREE.BoxGeometry(Math.abs(x1 - x0) + 0.1, 0.3, 1.8).translate((x0 + x1) / 2, top, KTUNNEL.z1 - 0.45));
       }
+    // the funnel's barriers: low concrete (New Jersey profile, as a box with a cap), in short straight runs
+    // along the eased curve, with reflector posts on top
+    const refl = new THREE.MeshStandardMaterial({ color: "#f5c542", roughness: 0.4, emissive: "#3a2a00" });
+    for (const sd of [-1, 1])
+      for (let k = 0; k < 9; k++) {
+        const za = KTUNNEL.z1 + 0.3 + (k * (FUNNEL - 0.3)) / 9,
+          zb = KTUNNEL.z1 + 0.3 + ((k + 1) * (FUNNEL - 0.3)) / 9;
+        const xa = KX + sd * (funnelAt(za) + 0.3),
+          xb = KX + sd * (funnelAt(zb) + 0.3);
+        const len = Math.hypot(xb - xa, zb - za) + 0.05;
+        const yaw = Math.atan2(xb - xa, zb - za);
+        add(conc, new THREE.BoxGeometry(0.6, 0.8, len).rotateY(yaw).translate((xa + xb) / 2, 0.4, (za + zb) / 2));
+        add(conc, new THREE.BoxGeometry(0.3, 0.12, len).rotateY(yaw).translate((xa + xb) / 2, 0.86, (za + zb) / 2));
+        if (k % 4 === 0) add(refl, new THREE.BoxGeometry(0.12, 0.22, 0.04).translate(xa, 1.03, za));
+      }
     // the promenade's wall on the sand side, with gaps for the steps down (and the pier)
     const wall = new THREE.MeshStandardMaterial({ color: "#f2eee6", roughness: 0.8 });
     for (let x = G.west; x < G.east; x += 12) {
@@ -350,8 +395,10 @@ export class Keys {
         this.group.add(mesh);
       }
     }
-    for (const s of out.signs) this.sign(s);
-    for (const [x, y, z, color] of out.lights) city.lamps.push({ pos: new THREE.Vector3(x, y, z), color, intensity: 10 });
+    // (nothing of the old north beach's layout on your villa's plot: its lamps lit up inside the house)
+    const off = (x: number, z: number) => !inVilla(x, z, 1.5);
+    for (const s of out.signs) if (off(s.x, s.z)) this.sign(s);
+    for (const [x, y, z, color] of out.lights) if (off(x, z)) city.lamps.push({ pos: new THREE.Vector3(x, y, z), color, intensity: 10 });
     this.facades = out.facades.map((f) => ({
       type: f.type,
       name: f.name,
@@ -362,10 +409,10 @@ export class Keys {
       out: new THREE.Vector3(f.out[0], 0, f.out[1]),
       door: { x: f.door[0], z: f.door[1] },
     }));
-    this.palms = out.palms.map(([x, z]) => ({ x, z }));
+    this.palms = out.palms.filter(([x, z]) => off(x, z)).map(([x, z]) => ({ x, z }));
     // the palms, pines and bushes, realistic and instanced (src/scene/real/trees.ts)
-    plantTrees(this.group, out.trees.map(([x, y, z, sp, seed]) => ({ x, y, z, species: sp as Species, seed })));
-    placeProps(this.group, out.lamps.map(([x, y, z, yaw]) => ({ type: "lamp", args: ["#ffd9a0"], x, y, z, rot: yaw })));
+    plantTrees(this.group, out.trees.filter(([x, , z]) => off(x, z)).map(([x, y, z, sp, seed]) => ({ x, y, z, species: sp as Species, seed })));
+    placeProps(this.group, out.lamps.filter(([x, , z]) => off(x, z)).map(([x, y, z, yaw]) => ({ type: "lamp", args: ["#ffd9a0"], x, y, z, rot: yaw })));
     // the parked cars, realistic (shared bodies: a few kinds and paints)
     const PARKED = ["#ff7fb0", "#46c8e0", "#f4b728", "#2a2a34", "#d8333f", "#9fe0c8"];
     for (const [x, z, yaw, k] of out.cars) {
@@ -377,6 +424,7 @@ export class Keys {
       this.parkedCars.push({ obj: car, kind: k >= PARKED.length ? "taxi" : kinds[k % kinds.length] });
     }
     for (const c of out.circles) {
+      if (!off(c[0], c[1])) continue;
       const k = cellKey(c[0], c[1]);
       (this.circles.get(k) ?? this.circles.set(k, []).get(k)!).push(c);
     }
@@ -430,6 +478,8 @@ export class Keys {
     const pier = this.pierAt(x, z);
     if (pier !== null) return pier;
     if (corridor(x, z) && z > KTUNNEL.z0 - 0.4) return Math.abs(x - KX) < KTUNNEL.half - 0.85 ? 0.03 : 0.36;
+    const vf = villaFloor(x, z);
+    if (vf !== null) return vf;
     if (!this.owns(x, z) || inTown(x, z)) return null;
     return Math.max(BAY.water - 0.3, this.ground(x, z));
   }
@@ -451,10 +501,20 @@ export class Keys {
   pushCar(p: THREE.Vector3, r: number) {
     // the tunnel's walls, for a car (under the hill the picture from above has nothing to stop it:
     // a car that strayed past the kerb found the hill's height and rode up the wall onto it)
-    if (p.z > KTUNNEL.z0 - 1 && p.z < KTUNNEL.z1 + 0.5) {
+    // (only in the tunnel itself: north of the town at these z there is the beach and your villa's forecourt)
+    if (p.z > KTUNNEL.z0 - 1 && p.z < KTUNNEL.z1 + 0.5 && Math.abs(p.x - KX) < KTUNNEL.half + SHELL + 1) {
       const lim = KTUNNEL.half - r - 0.1;
       if (Math.abs(p.x - KX) > lim) {
         p.x = KX + Math.sign(p.x - KX) * lim;
+        return true;
+      }
+    }
+    // the funnel before the south portal: eased along its barriers (inside), or held off them (outside)
+    if (p.z > KTUNNEL.z1 + 0.5 && p.z < KTUNNEL.z1 + FUNNEL + 0.5) {
+      const inner = funnelAt(p.z),
+        d = Math.abs(p.x - KX);
+      if (d > inner - r - 0.1 && d < inner + 0.6 + r) {
+        p.x = KX + Math.sign(p.x - KX) * (d < inner + 0.3 ? inner - r - 0.1 : inner + 0.6 + r);
         return true;
       }
     }
@@ -473,6 +533,7 @@ export class Keys {
   /** On foot (without the game's solid shape): the sea, the hill's steep side, the tunnel's walls, a house. */
   blocked(x: number, z: number) {
     if (this.pierAt(x, z) !== null) return false;
+    if (inVilla(x, z, 0.45)) return this.villaBlocked(x, z);
     if (this.circleAt(x, z, 0.25)) return true;
     if (corridor(x, z) && z > KTUNNEL.z0 - 0.4) return Math.abs(x - KX) > KTUNNEL.half - 0.3;
     if (inTown(x, z)) {
@@ -489,12 +550,32 @@ export class Keys {
   /** The height under a car's wheel where the town's ground is not the street's (the tunnel, the sand, the hill), or null. */
   carSurface(x: number, z: number): number | null {
     if (corridor(x, z)) return z < KTUNNEL.z0 ? CURB + 0.02 : 0.03;
+    const vf = villaFloor(x, z);
+    if (vf !== null) return vf;
     if (!this.owns(x, z) || inTown(x, z)) return null;
     return this.ground(x, z);
+  }
+
+  /** On foot (without the game's solid shape), on your villa's plot: its walls, the house, the pool. */
+  private villaBlocked(x: number, z: number) {
+    return villaWall(x, z);
   }
 }
 
 const cellKey = (x: number, z: number) => Math.floor(x / 4) * 4096 + Math.floor(z / 4);
+
+/** (Keys.villaBlocked: the walls, the house, the pool) */
+function villaWall(x: number, z: number) {
+  const V = VILLA,
+    H = V.house;
+  const t = 0.45;
+  if (x < V.x0 + t || x > V.x1 - t || z < V.z0 + t) return true;
+  if (z > V.z1 - t && (x < V.gate.x0 || x > V.gate.x1)) return true;
+  // (the porch cut into the house's front: up to its door)
+  const porch = x > V.hall.x0 + 2.3 && x < V.hall.x1 - 2.3 && z > V.door.z - 0.2;
+  if (x > H.x0 && x < H.x1 && z > H.z0 && z < H.z1 && !porch) return true;
+  return villaPool(x, z) !== null;
+}
 
 /** A half-float attribute over the worker's own array. */
 function half(a: Uint16Array) {

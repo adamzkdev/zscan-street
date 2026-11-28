@@ -296,6 +296,8 @@ const tmpW = new THREE.Vector3();
 const IDENTITY = new THREE.Matrix4();
 /** Beyond this (m), a figure's animation may step on its own turn only at a weak processor's levels (scene/load.ts). */
 const FAR_ANIM = 30;
+/** Beyond this (m) from the eye a figure keeps only its body and what it holds (see update). */
+const FAR_DETAIL = 70;
 /** Each figure's turn among the frames (load.turn): spread so they don't all step on the same one. */
 let animSlots = 0;
 
@@ -453,11 +455,13 @@ export class Snark {
 
   /** Seen from far away (see the constructor), and whether its legs show at all (seated, in a bus). */
   private far = false;
+  /** Far from the eye (the street's perspective view): drawn as from far up. */
+  private farDist = false;
   private legsOn = true;
   private applyDetail() {
     // (drawn in 3D by the game: the flat figure stays hidden, see set3D)
     if (this.in3D) return;
-    const near = !this.far;
+    const near = !this.far && !this.farDist;
     for (const l of this.legs) l.visible = near && this.legsOn;
     if (this.lap) this.lap.visible = near && !!this.seat;
     this.shadow.visible = near;
@@ -877,6 +881,15 @@ export class Snark {
     const par = this.root.parent;
     const top = par !== null && (par as THREE.Scene).isScene === true && par.parent === null && par.matrixWorld.equals(IDENTITY);
     let seen = this.root.visible && load.sees(top ? tmpW.copy(this.root.position) : tmpW.setFromMatrixPosition(this.root.matrixWorld), 2.5);
+    // (far down the street in the game's own view a figure is a few pixels tall: its legs, its lap, its
+    // shadow dropped as on the whole-city map — two draw calls instead of six)
+    if (seen) {
+      const fd = tmpW.distanceToSquared(load.eye) > FAR_DETAIL * FAR_DETAIL;
+      if (fd !== this.farDist) {
+        this.farDist = fd;
+        this.applyDetail();
+      }
+    }
     // (a processor that cannot keep up: far off, the figure's animation steps on its own turn only,
     // every other frame or less; where it walks still moves every frame)
     if (seen && load.level > 0 && !load.turn(this.animSlot) && tmpW.distanceToSquared(load.eye) > FAR_ANIM * FAR_ANIM) seen = false;

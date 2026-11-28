@@ -3,10 +3,11 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { CITY, CURB, GRID, RIVER, ST, streetSegments } from "./city/plan";
 import type { Traffic } from "./traffic";
 import { freeObject } from "./voxel/mesher";
-import { bikeObject, carObject, POLICE_BAR, spinWheels } from "./real/cars";
+import { bikeObject, carObject, POLICE_BAR, spinWheels, steerWheels } from "./real/cars";
 import { SnarkFigure } from "../gta/figure";
 import { MOTO_SEAT } from "../gta/models";
 import { busSign, canvasTexture } from "./textures";
+import { reach, type TrafficBlocker } from "./goldengate";
 
 /**
  * Traffic across the whole city: traffic lights at the grid's junctions (the avenue's included),
@@ -34,8 +35,55 @@ const SCRAMBLE_STOP = 4.4;
 const isScramble = (x: number, z: number) => Math.abs(x - SCRAMBLE.x) < 0.1 && Math.abs(z - SCRAMBLE.z) < 0.1;
 const xWidth = (x: number) => GRID.xw[GRID.xs.indexOf(x)] ?? GRID.street;
 const zWidth = (z: number) => GRID.zw[GRID.zs.indexOf(z)] ?? GRID.street;
+/** A street's width, and its lanes' middles off its centre line (one lane each way, right-hand traffic). */
+const streetWidth = (line: { axis: "x" | "z"; at: number }) => (line.axis === "x" ? zWidth(line.at) : xWidth(line.at));
+const laneOff = (line: { axis: "x" | "z"; at: number }) => Math.max(1.9, streetWidth(line) / 4 + 0.2);
 
 type Axis = "x" | "z";
+/**
+ * A turn at the end of a street, onto the ring road (or round one of its corners): a curve from the
+ * lane it comes in on, past the stop line, to the lane it leaves on — the quadratic through the
+ * corner where the two lanes cross, so it leaves its street and joins the next already heading
+ * along it, without a step.
+ */
+interface Bend {
+  ring: Line;
+  dir: 1 | -1;
+  /** Where it starts on the street (s), and where it comes out on the ring (s there). */
+  sIn: number;
+  sOut: number;
+  /** Start, corner, end (x, z). */
+  p: [number, number][];
+  /** Its length, its arc lengths at TABLE steps (for an even speed along it), the speed to take it at. */
+  len: number;
+  cum: number[];
+  vTurn: number;
+}
+const TABLE = 16;
+
+function bezier(b: Bend, t: number, out: { x: number; z: number; yaw: number }) {
+  const [p0, p1, p2] = b.p;
+  const u = 1 - t;
+  out.x = u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0];
+  out.z = u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1];
+  const dx = 2 * u * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0]),
+    dz = 2 * u * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1]);
+  // (the car's front is +x: its heading's yaw)
+  out.yaw = Math.atan2(-dz, dx);
+  return out;
+}
+/** The curve's parameter u metres along it. */
+function bendT(b: Bend, u: number) {
+  const c = b.cum;
+  if (u <= 0) return 0;
+  if (u >= b.len) return 1;
+  let i = 1;
+  while (i < TABLE && c[i] < u) i++;
+  return (i - 1 + (u - c[i - 1]) / Math.max(1e-6, c[i] - c[i - 1])) / TABLE;
+}
+const ON = { x: 0, z: 0, yaw: 0 },
+  AHEAD = { x: 0, z: 0, yaw: 0 };
+
 interface Line {
   axis: Axis;
   /** The street's centre on the other axis. */
@@ -89,6 +137,22 @@ class Mover {
   /** Who drives it (a zkSNARK's number), and on a bike its rider in 3D (src/gta/figure.ts). */
   readonly driver = 1 + Math.floor(Math.random() * 10000);
   rider: SnarkFigure | null = null;
+  /** The turn ahead at the end of its street (planned on the way there), and how far into it it is. */
+  bend: Bend | null = null;
+  next: Bend | null = null;
+  u = 0;
+  /** The front wheels' angle (radians), eased; the curve's turn per metre where it is. */
+  steer = 0;
+  curve = 0;
+  /** Across its lane (m: + to the kerb's side, − over the middle), where it is going, and its heading turned for it (eased). */
+  lat = 0;
+  latTo = 0;
+  tilt = 0;
+  /** Its lane's middle across the street (z of an east–west street, x of a north–south one). */
+  laneMid = 0;
+  /** Seconds stopped behind a car standing in its lane (yours, a wreck); its way round it, while it goes. */
+  waitBody = 0;
+  round: { x: number; z: number; stage: "back" | "out" | "by"; need: number; lat: number; ra: number; backed: number } | null = null;
   constructor(
     public line: Line,
     public dir: 1 | -1,
@@ -131,6 +195,8 @@ class Mover {
     }
     for (const c of [...body.children]) this.group.add(c);
     if (this.rider) this.group.add(this.rider.root);
+    // (its heading first, then its lean about its own length)
+    this.group.rotation.order = "YXZ";
     if (kind === "police") {
       // the light bar: red on the left, blue on the right, flashing in turn
       for (const [z, c] of [
@@ -162,23 +228,36 @@ class Mover {
     this.dir = dir;
     this.s = s;
     // right-hand traffic: +x keeps to +z, +z keeps to −x (in the middle of its half of the street)
-    const off = Math.max(1.9, (line.axis === "x" ? zWidth(line.at) : xWidth(line.at)) / 4 + 0.2);
+    const off = laneOff(line);
+    this.lat = this.latTo = this.tilt = 0;
+    this.round = null;
+    this.waitBody = 0;
     if (line.axis === "x") {
-      this.group.position.z = line.at + (dir > 0 ? off : -off);
+      this.laneMid = line.at + (dir > 0 ? off : -off);
       this.group.rotation.y = dir > 0 ? 0 : Math.PI;
     } else {
-      this.group.position.x = line.at + (dir > 0 ? -off : off);
+      this.laneMid = line.at + (dir > 0 ? -off : off);
       this.group.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
     }
     this.place();
   }
+  /** Its heading along its street. */
+  get yaw0() {
+    return this.line.axis === "x" ? (this.dir > 0 ? 0 : Math.PI) : this.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+  }
   place() {
-    if (this.line.axis === "x") this.group.position.x = this.s;
-    else this.group.position.z = this.s;
+    // (out of its lane by lat: + to its right, the kerb's side)
+    if (this.line.axis === "x") {
+      this.group.position.x = this.s;
+      this.group.position.z = this.laneMid + this.dir * this.lat;
+    } else {
+      this.group.position.z = this.s;
+      this.group.position.x = this.laneMid - this.dir * this.lat;
+    }
     this.group.position.y = 0;
   }
   get done() {
-    return this.dir > 0 ? this.s > this.line.to : this.s < this.line.from;
+    return !this.bend && (this.dir > 0 ? this.s > this.line.to : this.s < this.line.from);
   }
 }
 
@@ -189,8 +268,8 @@ export class CityTraffic {
   private clock = 0;
   private spawnIn = 0;
   private police: Mover | null = null;
-  /** People in the road (the player, jaywalkers). */
-  blockers: () => { x: number; z: number }[] = () => [];
+  /** People in the road (the player, jaywalkers), and cars' bodies standing in it (yours, wrecks: src/scene/goldengate.ts's blockers). */
+  blockers: () => TrafficBlocker[] = () => [];
 
   get movers() {
     return this.cars;
@@ -242,6 +321,9 @@ export class CityTraffic {
     this.cars.delete(m);
     this.group.remove(m.group);
     if (m === this.police) this.police = null;
+    // (upright, wheels straight: the game's car steers it from here)
+    m.group.rotation.x = 0;
+    steerWheels(m.group, 0);
     for (const b of m.bar) b.visible = true;
     return m.group;
   }
@@ -311,20 +393,167 @@ export class CityTraffic {
     this.group.add(m);
   }
 
-  /** Where a car at the end of its street turns: onto the ring road, along it or round its corner. */
-  private turn(c: Mover) {
+  /**
+   * The turn at the end of a car's street, planned on the way there: onto the ring road, either way
+   * (at one of the ring's corners, the only way on), as a curve from its lane to the ring's.
+   */
+  private planTurn(c: Mover): Bend | null {
     const L = c.line;
     const end = c.dir > 0 ? L.to : L.from;
     const ring = this.lines.find((l) => l.axis !== L.axis && Math.abs(l.at - end) < 0.1);
-    if (!ring) return false;
-    // at a corner of the ring there is only one way on; elsewhere either way
+    if (!ring) return null;
     const atStart = Math.abs(L.at - ring.from) < 0.1,
       atEnd = Math.abs(L.at - ring.to) < 0.1;
     const dir: 1 | -1 = atStart ? 1 : atEnd ? -1 : Math.random() < 0.5 ? 1 : -1;
-    // the lane across means a little way round the corner
-    c.setLine(ring, dir, L.at + dir * 2);
-    c.v *= 0.6;
+    // the lanes: the one it is in (across its street) and the ring's for the way it goes
+    const lane = c.laneMid;
+    const off = Math.max(1.9, (ring.axis === "x" ? zWidth(ring.at) : xWidth(ring.at)) / 4 + 0.2);
+    const ringLane = ring.axis === "x" ? ring.at + (dir > 0 ? off : -off) : ring.at + (dir > 0 ? -off : off);
+    // in, from just past the stop line (it waits at the red there like everyone, then turns), at
+    // most 9 m before the corner; out as far along the ring as it came in
+    const j = L.junctions.find((q) => Math.abs(q.at - end) < 0.1);
+    const half = j?.half ?? (L.axis === "x" ? xWidth(end) : zWidth(end)) / 2;
+    const stop = end - c.dir * (half + 1.8 - 0.4);
+    const kIn = Math.max(2.5, Math.min(9, (ringLane - stop) * c.dir));
+    const kOut = Math.max(kIn, 4);
+    const sIn = ringLane - c.dir * kIn,
+      sOut = lane + dir * kOut;
+    const P = (along: number, across: number): [number, number] => (L.axis === "x" ? [along, across] : [across, along]);
+    const b: Bend = { ring, dir, sIn, sOut, p: [P(sIn, lane), P(ringLane, lane), P(ringLane, sOut)], len: 0, cum: [0], vTurn: 0 };
+    let px = b.p[0][0],
+      pz = b.p[0][1];
+    for (let i = 1; i <= TABLE; i++) {
+      bezier(b, i / TABLE, ON);
+      b.cum.push(b.cum[i - 1] + Math.hypot(ON.x - px, ON.z - pz));
+      px = ON.x;
+      pz = ON.z;
+    }
+    b.len = b.cum[TABLE];
+    // (round a tight corner slower: about 0.35 g across)
+    b.vTurn = Math.sqrt(3.4 * Math.min(kIn, kOut));
+    return b;
+  }
+
+  /** Along the bend, u metres in: where it is, which way it faces, its front wheels turned to match. */
+  private ride(c: Mover, dt: number) {
+    const b = c.bend!;
+    const t = bendT(b, c.u);
+    bezier(b, t, ON);
+    bezier(b, bendT(b, c.u + 0.6), AHEAD);
+    c.group.position.x = ON.x;
+    c.group.position.z = ON.z;
+    c.group.rotation.y = ON.yaw;
+    // (the wheels: the curve's bend over the car's wheelbase)
+    const dy = Math.atan2(Math.sin(AHEAD.yaw - ON.yaw), Math.cos(AHEAD.yaw - ON.yaw)) / 0.6;
+    c.curve = dy;
+    this.wheel(c, Math.max(-0.55, Math.min(0.55, Math.atan(2.7 * dy))), dt);
+    // the virtual place on its street: still ahead of whoever follows it in
+    c.s = b.sIn + c.dir * c.u;
+  }
+
+  /**
+   * A car standing in its lane ahead (yours, a wreck): it waits (and honks), then backs up if it
+   * needs the room, pulls out round it — by the kerb's side if the street leaves room, else over the
+   * middle when nothing is coming — and back in once past. You drive off: it eases back into its lane.
+   */
+  private goRound(c: Mover, people: (TrafficBlocker & { self?: Mover })[], body: TrafficBlocker | null, gap: number, lead: Mover | null, behind: Mover | null, dt: number) {
+    const fx = c.line.axis === "x" ? c.dir : 0,
+      fz = c.line.axis === "x" ? 0 : c.dir;
+    const p = c.group.position;
+    const left = c.dir > 0 ? c.line.to - c.s : c.s - c.line.from;
+    const r = c.round;
+    if (r) {
+      // the one it goes round, still there (it may have rolled a little)
+      let found: TrafficBlocker | null = null;
+      // (moving off now or not: while it is beside it, it stays out till past)
+      for (const q of people) if (q.hl !== undefined && q.self !== c && Math.hypot(q.x - r.x, q.z - r.z) < 2.5) found = q;
+      const along = (r.x - p.x) * fx + (r.z - p.z) * fz;
+      const by = along < r.ra + c.len / 2 + 0.5 && along > -(r.ra + c.len / 2 + 1.5);
+      if (found) {
+        r.x = found.x;
+        r.z = found.z;
+      }
+      if (!found || found.wait || left < 14) {
+        // gone (you drove off), or the street's end near: back into its lane — unless beside it still
+        if (!found || !by) {
+          c.round = null;
+          c.latTo = 0;
+        }
+        return;
+      }
+      if (r.stage === "back") {
+        r.backed += Math.max(0, -c.v) * dt;
+        // (room enough now, or the one behind too close, or as far back as it goes)
+        const room = behind ? Math.abs(c.s - behind.s) - (c.len + behind.len) / 2 : Infinity;
+        if (gap >= r.need || room < 1.2 || r.backed > 4.5) r.stage = "out";
+      }
+      if (r.stage !== "back") c.latTo = r.lat;
+      if (r.stage === "out" && Math.abs(c.lat - r.lat) < 0.05) r.stage = "by";
+      // past it: back in
+      if (along < -(r.ra + c.len / 2 + 1.5)) {
+        c.round = null;
+        c.latTo = 0;
+      }
+      return;
+    }
+    if (c.lat !== 0 && left < 14) c.latTo = 0;
+    if (!body || gap > 4 || c.v > 0.6) {
+      c.waitBody = 0;
+      return;
+    }
+    c.waitBody += dt;
+    // (behind one already going round it: after it, sooner)
+    const patience = lead?.round && Math.abs(lead.s - c.s) < 20 ? 0.8 : 3.5;
+    if (c.waitBody < patience) return;
+    const [ra, rc] = reach(body, fx, fz);
+    if (left < gap + 2 * ra + c.len + 18) return;
+    // across its lane, from its middle (+ to the kerb's side)
+    const mx = c.line.axis === "x" ? c.s : c.laneMid,
+      mz = c.line.axis === "x" ? c.laneMid : c.s;
+    const l = -(body.x - mx) * fz + (body.z - mz) * fx;
+    const half = c.kind === "moto" ? 0.42 : 0.95;
+    const w = streetWidth(c.line),
+      off = laneOff(c.line);
+    const kerb = w / 2 - off - half - 0.3,
+      over = -(off + w / 2) + half + 0.3,
+      own = -(off - half - 0.15);
+    // (wide enough that its box, turned as it pulls out, keeps off yours: the game's crashes go by square boxes)
+    const right = l + rc + half + 0.75,
+      leftward = l - rc - half - 0.75;
+    const ways: number[] = [];
+    if (right <= kerb) ways.push(right);
+    if (leftward >= own) ways.push(leftward);
+    else if (leftward >= over && this.clearComing(c, gap + 2 * ra + c.len + 50)) ways.push(leftward);
+    if (!ways.length) {
+      // (no way round yet: it looks again in a second)
+      c.waitBody = patience - 1;
+      return;
+    }
+    const lat = ways.sort((a, b) => Math.abs(a) - Math.abs(b))[0];
+    const need = Math.min(6, Math.abs(lat) / 0.62 + 0.8);
+    c.round = { x: body.x, z: body.z, stage: gap < need ? "back" : "out", need, lat, ra, backed: 0 };
+    c.waitBody = 0;
+  }
+
+  /** Nothing coming the other way along its street within `dist` ahead (or just past it). */
+  private clearComing(c: Mover, dist: number) {
+    for (const o of this.cars) {
+      if (o === c || (o.bend ? o.bend.dir : o.dir) === c.dir) continue;
+      let s: number | null = null;
+      if (!o.bend && o.line === c.line) s = o.s;
+      else if (o.bend && o.bend.ring === c.line) s = o.bend.sOut;
+      if (s === null) continue;
+      const rel = (s - c.s) * c.dir;
+      if (rel > -8 && rel < dist) return false;
+    }
     return true;
+  }
+
+  private wheel(c: Mover, to: number, dt: number) {
+    if (c.kind === "moto") return;
+    const was = c.steer;
+    c.steer += (to - c.steer) * Math.min(1, dt * 8);
+    if (Math.abs(c.steer - was) > 1e-4 || to !== 0) steerWheels(c.group, c.steer);
   }
 
   private spawn(anywhere = false) {
@@ -369,53 +598,162 @@ export class CityTraffic {
       this.spawnIn = 1.5 + Math.random() * 2.5;
       this.spawn();
     }
-    // per lane: front first, keep the gap, stop at red lights
-    const lanes = new Map<string, Mover[]>();
-    for (const c of this.cars) {
-      const k = `${c.line.axis}${c.line.at}${c.dir}`;
+    // per lane: front first, keep the gap, stop at red lights (a car turning onto the ring is in its
+    // street's lane until it is out of the corner, and already the one in front for the ring's)
+    // (the lane's way kept in the entry: a car that comes out of its corner while an earlier lane is
+    // worked through has no bend any more when its ring's list is reached — that read a null)
+    type Entry = { c: Mover; s: number; own: boolean; dir: number };
+    const lanes = new Map<string, Entry[]>();
+    const add = (k: string, e: Entry) => {
       const l = lanes.get(k);
-      if (l) l.push(c);
-      else lanes.set(k, [c]);
+      if (l) l.push(e);
+      else lanes.set(k, [e]);
+    };
+    const key = (line: Line, dir: number) => `${line.axis}${line.at}${dir}`;
+    for (const c of this.cars) {
+      add(key(c.line, c.dir), { c, s: c.s, own: true, dir: c.dir });
+      if (c.bend) add(key(c.bend.ring, c.bend.dir), { c, s: c.bend.sOut - c.bend.dir * (c.bend.len - c.u), own: false, dir: c.bend.dir });
     }
-    const people = this.blockers();
+    const people: (TrafficBlocker & { self?: Mover })[] = this.blockers().slice();
+    // (a car of ours over the middle, going round one: the oncoming wait for it)
+    for (const c of this.cars)
+      if (!c.bend && c.lat < -(laneOff(c.line) - 1.2)) {
+        const p = c.group.position;
+        people.push({ x: p.x, z: p.z, yaw: c.group.rotation.y, hl: c.len / 2, hw: c.kind === "moto" ? 0.42 : 0.95, wait: true, self: c });
+      }
     for (const list of lanes.values()) {
-      list.sort((a, b) => (b.s - a.s) * a.dir);
-      list.forEach((c, i) => {
+      // (sorted along the lane's own way: the turning cars' places on the ring are the ring's s)
+      const dir = list[0].dir;
+      list.sort((a, b) => (b.s - a.s) * dir);
+      list.forEach((e, i) => {
+        if (!e.own) return;
+        const c = e.c;
         let limit = Infinity;
         const leader = list[i - 1];
-        if (leader) limit = Math.abs(leader.s - c.s) - (leader.len + c.len) / 2 - 1.2;
-        // someone in the road in its lane
-        const lane = c.line.axis === "x" ? c.group.position.z : c.group.position.x;
-        let person = Infinity;
-        for (const b of people) {
-          const across = c.line.axis === "x" ? b.z : b.x;
-          const along = c.line.axis === "x" ? b.x : b.z;
-          if (Math.abs(across - lane) > 1.3) continue;
-          const ahead = (along - c.s) * c.dir - 2.4;
-          if (ahead > -1 && ahead < person) person = ahead;
+        if (leader) limit = Math.abs(leader.s - c.s) - (leader.c.len + c.len) / 2 - 1.2;
+        // the end of its street ahead: its turn planned, slowing for it; whoever is already on the
+        // ring where it comes out is the one in front
+        const left = c.dir > 0 ? c.line.to - c.s : c.s - c.line.from;
+        if (!c.bend && !c.next && left < 45) c.next = this.planTurn(c);
+        const b = c.bend ?? c.next;
+        let vCap = c.vmax;
+        if (b) {
+          const toIn = c.bend ? 0 : Math.max(0, (b.sIn - c.s) * c.dir);
+          vCap = Math.min(vCap, Math.sqrt(b.vTurn * b.vTurn + 2 * 3.5 * toIn));
+          const rest = (c.bend ? b.len - c.u : b.len + toIn) - 0.5;
+          for (const o of this.cars) {
+            if (o === c || o.line !== b.ring || o.dir !== b.dir) continue;
+            const past = (o.s - b.sOut) * b.dir;
+            if (past > -o.len && past < 30) limit = Math.min(limit, rest + past - (o.len + c.len) / 2 - 1.2);
+          }
+          for (const o of this.cars)
+            if (o !== c && o.bend && o.bend.ring === b.ring && o.bend.dir === b.dir && o.line !== c.line) {
+              // (another street's car turning into the same lane, nearer the end of it)
+              const oAt = o.bend.sOut - o.bend.dir * (o.bend.len - o.u);
+              const past = (oAt - b.sOut) * b.dir;
+              if (past > -rest && past < 30 && (o.bend.len - o.u < rest || o.u > 0.5)) limit = Math.min(limit, rest + past - (o.len + c.len) / 2 - 1.2);
+            }
+        }
+        // someone in the road in its lane (ahead of it, however it is turned); a car's body by its
+        // turned extents, stopped short of it with room to pull out round it
+        const p = c.group.position;
+        const fx = Math.cos(c.group.rotation.y),
+          fz = -Math.sin(c.group.rotation.y);
+        const half = c.kind === "moto" ? 0.42 : 0.95;
+        let person = Infinity,
+          body: TrafficBlocker | null = null,
+          bodyGap = Infinity;
+        for (const q of people) {
+          if (q.self === c) continue;
+          const dx = q.x - p.x,
+            dz = q.z - p.z;
+          const across = Math.abs(-dx * fz + dz * fx),
+            along = dx * fx + dz * fz;
+          if (q.hl === undefined) {
+            if (across > 1.3) continue;
+            const ahead = along - c.len / 2 - 0.25;
+            if (ahead > -1 && ahead < person) person = ahead;
+            continue;
+          }
+          const [ra, rc] = reach(q, fx, fz);
+          if (across > rc + half + 0.25) continue;
+          const gap = along - ra - c.len / 2;
+          if (gap < -1.5) continue;
+          // (going round it: as close as the way out lets it; else a car's length of room kept)
+          const ahead = gap - (c.round ? 0.25 : q.wait ? 1.2 : 2);
+          if (ahead < person) person = ahead;
+          if (!q.wait && gap < bodyGap) (bodyGap = gap), (body = q);
         }
         if (person < 10) limit = Math.min(limit, person);
-        c.blocked = person < 3 && c.v < 1 ? c.blocked + dt : 0;
+        c.blocked = person < 3 && c.v < 1 && !c.round ? c.blocked + dt : 0;
+        // stopped behind a car standing in its lane: it honks (src/scene/horns.ts), then backs up
+        // if it must and goes round it — by the kerb's side if there's room, else over the middle
+        // when nothing is coming; the ones behind follow it round sooner
+        if (!c.bend && !c.held) this.goRound(c, people, body, bodyGap, leader?.c ?? null, list[i + 1]?.c ?? null, dt);
         if (c.held) limit = 0;
-        for (const j of c.line.junctions) {
-          const [jx, jz] = c.line.axis === "x" ? [j.at, c.line.at] : [c.line.at, j.at];
-          if (this.greenAt(c.line.axis, jx, jz)) continue;
-          // the scramble's cars wait behind its zebras
-          const stop = j.at - c.dir * (isScramble(jx, jz) ? j.half + SCRAMBLE_STOP + c.len / 2 : j.half + 1.8);
-          const ahead = (stop - c.s) * c.dir;
-          // only a junction it has not entered yet
-          if (ahead > -0.3 && ahead < limit) limit = ahead;
-        }
+        if (!c.bend)
+          for (const j of c.line.junctions) {
+            const [jx, jz] = c.line.axis === "x" ? [j.at, c.line.at] : [c.line.at, j.at];
+            if (this.greenAt(c.line.axis, jx, jz)) continue;
+            // the scramble's cars wait behind its zebras
+            const stop = j.at - c.dir * (isScramble(jx, jz) ? j.half + SCRAMBLE_STOP + c.len / 2 : j.half + 1.8);
+            const ahead = (stop - c.s) * c.dir;
+            // only a junction it has not entered yet
+            if (ahead > -0.3 && ahead < limit) limit = ahead;
+          }
         const brake = Math.sqrt(Math.max(0, 2 * 5 * Math.max(0, limit - 0.4)));
-        const target = Math.min(c.vmax, brake);
+        let target = Math.min(vCap, brake);
+        if (c.round?.stage === "back") target = -1.3;
+        else if (c.round?.stage === "out") target = Math.min(target, 2.2);
         c.v = c.v < target ? Math.min(target, c.v + 3 * dt) : Math.max(target, c.v - 7 * dt);
-        c.s += c.dir * c.v * dt;
-        c.place();
-        spinWheels(c.group, c.v * dt);
-        // the biker rides on (posed while it is near enough to be seen)
+        const step = c.v * dt;
+        if (c.bend) {
+          c.u += step;
+          if (c.u >= c.bend.len) {
+            // out of the corner: on the ring, in its lane, the rest of the step along it
+            const b2 = c.bend;
+            c.bend = null;
+            c.setLine(b2.ring, b2.dir, b2.sOut + b2.dir * (c.u - b2.len));
+          } else this.ride(c, dt);
+        } else {
+          c.s += c.dir * step;
+          // across its lane: out round a car in it, back in once past (turned the way it moves)
+          let latRate = 0;
+          if (c.lat !== c.latTo) {
+            const rate = c.held ? 0 : Math.max(0.35, Math.min(2, Math.abs(c.v) * (c.round ? 0.62 : 0.3)));
+            const d = c.latTo - c.lat;
+            const m = Math.sign(d) * Math.min(Math.abs(d), rate * dt);
+            c.lat += m;
+            latRate = m / Math.max(dt, 1e-4);
+          }
+          const tiltTo = c.v > 0.2 ? -Math.atan2(latRate, Math.max(c.v, 1.5)) : 0;
+          c.tilt += (tiltTo - c.tilt) * Math.min(1, dt * 6);
+          if (c.lat !== 0 || c.tilt !== 0) c.group.rotation.y = c.yaw0 + c.tilt;
+          if (Math.abs(c.tilt) < 1e-4 && c.lat === 0 && c.tilt !== 0) {
+            c.tilt = 0;
+            c.group.rotation.y = c.yaw0;
+          }
+          if (c.next && (c.s - c.next.sIn) * c.dir >= 0) {
+            // into the corner (back in its lane by now: nothing goes round a car this near the end)
+            c.lat = c.latTo = c.tilt = 0;
+            c.round = null;
+            c.bend = c.next;
+            c.next = null;
+            c.u = (c.s - c.bend.sIn) * c.dir;
+            this.ride(c, dt);
+          } else c.place();
+        }
+        if (!c.bend) this.wheel(c, Math.max(-0.5, Math.min(0.5, c.tilt * 2)), dt);
+        spinWheels(c.group, step);
+        // the biker rides on (posed while it is near enough to be seen), leaning into the turn
         if (c.rider) {
           c.rider.act.ride = true;
           c.rider.update(dt, { speed: 0 });
+        }
+        // (a bike leans into the corner: as much as its speed round it asks, eased)
+        if (c.kind === "moto") {
+          const lean = c.bend ? Math.max(-0.6, Math.min(0.6, -Math.atan((c.v * c.v * c.curve) / 9.8))) : 0;
+          c.group.rotation.x += (lean - c.group.rotation.x) * Math.min(1, dt * 6);
         }
       });
     }
@@ -425,7 +763,7 @@ export class CityTraffic {
       this.police.bar.forEach((m, i) => (m.visible = (i === 0) === !!on));
     }
     for (const c of [...this.cars])
-      if (c.done && !this.turn(c)) {
+      if (c.done) {
         this.cars.delete(c);
         this.group.remove(c.group);
         // (its rider let go first: the figure frees its own)

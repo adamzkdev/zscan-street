@@ -18,14 +18,23 @@ export class GeoB {
   get n() {
     return this.pos.length / 3;
   }
+  uv2: number[] = [];
   /** Occlusion for the next vertices (1: open to the sky). */
   ao = 1;
+  /**
+   * The picture's second reading for the next vertices (the far side of a head or a torso, out of
+   * the picture's sight: the near side's art, mirrored) and how much of it shows (0…1).
+   */
+  u2 = 0;
+  w2 = 0;
+  mirror = 0;
   v(x: number, y: number, z: number, c: THREE.Color, mat: number, art = 0, u = 0, w = 0, fu = 0, fv = 0) {
     this.pos.push(x, y, z);
     this.col.push(c.r, c.g, c.b);
     this.uv.push(u, w);
+    this.uv2.push(this.mirror > 0 ? this.u2 : u, this.mirror > 0 ? this.w2 : w);
     this.fab.push(fu, fv);
-    this.mix.push(art, mat, this.ao);
+    this.mix.push(art, mat, this.ao, this.mirror);
     return this.n - 1;
   }
   tri(a: number, b: number, c: number) {
@@ -57,7 +66,8 @@ export class GeoB {
     g.setAttribute("color", new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute("uv", new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute("aFab", new THREE.Float32BufferAttribute(this.fab, 2));
-    g.setAttribute("aMix", new THREE.Float32BufferAttribute(this.mix, 3));
+    g.setAttribute("aUv2", new THREE.Float32BufferAttribute(this.uv2, 2));
+    g.setAttribute("aMix", new THREE.Float32BufferAttribute(this.mix, 4));
     g.setIndex(this.idx);
     normals(g);
     g.computeBoundingBox();
@@ -177,44 +187,6 @@ function boxBlur(src: Float32Array, W: number, r: number) {
   return out;
 }
 
-/** The silhouette's radius (cells) from (cx, cy) every 360/n degrees, smoothed round. */
-function contour(mask: Fine, cx: number, cy: number, n: number) {
-  const r = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const dx = Math.cos(a),
-      dy = -Math.sin(a);
-    let t = 0.5,
-      last = 0.5;
-    for (; t < 26; t += 0.25) {
-      if (mask.at(cx + dx * t, cy + dy * t) < 0.5) break;
-      last = t;
-    }
-    r[i] = last + 0.15;
-  }
-  // a circular average over a few neighbours: no stairs left
-  const out = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    let s = 0,
-      w = 0;
-    for (let k = -3; k <= 3; k++) {
-      const wt = 4 - Math.abs(k);
-      s += r[(i + k + n) % n] * wt;
-      w += wt;
-    }
-    out[i] = s / w;
-  }
-  return out;
-}
-const radiusAt = (c: Float32Array, a: number) => {
-  const n = c.length;
-  let f = ((a / (Math.PI * 2)) % 1) * n;
-  if (f < 0) f += n;
-  const i = Math.floor(f),
-    t = f - i;
-  return c[i % n] * (1 - t) + c[(i + 1) % n] * t;
-};
-
 // ---- level of detail ---------------------------------------------------------------------------------------
 
 /**
@@ -232,144 +204,230 @@ export function lowDetail<T>(fn: () => T): T {
   }
 }
 
+// ---- the picture on the figure -----------------------------------------------------------------------------
+
+/**
+ * How a zkSNARK's picture goes round its figure. The picture is a 3/4 bust: the face drawn nearly
+ * flat on, to the right; the hood's side (and its prints) to the left of it, out to the back. So the
+ * face's columns go round the front of the head (as wide round it as they are drawn: square cells);
+ * the hood's side goes on round the right side to the middle of the back, at the same scale, read
+ * back and forth (a pattern keeps its size); the left side, which no picture shows, is the right
+ * side mirrored (a print goes all the way round, a face stays one face). The rows go down the figure
+ * as drawn. The torso the same, its chest under the face.
+ */
+export interface ArtWrap {
+  slot: number;
+  /**
+   * The front's column (between the eyes), the face's columns to its left (the near side, drawn wider
+   * in a 3/4 view) and to its right, the back's column (cells).
+   */
+  c: number;
+  fl: number;
+  fr: number;
+  xl: number;
+  /** Per row, where the face ends on the left (cells): what is left of it past the front is squeezed round the cheek. */
+  edge?: Float32Array;
+  /** The face's half width round the front (rad). */
+  phi: number;
+  /** The row at y = 0, a cell's height (m). */
+  ay: number;
+  vy: number;
+  /** A torso longer than the bust in the picture: past row `last` it is read back up (to `first`). */
+  last?: number;
+  first?: number;
+}
+
+const PI = Math.PI;
+const wrapA = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+/** The picture's column at turn `th` round the figure (0 the front, + toward its left), at row `row`. */
+export function wrapCol(o: ArtWrap, th: number, row: number) {
+  th = wrapA(th);
+  if (th >= 0) return o.c + (th / o.phi) * o.fr;
+  if (th >= -o.phi) return o.c + (th / o.phi) * o.fl;
+  // the rest of the face on this row (a wide near cheek) and the hood's side squeezed round the side
+  const f0 = o.c - o.fl;
+  const e = o.edge ? Math.min(f0, o.edge[Math.min(25, Math.max(0, Math.floor(row)))]) : f0;
+  const band = Math.max(1, Math.min(3.5, e - o.xl));
+  const b0 = o.xl + band;
+  const d = Math.min(0.55, Math.max(0, f0 - b0) * (o.phi / o.fl) * 0.35);
+  if (d > 0 && -th - o.phi < d) return f0 - ((-th - o.phi) / d) * (f0 - b0);
+  // then the hood's back — its outer columns — round to the middle of the back at the face's own
+  // scale (a check stays square, a camo its size), read back and forth as often as it takes
+  const cells = (-th - o.phi - d) * (o.fl / o.phi);
+  const m = cells % (2 * band);
+  return b0 - (m <= band ? m : 2 * band - m);
+}
+/** The turn round the figure where column `col` goes (the near side's; the squeeze left out). */
+export function wrapTurn(o: ArtWrap, col: number) {
+  if (col >= o.c) return ((col - o.c) / o.fr) * o.phi;
+  if (col >= o.c - o.fl) return ((col - o.c) / o.fl) * o.phi;
+  return -o.phi - (o.c - o.fl - col) * (o.phi / o.fl);
+}
+export function wrapRow(o: ArtWrap, y: number) {
+  let cy = o.ay - y / o.vy;
+  if (o.last !== undefined && cy > o.last + 1) cy = Math.max(o.first ?? 0, 2 * (o.last + 1) - cy);
+  return Math.min(26, Math.max(0, cy));
+}
+const cellT: [number, number] = [0, 0];
+/**
+ * The picture's readings at turn `th`, height `y`: the direct one into `uv`; past the face's far edge
+ * the mirrored one (and how much of it shows) into the builder's state for the next vertex.
+ */
+function readArt(B: GeoB, o: ArtWrap, th: number, y: number, uv: [number, number]) {
+  th = wrapA(th);
+  const row = wrapRow(o, y);
+  slotUV(o.slot, Math.min(26, Math.max(0, wrapCol(o, th, row))), row, uv);
+  const w = th <= 0 ? 0 : smooth(o.phi - 0.04, o.phi + 0.14, th);
+  if (w > 0) {
+    slotUV(o.slot, Math.min(26, Math.max(0, wrapCol(o, -th, row))), row, cellT);
+    B.u2 = cellT[0];
+    B.w2 = cellT[1];
+  }
+  B.mirror = w;
+}
+const smin = (a: number, b: number, k: number) => -k * Math.log(Math.exp(-a / k) + Math.exp(-b / k));
+
 // ---- the head -----------------------------------------------------------------------------------------
 
 export interface HeadIn {
-  slot: number;
-  /** The head's cells (the picture's, the trail cut off, a cap's visor out of the outline). */
+  art: ArtWrap;
+  /** The head's cells (the picture's outline: a cap's peak, glasses' ends cut off). */
   shape: Fine;
-  /** The hood's opening (cells): an oval round the face — a hood's opening is round, whatever the pixels. */
-  opening: { x: number; y: number; rx: number; ry: number };
-  /** Art rows: top and the neck (its bottom), the body's middle column, a cell's size (m). */
+  /** The face's cells (blurred: the opening's edge) and the same blurred wide (its middle), or null: no opening. */
+  face: Fine | null;
+  faceWide: Fine | null;
+  /** Art rows: top and the neck (its bottom); a cell's size (m). */
   top: number;
   neck: number;
-  cx: number;
   v: number;
-  hood: THREE.Color;
-  hat: THREE.Color | null;
-  /** The art row where the hat ends (−1: none), and a visor sticking out at the front. */
+  /** The art row where a hat ends (−1: none); a cap's peak (its colour) or null; a knitted hat. */
   hatEnd: number;
-  visor: boolean;
+  visor: THREE.Color | null;
+  knit: boolean;
+  /** A halo over it: its middle (cells), its half width (cells), its colour. */
+  halo: { x: number; y: number; w: number; col: THREE.Color } | null;
+  /** Glasses: their rows and columns (cells): the picture shows on them. */
+  lenses: { y0: number; y1: number; x0: number; x1: number } | null;
+}
+
+/** The outline's width at a row (cells, continuous). */
+function widthAt(shape: Fine, cy: number) {
+  let x0 = -1,
+    x1 = -1;
+  for (let x = 0; x < 26; x += 0.25)
+    if (shape.at(x, cy) > 0.5) {
+      if (x0 < 0) x0 = x;
+      x1 = x;
+    }
+  return x0 < 0 ? 0 : x1 - x0 + 0.25;
 }
 
 export function headGeo(o: HeadIn) {
   const B = new GeoB();
-  const { v, cx, neck, top } = o;
-  // the outline's centre (cells) and its radius all round
-  let sx = 0,
-    sy = 0,
-    sw = 0;
-  for (let y = top; y <= neck; y += 0.5)
-    for (let x = 0; x < 26; x += 0.5) {
-      const m = o.shape.at(x + 0.25, y + 0.25);
-      if (m > 0.5) ((sx += x + 0.25), (sy += y + 0.25), (sw += 1));
-    }
-  const ccx = sw ? sx / sw : cx,
-    ccy = sw ? sy / sw : (top + neck) / 2;
-  const C = contour(o.shape, ccx, ccy, 96);
-  // world: x = (cell x − cx)·v, y = (neck + 1 − cell y)·v; the hood as deep as it is wide
-  const X0 = (ccx - cx) * v,
-    Y0 = (neck + 1 - ccy) * v;
-  const halfW = (radiusAt(C, 0) + radiusAt(C, Math.PI)) * 0.5 * v;
-  const rz = Math.max(0.16, halfW * 0.98);
-  const n = 2.15;
-  const SEG = LOD ? 14 : 36,
+  const { v, neck, top } = o;
+  // its widths down the rows; the head as wide as most of them, a boxy round (a hood), narrowing where
+  // the picture narrows (the crown, the neck)
+  const ws: number[] = [];
+  for (let cy = top + 0.5; cy <= neck + 0.5; cy += 0.5) ws.push(widthAt(o.shape, cy));
+  const sorted = [...ws].sort((a, b) => a - b);
+  const W = sorted[Math.floor(sorted.length * 0.8)] || 10;
+  const R0 = (W / 2) * v * 0.94;
+  const yTop = (neck + 1 - top) * v;
+  const Yc = yTop / 2 - 0.01,
+    Hh = yTop / 2 + 0.01;
+  const n = 2.7,
+    nx = 2.35;
+  const SEG = LOD ? 16 : 40,
     RING = LOD ? 10 : 26;
   const hatY = o.hatEnd >= 0 ? (neck + 1 - (o.hatEnd + 1)) * v : Infinity;
-  const recess = Math.min(0.12, rz * 0.32);
-  const uvp: [number, number] = [0, 0];
+  const recess = Math.min(0.07, R0 * 0.28);
+  const phiOf = (y: number) => Math.acos(Math.min(1, Math.max(-1, sp((y - Yc) / Hh, n / 2))));
+  /** The ring's radius at a height (m). */
+  const radius = (phi: number) => {
+    const y = Yc + Hh * sp(Math.cos(phi), 2 / n);
+    const rs = R0 * Math.abs(sp(Math.sin(phi), 2 / n));
+    const rp = (widthAt(o.shape, neck + 1 - y / v) / 2) * v * 0.94;
+    return { y, r: Math.max(0.002, smin(rs, Math.max(rp, rs * 0.55), 0.012)) };
+  };
+  const ring = (phi: number, th: number, R: number, y: number, out: THREE.Vector3) => {
+    let yy = y;
+    // the bottom sits on the shoulders (a little below the neck line: no gap when it turns)
+    if (yy < -0.03) yy = -0.03 + (yy + 0.03) * 0.2;
+    return out.set(R * sp(Math.sin(th), 2 / nx), yy, R * 1.03 * sp(Math.cos(th), 2 / nx));
+  };
+  const P = new THREE.Vector3();
+  const uv: [number, number] = [0, 0];
+  const white = new THREE.Color(1, 1, 1);
   const start = B.n;
   for (let r = 0; r <= RING; r++) {
-    const phi = (r / RING) * Math.PI;
+    const phi = (r / RING) * PI;
+    const { y: y0, r: R } = radius(phi);
     for (let s = 0; s <= SEG; s++) {
-      // θ from the back (the seam behind), round through the front
-      const th = (s / SEG) * Math.PI * 2 + Math.PI;
-      const ux = Math.sin(phi) * Math.sin(th),
-        uy = Math.cos(phi),
-        uz = Math.sin(phi) * Math.cos(th);
-      // a superellipsoid: a hood is fuller than a ball at its shoulders
-      const ex = sp(ux, 2 / n),
-        ey = sp(uy, 2 / n),
-        ez = sp(uz, 2 / n);
-      // the outline from the picture: scale the front-on offset to the silhouette's radius at its angle
-      const a = Math.atan2(ey, ex);
-      const base = Math.pow(Math.pow(Math.abs(Math.cos(a)), n) + Math.pow(Math.abs(Math.sin(a)), n), -1 / n);
-      const k = (radiusAt(C, a) * v) / base;
-      let x = X0 + ex * k;
-      let y = Y0 + ey * k;
-      let z = ez * rz;
-      // the bottom sits on the shoulders (a little below the neck line: no gap when it turns)
-      if (y < -0.03) y = -0.03 + (y + 0.03) * 0.2;
+      const th = -PI + (s / SEG) * PI * 2;
+      ring(phi, th, R, y0, P);
+      let { x, y, z } = P;
+      // the picture on it (read before the opening moves it: the art stays where it was drawn)
+      readArt(B, o.art, th, y0, uv);
+      const row = wrapRow(o.art, y0),
+        col = wrapCol(o.art, th, row);
       // the hood gathers at the neck behind (soft pleats), a seam runs over its crown to the back
+      const uy = Math.cos(phi),
+        uz = Math.sin(phi) * Math.cos(th);
       const back = 1 - smooth(-0.3, 0.2, uz);
       const gather = smooth(-0.1, -0.7, uy) * back;
-      const pleat = LOD ? 0 : 0.007 * Math.sin(th * 11) * gather;
-      let dth = th - Math.PI * 2;
-      dth = Math.atan2(Math.sin(dth), Math.cos(dth));
-      const seam = LOD ? 0 : 0.005 * Math.exp(-((dth / 0.07) ** 2)) * smooth(-0.6, 0.4, uy) * back;
-      const ol = Math.hypot(x - X0, y - Y0, z) || 1;
-      x += ((x - X0) / ol) * (pleat + seam);
-      y += ((y - Y0) / ol) * (pleat + seam);
-      z += (z / ol) * (pleat + seam);
-      // cell coordinates on the picture (front-on)
-      const acx = x / v + cx,
-        acy = neck + 1 - y / v;
-      const front = smooth(0.05, 0.55, uz);
-      // the opening: an oval round the face, set back in the hood and rounded forward again in its
-      // middle (a face inside a hood); the hood's rim stands proud round it
-      const ex2 = (acx - o.opening.x) / o.opening.rx,
-        ey2 = (acy - o.opening.y) / o.opening.ry;
-      const e = Math.hypot(ex2, ey2);
-      // (soft over a wide band: a sharp edge between the mesh's vertices showed as a staircase)
-      const f = (1 - smooth(0.7, 1.08, e)) * front;
-      const rim = smooth(0.85, 1.05, e) * (1 - smooth(1.05, 1.4, e)) * front;
-      z += f * (-recess + recess * 0.62 * (1 - Math.min(1, e * e))) + 0.014 * rim;
-      // inside the opening it is darker toward the rim and under the brim (the hood's shade)
-      const brim = smooth(-0.3, 1, -ey2);
-      B.ao = Math.max(0.35, 1 - f * (0.5 * smooth(0.4, 1.0, e) + 0.28 * brim)) * (1 - 0.18 * gather);
-      // a beanie or a cap: its band stands a little proud of the hood
+      const pleat = LOD ? 0 : 0.006 * Math.sin(th * 11) * gather;
+      const seam = LOD ? 0 : 0.004 * Math.exp(-((wrapA(th - PI) / 0.07) ** 2)) * smooth(-0.6, 0.4, uy) * back;
+      // the face: its own cells, set back in the hood, its middle rounded forward again, the hood's
+      // edge proud round it
+      // (not down to the neck: the hood closes under the chin)
+      const seen = (1 - smooth(o.art.phi + 0.1, o.art.phi + 0.45, Math.abs(th))) * smooth(0.01, 0.09, y0);
+      const f = o.face ? o.face.at(col, row) * seen : 0;
+      const fw = o.faceWide ? o.faceWide.at(col, row) * seen : 0;
+      const inset = recess * smooth(0.2, 0.8, f) * (1 - 0.4 * smooth(0.6, 1, fw));
+      const rim = LOD ? 0 : 0.01 * smooth(0.0, 0.15, f) * (1 - smooth(0.18, 0.42, f));
+      let out = pleat + seam + rim - inset;
+      // a hat's band stands a little proud of the hood
       let mat: number = MAT.jersey;
-      let col = o.hood;
-      if (o.hat && y > hatY - 0.005) {
-        const k = smooth(hatY - 0.005, hatY + 0.02, y);
-        const out = 0.014 * k;
-        const l = Math.hypot(x - X0, y - Y0, z) || 1;
-        x += ((x - X0) / l) * out;
-        y += ((y - Y0) / l) * out;
-        z += (z / l) * out;
-        // (a beanie is knitted, a cap is cotton twill)
-        mat = o.visor ? MAT.jersey : MAT.knit;
-        col = o.hat;
+      if (y > hatY - 0.005) {
+        out += 0.012 * smooth(hatY - 0.005, hatY + 0.02, y);
+        mat = o.knit ? MAT.knit : MAT.twill;
       }
-      // the picture inside the opening (the face, its eyes, its mask) and on the rim's inner edge;
-      // the hood round it is its own cloth (the drawing's flat shading on a round hood read as paint)
-      // (the front; the picture's own mask, in the atlas's alpha, says where: the opening, a hat's badge)
-      const art = smooth(0.25, 0.75, uz);
-      slotUV(o.slot, Math.min(26, Math.max(0, acx)), Math.min(26, Math.max(0, acy)), uvp);
-      // (the fabric's metres round the ring at its own girth: a beanie's ribs meet at its crown)
-      B.v(x, y, z, col, mat, art, uvp[0], uvp[1], (s / SEG) * Math.PI * (halfW + rz) * Math.sin(phi), y);
+      const len = Math.hypot(x, y - Yc, z) || 1;
+      x += (x / len) * out;
+      y += ((y - Yc) / len) * out;
+      z += (z / len) * out;
+      if (f > 0.5) mat = MAT.skin;
+      // the opening's shade: darker toward its edge
+      B.ao = Math.max(0.42, 1 - 0.42 * smooth(0.15, 0.85, f) * (1 - 0.7 * fw)) * (1 - 0.18 * gather);
+      B.v(x, y, z, white, mat, 1, uv[0], uv[1], (s / SEG) * PI * 2 * R0 * Math.sin(phi), y);
     }
   }
   B.ao = 1;
+  B.mirror = 0;
   B.rings(start, RING + 1, SEG);
-  // a cap's visor: a curved peak out over the face
-  if (o.visor && o.hat) {
-    const vy = hatY + 0.005;
-    const w = halfW * 0.82,
-      L = rz * 0.5;
+  // a cap's peak: a curved visor out over the face, in the picture's own colour for it
+  if (o.visor) {
+    const vy = hatY + 0.004;
+    const { r: Rv } = radius(phiOf(vy));
+    const w = Rv * 0.84,
+      L = R0 * 0.6;
+    const z0 = Rv * 1.03 * 0.9;
     const s0 = B.n;
     const SEGV = LOD ? 5 : 12,
       ROWV = LOD ? 1 : 4;
+    const under = o.visor.clone().multiplyScalar(0.72);
     for (let t = 0; t <= 1; t++)
       for (let r = 0; r <= ROWV; r++)
         for (let s = 0; s <= SEGV; s++) {
           const u = s / SEGV - 0.5,
             q = r / ROWV;
-          const xx = X0 + u * 2 * w * (1 - 0.35 * q * q);
-          const zz = rz * 0.82 * Math.sqrt(Math.max(0, 1 - (u * 2) ** 2 * 0.6)) + q * L;
-          const yy = vy - q * q * 0.035 - (t ? 0.018 : 0) - Math.abs(u) * 0.02;
-          B.v(xx, yy, zz, o.hat, MAT.knit, 0, 0, 0, xx, zz);
+          const xx = u * 2 * w * (1 - 0.35 * q * q);
+          const zz = z0 * Math.sqrt(Math.max(0, 1 - (u * 2) ** 2 * 0.6)) + q * L;
+          const yy = vy - q * q * 0.035 - (t ? 0.016 : 0) - Math.abs(u) * 0.02;
+          B.ao = t ? 0.8 : 1;
+          B.v(xx, yy, zz, t ? under : o.visor, MAT.twill, 0, 0, 0, xx, zz);
         }
+    B.ao = 1;
     const cols = SEGV + 1,
       layer = (ROWV + 1) * cols;
     for (let r = 0; r < ROWV; r++)
@@ -379,169 +437,130 @@ export function headGeo(o: HeadIn) {
         const b = a + layer;
         B.quad(b, b + 1, b + cols + 1, b + cols);
       }
-    // the rim between top and bottom
     for (let s = 0; s < SEGV; s++) {
       const a = s0 + ROWV * cols + s;
       B.quad(a, a + layer, a + 1 + layer, a + 1);
     }
   }
-  return { geo: B.geometry(), halfW };
+  // glasses: a band standing off the face where the picture has them (its frames and lenses on it,
+  // glossy), round to the temples
+  if (o.lenses) {
+    const L0 = o.lenses;
+    const yTopL = (neck + 1 - L0.y0) * v + 0.003,
+      yBot = (neck + 1 - (L0.y1 + 1)) * v - 0.003;
+    const SEGL = LOD ? 8 : 24,
+      ROWL = LOD ? 1 : 3;
+    // (as far round as they are drawn, a little past: a strap may go on round the side)
+    const T0 = Math.max(-1.8, wrapTurn(o.art, L0.x0) - 0.04),
+      T1 = Math.min(1.8, Math.max(0.35, wrapTurn(o.art, L0.x1 + 1) + 0.04));
+    const off = 0.01 + (o.face ? recess * 0.25 : 0);
+    const s0 = B.n;
+    for (let r = 0; r <= ROWL; r++) {
+      const yy = yTopL + ((yBot - yTopL) * r) / ROWL;
+      const phi = phiOf(yy);
+      const { r: R } = radius(phi);
+      for (let s = 0; s <= SEGL; s++) {
+        const th = T0 + ((T1 - T0) * s) / SEGL;
+        ring(phi, th, R + off, yy, P);
+        const lrow = Math.min(L0.y1 + 0.95, Math.max(L0.y0 + 0.05, wrapRow(o.art, yy)));
+        const col = Math.min(L0.x1 + 0.95, Math.max(L0.x0 + 0.05, wrapCol(o.art, th, lrow)));
+        slotUV(o.art.slot, col, lrow, uv);
+        // (round the sides: the frame's arms, thinner)
+        const k = Math.max(smooth(0.8, 1, th / T1), smooth(0.8, 1, th / T0));
+        const ym = (yTopL + yBot) / 2;
+        B.v(P.x, ym + (P.y - ym) * (1 - 0.6 * k), P.z, white, MAT.gloss, 1, uv[0], uv[1], th * 0.1, yy);
+      }
+    }
+    B.rings(s0, ROWL + 1, SEGL);
+  }
+  // a halo over it: a ring of light
+  if (o.halo) {
+    const hy = (neck + 1 - o.halo.y) * v + 0.03;
+    const R = Math.max(0.07, o.halo.w * v * 0.8);
+    const tube = 0.011;
+    const SG = LOD ? 14 : 32,
+      RG = LOD ? 4 : 8;
+    const s0 = B.n;
+    const tilt = 0.18;
+    for (let r = 0; r <= RG; r++) {
+      const b = (r / RG) * PI * 2;
+      for (let s = 0; s <= SG; s++) {
+        const a = (s / SG) * PI * 2;
+        const rr = R + Math.cos(b) * tube;
+        const lx = Math.cos(a) * rr,
+          lz = Math.sin(a) * rr,
+          ly = Math.sin(b) * tube;
+        // tipped back a little
+        const y2 = ly * Math.cos(tilt) + lz * Math.sin(tilt),
+          z2 = -ly * Math.sin(tilt) + lz * Math.cos(tilt);
+        B.v(lx, hy + y2, z2 - 0.01, o.halo.col, MAT.glow, 0, 0, 0, a * R, b);
+      }
+    }
+    B.rings(s0, RG + 1, SG);
+  }
+  return { geo: B.geometry(), halfW: R0 };
 }
 
-// ---- the torso: a hoodie ------------------------------------------------------------------------------------
+// ---- the torso -----------------------------------------------------------------------------------------------
 
 export interface BodyIn {
-  slot: number;
-  /** The body's cells (the art's shoulders) for its front. */
-  shape: Fine;
-  neck: number;
-  bottom: number;
-  ext: number;
-  cx: number;
-  v: number;
-  sx: number;
+  art: ArtWrap;
   /** Half the width (m), its height (m). */
   halfW: number;
   H: number;
   cloth: THREE.Color;
 }
 
+/** The torso: the picture's shoulders, chest and clothes all round it (rounded, a soft hem). */
 export function bodyGeo(o: BodyIn) {
   const B = new GeoB();
   const { H, halfW: A } = o;
-  const D = A * 0.62;
+  const D = A * 0.64;
   const n = 2.7;
-  const SEG = LOD ? 10 : 26;
+  const SEG = LOD ? 12 : 32;
   // rings from the hem up to the neck: half width, half depth, fabric
   const prof: [number, number, number, number][] = [];
   const push = (y: number, a: number, d: number, mat: number) => prof.push([y, a, d, mat]);
-  push(0, 0.88, 0.86, MAT.rib);
-  push(0.02, 0.9, 0.88, MAT.rib);
-  push(0.055, 0.9, 0.88, MAT.rib);
-  push(0.065, 0.97, 0.95, MAT.jersey);
+  push(0, 0.9, 0.88, MAT.rib);
+  push(0.025, 0.92, 0.9, MAT.rib);
+  push(0.05, 0.92, 0.9, MAT.rib);
+  push(0.06, 0.97, 0.95, MAT.jersey);
   push(0.1, 1.0, 0.98, MAT.jersey);
   const shoulder = Math.max(0.12, H - 0.16);
-  for (let y = 0.14; y < shoulder; y += LOD ? 0.15 : 0.05) push(y, 1.0, 1.0, MAT.jersey);
+  for (let y = 0.15; y < shoulder; y += LOD ? 0.15 : 0.05) push(y, 1.0, 1.0, MAT.jersey);
   const SH = LOD ? 3 : 6;
   for (let k = 0; k <= SH; k++) {
     const t = k / SH;
-    const y = shoulder + (H - shoulder) * Math.sin((t * Math.PI) / 2);
-    const a = 0.46 + 0.54 * Math.cos((t * Math.PI) / 2) ** 0.8;
-    const d = 0.55 + 0.45 * Math.cos((t * Math.PI) / 2);
+    const y = shoulder + (H - shoulder) * Math.sin((t * PI) / 2);
+    const a = 0.46 + 0.54 * Math.cos((t * PI) / 2) ** 0.8;
+    const d = 0.55 + 0.45 * Math.cos((t * PI) / 2);
     push(y, a, d, MAT.jersey);
   }
   push(H - 0.004, 0.3, 0.3, MAT.jersey);
   push(H - 0.006, 0, 0, MAT.jersey);
-  const uvp: [number, number] = [0, 0];
+  const uv: [number, number] = [0, 0];
+  const white = new THREE.Color(1, 1, 1);
   const start = B.n;
-  for (const [y, a, d, mat] of prof) {
+  for (const pr of prof) {
+    const [y, a, d, mat] = pr;
     for (let s = 0; s <= SEG; s++) {
-      const th = (s / SEG) * Math.PI * 2 + Math.PI;
+      const th = -PI + (s / SEG) * PI * 2;
       const ux = Math.sin(th),
         uz = Math.cos(th);
-      // a hoodie's folds: soft horizontal ones bunched over the hem, a few down from the arms
-      const fold = 0.006 * Math.sin(y * 70 + Math.sin(th * 3) * 1.5) * smooth(0.3, 0.06, y) * (y > 0.06 ? 1 : 0) + 0.004 * Math.sin(th * 7 + y * 20) * smooth(H * 0.5, H * 0.8, y) * (1 - smooth(H * 0.85, H, y));
+      readArt(B, o.art, th, y, uv);
+      // soft horizontal folds bunched over the hem, a few down from the arms
+      const fold = LOD ? 0 : 0.005 * Math.sin(y * 70 + Math.sin(th * 3) * 1.5) * smooth(0.3, 0.06, y) * (y > 0.06 ? 1 : 0) + 0.003 * Math.sin(th * 7 + y * 20) * smooth(H * 0.5, H * 0.8, y) * (1 - smooth(H * 0.85, H, y));
       const x = sp(ux, 2 / n) * (A * a + fold),
         z = sp(uz, 2 / n) * (D * d + fold);
-      // darker under the arms (the sides high up), round the collar, inside the hem's fold
+      // darker under the arms (the sides high up), at the neck, inside the hem's fold
       const side = Math.abs(ux);
-      B.ao = Math.max(0.5, 1 - 0.32 * smooth(0.75, 1, side) * smooth(H * 0.45, H * 0.72, y) * (1 - smooth(H * 0.8, H * 0.95, y)) - 0.25 * smooth(H - 0.05, H, y) - 0.15 * (1 - smooth(0.0, 0.03, y)));
-      const acx = x / (o.v * o.sx) + o.cx,
-        acy = o.neck + 1 + (H - y) / o.v;
-      // (the torso is its cloth: the drawing's shoulders were all flat shading)
-      const art = 0;
-      slotUV(o.slot, Math.min(26, Math.max(0, acx)), Math.min(26, Math.max(0, acy)), uvp);
-      B.v(x, y, z, o.cloth, mat, art, uvp[0], uvp[1], (s / SEG) * Math.PI * (A + D), y);
+      B.ao = Math.max(0.5, 1 - 0.3 * smooth(0.75, 1, side) * smooth(H * 0.45, H * 0.72, y) * (1 - smooth(H * 0.8, H * 0.95, y)) - 0.22 * smooth(H - 0.05, H, y) - 0.15 * (1 - smooth(0.0, 0.03, y)));
+      B.v(x, y, z, white, mat, 1, uv[0], uv[1], (s / SEG) * PI * (A + D), y);
     }
   }
   B.ao = 1;
+  B.mirror = 0;
   B.rings(start, prof.length, SEG, true);
-  // (rings going up: wound the other way)
-  // the front's surface at (x, y), for the things on it
-  const frontZ = (x: number, y: number) => {
-    let a = 1,
-      d = 1;
-    for (let i = 1; i < prof.length; i++)
-      if (prof[i][0] >= y) {
-        const [y0, a0, d0] = prof[i - 1],
-          [y1, a1, d1] = prof[i];
-        const t = (y - y0) / Math.max(1e-4, y1 - y0);
-        a = a0 + (a1 - a0) * t;
-        d = d0 + (d1 - d0) * t;
-        break;
-      }
-    const ux = Math.min(1, Math.abs(x) / (A * a));
-    return D * d * Math.pow(Math.max(0, 1 - Math.pow(ux, n)), 1 / n);
-  };
-  // the kangaroo pocket: a panel on the belly, its slanted openings darker
-  if (!LOD) {
-    const y0 = 0.07,
-      y1 = Math.min(H * 0.48, 0.07 + 0.14);
-    const s0 = B.n;
-    const NX = 8,
-      NY = 3;
-    const dark = o.cloth.clone().multiplyScalar(0.78);
-    const body = o.cloth.clone().multiplyScalar(0.97);
-    for (let j = 0; j <= NY; j++)
-      for (let i = 0; i <= NX; i++) {
-        const t = j / NY,
-          u = i / NX - 0.5;
-        const y = y0 + (y1 - y0) * t;
-        const w = A * (0.62 - 0.2 * t);
-        const x = u * 2 * w;
-        const edge = i === 0 || i === NX;
-        // (its edges sewn down onto the front, its middle a little proud)
-        const z = frontZ(x, y) + (edge || j === 0 ? 0.002 : 0.008);
-        B.ao = edge && j > 0 ? 0.82 : 1;
-        B.v(x, y, z, edge && j > 0 ? dark : body, MAT.jersey, 0, 0, 0, x, y);
-      }
-    for (let j = 0; j < NY; j++)
-      for (let i = 0; i < NX; i++) {
-        const a = s0 + j * (NX + 1) + i;
-        B.quad(a, a + 1, a + NX + 2, a + NX + 1);
-      }
-    B.ao = 1;
-  }
-  // the drawstrings from the collar, their aglets
-  if (!LOD) {
-    const white = new THREE.Color(0.9, 0.9, 0.88);
-    const tip = new THREE.Color(0.12, 0.12, 0.13);
-    for (const side of [-1, 1]) {
-      const x = side * A * 0.16;
-      const yTop = H - 0.05,
-        L = Math.min(0.16, H * 0.45);
-      const s0 = B.n;
-      const SG = 5,
-        RG = 3;
-      for (let r = 0; r <= RG; r++) {
-        const y = yTop - (r / RG) * L;
-        const z = frontZ(x, y) + 0.01;
-        const rad = r >= RG - 1 ? 0.007 : 0.0055;
-        for (let s = 0; s <= SG; s++) {
-          const a = (s / SG) * Math.PI * 2;
-          B.v(x + Math.cos(a) * rad, y, z - Math.sin(a) * rad, r >= RG - 1 ? tip : white, r >= RG - 1 ? MAT.rubber : MAT.jersey, 0, 0, 0, a * rad, y);
-        }
-      }
-      B.rings(s0, RG + 1, SG);
-    }
-  }
-  // the collar round the neck (the hood's seam): a rolled rib
-  {
-    const s0 = B.n;
-    const SG = LOD ? 8 : 20,
-      RG = LOD ? 2 : 4;
-    const c = o.cloth.clone().multiplyScalar(0.9);
-    for (let r = 0; r <= RG; r++) {
-      const b = (r / RG) * Math.PI * 2;
-      for (let s = 0; s <= SG; s++) {
-        const th = (s / SG) * Math.PI * 2;
-        const R = A * 0.5 + Math.cos(b) * 0.03,
-          Rz = D * 0.62 + Math.cos(b) * 0.03;
-        B.v(Math.sin(th) * R, H - 0.03 + Math.sin(b) * 0.028, Math.cos(th) * Rz, c, MAT.rib, 0, 0, 0, th * R, b * 0.03);
-      }
-    }
-    B.rings(s0, RG + 1, SG, true);
-  }
   return B.geometry();
 }
 

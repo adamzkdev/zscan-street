@@ -25,6 +25,10 @@ const CURB_CAR = 0.45;
 /** Under this (or nothing at all drawn): water, a hole. */
 const HOLE = -0.35;
 
+/** An island's picture is made within this of it, let go past the other (m). */
+const NEAR_IN = 240;
+const NEAR_OUT = 760;
+
 /** At the wheel: anything thinner than this (m) is driven through (a post, a trunk, a rail, a bench). */
 const THIN = 2.4;
 /** On the asphalt only what stands this tall stops a car (a pillar, a building): never a rail or a low wall. */
@@ -40,8 +44,11 @@ export interface SolidHost {
   surface(x: number, z: number): number;
   /** On the asphalt. */
   road(x: number, z: number): boolean;
-  /** More of the world beyond `area` (Orchard Keys, across the bridge): each its own picture, as fine. */
-  extra?: { x0: number; x1: number; z0: number; z1: number }[];
+  /**
+   * More of the world beyond `area` (Orchard Keys, across the bridge; the islands): each its own
+   * picture, as fine. `lazy`: made only as you come near it (`near`), let go when far (the islands).
+   */
+  extra?: { x0: number; x1: number; z0: number; z1: number; lazy?: boolean }[];
 }
 
 export class StreetSolid {
@@ -61,6 +68,10 @@ export class StreetSolid {
   /** The pictures of the world beyond the board (each answers for its own area). */
   private more: StreetSolid[] = [];
   private area: { x0: number; x1: number; z0: number; z1: number };
+  /** Made only near (an island's picture). */
+  private lazy = false;
+  /** A picture beyond the board was made (or let go): the game looks at its pavements again. */
+  onMore: (() => void) | null = null;
 
   constructor(
     private host: SolidHost,
@@ -73,7 +84,9 @@ export class StreetSolid {
     this.builder = new FieldBuilder(host.renderer, host.scene, host.area, () => host.movers(), { size: this.size, band: [LOW, HIGH], empty: NaN, shear: 0.16 });
     for (const a of host.extra ?? []) {
       const w = Math.max(a.x1 - a.x0, a.z1 - a.z0);
-      this.more.push(new StreetSolid({ ...host, area: a, extra: undefined }, Math.min(this.size, 2 ** Math.round(Math.log2(w / 0.24)))));
+      const m = new StreetSolid({ ...host, area: a, extra: undefined }, Math.min(this.size, 2 ** Math.round(Math.log2(w / 0.24))));
+      m.lazy = !!a.lazy;
+      this.more.push(m);
     }
   }
 
@@ -87,7 +100,32 @@ export class StreetSolid {
 
   /** The pictures beyond the board made again (what is there was built after the first time). */
   async buildMore() {
-    for (const m of this.more) await m.build();
+    for (const m of this.more) if (!m.lazy || m.ready) await m.build();
+  }
+
+  /**
+   * Where the player is: an island's picture is made as you come within `NEAR_IN` metres of it, let go
+   * past `NEAR_OUT` (its memory back; nobody out there needs it).
+   */
+  near(x: number, z: number) {
+    for (const m of this.more) {
+      if (!m.lazy) continue;
+      const a = m.area;
+      const d = Math.hypot(Math.max(a.x0 - x, 0, x - a.x1), Math.max(a.z0 - z, 0, z - a.z1));
+      if (d < NEAR_IN && !m.ready && !m.building) void m.build().then(() => this.onMore?.());
+      else if (d > NEAR_OUT && m.ready && !m.building) {
+        m.top = m.sdf = null;
+        m.thin = null;
+        m.ready = false;
+        this.onMore?.();
+      }
+    }
+  }
+
+  /** Is (x, z) in a lazy picture not made yet (the walker and the cars keep to the old rules there)? */
+  pending(x: number, z: number) {
+    for (const m of this.more) if (m.lazy && !m.ready && x >= m.area.x0 && x <= m.area.x1 && z >= m.area.z0 && z <= m.area.z1) return true;
+    return false;
   }
 
   /** Make it (or make it again): what moves is noted now and left out a second later. */
@@ -107,7 +145,7 @@ export class StreetSolid {
       const sdf = await this.distance(top);
       this.top = top;
       this.sdf = sdf;
-      for (const m of this.more) await m.build();
+      for (const m of this.more) if (!m.lazy) await m.build();
       this.ready = true;
     } catch (e) {
       console.warn("gta: the street's solid shape could not be built", e);

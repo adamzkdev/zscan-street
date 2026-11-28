@@ -115,7 +115,8 @@ const leg = async (name, lane, z0, z1, ms) => {
     await sleep(2500);
     const z = await p.evaluate(() => street.gta.car?.group.position.z ?? 0);
     shots.push(z);
-    await p.screenshot({ path: `${OUT}-${name}-${String(++n).padStart(2, "0")}.png` });
+    // (NOSHOT=1: no pictures; else JPEGs — small on a tight disk)
+    if (!process.env.NOSHOT) await p.screenshot({ path: `${OUT}-${name}-${String(++n).padStart(2, "0")}.jpg`, type: "jpeg", quality: 60 });
     const done = await p.evaluate(() => { const l = window.__log; return l.length > 5 && l[l.length - 1].v < 0.2 && Math.abs(l[l.length - 1].z - l[l.length - 6].z) < 0.05; });
     if (done) break;
   }
@@ -124,14 +125,18 @@ const leg = async (name, lane, z0, z1, ms) => {
   let worst = 0,
     stuck = 0,
     wet = 0;
+  const stalls = [];
   const streets = new Set();
   for (let i = 0; i < log.length; i++) {
     const q = log[i];
     streets.add(q.street);
     if (q.deck !== null) worst = Math.max(worst, Math.abs(q.y - q.deck));
     if (q.y < -0.5) wet++;
-    if (i > 10 && q.v < 0.5 && Math.abs(q.z - (lane > 0 ? z1 : z1)) > 6) stuck++;
+    // (stopped short of the goal: the braking past it, at the end, is no stall; where each was, logged)
+    const past = z1 > log[0].z ? q.z > z1 : q.z < z1;
+    if (i > 10 && q.v < 0.5 && !past && Math.abs(q.z - z1) > 6) (stuck++, stalls.push({ i, z: q.z, v: q.v }));
   }
+  if (stalls.length) console.log("  stalls:", JSON.stringify(stalls.slice(0, 6)));
   const last = log[log.length - 1];
   console.log(`${name}: ${log.length} samples, end z ${last?.z} (wanted ${z1}), max v ${Math.max(...log.map((q) => q.v))} m/s, deck |y-deck| max ${worst.toFixed(2)} m, stuck samples ${stuck}, under water ${wet}, x range ${Math.min(...log.map((q) => q.x)).toFixed(1)}..${Math.max(...log.map((q) => q.x)).toFixed(1)}`);
   console.log("  streets:", [...streets].join(" → "));

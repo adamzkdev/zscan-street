@@ -9,6 +9,7 @@
  * when you get near, torn down after you have been away a while.
  */
 import { ACROSS, BAY, GRID, LOTS, PARK, RIVER } from "../scene/city/plan";
+import { COURSES, ISLES } from "../scene/isles/plan";
 import { bell, drum, type Room, Scene, tone, type Bufs } from "./lib";
 import { load, loop, preload, shot } from "./samples";
 import { pyramidMusic } from "./egypt";
@@ -359,6 +360,35 @@ const DISTRICTS: Record<string, District> = {
     },
   },
 };
+// the islands round the city (src/scene/isles): each its own layer — the sea on its shores, gulls, the
+// music out of its bars and shops — and its crossing's: the wind up on the deck, a ship's horn below
+for (const isle of ISLES) {
+  DISTRICTS[`isle:${isle.key}`] = {
+    weight: (e) => fall(dRect(isle.box, e.x, e.z), 40),
+    build(s, e) {
+      loop(s, "waves", 0.55);
+      loop(s, "gulls", e.night ? 0.06 : 0.26);
+      loop(s, "wind", 0.12);
+      if (isle.sound) music(s, isle.sound.tracks, isle.sound.level * (e.night ? 1.5 : 1), 2400, 0.3);
+      // (a cathedral's bells: a peal now and then over the roofs)
+      if (isle.sound?.bells) {
+        preload(s.ctx, "bigben-bong");
+        s.every(`bells:${isle.key}`, 70, 140, (t) => {
+          for (let i = 0; i < 3; i++) shot(s, "bigben-bong", t + i * 2.6, 0.32, { pan: side(), lp: 2200 });
+        }, 12);
+      }
+    },
+  };
+  const box = COURSES.get(isle.key)!.box;
+  DISTRICTS[`crossing:${isle.key}`] = {
+    weight: (e) => fall(dRect(box, e.x, e.z), 30) * (isle.crossing.kind === "tunnel" ? 0 : 1),
+    build(s) {
+      preload(s.ctx, "ship-horn");
+      loop(s, "wind", 0.55);
+      s.every("ship-horn", 40, 80, (t) => shot(s, "ship-horn", t, 0.3, { pan: side(), lp: 1600 }), 10);
+    },
+  };
+}
 /** Orchard Keys (src/scene/keys): the town, its beaches and the bluff behind it. */
 const KEYS_R = { x0: 70, x1: 352, z0: 238 + ACROSS, z1: 492 + ACROSS };
 /** Orchard Beach: the big sand south of the promenade, to the water's edge and the swimmers off it. */

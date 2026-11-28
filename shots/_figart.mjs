@@ -1,8 +1,11 @@
 import puppeteer from "puppeteer-core";
-const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal"], defaultViewport: { width: 2300, height: 420 } });
+const [IDS, OUT] = process.argv.slice(2);
+const n = IDS.split(",").length;
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: n * 426, height: 210 } });
 const p = await b.newPage();
-await p.goto(`http://localhost:3061/figtest.html?ids=${process.env.IDS ?? "1192,9703,42,5506,777"}&art`);
-await p.waitForFunction(() => window.__figReady, { timeout: 60000 });
+await p.evaluateOnNewDocument(() => { const W = window.WebSocket; const F = function (u, pr) { if (pr === "vite-hmr" || String(u).includes("token=")) return { addEventListener() {}, removeEventListener() {}, send() {}, close() {}, readyState: 0 }; return pr === undefined ? new W(u) : new W(u, pr); }; F.prototype = W.prototype; Object.assign(F, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 }); window.WebSocket = F; });
+await p.goto(`http://localhost:3061/figtest.html?ids=${IDS}&art`);
+await p.waitForFunction(() => window.__figReady, { timeout: 120000, polling: 300 });
 await new Promise((r) => setTimeout(r, 500));
-await p.screenshot({ path: process.argv[2] ?? "shots/gta/fig/art.png" });
+await p.screenshot({ path: OUT });
 await b.close();

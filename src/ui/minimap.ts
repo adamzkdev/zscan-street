@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { CITY, PARK, GRID } from "../scene/city/plan";
 import { KEYS, KGRID } from "../scene/keys/plan";
 import { GG } from "../scene/real/bridge";
+import { COURSES, crossingRuns, ISLES, WORLD } from "../scene/isles/plan";
 
 /** The base map's frame (the game's own maps, src/gta, draw from the same picture). */
 export const MAP_FRAME = {
@@ -29,15 +30,32 @@ export interface Blip {
   icon?: string;
 }
 
-/** The square the base map covers (metres): the city and Orchard Keys across the bridge. */
-const MX0 = Math.min(CITY.minX, KEYS.x0),
-  MX1 = Math.max(CITY.maxX, KEYS.x1),
-  MZ0 = Math.min(CITY.minZ, KEYS.z0),
-  MZ1 = Math.max(CITY.maxZ, KEYS.z1);
+/** The square the base map covers (metres): the city, Orchard Keys across the bridge, the islands round it (src/scene/isles). */
+const MX0 = WORLD.x0,
+  MX1 = WORLD.x1,
+  MZ0 = WORLD.z0,
+  MZ1 = WORLD.z1;
+void [KEYS];
 const SPAN = Math.max(MX1 - MX0, MZ1 - MZ0) + 16;
 const CX = (MX0 + MX1) / 2;
 const CZ = (MZ0 + MZ1) / 2;
-const RES = 2048;
+// (as fine as the city alone was drawn, the world grown: a phone keeps the old size)
+const RES = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? 2048 : SPAN > 1000 ? 3072 : 2048;
+/** The islands (their land, their whole box) and their crossings' runs (half width to the deck's edge), for the bake. */
+const N_ISLE = 4,
+  N_CROSS = 8;
+const isleLand = Array.from({ length: N_ISLE }, (_, i) => (ISLES[i] ? new THREE.Vector4(ISLES[i].land.x0, ISLES[i].land.x1, ISLES[i].land.z0, ISLES[i].land.z1) : new THREE.Vector4(1e9, -1e9, 1e9, -1e9)));
+const isleBox = Array.from({ length: N_ISLE }, (_, i) => (ISLES[i] ? new THREE.Vector4(ISLES[i].box.x0, ISLES[i].box.x1, ISLES[i].box.z0, ISLES[i].box.z1) : new THREE.Vector4(1e9, -1e9, 1e9, -1e9)));
+const crossRuns = (() => {
+  const out: THREE.Vector4[] = [];
+  for (const i of ISLES) {
+    const e = i.crossing.section.edge;
+    for (const r of crossingRuns(i)) out.push(r.axis === "x" ? new THREE.Vector4(r.from, r.to, r.at - e, r.at + e) : new THREE.Vector4(r.at - e, r.at + e, r.from, r.to));
+  }
+  void COURSES;
+  while (out.length < N_CROSS) out.push(new THREE.Vector4(1e9, -1e9, 1e9, -1e9));
+  return out.slice(0, N_CROSS);
+})();
 /** Metres from you to the radar's top and bottom edge. */
 const RANGE = 40;
 /** Where you stand on the radar (share of its height from the top): more of what's ahead shows. */
@@ -85,6 +103,9 @@ uniform vec3 uLand;
 uniform vec4 uKeys;
 uniform vec4 uTown;
 uniform vec4 uGG;
+uniform vec4 uIsleLand[${4}];
+uniform vec4 uIsleBox[${4}];
+uniform vec4 uCross[${8}];
 varying float vY;
 varying vec2 vXZ;
 void main() {
@@ -107,6 +128,27 @@ void main() {
     float d = abs(vXZ.x - uGG.x);
     if (d < hw + 0.5) { gl_FragColor = vec4(2.0 / 255.0, clamp(vY / 80.0, 0.0, 1.0), 0.0, 1.0); return; }
     if (d < ${GG.rail.toFixed(2)} && vXZ.y < ${GG.walkEnd.toFixed(1)}) { gl_FragColor = vec4(3.0 / 255.0, clamp(vY / 80.0, 0.0, 1.0), 0.0, 1.0); return; }
+  }
+  // the islands' crossings: the deck (its road and walkways), the towers and cables beside it
+  for (int i = 0; i < ${8}; i++) {
+    vec4 r = uCross[i];
+    if (vXZ.x > r.x - 5.0 && vXZ.x < r.y + 5.0 && vXZ.y > r.z - 5.0 && vXZ.y < r.w + 5.0 && vY > -0.45) {
+      bool deck = vXZ.x > r.x && vXZ.x < r.y && vXZ.y > r.z && vXZ.y < r.w;
+      gl_FragColor = vec4((deck ? 2.0 : 5.0) / 255.0, clamp(vY / 80.0, 0.0, 1.0), 0.0, 1.0);
+      return;
+    }
+  }
+  // the islands: their land like the city's (roads low, pavements a kerb up, buildings taller), sand round it
+  for (int i = 0; i < ${4}; i++) {
+    vec4 b = uIsleBox[i];
+    if (vXZ.x > b.x && vXZ.x < b.y && vXZ.y > b.z && vXZ.y < b.w) {
+      vec4 l = uIsleLand[i];
+      bool land = vXZ.x > l.x - 0.3 && vXZ.x < l.y + 0.3 && vXZ.y > l.z - 0.3 && vXZ.y < l.w + 0.3;
+      // (off the land: a mountain's green slopes are green, what stands up is a building, the low ground sand)
+      float c = vY < -0.45 ? 1.0 : !land ? (green ? 4.0 : vY > 1.4 ? 5.0 : 6.0) : green ? 4.0 : vY < 0.1 ? 2.0 : vY < 0.9 ? 3.0 : 5.0;
+      gl_FragColor = vec4(c / 255.0, clamp(vY / 80.0, 0.0, 1.0), 0.0, 1.0);
+      return;
+    }
   }
   // Orchard Keys across the bridge: its town (streets, blocks, lots), the bluff behind it, its beaches
   bool keys = vXZ.x > uKeys.x && vXZ.x < uKeys.y && vXZ.y > uKeys.z && vXZ.y < uKeys.w;
@@ -143,6 +185,9 @@ function bake(renderer: THREE.WebGLRenderer, scene: THREE.Scene): HTMLCanvasElem
       uKeys: { value: new THREE.Vector4(KEYS.x0, KEYS.x1, KEYS.z0 + 8, KEYS.z1) },
       uTown: { value: new THREE.Vector4(KGRID.west, KGRID.east, KGRID.north, KGRID.south) },
       uGG: { value: new THREE.Vector4(GG.x, GG.quay, GG.z1, GG.narrowFrom) },
+      uIsleLand: { value: isleLand },
+      uIsleBox: { value: isleBox },
+      uCross: { value: crossRuns },
     },
   });
   const cam = new THREE.OrthographicCamera(-SPAN / 2, SPAN / 2, SPAN / 2, -SPAN / 2, 1, 310);
@@ -160,6 +205,8 @@ function bake(renderer: THREE.WebGLRenderer, scene: THREE.Scene): HTMLCanvasElem
       (o as THREE.Sprite).isSprite ||
       (o as THREE.Points).isPoints ||
       (o as THREE.Line).isLine ||
+      // (a backdrop drawn by its own rules: an island's far mountain)
+      !!o.userData.noField ||
       (m.isMesh && ((m.geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry || mats.some((x) => x.transparent || x.side === THREE.BackSide)));
     if (skip) hidden.push(o);
   });

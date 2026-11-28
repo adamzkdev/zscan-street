@@ -2,8 +2,8 @@ import { Economy } from "./economy";
 import { Home, storeTab, type HomeSite } from "./home";
 
 /**
- * At home (src/gta): furnishing your flat, and its radio. While you are in your penthouse
- * (interior/home), a bar at the bottom says what you can do:
+ * At home (src/gta): furnishing your villa, and its radio. While you are in it (interior/home), a
+ * bar at the bottom says what you can do:
  *
  *   B          furnish: pick up the piece in front of you, else choose one from your storage
  *   Q / R      (choosing) the previous / next piece in storage · (carrying) turn it a quarter
@@ -162,7 +162,7 @@ export class HomeEdit {
     }
   }
 
-  /** Pick up a piece: one standing in the flat, or one from storage. */
+  /** Pick up a piece: one standing in the villa, or one from storage. */
   take(id: string) {
     if (!Home.owns(id) || !Home.room?.size(id)) return false;
     const q = Home.placed().find((p) => p.id === id);
@@ -232,29 +232,15 @@ const norm = (a: number) => {
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /**
- * Where PLAY starts you when it starts you at home: the pavement in front of your building's door
- * (the way back out lands you there), your ZK-GT parked on the street in front, the bike behind it.
+ * Where PLAY puts you at home: on the porch by the villa's front door, facing out (the game then
+ * takes you in), and where your car waits in the forecourt.
  */
-export function homeStart(site: HomeSite, road: (x: number, z: number) => boolean, nearest: (x: number, z: number) => { x: number; z: number; axis: "x" | "z" }) {
+export function homeStart(site: HomeSite) {
   const { door, out } = site;
-  // the pavement in front of the door, and the nearest street to it
-  const sx = door.x + out.x * 1.8,
-    sz = door.z + out.z * 1.8;
-  const r = nearest(sx, sz);
-  const ax = r.axis === "x";
-  // parked by that street's kerb on your side, facing the way its lane runs there (the roads'
-  // right-hand lane is on the + side of their centre line)
-  const lat0 = ax ? sz : sx,
-    dir = Math.sign((ax ? r.z : r.x) - lat0) || 1;
-  let e = lat0;
-  for (let i = 0; i < 160 && !(ax ? road(r.x, e) : road(e, r.z)); i++) e += dir * 0.25;
-  const lat = e + dir * 1.3;
-  const yaw = (ax ? 0 : -Math.PI / 2) + (dir < 0 ? 0 : Math.PI);
   return {
-    x: sx,
-    z: sz,
+    x: door.x + out.x * 1.8,
+    z: door.z + out.z * 1.8,
     heading: Math.atan2(-out.x, -out.z),
-    // (a few steps along from the door, not across the way out)
-    car: { x: ax ? r.x + 3.5 : lat, z: ax ? lat : r.z + 3.5, yaw },
+    car: { ...site.car },
   };
 }

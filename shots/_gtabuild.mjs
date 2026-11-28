@@ -8,7 +8,7 @@ const errs = [];
 p.on("pageerror", (e) => errs.push("pageerror " + e.message));
 p.on("console", (m) => m.type() === "error" && errs.push(m.text().slice(0, 300)));
 await p.goto(URL);
-await p.waitForFunction(() => window.__streetUp && window.street?.gta?.solid?.ready, { timeout: 240000, polling: 300 });
+await p.waitForFunction(() => window.__streetUp && window.street?.gta?.solid?.ready && window.street.gta.doorsReady, { timeout: 600000, polling: 300 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 await p.evaluate(() => street.gta.hud.coach(-1));
 await sleep(1500);

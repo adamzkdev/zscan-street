@@ -137,6 +137,10 @@ const lost = await p.evaluate(async () => {
   const r = await m.ZecShop.checkout({ id: "z3000", coins: 3000, zec: "0.025" });
   if (!r.ok) return { err: r.error };
   const ref = r.order.ref;
+  // (the balance is read in the same synchronous run as the edits below: the shop's background
+  // watcher can't poll in between and credit the order before "before" is taken)
+  const eco = await import("/src/gta/economy.ts");
+  const before = eco.Economy.balance();
   const db = JSON.parse(localStorage.getItem("zstreet.zecshop.mock"));
   db[ref].at -= 7000; // paid
   Object.assign(db[ref], { claimed: 3000, key: "lostkey0001", last: 3000 }); // claimed, answer lost
@@ -144,8 +148,6 @@ const lost = await p.evaluate(async () => {
   const list = JSON.parse(localStorage.getItem("zstreet.zecshop.mockorders"));
   list.find((o) => o.ref === ref).key = "lostkey0001";
   localStorage.setItem("zstreet.zecshop.mockorders", JSON.stringify(list));
-  const eco = await import("/src/gta/economy.ts");
-  const before = eco.Economy.balance();
   await m.ZecShop.poll();
   const once = eco.Economy.balance();
   await m.ZecShop.poll();

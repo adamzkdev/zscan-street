@@ -10,7 +10,7 @@ import { busLocal, type BlockBus } from "./scene/bus";
 import { BUS } from "./scene/voxel/vehicles";
 import { CameraRig } from "./scene/camera";
 import { AREAS, buildCity, CITY, CURB, CUT_VOX, DISTRICTS, type Occluder } from "./scene/city";
-import { GRID, NU7Q, RIVER, ST, planCity } from "./scene/city/plan";
+import { NU7Q, RIVER, ST, planCity } from "./scene/city/plan";
 import { VOX } from "./scene/voxel/model";
 import { Director } from "./scene/director";
 import { buildDecor } from "./scene/decor";
@@ -20,7 +20,7 @@ import { cityMemes } from "./scene/memewalls";
 import { LampLights, speedBlur, tiltShift } from "./scene/post";
 import { GtaMode } from "./gta";
 import { goldenHour } from "./gta/frontend";
-import { Home, pickSite } from "./gta/home";
+import { Home, villaSite } from "./gta/home";
 import type { Person3 } from "./gta/people3d";
 import { FinishPass, GradePass, ScenePass } from "./scene/finish";
 import { cityEnvironment, loadSkies, SKY_ENVS } from "./scene/envmap";
@@ -39,14 +39,16 @@ import { ZsaLabPanel } from "./ui/zsalab";
 import { StadiumLive } from "./scene/stadium";
 import { type RideKind, Sky } from "./scene/sky";
 import { Shibuya } from "./scene/shibuya";
-import { GoldenGate } from "./scene/goldengate";
+import { GoldenGate, type TrafficBlocker } from "./scene/goldengate";
+import { Isles } from "./scene/isles";
+import { GLASS_NIGHT as ISLE_NIGHT } from "./scene/voxel/surface";
 import { BayMarks } from "./scene/real/baymarks";
 import { WalletCrowns } from "./scene/walletcrowns";
 import { Forest } from "./scene/forest";
 import { Keys } from "./scene/keys";
 import { Parking } from "./scene/real/parking";
 import { KeysSea } from "./scene/keys/sea";
-import { corridor, SEA_Y } from "./scene/keys/plan";
+import { corridor, SEA_Y, villaPool } from "./scene/keys/plan";
 import { Cemetery } from "./scene/cemetery";
 import { Chatter } from "./scene/chatter";
 import { bubbles, drawBubbles } from "./scene/speech";
@@ -85,7 +87,7 @@ import { slotId, type Crowd } from "./scene/alive/crowd";
 import { Agents } from "./game/agents";
 import { Npcs } from "./game/npcs";
 import { Horns } from "./scene/horns";
-import { Prison, PRISON } from "./scene/prison";
+import { Prison, PRISON, PRISON_DOOR } from "./scene/prison";
 import { carObject, POLICE_BAR } from "./scene/real/cars";
 import { carLamps } from "./scene/real/carkit";
 import { storeInfo } from "./ui/stores";
@@ -544,11 +546,30 @@ const cityTraffic = new CityTraffic(scene, director.traffic, [44, 36, 26, 16, 10
 /** What stops the cars: the parade's closed road, the Titan's feet. */
 let paradeBlocks: { x: number; z: number }[] = [];
 let titanBlocks: () => { x: number; z: number }[] = () => [];
-cityTraffic.blockers = () => {
+// (joined to the horns' people — you on foot, the jaywalkers — once those are up, below: the horns set the list)
+const cityBlocks = (): TrafficBlocker[] => {
   const t = titanBlocks();
   const g = gta?.trafficBlockers() ?? [];
-  return t.length || g.length ? paradeBlocks.concat(t, g) : paradeBlocks;
+  // (the bridge's cars on Bay Road, coming to or from the bridge: the city's cars give way to them)
+  const b = bayRoadCars();
+  const me = myCarBlock();
+  if (!t.length && !g.length && !b.length && !me) return paradeBlocks;
+  const out: TrafficBlocker[] = paradeBlocks.concat(t, g, b);
+  if (me) out.push(me);
+  return out;
 };
+/** Your car in the game as the traffic sees it: its body (turned, half length and width); a moving one is followed, never gone round. */
+function myCarBlock(): TrafficBlocker | null {
+  const c = gta?.active ? gta.car : null;
+  if (!c) return null;
+  return { x: c.group.position.x, z: c.group.position.z, yaw: c.yaw, hl: c.spec.len / 2, hw: c.spec.wid / 2, wait: c.speed > 0.8 };
+}
+/** The Golden Gate's own cars while they drive along Bay Road (their lead-in and lead-out). */
+function bayRoadCars(): { x: number; z: number }[] {
+  const out: { x: number; z: number }[] = [];
+  for (const c of goldenGate.boxes()) if (Math.abs(c.z - ST.ringS) < 9) out.push({ x: c.x, z: c.z });
+  return out;
+}
 // Shibuya: the scramble crossing, its crowd and its screens
 const shibuya = new Shibuya(scene, city, cityTraffic, { count: [300, 260, 200, 140, 90][worldLevel()], director });
 rainListeners.push((on) => shibuya.setRain(on));
@@ -577,6 +598,25 @@ metro.onHorn = metro2.onHorn = (p) => {
   sound.horn("metro", w.level, w.pan);
 };
 tram.blockers = () => (walking ? [{ x: onFoot.camera.position.x, z: onFoot.camera.position.z }] : []);
+// the city's cars and the avenue's stop for the horns' people (just set by them) and for what is in
+// the road in the game: its walkers, the wrecks, your car (and the city's go round a car standing in its lane)
+{
+  const people = cityTraffic.blockers;
+  cityTraffic.blockers = () => {
+    const a = people(),
+      b = cityBlocks();
+    return b.length ? a.concat(b) : a;
+  };
+  const avenuePeople = director.traffic.blockers;
+  director.traffic.blockers = () => {
+    const a = avenuePeople();
+    if (!gta?.active) return a;
+    const g: TrafficBlocker[] = gta.trafficBlockers();
+    const me = myCarBlock();
+    if (me) g.push(me);
+    return g.length ? a.concat(g) : a;
+  };
+}
 tram.onBell = (p) => {
   const w = soundAt(p);
   sound.tramBell(w.level, w.pan);
@@ -586,15 +626,17 @@ const prison = new Prison(scene, city.nav, director);
 // the rock is a walk-in place too: the cell house, from the city's side (click the island)
 {
   const box = new THREE.Box3(new THREE.Vector3(PRISON.x0, 0, PRISON.z0), new THREE.Vector3(PRISON.x1, 22, PRISON.z1));
-  const door = new THREE.Vector3((PRISON.x0 + PRISON.x1) / 2, PRISON.floor, PRISON.z0 - 1);
+  // (its door: the cell house's, under the portico, at the end of the path in from the sally port and
+  // the ferry's pier — facing it, east)
+  const door = new THREE.Vector3(PRISON_DOOR.x + 0.4, PRISON.floor, PRISON_DOOR.z);
   city.venues.push({
     kind: "prison",
     name: "the ZEC STATE PENITENTIARY",
     door,
-    front: new THREE.Vector3(0, 0, -1),
+    front: new THREE.Vector3(1, 0, 0),
     occluder: { full: prison.group, cut: new THREE.Group(), extras: new THREE.Group(), box, level: 1, height: 22, open: false, fixed: true },
     keeper: door.clone(),
-    camPos: door.clone().add(new THREE.Vector3(0, 12, -24)),
+    camPos: door.clone().add(new THREE.Vector3(20, 11, -10)),
     camLook: door.clone(),
     walls: [],
   });
@@ -717,8 +759,19 @@ function skyAt(x: number, y: number) {
 }
 // the Golden Gate: traffic over it, and its deck to walk on
 const goldenGate = new GoldenGate(scene, city);
+// the islands round the city and their crossings (src/scene/isles; the Rainbow Bridge to Zaiba, east)
+const isles = new Isles(scene, () => ISLE_NIGHT.value);
 // the bay's statue and opera house, realistic (drawn here, not by the city's workers)
 const bayMarks = new BayMarks(city);
+// (the opera house's door: in its foyer's glass at the top of the Monumental Steps, its podium walked)
+{
+  const od = bayMarks.operaDoor();
+  const ov = city.venues.find((v) => v.kind === "opera");
+  if (od && ov) {
+    ov.door.set(od.x, od.y, od.z);
+    ov.front.set(od.fx, 0, od.fz);
+  }
+}
 // the ZODL and Vizor emblems turning over their towers
 const walletCrowns = new WalletCrowns(scene, city);
 // Shielded Woods: the redwood forest on the headland across the bridge, walkable off its deck
@@ -940,7 +993,7 @@ const PLACES: Record<Interior["key"], string> = {
   university: "ZK UNIVERSITY",
   gamehouse: "GAME HOUSE",
   nu7tower: "NU7 TOWER",
-  home: "YOUR PENTHOUSE",
+  home: "YOUR VILLA",
 };
 const blockListeners: ((h: number, pool: string | null) => void)[] = [];
 /** Panoramas of the real street for the windows of tall places, one per height, kept a minute. */
@@ -978,8 +1031,8 @@ function cityView(place: string, up: number, back = 3, side = 0): THREE.Texture 
   const hq = city.shops[0];
   // the NU7 TOWER is the game layer's (game/nu7quarter.ts): looking out from its axis, its building hidden
   const nu7v = place === "nu7tower" ? { door: new THREE.Vector3(NU7Q.door.x, CURB, NU7Q.door.z), occluder: { full: nu7Quarter.towerGroup, cut: nu7Hidden, extras: nu7Hidden } } : null;
-  // your home (src/gta/home.ts): from its tower's door (its top floor: Home.site.view says where)
-  const homev = place === "home" && homeSite ? { door: new THREE.Vector3(homeSite.door.x, CURB, homeSite.door.z), occluder: { full: nu7Hidden, cut: nu7Hidden, extras: nu7Hidden } } : null;
+  // your home (src/gta/home.ts): from its front door, in by its glass on the sea (Home.site.view), the house itself hidden (its pool and terrace seen)
+  const homev = place === "home" && homeSite ? { door: new THREE.Vector3(homeSite.door.x, CURB, homeSite.door.z), occluder: { full: keys.villaHouse, cut: nu7Hidden, extras: nu7Hidden } } : null;
   const v = nu7v ?? homev ?? (place === "factory" && f?.door ? { door: f.door, occluder: f.occluder } : place === "mempool" && hq ? { door: hq.door, occluder: hq.occluder } : city.venues.find((x) => x.kind === place));
   if (!v) return null;
   const key = viewKey(place, up, side);
@@ -1087,7 +1140,7 @@ const PLACE_CODE: Record<Interior["key"], () => Promise<PlaceBuilder>> = {
   cemetery: () => import("./interior/cemetery").then((m) => m.buildCemetery),
   gamehouse: () => import("./interior/gamehouse").then((m) => m.buildGameHouse),
   nu7tower: () => import("./interior/nu7tower").then((m) => m.buildNu7Tower),
-  // your home in the game (src/gta/home.ts): the penthouse PLAY starts you in
+  // your home in the game (src/gta/home.ts): the villa PLAY starts you in
   home: () => import("./interior/home").then((m) => m.buildHome),
   // any building of the city, walked into from the game (src/gta): dressed again on every visit
   building: () => import("./interior/building").then((m) => m.buildBuilding),
@@ -1282,10 +1335,14 @@ onFoot.resize(window.innerWidth, window.innerHeight);
 const BOARD = { x0: CITY.minX + 0.6, x1: CITY.maxX - 0.6, z0: CITY.minZ + 0.6, z1: CITY.maxZ - 0.6 };
 /** Floor heights on foot off the street level: station platforms and stairs, the footbridges. */
 function groundAt(x: number, z: number): number | null {
+  const og = bayMarks.groundAt(x, z);
+  if (og !== null) return og;
   const pg = prison.groundAt(x, z);
   if (pg !== null) return pg;
   const gg = goldenGate.groundAt(x, z);
   if (gg !== null) return gg;
+  const ig = isles.groundAt(x, z);
+  if (ig !== null) return ig;
   const kg = keys.groundAt(x, z);
   if (kg !== null) return kg;
   const cg = cemetery.groundAt(x, z);
@@ -1318,11 +1375,15 @@ function dynamicHit(x: number, z: number) {
   }
   for (const m of cityTraffic.movers) {
     const p = m.group.position;
-    const along = m.line.axis === "x";
-    if (Math.abs((along ? x : z) - (along ? p.x : p.z)) < 2.4 && Math.abs((along ? z : x) - (along ? p.z : p.x)) < 1.3) return true;
+    // (in the car's own frame: along it, across it — turned round a corner as well as on its street)
+    const yaw = m.group.rotation.y,
+      dx = x - p.x,
+      dz = z - p.z;
+    if (Math.abs(dx * Math.cos(yaw) - dz * Math.sin(yaw)) < 2.4 && Math.abs(dx * Math.sin(yaw) + dz * Math.cos(yaw)) < 1.3) return true;
   }
   if (cemetery.hit(x, z)) return true;
   for (const b of goldenGate.boxes()) if (Math.abs(x - b.x) < b.hx + 0.3 && Math.abs(z - b.z) < b.hz + 0.3) return true;
+  for (const b of isles.boxes()) if (Math.abs(x - b.x) < b.hx + 0.3 && Math.abs(z - b.z) < b.hz + 0.3) return true;
   for (const t of tram.sets) {
     const p = t.group.position;
     if (Math.abs(x - p.x) < 7.4 && Math.abs(z - p.z) < 1.5) return true;
@@ -1337,7 +1398,7 @@ function dynamicHit(x: number, z: number) {
 onFoot.collide = (x, z) => {
   const inPrison = x > PRISON.x0 + 0.6 && x < PRISON.x1 && z > PRISON.z0 + 0.6 && z < PRISON.z1 - 0.6;
   // (across the strait: the woods and the town are past the board's edge, the bridge over it)
-  if (!inPrison && !keys.owns(x, z) && !forest.owns(x, z) && !goldenGate.onDeck(x, z) && (x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1)) return true;
+  if (!inPrison && !keys.owns(x, z) && !forest.owns(x, z) && !goldenGate.onDeck(x, z) && !isles.owns(x, z) && (x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1)) return true;
   const here = onFoot.floor;
   const there = groundAt(x, z) ?? CURB;
   // no walking off a platform, no walking into the side of a staircase
@@ -1346,10 +1407,15 @@ onFoot.collide = (x, z) => {
   if (inPrison) return !prison.free(x, z, 0.28);
   // on the Golden Gate: between its railings
   if (goldenGate.onDeck(x, z)) return goldenGate.footBlocked(x, z);
+  // the islands' crossings: between their railings; on the islands, their ground (the walker has no plan of them)
+  if (isles.onDeck(x, z)) return isles.footBlocked(x, z);
+  if (isles.owns(x, z)) return isles.blocked(x, z) || dynamicHit(x, z);
   // across it, the beach town (and the tunnel there)
   if (keys.owns(x, z)) return keys.blocked(x, z) || dynamicHit(x, z);
   // in the woods across it: trunks, rocks, the creek, the cliffs
   if (forest.owns(x, z)) return forest.blocked(x, z);
+  // (the opera house's podium: its shells)
+  if (there > 1.2 && bayMarks.blocked(x, z)) return true;
   // up there, the street's obstacles are below you
   if (there > 1.2) return false;
   return !city.nav.free(x, z, 0.28) || dynamicHit(x, z);
@@ -1359,8 +1425,8 @@ let walking = false;
 let gta: GtaMode | null = null;
 /** The place walked into, to step back out of its door. */
 let cameIn: Interior["key"] | null = null;
-/** Your home in the game (src/gta/home.ts): an apartment tower on Park Row, facing Central Park. */
-const homeSite = pickSite(city.facades, GRID.park);
+/** Your home in the game (src/gta/home.ts): your villa on Orchard Keys' north point (scene/keys/villa.ts). */
+const homeSite = villaSite();
 Home.setSite(homeSite);
 /** Walk-in doors on the street (the Proof Factory's is on the avenue, in line with the others). */
 const doors: { key: Interior["key"]; at: THREE.Vector3; front: THREE.Vector3 }[] = [
@@ -1374,6 +1440,246 @@ const doors: { key: Interior["key"]; at: THREE.Vector3; front: THREE.Vector3 }[]
 /** Any building of the city walked into from the game (src/gta): its door is set at each visit. */
 const buildingDoor = { key: "building" as const, at: new THREE.Vector3(), front: new THREE.Vector3(0, 0, 1) };
 doors.push(buildingDoor);
+/** Each place's own model (to find its facade from the street): the MEMPOOL's, the venues', the factory's. */
+const placeModel = new Map<string, THREE.Object3D>([
+  ...(city.shops[0] ? [["mempool", city.shops[0].occluder.full] as const] : []),
+  ...city.venues.map((v) => [v.kind, v.occluder.full] as const),
+  ...(city.factory ? [["factory", city.factory.occluder.full] as const] : []),
+]);
+const faceRay = new THREE.Raycaster();
+const faceSeen = new Map<string, { x: number; y: number; z: number } | null>();
+/**
+ * A place's facade as it is drawn, seen from (x, z) looking along −(fx, fz): its own model — a ray in at
+ * a body's height over the floor, across the forecourt (over a planter, up the steps) to
+ * the first face that looks back out and is a building's wall (as tall as a door with its canopy, and
+ * wide: not a post, a pillar or a sign); at the mouth of an arch or a tunnel rather than deep inside it.
+ * The game puts the front door there (src/gta snapDoor); none found (null), it walks its solid shape.
+ */
+function placeFacade(key: string, x: number, z: number, fx: number, fz: number) {
+  // (the same look again, when the game finds its doors again: as it was)
+  const id = `${key}:${x.toFixed(1)},${z.toFixed(1)},${fx.toFixed(2)},${fz.toFixed(2)}`;
+  if (faceSeen.has(id)) return faceSeen.get(id)!;
+  const model = placeModel.get(key);
+  if (!model) return null;
+  let drawn = false;
+  model.traverse((o) => (drawn ||= (o as THREE.Mesh).isMesh === true));
+  // (not drawn yet: looked at again next time)
+  if (!drawn) return null;
+  const r = facadeRay(model, x, z, fx, fz);
+  faceSeen.set(id, r);
+  return r;
+}
+/**
+ * The part of a model a facade's rays can meet: its triangles over the strip from (x, z) in along `dir`
+ * (`len` m, `half` m either side), in world space, one probe mesh per material side (a model of a
+ * hundred thousand triangles tested by every ray of a facade's search froze the start for a second);
+ * what is not a plain mesh (instanced, skinned) is kept as it is.
+ */
+const probeLayers = new THREE.Layers();
+probeLayers.enable(0);
+probeLayers.enable(29);
+probeLayers.enable(30);
+const probeMats: Record<number, THREE.MeshBasicMaterial> = {};
+/** A model's triangles in world space, each with its flat box and its material's side (made once a model: they stand still). */
+const probeCache = new WeakMap<THREE.Object3D, { tri: Float32Array; bb: Float32Array; side: Uint8Array; others: THREE.Object3D[] }>();
+function probeTris(model: THREE.Object3D) {
+  const had = probeCache.get(model);
+  if (had) return had;
+  const tri: number[] = [],
+    side: number[] = [];
+  const others: THREE.Object3D[] = [];
+  const va = new THREE.Vector3(),
+    vb = new THREE.Vector3(),
+    vc = new THREE.Vector3();
+  model.updateMatrixWorld(true);
+  model.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.layers.test(probeLayers)) return;
+    if ((m as unknown as THREE.InstancedMesh).isInstancedMesh || (m as unknown as THREE.SkinnedMesh).isSkinnedMesh || (m as unknown as { isBatchedMesh?: boolean }).isBatchedMesh || Array.isArray(m.material)) {
+      others.push(m);
+      return;
+    }
+    const g = m.geometry;
+    const pos = g.getAttribute("position") as THREE.BufferAttribute | undefined;
+    if (!pos) return;
+    const sd = (m.material as THREE.Material).side ?? THREE.FrontSide;
+    const idx = g.index;
+    const n = idx ? idx.count : pos.count;
+    const e = m.matrixWorld.elements;
+    const w = (v: THREE.Vector3, i: number) => {
+      const px = pos.getX(i),
+        py = pos.getY(i),
+        pz = pos.getZ(i);
+      return v.set(e[0] * px + e[4] * py + e[8] * pz + e[12], e[1] * px + e[5] * py + e[9] * pz + e[13], e[2] * px + e[6] * py + e[10] * pz + e[14]);
+    };
+    for (let t = 0; t + 2 < n; t += 3) {
+      w(va, idx ? idx.getX(t) : t);
+      w(vb, idx ? idx.getX(t + 1) : t + 1);
+      w(vc, idx ? idx.getX(t + 2) : t + 2);
+      tri.push(va.x, va.y, va.z, vb.x, vb.y, vb.z, vc.x, vc.y, vc.z);
+      side.push(sd);
+    }
+  });
+  const T = new Float32Array(tri);
+  const bb = new Float32Array(side.length * 4);
+  for (let t = 0; t < side.length; t++) {
+    const o = t * 9;
+    bb[t * 4] = Math.min(T[o], T[o + 3], T[o + 6]);
+    bb[t * 4 + 1] = Math.max(T[o], T[o + 3], T[o + 6]);
+    bb[t * 4 + 2] = Math.min(T[o + 2], T[o + 5], T[o + 8]);
+    bb[t * 4 + 3] = Math.max(T[o + 2], T[o + 5], T[o + 8]);
+  }
+  const r = { tri: T, bb, side: Uint8Array.from(side), others };
+  probeCache.set(model, r);
+  return r;
+}
+function facadeProbe(model: THREE.Object3D, x: number, z: number, dir: THREE.Vector3, len: number, half: number): THREE.Object3D[] {
+  // the strip's corners → its box, and the test: a triangle's xz box over the strip's rectangle
+  const sx = -dir.z,
+    sz = dir.x;
+  const cs = [
+    [x - sx * half - dir.x * 2, z - sz * half - dir.z * 2],
+    [x + sx * half - dir.x * 2, z + sz * half - dir.z * 2],
+    [x - sx * half + dir.x * len, z - sz * half + dir.z * len],
+    [x + sx * half + dir.x * len, z + sz * half + dir.z * len],
+  ];
+  const bx0 = Math.min(...cs.map((c) => c[0])),
+    bx1 = Math.max(...cs.map((c) => c[0])),
+    bz0 = Math.min(...cs.map((c) => c[1])),
+    bz1 = Math.max(...cs.map((c) => c[1]));
+  const inStrip = (ax0: number, ax1: number, az0: number, az1: number) => {
+    if (ax1 < bx0 || ax0 > bx1 || az1 < bz0 || az0 > bz1) return false;
+    // (the strip turned: its own axes, along and across, against the triangle box's corners)
+    let a0 = Infinity,
+      a1 = -Infinity,
+      c0 = Infinity,
+      c1 = -Infinity;
+    for (const [px, pz] of [
+      [ax0, az0],
+      [ax1, az0],
+      [ax0, az1],
+      [ax1, az1],
+    ]) {
+      const u = (px - x) * dir.x + (pz - z) * dir.z,
+        w = (px - x) * sx + (pz - z) * sz;
+      a0 = Math.min(a0, u);
+      a1 = Math.max(a1, u);
+      c0 = Math.min(c0, w);
+      c1 = Math.max(c1, w);
+    }
+    return a1 >= -2 && a0 <= len && c1 >= -half && c0 <= half;
+  };
+  const tris = probeTris(model);
+  const bySide = new Map<number, number[]>();
+  const T = tris.tri,
+    B = tris.bb;
+  for (let t = 0, n = tris.side.length; t < n; t++) {
+    const b = t * 4;
+    if (B[b + 1] < bx0 || B[b] > bx1 || B[b + 3] < bz0 || B[b + 2] > bz1) continue;
+    if (!inStrip(B[b], B[b + 1], B[b + 2], B[b + 3])) continue;
+    const side = tris.side[t];
+    let out = bySide.get(side);
+    if (!out) bySide.set(side, (out = []));
+    const o = t * 9;
+    for (let k = 0; k < 9; k++) out.push(T[o + k]);
+  }
+  const others = tris.others;
+  const list: THREE.Object3D[] = [];
+  for (const [side, arr] of bySide) {
+    if (!arr.length) continue;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
+    g.computeBoundingSphere();
+    const mat = (probeMats[side] ??= new THREE.MeshBasicMaterial({ side: side as THREE.Side }));
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.updateMatrixWorld(true);
+    list.push(mesh);
+  }
+  return [...list, ...others];
+}
+function facadeRay(model: THREE.Object3D, x: number, z: number, fx: number, fz: number): { x: number; y: number; z: number } | null {
+  model.updateMatrixWorld(true);
+  const dir = new THREE.Vector3(-fx, 0, -fz).normalize();
+  const side = new THREE.Vector3(-dir.z, 0, dir.x);
+  const n = new THREE.Vector3();
+  const from = new THREE.Vector3();
+  // (only the strip in front of the door point and along the search: 34 m in, 4 m either side)
+  const probe = facadeProbe(model, x, z, dir, 36, 4.2);
+  const hits = () => {
+    const r = faceRay.intersectObjects(probe, false);
+    return r;
+  };
+  // the first face looking back at the ray (a face's back, a floor, a roof: on)
+  const castAlong = (x: number, y: number, z: number, d: THREE.Vector3, far: number) => {
+    faceRay.set(from.set(x, y, z), d);
+    faceRay.far = far;
+    for (const h of hits()) {
+      if (!h.face) continue;
+      n.copy(h.face.normal).transformDirection(h.object.matrixWorld);
+      if (-(n.x * d.x + n.z * d.z) > 0.5) return h;
+    }
+    return null;
+  };
+  const cast = (x: number, y: number, z: number, far: number) => castAlong(x, y, z, dir, far);
+  // what you would stand on at (x, z): the first face looking up, down from y0
+  const down = new THREE.Vector3(0, -1, 0);
+  const topOf = (x: number, z: number, y0: number) => {
+    faceRay.set(from.set(x, y0, z), down);
+    faceRay.far = y0 + 1;
+    for (const h of hits()) {
+      if (!h.face) continue;
+      n.copy(h.face.normal).transformDirection(h.object.matrixWorld);
+      if (n.y > 0.7) return h.point.y;
+    }
+    return null;
+  };
+  let floor = CURB,
+    left = 32;
+  for (let k = 0; k < 40 && left > 0; k++) {
+    const low = cast(x, floor + 1.1, z, left);
+    if (!low) return null;
+    const D = low.distance;
+    // (as near, or nearer: a lintel or a portal over it; a little further: a sloping or set-back face)
+    const upto = (h: THREE.Intersection | null, more = 0.8) => !!h && h.distance < D + more;
+    // a building's wall: up past a door's height with its canopy, and wide (not a post, a pillar, a sign)
+    if (
+      upto(cast(x, floor + 2.3, z, left)) &&
+      upto(cast(x, floor + 2.9, z, left), 1.6) &&
+      (upto(cast(x + side.x * 1.4, floor + 1.6, z + side.z * 1.4, left)) || upto(cast(x - side.x * 1.4, floor + 1.6, z - side.z * 1.4, left)))
+    ) {
+      // deep in a recess (an arch of an arcade, a tunnel): its lintel well in front and its walls close
+      // either side — the door goes at its mouth, in the facade's plane
+      const lintel = cast(x, floor + 4.3, z, left);
+      if (lintel && lintel.distance < D - 2) {
+        const mx = x + dir.x * (D - 1),
+          mz = z + dir.z * (D - 1);
+        if (castAlong(mx, floor + 1.6, mz, side, 2.8) && castAlong(mx, floor + 1.6, mz, side.clone().negate(), 2.8))
+          return { x: x + dir.x * (lintel.distance + 0.05), y: floor, z: z + dir.z * (lintel.distance + 0.05) };
+      }
+      return { x: low.point.x, y: floor, z: low.point.z };
+    }
+    // something else in the way (a step, a planter, a bench, a post): on past its front; onto it if it
+    // is a step, or a terrace (flat, deep, a storey or less up: the steps lead there)
+    const go = D + 0.3;
+    x += dir.x * go;
+    z += dir.z * go;
+    left -= go;
+    const t = topOf(x, z, floor + 2.8);
+    if (t !== null && t > floor - 0.7 && t < floor + 0.7) floor = t;
+    else if (t !== null && t >= floor + 0.7 && t < floor + 2.6) {
+      const t2 = topOf(x + dir.x * 2, z + dir.z * 2, floor + 2.8);
+      if (t2 !== null && Math.abs(t2 - t) < 0.3) floor = t;
+    }
+  }
+  return null;
+}
+/** A place's footprint (its own model's box, flat), for the game to look for its street front. */
+function placeBox(key: string) {
+  const m = placeModel.get(key);
+  if (!m) return null;
+  const b = new THREE.Box3().setFromObject(m);
+  return b.isEmpty() ? null : { x0: b.min.x, x1: b.max.x, z0: b.min.z, z1: b.max.z };
+}
 /** Out of a door: from a point inside the building to the door, flat. */
 function away(door: THREE.Vector3, inside: THREE.Vector3) {
   return door.clone().sub(inside).setY(0).normalize();
@@ -1417,14 +1723,16 @@ function stepOut(key: Interior["key"]) {
   onFoot.enabled = true;
   doorCool = 1.2;
   doorLeft = d;
+  // (on a raised floor of its own — the rock's top, a deck — out onto it, not down at the street's level)
+  const oy = groundAt(o.x, o.z) ?? CURB;
   if (!from) {
-    onFoot.place(new THREE.Vector3(o.x, CURB, o.z), o.yaw);
+    onFoot.place(new THREE.Vector3(o.x, oy, o.z), o.yaw);
     return;
   }
   // walked out through the doors: the same look turned to the street (the room's way out is +z,
   // a look along it is π: the same turn takes it to the street's), still walking
   const yaw = from.yaw + Math.atan2(-d.front.x, -d.front.z) - Math.PI;
-  onFoot.place(new THREE.Vector3(o.x, CURB, o.z), yaw);
+  onFoot.place(new THREE.Vector3(o.x, oy, o.z), yaw);
   onFoot.aim(yaw, from.tilt);
   onFoot.camera.fov = from.fov;
   onFoot.camera.updateProjectionMatrix();
@@ -2705,6 +3013,10 @@ if (new URLSearchParams(location.search).has("debug")) {
       scene3: scene,
       /** Out of the place you are in (tests). */
       leavePlace: () => leavePlace(),
+      /** A place's panorama of the city (tests: what its windows show). */
+      cityView: (place: string, up: number, back?: number, side?: number) => cityView(place, up, back, side),
+      /** The shadow map every other frame (true) or every frame (false): an A/B of its cost. */
+      shadowHalf: (on: boolean) => (shadowHalf = on),
       parking,
       ray,
       composer,
@@ -2784,6 +3096,7 @@ if (new URLSearchParams(location.search).has("debug")) {
       stadium,
       sky,
       goldenGate,
+      isles,
       forest,
       keys,
       groundAt,
@@ -3158,6 +3471,7 @@ gta = new GtaMode({
     ...[...metro.trains, ...metro2.trains].map((t) => t.group),
     sky.blimp.group,
     goldenGate.group,
+    ...isles.movers(),
     ...parking.cars.map((c) => c.obj),
   ],
   // (raised floors a body walks on: the deck, the woods, platforms and stairs up; a footbridge's gentle hump is the solid shape's)
@@ -3168,6 +3482,10 @@ gta = new GtaMode({
       return g !== null && g > CURB + 0.45;
     }
     if ((x > PRISON.x0 && x < PRISON.x1 && z > PRISON.z0 && z < PRISON.z1) || goldenGate.onDeck(x, z) || forest.owns(x, z)) return true;
+    // (a crossing's deck high over the water: its own floor; at its ends the streets')
+    // (and down in a tunnel: its walls, its walkways)
+    // (and its low ends past the board's edge, where the street's solid shape does not reach)
+    if (isles.onDeck(x, z) && (Math.abs((isles.deckAt(x, z) ?? 0) - CURB) > 0.45 || x < BOARD.x0 || x > BOARD.x1 || z < BOARD.z0 || z > BOARD.z1)) return true;
     const g = groundAt(x, z);
     return g !== null && g > CURB + 0.45;
   },
@@ -3177,17 +3495,27 @@ gta = new GtaMode({
     doors
       .filter((d) => d !== buildingDoor && (d.key !== "nu7tower" || nu7Quarter.done))
       .map((d) => ({ key: d.key, x: d.at.x, z: d.at.z, fx: d.front.x, fz: d.front.z, label: PLACES[d.key] ?? d.key, y: groundAt(d.at.x, d.at.z) ?? CURB })),
+  placeFace: (key, x, z, fx, fz) => placeFacade(key, x, z, fx, fz),
+  placeBox,
   enter: (key) => {
     if (!jumping && !closeChoice) enterPlace(key);
   },
-  facades: () => [...city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out!, door: f.door })), ...keys.facades],
+  facades: () => [...city.facades.filter((f) => f.out).map((f) => ({ type: f.type, face: f.face, x0: f.x0, x1: f.x1, z: f.z, out: f.out!, door: f.door })), ...keys.facades, ...isles.facades.map((f) => ({ ...f, out: new THREE.Vector3(f.out.x, 0, f.out.z) }))],
   // across the Golden Gate: the deck under the wheels (and its railings), the tunnel, the town's sand
-  carSurface: (x, z) => (goldenGate.onDeck(x, z) ? goldenGate.deckAt(z) : keys.carSurface(x, z)),
-  carHold: (p, r) => goldenGate.holdCar(p, r) || (keys.pushCar(p, r), false),
-  beyond: (x, z) => keys.owns(x, z) || goldenGate.onDeck(x, z) || forest.owns(x, z) || corridor(x, z),
+  carSurface: (x, z) => (goldenGate.onDeck(x, z) ? goldenGate.deckAt(z) : (isles.carSurface(x, z) ?? keys.carSurface(x, z))),
+  carHold: (p, r) => goldenGate.holdCar(p, r) || isles.holdCar(p, r) || (keys.pushCar(p, r), false),
+  beyond: (x, z) => keys.owns(x, z) || goldenGate.onDeck(x, z) || forest.owns(x, z) || corridor(x, z) || isles.owns(x, z),
+  walks: () => isles.walks,
+  seats: () => isles.seats,
   underwater: (on) => sound.underwater(on),
   // (Orchard Keys' low sand and its sea: waded into, swum in)
   sea: (x, z) => {
+    // (the islands' beaches and the sea off them)
+    const is = isles.sea(x, z);
+    if (is) return is;
+    // (your villa's pool: swum in too)
+    const pool = villaPool(x, z);
+    if (pool) return pool;
     if (!KeysSea.inside(x, z) || !keys.owns(x, z) || keys.pierAt(x, z) !== null) return null;
     const floor = keys.ground(x, z);
     return floor < SEA_Y + 1.35 ? { floor, surface: SEA_Y } : null;
@@ -3350,6 +3678,7 @@ gta = new GtaMode({
       yield { x: p.x, z: p.z, hx: 7.4, hz: 1.5 };
     }
     yield* goldenGate.boxes();
+    yield* isles.boxes();
     // the parked cars: a crash shoves them out of their place (the game takes them out of the list)
     for (const c of parking.cars) {
       const p = c.obj.position;
@@ -3395,6 +3724,19 @@ gta = new GtaMode({
         v: speedNow(c.obj, c.v ?? 0),
         driver: rideDriver(c.obj),
         take: () => goldenGate.take(c)?.group ?? null,
+      };
+    }
+    // the islands' traffic (over their crossings, round their blocks)
+    for (const b of isles.boxes()) {
+      const c = b.ref as { obj?: THREE.Group; v?: number; len?: number } | undefined;
+      if (!c?.obj) continue;
+      const k = (c.obj.userData.kind as string) ?? "sedan";
+      yield {
+        obj: c.obj,
+        kind: (k === "truck" ? "truck" : k === "taxi" ? "taxi" : "sedan") as "truck" | "taxi" | "sedan",
+        v: speedNow(c.obj, c.v ?? 0),
+        driver: rideDriver(c.obj),
+        take: () => isles.take(c)?.group ?? null,
       };
     }
   },
@@ -3469,7 +3811,7 @@ gta = new GtaMode({
       if (g) scene.add(g);
       return g ? { group: g, kind: r.kind as never } : null;
     }
-    return goldenGate.take(ref);
+    return goldenGate.take(ref) ?? isles.take(ref);
   },
   tod: (d) => paintDay(d),
   thunder: () => {
@@ -3509,11 +3851,43 @@ gta = new GtaMode({
 });
 // the bridge's traffic stops for you (on foot in the road, or at the wheel in front of it)
 goldenGate.blockers = () => {
-  if (!gta?.active) return [];
-  const out = gta.trafficBlockers();
-  if (gta.car) out.push({ x: gta.car.group.position.x, z: gta.car.group.position.z });
+  const out: TrafficBlocker[] = gta?.active ? gta.trafficBlockers() : [];
+  // (your car as its body: turned, its half length and width — the traffic stops short of its tail and goes round its length)
+  if (gta?.active && gta.car) out.push({ x: gta.car.group.position.x, z: gta.car.group.position.z, yaw: gta.car.yaw, hl: gta.car.spec.len / 2, hw: gta.car.spec.wid / 2 });
+  // (on Bay Road the city's cars are there too: the bridge's give way to them — wait for them, never go round)
+  for (const m of cityTraffic.movers) {
+    const p = m.group.position;
+    if (Math.abs(p.z - ST.ringS) < 9) out.push({ x: p.x, z: p.z, wait: true });
+  }
   return out;
 };
+// a bridge car held by you honks (then goes round you: src/scene/goldengate.ts)
+{
+  const at = new THREE.Vector3();
+  goldenGate.onHorn = (x, z, long) => {
+    const w = soundAt(at.set(x, 1.2, z));
+    if (w.level > 0.02) sound.horn("car", w.level, w.pan, long);
+  };
+}
+// (born and gone only out of the picture: in the view of the camera that draws the frame, within 220 m)
+{
+  const v = new THREE.Vector3();
+  goldenGate.seen = (x, z) => {
+    v.set(x, 1.2, z);
+    return load.eye.distanceToSquared(v) < 220 * 220 && load.frustum.containsPoint(v);
+  };
+}
+isles.blockers = goldenGate.blockers;
+isles.onHorn = goldenGate.onHorn;
+// the islands' ground and content, once Orchard Keys is in (a slice a frame); then the maps, the game's solid shape and doors
+void keys.ready.then(() => isles.build());
+void isles.ready.then(() => {
+  for (const c of isles.parkedCars) parking.adopt(c.obj, c.kind as never);
+  // (their street lamps in the street's pool of lamp lights: the nearest few lit at night)
+  city.lamps.push(...isles.lamps);
+  minimap.stale();
+  gta?.keysReady();
+});
 // Orchard Keys is up: the maps drawn again with it, the game's solid shape and doors taken again there
 void keys.ready.then(() => {
   for (const c of keys.parkedCars) parking.adopt(c.obj, c.kind);
@@ -3606,8 +3980,8 @@ if (new URLSearchParams(location.search).has("wingsuit")) {
 }
 
 
-/** Frames counted for the shadow map's cadence. */
-let shadowTick = 0;
+/** (debug, ?debug: street.shadowHalf(true) draws the shadow map every other frame, to measure what it costs) */
+let shadowHalf = false;
 
 /** Advance the director by `sim` seconds in steps of at most 50 ms. */
 function runDirector(sim: number, t: number, q: THREE.Quaternion, right: THREE.Vector3) {
@@ -3651,10 +4025,18 @@ const frameErrors = new Set<string>();
 /** How long the last frame's own work took (ms): the governors tell a slow processor by it. */
 let frameBusy = 0;
 const minimapStride = new Stride(1);
-function frame(stepDt?: number) {
+/**
+ * The next frame, timed by the display: the requestAnimationFrame timestamp (the frame's vsync) is
+ * the clock, not performance.now() somewhere in the middle of the frame — when the JavaScript of a
+ * frame started a few milliseconds late (a GC, a busy worker), the old way measured a long step then
+ * a short one while the screen showed them at an even 16.7 ms: everything that moves (the traffic,
+ * the walkers, the camera) stuttered for no reason.
+ */
+const nextFrame = () => requestAnimationFrame((ts) => frame(undefined, ts));
+function frame(stepDt?: number, ts?: number) {
   const t0 = performance.now();
   try {
-    frameBody(stepDt);
+    frameBody(stepDt, ts);
     frameBusy = performance.now() - t0;
   } catch (e) {
     const msg = String((e as Error)?.stack ?? e);
@@ -3662,18 +4044,20 @@ function frame(stepDt?: number) {
       frameErrors.add(msg);
       console.error("frame:", e);
     }
-    if (!CAPTURE) requestAnimationFrame(() => frame());
+    if (!CAPTURE) nextFrame();
     else throw e;
   }
 }
-function frameBody(stepDt?: number) {
+function frameBody(stepDt?: number, ts?: number) {
   // the voxel workshop draws on its own: the city waits (one cheap frame a second keeps it alive)
   if (cityPaused && !stepDt) {
     timer.update();
-    return void setTimeout(() => requestAnimationFrame(() => frame()), 500);
+    return void setTimeout(nextFrame, 500);
   }
-  timer.update();
-  const real = timer.getDelta();
+  timer.update(stepDt === undefined ? ts : undefined);
+  // (a frame's timestamp can come in under a clock read with performance.now() — the very first,
+  // one after the paused city's: never a step back)
+  const real = Math.max(0, timer.getDelta());
   if (stepDt === undefined) quality.sample(real, frameBusy), load.sample(real, frameBusy);
   // The street keeps real time even when frames are slow: the director (traffic, buses, walkers)
   // runs in steps of at most 50 ms, so a slow device no longer plays it in slow motion while the
@@ -3683,7 +4067,7 @@ function frameBody(stepDt?: number) {
   const dt = stepDt ?? Math.min(real, 0.05);
   const t = stepDt !== undefined ? (capT += stepDt) : timer.getElapsed();
   const again = () => {
-    if (!CAPTURE) requestAnimationFrame(() => frame());
+    if (!CAPTURE) nextFrame();
   };
 
   // in a proof (the dive): its own place, its own camera; the city keeps living (but unseen)
@@ -3818,11 +4202,9 @@ function frameBody(stepDt?: number) {
   const shadows = !wide && quality.tier.shadow > 0;
   // (a processor that cannot keep up: the shadow map is drawn again every other frame, or less; in
   // between it stays as it was, its own matrix with it, so the still city's shadows do not move)
-  // (in the game the shadow map is drawn every other frame: its pass draws the street a second time,
-  // a fifth of the frame; between two it stays as it was, its matrix with it — a moving car's shadow
-  // a frame late at 60 fps, which nobody sees)
-  shadowTick++;
-  moon.shadow.autoUpdate = shadows && (load.stride > 1 ? load.turn(1) : !gta?.active || shadowTick % 2 === 0);
+  // (otherwise every frame: drawn every other frame, a moving car's shadow trailed it by its own
+  // frame's travel and shuddered — 20 cm under a city car, half a metre under yours)
+  moon.shadow.autoUpdate = shadows && (load.stride > 1 ? load.turn(1) : !shadowHalf || load.frame % 2 === 0);
   // (a map must exist all the same: after a resize to a new tier it is re-made once, unseen)
   if (!moon.shadow.map) moon.shadow.needsUpdate = true;
   // off: every fragment falls outside the map, so the shader skips the shadow lookups altogether
@@ -3855,6 +4237,7 @@ function frameBody(stepDt?: number) {
   sky.update(t, sim, camQuat, camRight);
   if (!walking) sky.aim(rig.persp);
   goldenGate.update(sim);
+  isles.update(sim, focus);
   bayMarks.update();
   walletCrowns.update(dt, t);
   forest.update(sim, t, cam, focus, theme === "night", walking, wide);

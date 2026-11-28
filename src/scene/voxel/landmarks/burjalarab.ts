@@ -238,7 +238,9 @@ export function burjalarab(seed: number, o: LandmarkOpts): Built {
     // the porte-cochère canopy over the door
     m.box(Math.round(cx - 5), TOPY + 5, z1, Math.round(cx + 5), TOPY + 6, z1 + 5, gold);
     for (const sx of [-1, 1]) m.box(Math.round(cx + sx * 4.5 - 0.5), TOPY, z1 + 4, Math.round(cx + sx * 4.5 + 0.5), TOPY + 5, z1 + 5, gold);
-    signs.push({ text: "BURJ AL ZEC", color: "#f4b728", x: cx, y: TOPY + 9.5, z: z1 + 0.2, w: 16, h: 2.6, vertical: false, facing: "front" });
+    // (its name along the porte-cochère's front edge, up over the drive: the realistic one raises the
+    // canopy to TOPY + 13, src/scene/real/palmmarks.ts — not across the doors at eye height)
+    signs.push({ text: "BURJ AL ZEC", color: "#f4b728", x: cx, y: TOPY + 14.6, z: z1 + 5.3, w: 10, h: 1.6, vertical: false, facing: "front" });
   }
   // the fountain court: a round basin with jets in a ring, and the driveway round it
   const FZ = Math.round(front + 14);

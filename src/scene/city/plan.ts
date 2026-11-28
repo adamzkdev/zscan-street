@@ -73,6 +73,19 @@ export const RIVER = { z0: 59, z1: 77, water: -1.1, bed: -2.2, bridges: [-226, -
  */
 export const ACROSS = 380;
 
+/**
+ * Where the islands' crossings leave the city (src/scene/isles): the start of each one's course on the
+ * ring road, the way it heads, the deck's half width. The city keeps its pavement there clear (no lamp,
+ * tree or bench under the deck); the island's descriptor starts its course here.
+ */
+export const ISLE_FEET: Record<string, { x: number; z: number; dir: "e" | "w" | "n" | "s"; half: number }> = {
+  east: { x: ST.ringE + 2, z: ST.blvdN, dir: "e", half: 12 },
+  // (the Øresund-style bridge and tunnel to the old town, off the west ring road at Boulevard North)
+  west: { x: ST.ringW - 2, z: ST.blvdN, dir: "w", half: 12 },
+  // (the Brooklyn Bridge to Zakone and Mount Zuji, off the north ring road at Boulevard West: its deck 32 m wide)
+  north: { x: ST.blvdW, z: ST.ringN - 2, dir: "n", half: 17 },
+};
+
 /** The bay south of the ring road: open water, two islands, the headland across it and its bridge. */
 export const BAY = {
   z0: 146,
@@ -1246,6 +1259,17 @@ export function planCity() {
     }
   }
 
+  // the islands' crossings leave the ring road over its pavement: nothing of the street's furniture under their decks
+  {
+    const feet = Object.values(ISLE_FEET).map((f) => {
+      const reach = 16;
+      return f.dir === "e" ? { x0: f.x - 2, x1: f.x + reach, z0: f.z - f.half, z1: f.z + f.half } : f.dir === "w" ? { x0: f.x - reach, x1: f.x + 2, z0: f.z - f.half, z1: f.z + f.half } : f.dir === "s" ? { x0: f.x - f.half, x1: f.x + f.half, z0: f.z - 2, z1: f.z + reach } : { x0: f.x - f.half, x1: f.x + f.half, z0: f.z - reach, z1: f.z + 2 };
+    });
+    const under = (x: number, z: number) => feet.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1);
+    for (let i = props.length - 1; i >= 0; i--) if (under(props[i].x, props[i].z)) props.splice(i, 1);
+    for (let i = circles.length - 1; i >= heartCircles; i--) if (under(circles[i][0], circles[i][1])) circles.splice(i, 1);
+  }
+
   return {
     jobs,
     props,
@@ -1351,8 +1375,9 @@ export function polePositions() {
   const out: { x: number; z: number }[][] = [];
   let run: { x: number; z: number }[] = [];
   for (let x = -46; x <= 47; x += 12) {
-    // no pole (and its transformer box) at the crossings, nor in front of the bank's portico
-    if (CITY.cross.some((c) => Math.abs(x - c) < 4) || (x > 9 && x < 19)) {
+    // no pole (and its transformer box) at the crossings, nor in front of the bank's portico, nor in
+    // front of a walk-in door on this pavement (the MEMPOOL HQ's at its west end, the ZK TOWER's)
+    if (CITY.cross.some((c) => Math.abs(x - c) < 4) || (x > 9 && x < 19) || [-10.4, 1.8].some((d) => Math.abs(x - d) < 3)) {
       if (run.length > 1) out.push(run);
       run = [];
       continue;
@@ -1417,6 +1442,8 @@ export function viaductBents(): Bent[] {
       // not over a crossing, the river, nor where a station's platforms and stairs are
       const cross = run.along === "x" ? GRID.xs.some((c, i) => Math.abs(x - c) < GRID.xw[i] / 2 + 1.6) : GRID.zs.some((c, i) => Math.abs(z - c) < GRID.zw[i] / 2 + 1.6) || (z > CITY.road.z0 - 1.6 && z < CITY.road.z1 + 1.6);
       if (cross) continue;
+      // nor under an island crossing's deck where it leaves the ring road
+      if (Object.values(ISLE_FEET).some((f) => (f.dir === "n" || f.dir === "s" ? Math.abs(x - f.x) < f.half + 1.5 && Math.abs(z - f.z) < 10 : Math.abs(z - f.z) < f.half + 1.5 && Math.abs(x - f.x) < 10))) continue;
       if (run.along === "z" && z > RIVER.z0 - 2 && z < RIVER.z1 + 2) continue;
       if (run.line.stops.some(([sx, sz]) => (run.along === "x" ? Math.abs(sz - z) < 2 && Math.abs(sx - x) < 29 : Math.abs(sx - x) < 2 && Math.abs(sz - z) < 29))) continue;
       const legs: [number, number][] = run.along === "x" ? [[x, z - reach], [x, z + reach]] : [[x - reach, z], [x + reach, z]];

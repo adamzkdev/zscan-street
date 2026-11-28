@@ -1,6 +1,7 @@
 import { BAY, CITY, CORE, CURB, GRID, RIVER, ST, streetSegments, zoneAt } from "../scene/city/plan";
 import { F } from "../scene/forest/land";
-import { corridor, inKeys, KEYS, KGRID, KPARK, KPIER, kStreets, KTUNNEL, KX } from "../scene/keys/plan";
+import { corridor, inKeys, inVilla, KEYS, KGRID, KPARK, KPIER, kStreets, KTUNNEL, KX, VILLA } from "../scene/keys/plan";
+import { crossingAt, crossingRuns, inBox, isleAt, ISLES, WORLD } from "../scene/isles/plan";
 
 /**
  * The city's roads for the game (src/gta): where the asphalt is (a car rides at y = 0 there and on
@@ -64,6 +65,9 @@ interface Rect {
   at: number;
   /** Orchard Keys' (its cross streets are its own). */
   keys?: boolean;
+  /** An island's (its key: its cross streets are its own), and whether it is the crossing to it. */
+  isle?: string;
+  crossing?: boolean;
 }
 
 const RES = 0.5;
@@ -100,7 +104,26 @@ export class Roads {
       if (st.axis === "x") this.rects.push({ x0: from, x1: st.to, z0: st.at - h, z1: st.at + h, name: st.name, axis: "x", at: st.at, keys: true });
       else this.rects.push({ x0: st.at - h, x1: st.at + h, z0: from, z1: st.to, name: st.name, axis: "z", at: st.at, keys: true });
     }
+    // the islands round the city: their streets, and each one's crossing from the ring road (its straight
+    // runs, a few metres into the streets at either end: a junction for the GPS there)
+    for (const isle of ISLES) {
+      for (const st of isle.streets) {
+        const h = st.width / 2;
+        if (st.axis === "x") this.rects.push({ x0: st.from, x1: st.to, z0: st.at - h, z1: st.at + h, name: st.name, axis: "x", at: st.at, isle: isle.key });
+        else this.rects.push({ x0: st.at - h, x1: st.at + h, z0: st.from, z1: st.to, name: st.name, axis: "z", at: st.at, isle: isle.key });
+      }
+      const runs = crossingRuns(isle);
+      runs.forEach((st, k) => {
+        const h = st.width / 2;
+        const from = st.from - (k === 0 || k === runs.length - 1 ? 3 : 0),
+          to = st.to + (k === 0 || k === runs.length - 1 ? 3 : 0);
+        if (st.axis === "x") this.rects.push({ x0: from, x1: to, z0: st.at - h, z1: st.at + h, name: st.name, axis: "x", at: st.at, isle: isle.key, crossing: true });
+        else this.rects.push({ x0: st.at - h, x1: st.at + h, z0: from, z1: to, name: st.name, axis: "z", at: st.at, isle: isle.key, crossing: true });
+      });
+    }
+    this.isleRoads = this.rects.filter((r) => r.isle && !r.crossing);
     for (const r of this.rects) {
+      if (r.isle) continue;
       const i0 = Math.max(0, Math.floor((r.x0 - GX0) / RES)),
         i1 = Math.min(W - 1, Math.ceil((r.x1 - GX0) / RES));
       const j0 = Math.max(0, Math.floor((r.z0 - GZ0) / RES)),
@@ -109,11 +132,17 @@ export class Roads {
     }
   }
 
+  /** The islands' streets (beyond the grid: a handful of rectangles each). */
+  private isleRoads: Rect[] = [];
+
   /** On the asphalt? */
   road(x: number, z: number) {
     const i = Math.floor((x - GX0) / RES),
       j = Math.floor((z - GZ0) / RES);
-    if (i < 0 || j < 0 || i >= W || j >= H) return false;
+    if (i < 0 || j < 0 || i >= W || j >= H || isleAt(x, z)) {
+      for (const r of this.isleRoads) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return true;
+      return false;
+    }
     return this.grid[j * W + i] === 1;
   }
 
@@ -136,7 +165,24 @@ export class Roads {
       if (score < bd) (bd = score), (best = r);
     }
     let next: string | null = null;
-    if (best?.keys) {
+    // on a crossing: its name, and where it goes
+    const cr = crossingAt(x, z);
+    if (cr) {
+      const p = cr.course.at(cr.s);
+      const toIsle = p.tx * dirX + p.tz * dirZ > 0;
+      return { street: cr.isle.crossing.name, next: toIsle ? cr.isle.name : "Ring Road", district: this.district(x, z) };
+    }
+    if (best?.isle) {
+      // an island: the next of its own cross streets ahead
+      const sign = best.axis === "x" ? Math.sign(dirX) || 1 : Math.sign(dirZ) || 1;
+      const pos = best.axis === "x" ? x : z;
+      let nd = Infinity;
+      for (const o of this.rects) {
+        if (o.isle !== best.isle || o.crossing || o.axis === best.axis || !this.crosses(best, o.at)) continue;
+        const ahead = (o.at - pos) * sign;
+        if (ahead > 6 && ahead < nd) (nd = ahead), (next = o.name);
+      }
+    } else if (best?.keys) {
       // Orchard Keys: the next of its own cross streets ahead
       const sign = best.axis === "x" ? Math.sign(dirX) || 1 : Math.sign(dirZ) || 1;
       const pos = best.axis === "x" ? x : z;
@@ -170,6 +216,9 @@ export class Roads {
 
   /** Off the streets: what the place is. */
   private landmark(x: number, z: number) {
+    // an island: the neighbourhood it says (its beach, its town)
+    const isle = isleAt(x, z);
+    if (isle) return isle.areas.find((a) => inBox(a.box, x, z))?.name ?? `${isle.name}'s shore`;
     if (inKeys(x, z) && z > F.z1) {
       if (Math.abs(x - KPIER.x) < KPIER.half + 1 && z > KPIER.z0) return "Orchard Pier";
       if (x > KPARK.x0 && x < KPARK.x1 && z > KPARK.z0 && z < KPARK.z1) return "Sapling Park";
@@ -186,6 +235,10 @@ export class Roads {
   }
 
   district(x: number, z: number) {
+    const cr = crossingAt(x, z);
+    if (cr) return cr.isle.crossing.name;
+    const isle = isleAt(x, z);
+    if (isle) return isle.name;
     if (onBridge(x, z)) return "Golden Gate";
     if (corridor(x, z) || (inKeys(x, z) && (z > F.z1 || x < F.x0 || x > F.x1))) return "Orchard Keys";
     if (x > F.x0 && x < F.x1 && z > F.z0 && z < F.z1 && z > BAY.headland.z0 - 30) return "Shielded Woods";
@@ -274,6 +327,39 @@ export class Roads {
    * it to a junction, junction to junction, onto B's street and to the point of it nearest B, then B.
    */
   gps(ax: number, az: number, bx: number, bz: number): { x: number; z: number }[] {
+    // your villa's plot (scene/keys/plan.ts VILLA): in and out by its gate, at the end of Sinsemilla Street
+    const a = inVilla(ax, az),
+      b = inVilla(bx, bz);
+    if (a !== b) {
+      const gx = (VILLA.gate.x0 + VILLA.gate.x1) / 2;
+      const gIn = { x: gx, z: VILLA.z1 - 3.4 },
+        gOut = { x: gx, z: VILLA.z1 + 7 };
+      if (a) return [{ x: ax, z: az }, gIn, ...this.gps(gOut.x, gOut.z, bx, bz)];
+      return [...this.gps(ax, az, gOut.x, gOut.z), gIn, { x: bx, z: bz }];
+    }
+    // an island's own road off the grid (Zakone's mountain road): along its line to or from its foot
+    for (const isle of ISLES)
+      for (const rt of isle.routes ?? []) {
+        const ia = rt.holds(ax, az),
+          ib = rt.holds(bx, bz);
+        if (ia === ib) continue;
+        const nearest = (x: number, z: number) => {
+          let bi = 0,
+            bd = Infinity;
+          rt.line.forEach(([px, pz], i) => {
+            const d = (px - x) ** 2 + (pz - z) ** 2;
+            if (d < bd) (bd = d), (bi = i);
+          });
+          return bi;
+        };
+        const [fx, fz] = rt.line[0];
+        if (ia) {
+          const way = rt.line.slice(0, nearest(ax, az) + 1).reverse().map(([x, z]) => ({ x, z }));
+          return [{ x: ax, z: az }, ...way, ...this.gps(fx, fz, bx, bz).slice(1)];
+        }
+        const way = rt.line.slice(1, nearest(bx, bz) + 1).map(([x, z]) => ({ x, z }));
+        return [...this.gps(ax, az, fx, fz), ...way, { x: bx, z: bz }];
+      }
     const nodes = this.graph();
     const A = this.snap(ax, az),
       B = this.snap(bx, bz);
@@ -343,8 +429,10 @@ export class Roads {
   /** The districts' middles (where to write their names on a map). */
   districts(): { name: string; x: number; z: number }[] {
     const acc = new Map<string, { x: number; z: number; n: number }>();
-    for (let x = GX0 + 6; x < Math.max(CITY.maxX, KEYS.x1); x += 12)
-      for (let z = GZ0 + 6; z < Math.max(CITY.maxZ, KEYS.z1); z += 12) {
+    for (let x = Math.min(GX0, WORLD.x0) + 6; x < WORLD.x1; x += 12)
+      for (let z = Math.min(GZ0, WORLD.z0) + 6; z < WORLD.z1; z += 12) {
+        // (out at sea between the city and an island: nobody's district)
+        if ((x < GX0 || x > Math.max(CITY.maxX, KEYS.x1) || z < GZ0 || z > Math.max(CITY.maxZ, KEYS.z1)) && !isleAt(x, z)) continue;
         const n = this.district(x, z);
         if (n === "ZStreet") continue;
         const a = acc.get(n) ?? { x: 0, z: 0, n: 0 };
@@ -415,7 +503,8 @@ export class Roads {
     const out: { x: number; z: number; axis: "x" | "z"; name: string }[] = [];
     for (const r of this.rects) {
       const len = r.axis === "x" ? r.x1 - r.x0 : r.z1 - r.z0;
-      if (len < 24) continue;
+      // (not on a crossing: its deck is high over the water)
+      if (len < 24 || r.crossing) continue;
       for (let s = 10; s < len - 10; s += step) {
         const x = r.axis === "x" ? r.x0 + s : r.at;
         const z = r.axis === "x" ? r.at : r.z0 + s;

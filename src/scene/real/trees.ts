@@ -564,6 +564,41 @@ export function treeLod(focus: THREE.Vector3) {
 }
 
 /**
+ * The trees standing in front of doors taken out: a lane from each door (`x`, `z`, its way out `fx`,
+ * `fz`) `len` metres out and `half` across — its way in and the view of it (the game clears its
+ * doorways, src/gta). Returns how many went.
+ */
+export function clearTrees(lanes: { x: number; z: number; fx: number; fz: number; len: number; half: number }[]) {
+  let n = 0;
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (const l of lots) {
+    let hit = false;
+    for (let i = 0; i < l.mats.length; i++) {
+      const p = l.at[i];
+      if (l.mats[i] === zero) continue;
+      for (const ln of lanes) {
+        const dx = p.x - ln.x,
+          dz = p.z - ln.z;
+        if (dx * dx + dz * dz > (ln.len + ln.half) ** 2) continue;
+        const along = dx * ln.fx + dz * ln.fz,
+          across = Math.abs(-dx * ln.fz + dz * ln.fx);
+        if (along > 0.2 && along < ln.len && across < ln.half) {
+          l.mats[i] = zero;
+          l.bark?.setMatrixAt(i, zero);
+          hit = true;
+          n++;
+          break;
+        }
+      }
+    }
+    if (hit && l.bark) l.bark.instanceMatrix.needsUpdate = true;
+  }
+  // (the leaves drawn again from the lots at the next look)
+  if (n) lastFocus.set(1e9, 0, 0);
+  return n;
+}
+
+/**
  * Every tree of a list as instanced meshes (bark, and near and far leaves, per shape), in
  * `parent`. Returns the crowns (for the rain and the camera) as spheres.
  */

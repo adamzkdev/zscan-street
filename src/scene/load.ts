@@ -111,10 +111,10 @@ export class Load {
     return (this.frame + slot) % (this.level + 1) === 0;
   }
 
-  /** The street's scene: at levels 3 and 4 its still branches are brought up to date on alternate frames (matrices.ts naps). */
+  /** The street's scene: its still branches are brought up to date on alternate frames (one in three at level 4: matrices.ts naps). */
   watch(scene: THREE.Object3D) {
     this.scene = scene;
-    if (this.fixed) this.apply();
+    this.apply();
   }
 
   /** The camera that draws this frame: called once a frame, before the street is updated. */
@@ -210,7 +210,9 @@ export class Load {
   }
 
   private apply() {
-    naps.every = this.level >= 4 ? 3 : this.level >= 3 ? 2 : 1;
+    // (the still branches on alternate frames at every level: a matrix walk of a city's every thing each
+    // frame was some three milliseconds of it; what starts to move in one is late by a frame, once)
+    naps.every = this.level >= 4 ? 3 : 2;
     this.napAt = -1e9;
   }
 

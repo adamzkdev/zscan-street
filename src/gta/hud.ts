@@ -377,10 +377,16 @@ export class GtaHud {
 
   // ---- the radar ------------------------------------------------------------------------------------
 
+  /** A canvas's size on the page, measured at most twice a second (reading it every frame, after the
+   *  HUD's text was written, made the browser lay the page out again each frame). */
+  private sized = new WeakMap<HTMLCanvasElement, { at: number; w: number; h: number }>();
   private fit(cv: HTMLCanvasElement) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const w = Math.round(cv.clientWidth * dpr),
-      h = Math.round(cv.clientHeight * dpr);
+    const now = performance.now();
+    let m = this.sized.get(cv);
+    if (!m || now - m.at > 500 || !m.w) this.sized.set(cv, (m = { at: now, w: cv.clientWidth, h: cv.clientHeight }));
+    const w = Math.round(m.w * dpr),
+      h = Math.round(m.h * dpr);
     if (w && h && (cv.width !== w || cv.height !== h)) (cv.width = w), (cv.height = h);
     return dpr;
   }

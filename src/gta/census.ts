@@ -1,5 +1,6 @@
 import { CORE, GRID, ST } from "../scene/city/plan";
 import { KEYS, KGRID } from "../scene/keys/plan";
+import { ISLES } from "../scene/isles/plan";
 
 /**
  * The town's census (src/gta): every one of the 10,000 zkSNARKs lives somewhere — most of them in
@@ -23,6 +24,8 @@ const rect = (x0: number, x1: number, z0: number, z1: number) => (x: number, z: 
 
 /** Most particular first (the first that holds a point is its area). */
 export const AREAS: Area[] = [
+  // the islands round the city (src/scene/isles): their beaches and their towns
+  ...ISLES.flatMap((i) => i.areas.map((a) => ({ key: a.key, name: a.name, weight: a.weight, density: a.density, inside: rect(a.box.x0, a.box.x1, a.box.z0, a.box.z1) }))),
   { key: "beach", name: "Orchard Beach", weight: 9, density: 1.05, inside: (x, z) => x > KEYS.x0 && x < KEYS.x1 && z > KGRID.south - 4 && z < KEYS.z1 },
   { key: "beachside", name: "Orchard Keys' sands", weight: 2, density: 0.8, inside: (x, z) => x > KEYS.x0 && x < KEYS.x1 && z > KGRID.north && z < KGRID.south && (x < KGRID.west || x > KGRID.east) },
   { key: "keys", name: "Orchard Keys", weight: 6, density: 0.9, inside: rect(KEYS.x0, KEYS.x1, KEYS.z0, KGRID.south) },

@@ -7,7 +7,7 @@ import { palette, VOX, type VoxelModel } from "./model";
  * of foliage instead of a stack of cubes; the architecture around it stays crisp (greedy mesher).
  * Colours come from the voxels around each vertex, shaded by how buried the vertex is.
  */
-export function smoothPart(m: VoxelModel, inPart: (c: number) => boolean) {
+export function smoothPart(m: VoxelModel, inPart: (c: number) => boolean, relax = 2) {
   const W = m.w + 1,
     H = m.h + 1,
     D = m.d + 1;
@@ -115,9 +115,9 @@ export function smoothPart(m: VoxelModel, inPart: (c: number) => boolean) {
         if (s0 !== !!at(x, y, z + 1) && x >= 0 && y >= 0) quad(vid[cell(x - 1, y - 1, z)], vid[cell(x, y - 1, z)], vid[cell(x, y, z)], vid[cell(x - 1, y, z)], !s0);
       }
   if (!idx.length) return null;
-  // relax: each vertex moves halfway to the mean of its neighbours, twice
+  // relax: each vertex moves halfway to the mean of its neighbours, twice (or as asked)
   const p = Float32Array.from(pos);
-  for (let it = 0; it < 2; it++) {
+  for (let it = 0; it < relax; it++) {
     const q = p.slice();
     for (let i = 0; i < nbr.length; i++) {
       const ns = nbr[i];

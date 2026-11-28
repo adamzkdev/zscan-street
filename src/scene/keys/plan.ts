@@ -335,3 +335,59 @@ export function beachSpots(): BeachSpot[] {
   for (let k = 0; k < 6; k++) out.push({ kind: "swim", x: k < 3 ? KSHORE.west - 6 - R() * 8 : KSHORE.east + 6 + R() * 8, z: 300 + A + R() * 90, yaw: R() * 6.28, seed: 100 + k });
   return out;
 }
+
+/**
+ * YOUR VILLA (src/gta/home.ts): a waterfront estate of its own on Orchard Keys' north point, past
+ * the end of Sinsemilla Street — between the woods' bluff and the east beach, its back to the strait,
+ * the Golden Gate and the city's skyline across the water. A walled plot raised to the street's level
+ * over the old north beach: the forecourt behind the gate (where your car waits), the house (a white
+ * modernist pavilion between two wings, its door to the street), the pool terrace and the sea wall,
+ * a motor yacht moored along it. Drawn by ./villa.ts; the interior is src/interior/home.
+ */
+export const VILLA = {
+  /** The plot: from the sea wall's face (z0) to the wall on Note Street's pavement (z1). */
+  x0: 250,
+  x1: 334,
+  z0: 610,
+  z1: 638,
+  /** The house: two wings and the tall pavilion between them (x 270 … 284). */
+  house: { x0: 260, x1: 294, z0: 619, z1: 631 },
+  hall: { x0: 270, x1: 284 },
+  /** The floor's height inside (one step up from the terrace). */
+  floor: CURB + 0.14,
+  /** The front door's threshold, under the porch (the way out: +z, the street's side). */
+  door: { x: 277, z: 630.4 },
+  /** The gate in the street wall, at the end of Sinsemilla Street. */
+  gate: { x0: 298.6, x1: 307.4 },
+  /** The pool on the terrace (its water a little under the deck; deep enough to swim). */
+  pool: { x0: 265, x1: 289, z0: 611.4, z1: 615.6, surface: CURB - 0.1, floor: CURB - 1.75 },
+  /**
+   * Your ZK-GT and your bike side by side in the motor court right behind the gate, both nose to it
+   * (yaw −π/2: +z, the street): the way out is straight ahead through the gate, the way home straight
+   * in (the court, 19 × 18 m, turns a car round). Not along the 6.7 m strip in front of the house,
+   * where a car had to swing 90° between the house and the wall to reach the gate.
+   */
+  car: { x: 300.6, z: 627.4, yaw: -Math.PI / 2 },
+  bike: { x: 305.7, z: 628.2, yaw: -Math.PI / 2 },
+  /** The yacht at the sea wall. */
+  yacht: { x: 318, z: 605.7 },
+  name: "Shielded Point",
+};
+/** Inside the villa's walls (the plot)? */
+export const inVilla = (x: number, z: number, m = 0) => x > VILLA.x0 - m && x < VILLA.x1 + m && z > VILLA.z0 - m && z < VILLA.z1 + m;
+/** In the villa's pool: its water and its floor, or null. */
+export function villaPool(x: number, z: number) {
+  const P = VILLA.pool;
+  if (!(x > P.x0 && x < P.x1 && z > P.z0 && z < P.z1)) return null;
+  // the steps down at the west end (0.4 m each), the bench along the east end, else the floor
+  const k = Math.max(0, Math.floor((x - P.x0 - 0.12) / 0.4));
+  const floor = k < 4 ? P.surface - 0.25 - k * 0.32 : x > P.x1 - 0.62 ? P.surface - 0.5 : P.floor;
+  return { floor, surface: P.surface };
+}
+/** The floor's height on the villa's plot (the terrace and the forecourt at the street's; the house and its porch a step up), or null off it. */
+export function villaFloor(x: number, z: number) {
+  if (!inVilla(x, z)) return null;
+  const H = VILLA.house;
+  if (x > H.x0 && x < H.x1 && z > H.z0 && z < H.z1 + 0.5 && (z < H.z1 || (x > VILLA.hall.x0 + 1.6 && x < VILLA.hall.x1 - 1.6))) return VILLA.floor;
+  return CURB;
+}

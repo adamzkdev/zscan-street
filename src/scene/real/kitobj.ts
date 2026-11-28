@@ -50,7 +50,7 @@ export function kitMeshes(g: KitGeos, o: { shadows?: boolean; shared?: boolean }
     if (o.shared) geo.userData.shared = true;
     const mesh = new THREE.Mesh(geo, realMat(slot as never));
     const lit = LIT.has(slot);
-    mesh.castShadow = !lit && o.shadows !== false && slot !== "lm.glass";
+    mesh.castShadow = !lit && o.shadows !== false && slot !== "lm.glass" && slot !== "lm.glass.clear";
     mesh.receiveShadow = !lit;
     if (o.shared) mesh.userData.shared = true;
     out.add(mesh);

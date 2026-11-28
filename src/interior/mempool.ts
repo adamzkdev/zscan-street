@@ -180,6 +180,7 @@ export function buildMempool(ctx: InteriorContext): Interior {
     }
     stanchions(scene, pts);
     scene.add(blockBoxes((X0 + PART_X) / 2, Z0 / 2));
+    scene.add(lockerWall());
   }
   // the lockers on the back wall, the stanchions, the ATM and the bench by the window
   rects.push([X0, Z0, -4.6, Z0 + 0.7], [X0, -3.2, X0 + 0.7, -1.2], [X0, -1.0, X0 + 2.4, -0.4]);
@@ -760,6 +761,54 @@ function dockModel() {
   return m;
 }
 
+/**
+ * The pickup lockers on the hall's back wall, as made: a steel carcass, powder-coated orange doors
+ * (two shades, a hairline gap between), a recessed pull and a small lit keypad on each, a teal fascia
+ * on top with its light strips (x −10…−4.67, z −14…−13.33, 3 m high; where the voxel lockers stood).
+ */
+function lockerWall() {
+  const g = new THREE.Group();
+  g.name = "mempool:lockers";
+  const x0 = X0,
+    x1 = X0 + 32 / 6,
+    z0 = Z0,
+    z1 = Z0 + 4 / 6;
+  const cols = 8,
+    rows = 5,
+    cw = (x1 - x0) / cols,
+    rh = 3 / rows;
+  box(g, x1 - x0, 3, z1 - z0, std("#3a3d44", 0.55, 0.6), (x0 + x1) / 2, 0, (z0 + z1) / 2);
+  const door = new THREE.BoxGeometry(cw - 0.03, rh - 0.03, 0.03);
+  const doors = new THREE.InstancedMesh(door, new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.42, metalness: 0.25 }), cols * rows);
+  const pad = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.12, 0.012), new THREE.MeshStandardMaterial({ color: "#1c1e24", roughness: 0.3, metalness: 0.2, emissive: "#5fd8ff", emissiveIntensity: 0.35 }), cols * rows);
+  const pull = new THREE.InstancedMesh(new THREE.BoxGeometry(0.03, 0.16, 0.025), std("#c8ccd2", 0.25, 0.9), cols * rows);
+  const tint = new THREE.Color();
+  const mt = new THREE.Matrix4();
+  let i = 0;
+  for (let c = 0; c < cols; c++)
+    for (let r = 0; r < rows; r++, i++) {
+      const cx = x0 + (c + 0.5) * cw,
+        cy = (r + 0.5) * rh;
+      mt.makeTranslation(cx, cy, z1 + 0.015);
+      doors.setMatrixAt(i, mt);
+      doors.setColorAt(i, tint.set(r % 2 ? "#e08a2a" : "#ea9636"));
+      mt.makeTranslation(cx + cw * 0.28, cy + 0.06, z1 + 0.036);
+      pad.setMatrixAt(i, mt);
+      mt.makeTranslation(cx - cw * 0.36, cy, z1 + 0.04);
+      pull.setMatrixAt(i, mt);
+    }
+  for (const im of [doors, pad, pull]) {
+    im.instanceMatrix.needsUpdate = true;
+    im.castShadow = im.receiveShadow = false;
+    g.add(im);
+  }
+  if (doors.instanceColor) doors.instanceColor.needsUpdate = true;
+  // the fascia on top, its light strips
+  box(g, x1 - x0 + 0.04, 0.34, z1 - z0 + 0.18, std("#3ec9b0", 0.5, 0.1), (x0 + x1) / 2, 3, (z0 + z1) / 2 + 0.09);
+  for (let x = x0 + 0.35; x < x1 - 0.4; x += 1.33) box(g, 0.5, 0.04, 0.03, glowMat("#9ff0e0", 1.6), x + 0.25, 3.12, z1 + 0.19);
+  return g;
+}
+
 /** The hall's furniture (x −10…3, z −14…0): lockers, a queue line, the ATM, a bench, plants. */
 function hallModel(real = false) {
   const W = 78,
@@ -768,14 +817,17 @@ function hallModel(real = false) {
   const vx = (x: number) => Math.round((x + 10) * 6),
     vz = (z: number) => Math.round((z + 14) * 6);
   // pickup lockers along the back wall: orange doors, a dark keypad each, a teal band on top
-  for (let x = 0; x < vx(-4.6); x += 4)
-    for (let y = 0; y < 18; y += 4) {
-      m.box(x, y, 0, x + 4, y + 4, 4, C(y % 8 ? "#e08a2a" : "#ea9636"));
-      m.box(x, y, 4, x + 4, y + 0.4, 4.4, C("#b86a1a"));
-      m.set(x + 3, y + 2, 4, C("#2a2830"));
-    }
-  m.box(0, 18, 0, vx(-4.6), 20, 5, C("#3ec9b0"));
-  for (let x = 2; x < vx(-4.6); x += 8) m.box(x, 15, 4, x + 3, 16, 4.6, E("#9ff0e0", 1.2));
+  // (the realistic pass draws them in steel and powder coat: lockerWall)
+  if (!real) {
+    for (let x = 0; x < vx(-4.6); x += 4)
+      for (let y = 0; y < 18; y += 4) {
+        m.box(x, y, 0, x + 4, y + 4, 4, C(y % 8 ? "#e08a2a" : "#ea9636"));
+        m.box(x, y, 4, x + 4, y + 0.4, 4.4, C("#b86a1a"));
+        m.set(x + 3, y + 2, 4, C("#2a2830"));
+      }
+    m.box(0, 18, 0, vx(-4.6), 20, 5, C("#3ec9b0"));
+    for (let x = 2; x < vx(-4.6); x += 8) m.box(x, 15, 4, x + 3, 16, 4.6, E("#9ff0e0", 1.2));
+  }
   // the queue: brass posts, red ropes, in front of the table
   // (the realistic pass draws them as real stanchions: buildMempool)
   for (let x = vx(-7.4); x <= vx(-0.4) && !real; x += 7) {

@@ -8,11 +8,13 @@ import { artPixels, SLOT_NONE, slotAlloc, slotFree, SLOTS, slotWrite } from "./s
 /**
  * The zkSNARKs' looks for the game (src/gta): each one's own picture (the collection's PNG, exact:
  * not the atlas, whose JPEG smears a dark halo round every figure) read once into its 26 × 26 cells,
- * one request at a time with a pause between, so the image API is never flooded. From the cells:
- * a sculpted hood shaped to its silhouette with its face set in the opening, its picture (upscaled,
- * in a slot of the shared art atlas: snarkmat.ts) on the front; a hoodie torso; the colours the body
- * is dressed in (the top, the hood, the skin), with trousers and shoes picked by the number
- * (snarkgeo.ts makes the shapes).
+ * one request at a time with a pause between, so the image API is never flooded. From the cells, the
+ * zkSNARK itself in 3D, made from its picture like a vinyl figure from its drawing: its head and its
+ * torso shaped to the picture's outline, the whole picture on them as it was drawn (its hood's prints
+ * and patterns, its face, its mask, its eyes, its hat's logo, its chest) seen from where the painter
+ * stood; its face set back in its hood in the face's own shape; a cap's peak, glasses and a halo made
+ * as parts of their own; its eyes and lenses shining (glowing at night); its limbs in its own colours
+ * (snarkgeo.ts makes the shapes, snarkmat.ts the one material).
  *
  *   faces.want([ids]); faces.ready(id); faces.look(id) → Look | null
  */
@@ -138,10 +140,14 @@ async function read(id: number): Promise<Cells | null> {
       const k = (Math.floor((r + 0.5) * cell) * c.width + Math.floor((q + 0.5) * cell)) * 4;
       out[r * GRID + q] = d[k + 3] < 128 ? -1 : (d[k] << 16) | (d[k + 1] << 8) | d[k + 2];
     }
+  // (figtest.html's only: a PNG of every picture read held up the street's frames for up to 3 s)
+  if (import.meta.env?.DEV && (globalThis as { __figtest?: boolean }).__figtest) debugOrig.set(id, c.toDataURL());
   c.width = c.height = 0;
   keyOut(out);
   return out;
 }
+/** (development: the pictures as read — figtest.html's side-by-side sheets) */
+export const debugOrig = new Map<number, string>();
 
 /** The flat black round the art (black cells joined to the border) is nothing. */
 function keyOut(c: Cells) {
@@ -183,8 +189,24 @@ function keyHalo(c: Cells) {
   }
 }
 
-/** (development: each look's picture as it went to the atlas, the opening — figtest.html?art) */
-export const debugArt = new Map<number, { src: Int32Array; art: Int32Array; opening: { x: number; y: number; rx: number; ry: number }; hood: number; neck: number; top: number; hatEnd: number }>();
+/** (development: each look's picture as it went to the atlas, what was found in it — figtest.html?art) */
+export const debugArt = new Map<
+  number,
+  {
+    src: Int32Array;
+    art: Int32Array;
+    glow: Uint8Array;
+    face: Uint8Array;
+    lenses: { y0: number; y1: number; x0: number; x1: number } | null;
+    halo: { x: number; y: number; w: number; col: number } | null;
+    yaw: number;
+    cx: number;
+    neck: number;
+    top: number;
+    hatEnd: number;
+    visor: boolean;
+  }
+>();
 
 export const faces = {
   /** Read these (in this order, after those already asked for; `first`: before them). */
@@ -405,6 +427,16 @@ function build(id: number, src: Cells, real: boolean): Look {
   for (let y = neck + 1; y < GRID; y++) for (let x = 0; x < bl; x++) c[y * GRID + x] = -1;
   const inHead = piece(c, top, neck),
     inBody = piece(c, neck + 1, bottom);
+  // (the head's own top: a halo floats over it)
+  const top0 = top;
+  for (let y = top0; y <= neck; y++) {
+    let any = false;
+    for (let x = 0; x < GRID && !any; x++) if (inHead(x, y)) any = true;
+    if (any) {
+      top = y;
+      break;
+    }
+  }
   // the columns of each
   const span = (inside: (x: number, y: number) => boolean, y0: number, y1: number) => {
     let x0 = GRID,
@@ -419,6 +451,31 @@ function build(id: number, src: Cells, real: boolean): Look {
   };
   const hs = span(inHead, top, neck)!,
     bs = span(inBody, neck + 1, bottom) ?? { x0: hs.x0, x1: hs.x1 };
+  // a halo: a bar of light over the head, apart from it
+  let halo: { x: number; y: number; w: number; col: number } | null = null;
+  if (top > top0) {
+    let x0 = GRID,
+      x1 = -1,
+      y0 = GRID,
+      y1 = -1;
+    const cols: number[] = [];
+    for (let y = top0; y < top; y++)
+      for (let x = Math.max(0, hs.x0 - 1); x <= Math.min(GRID - 1, hs.x1 + 1); x++) {
+        if (at(x, y) < 0) continue;
+        // (a row of at least three: not a loose spark)
+        if (!(at(x - 1, y) >= 0 || at(x + 1, y) >= 0)) continue;
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+        cols.push(at(x, y));
+      }
+    if (cols.length >= 3 && x1 - x0 >= 2 && y1 - y0 <= 3) {
+      // its brightest common colour
+      const bright = cols.filter((k) => lum(k) >= Math.max(...cols.map(lum)) * 0.7);
+      halo = { x: (x0 + x1 + 1) / 2, y: (y0 + y1 + 1) / 2, w: (x1 - x0 + 1) / 2, col: mode(bright, cols[0]) };
+    }
+  }
   // each row's shell: the colour just inside its back (left) edge
   const shell = new Int32Array(GRID).fill(0x505050);
   for (let y = top; y <= bottom; y++) {
@@ -434,48 +491,43 @@ function build(id: number, src: Cells, real: boolean): Look {
     for (let x = x0; x <= x0 + 2; x++) if (inside(x, y)) xs.push(at(x, y));
     shell[y] = mode(xs, at(x0, y));
   }
-  // the clothes: the bottom rows' middle; the skin: the face's commonest colour that is not the hood
+  // the clothes: the bottom rows' middle
   const clothXs: number[] = [];
   for (let y = Math.max(neck + 1, bottom - 2); y <= bottom; y++) for (let x = bs.x0 + 2; x <= bs.x1 - 1; x++) if (inBody(x, y)) clothXs.push(at(x, y));
   const cloth = mode(clothXs, shell[neck]);
-  // round the sides and the back one colour, not a stripe per row (each row's back edge took its own
-  // colour: the trail's leftovers, an outline, a highlight striped the back of every head): the hood's
-  // commonest edge colour, and a hat's on top when the first rows are another colour all along
+  // a hat: the first rows another colour all along than the hood's (a band of at least two rows,
+  // not the whole head)
   let hatEnd = top - 1;
   {
     const rows: number[] = [];
     for (let y = top; y <= neck; y++) rows.push(shell[y]);
-    // (the hood's colour from the lower rows: the top ones may be a hat's)
     const hood = mode(rows.slice(Math.floor(rows.length * 0.55)), shell[neck]);
     const hatCol = shell[top];
-    if (hatCol !== hood) {
+    if (hatCol !== hood && !near(hatCol, hood)) {
       let y = top;
       while (y <= neck && (shell[y] === hatCol || near(shell[y], hatCol))) y++;
-      // (a band of at least two rows, not the whole head)
-      if (y - top >= 2 && y <= top + (neck - top) * 0.6) hatEnd = y - 1;
+      if (y - top >= 2 && y <= top + (neck - top) * 0.6) {
+        hatEnd = y - 1;
+        // (a beanie's turned-up band, a cap's brim: a row or two of another colour still the hat's)
+        for (let k = 0; k < 2 && hatEnd + 1 < neck - 4 && shell[hatEnd + 1] !== hood && !near(shell[hatEnd + 1], hood); k++) hatEnd++;
+      }
     }
     for (let y = top; y <= neck; y++) shell[y] = y <= hatEnd ? hatCol : hood;
-    for (let y = neck + 1; y <= bottom; y++) shell[y] = cloth;
   }
+  const hoodCol = shell[neck];
   const shells = new Set<number>();
   for (let y = top; y <= neck; y++) shells.add(shell[y]);
+  const shellish = (c0: number) => [...shells].some((s0) => s0 === c0 || near(s0, c0));
+  // the face's commonest colour (not the hood's nor the hat's, nor a shade of them)
   const faceXs: number[] = [];
   const hcx = (hs.x0 + hs.x1 + 1) / 2;
-  // (not the hood's nor the hat's colour, nor a shade of them: the hands took a beanie's orange)
-  const shellish = (c0: number) => [...shells].some((s0) => s0 === c0 || near(s0, c0));
-  for (let y = Math.max(top + 2, hatEnd + 2); y <= neck - 1; y++) for (let x = Math.floor(hcx) - 1; x <= hs.x1; x++) if (inHead(x, y) && !shellish(at(x, y)) && lum(at(x, y)) > 50) faceXs.push(at(x, y));
-  const skin = faceXs.length > 6 ? mode(faceXs, 0xd8b48c) : 0xd8b48c;
-  // both pieces round the shoulders' middle column (the head sits where the art has it)
-  const cx = (bs.x0 + bs.x1 + 1) / 2;
-  const v = SNARK_VOX;
-  const bw = bs.x1 - bs.x0 + 1;
-  // the face: what is inside the hood and not the hood's colour — set back in the hood's opening
-  const hoodCol = shell[neck];
+  for (let y = Math.max(top + 2, hatEnd + 2); y <= neck - 1; y++) for (let x = Math.floor(hcx) - 1; x <= hs.x1; x++) if (inHead(x, y) && !shellish(at(x, y))) faceXs.push(at(x, y));
+  const faceCol = faceXs.length > 6 ? mode(faceXs, -1) : -1;
+  // the face: what is inside the hood and not the hood's colour (hood all round it within a few cells)
   const faceIn = (x: number, y: number) => {
-    if (!inHead(x, y)) return false;
+    if (!inHead(x, y) || y <= hatEnd) return false;
     const c0 = at(x, y);
     if (c0 === hoodCol || near(c0, hoodCol) || c0 === shell[y]) return false;
-    // (inside: hood all round it within a few cells)
     let n = 0;
     for (const [dx, dy] of [
       [-3, 0],
@@ -485,74 +537,61 @@ function build(id: number, src: Cells, real: boolean): Look {
       if (inHead(x + dx, y + dy)) n++;
     return n === 3;
   };
-  // the face's cells, closed over its features' small gaps (the eyes are face too)
+  // its cells, closed over its features' small gaps (the eyes are face too)
   const faceCells = new Uint8Array(GRID * GRID);
   for (let y = top; y <= neck; y++) for (let x = 0; x < GRID; x++) if (faceIn(x, y)) faceCells[y * GRID + x] = 1;
   const closed = new Uint8Array(faceCells);
-  for (let y = top + 1; y < neck; y++)
-    for (let x = 1; x < GRID - 1; x++) {
-      if (faceCells[y * GRID + x] || !inHead(x, y)) continue;
-      const lr = faceCells[y * GRID + x - 1] && faceCells[y * GRID + x + 1],
-        ud = faceCells[(y - 1) * GRID + x] && faceCells[(y + 1) * GRID + x];
-      if (lr || ud) closed[y * GRID + x] = 1;
-    }
-  const isFace = (x: number, y: number) => x >= 0 && y >= 0 && x < GRID && y < GRID && closed[y * GRID + x] === 1;
-  // the hood's opening: an oval round the face's cells; where the face is the hood's own colour (a
-  // white face in a white hood), where a face sits in these pictures — forward and a little low
-  let fx0 = GRID,
-    fx1 = -1,
-    fy0 = GRID,
-    fy1 = -1,
-    fn = 0;
+  for (let pass = 0; pass < 2; pass++) {
+    const prev = new Uint8Array(closed);
+    for (let y = top + 1; y < neck; y++)
+      for (let x = 1; x < GRID - 1; x++) {
+        if (prev[y * GRID + x] || !inHead(x, y)) continue;
+        const lr = prev[y * GRID + x - 1] && prev[y * GRID + x + 1],
+          ud = prev[(y - 1) * GRID + x] && prev[(y + 1) * GRID + x];
+        if (lr || ud) closed[y * GRID + x] = 1;
+      }
+  }
+  // (only the largest piece of it: a stray cell of another colour on the hood is a print, not a face)
+  const faceBig = piece(
+    Int32Array.from(closed, (k) => (k ? 1 : -1)),
+    top,
+    neck,
+  );
+  let fn = 0,
+    fx = 0,
+    fy = 0;
   for (let y = top; y <= neck; y++)
     for (let x = 0; x < GRID; x++)
-      if (isFace(x, y)) {
+      if (faceBig(x, y)) {
         fn++;
-        fx0 = Math.min(fx0, x);
-        fx1 = Math.max(fx1, x);
-        fy0 = Math.min(fy0, y);
-        fy1 = Math.max(fy1, y);
+        fx += x + 0.5;
+        fy += y + 0.5;
       }
-  const headW = hs.x1 - hs.x0 + 1,
-    headHc = neck - top + 1;
-  // the eyes: the few cells of the head (under the hat, in its front two thirds) unlike its common
-  // colours — the one thing every zkSNARK's face has
-  const counts = new Map<number, number>();
-  for (let y = top; y <= neck; y++) for (let x = 0; x < GRID; x++) if (inHead(x, y)) counts.set(at(x, y), (counts.get(at(x, y)) ?? 0) + 1);
-  const common = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c0]) => c0);
-  let ex0 = GRID,
-    ex1 = -1,
-    ey0 = GRID,
-    ey1 = -1,
-    en = 0;
-  const eyeSet = new Set<number>();
-  for (let y = Math.max(top + 1, hatEnd + 1); y <= neck - 2; y++)
-    for (let x = Math.floor(hs.x0 + headW * 0.35); x <= hs.x1; x++) {
-      if (!inHead(x, y)) continue;
-      const c0 = at(x, y);
-      if (common.some((k) => k === c0 || near(k, c0)) || near(c0, shell[y])) continue;
-      eyeSet.add(y * GRID + x);
-      en++;
-      ex0 = Math.min(ex0, x);
-      ex1 = Math.max(ex1, x);
-      ey0 = Math.min(ey0, y);
-      ey1 = Math.max(ey1, y);
-    }
-  const eyes = en >= 2 && en <= 18 && ex1 - ex0 <= headW * 0.75 && ey1 - ey0 <= 4;
-  let opening =
-    fn >= 10
-      ? { x: (fx0 + fx1 + 1) / 2, y: (fy0 + fy1 + 1) / 2, rx: Math.min(headW * 0.42, (fx1 - fx0 + 1) / 2 + 0.7), ry: Math.min(headHc * 0.42, (fy1 - fy0 + 1) / 2 + 0.7) }
-      : eyes
-        ? { x: (ex0 + ex1 + 1) / 2, y: (ey0 + ey1 + 1) / 2 + 1.2, rx: Math.max(headW * 0.3, (ex1 - ex0 + 1) / 2 + 2.2), ry: Math.max(headHc * 0.3, 3.6) }
-        : { x: (hs.x0 + hs.x1 + 1) / 2 + headW * 0.1, y: top + headHc * 0.58, rx: headW * 0.32, ry: headHc * 0.3 };
-  // (the opening stays under a hat's band)
-  if (hatEnd >= top && opening.y - opening.ry < hatEnd + 1.3) {
-    const bottom0 = opening.y + opening.ry;
-    const top0 = hatEnd + 1.3;
-    opening = { ...opening, y: (top0 + bottom0) / 2, ry: Math.max(2.5, (bottom0 - top0) / 2) };
+  // the opening: the face's piece filled across its rows and down its columns (its own outline, no
+  // notches where a feature or a print cut into it)
+  const fill = new Uint8Array(GRID * GRID);
+  for (let y = top; y <= neck; y++) {
+    let a = -1,
+      b = -1;
+    for (let x = 0; x < GRID; x++) if (faceBig(x, y)) ((a = a < 0 ? x : a), (b = x));
+    if (a >= 0) for (let x = a; x <= b; x++) fill[y * GRID + x] = 1;
   }
-  // a cap's visor: the hat's lowest rows reaching out past the hood below — out of the outline,
-  // a peak of its own
+  for (let x = 0; x < GRID; x++) {
+    let a = -1,
+      b = -1;
+    for (let y = top; y <= neck; y++) if (fill[y * GRID + x]) ((a = a < 0 ? y : a), (b = y));
+    if (a >= 0) for (let y = a; y <= b; y++) if (inHead(x, y)) fill[y * GRID + x] = 1;
+  }
+  // (a face is solid: where the "face" is a pattern on the hood — a check, a camo — half of its
+  // piece is the hood's own cells between: no opening)
+  {
+    let own = 0;
+    for (let y = top; y <= neck; y++) for (let x = 0; x < GRID; x++) if (faceBig(x, y) && faceCells[y * GRID + x]) own++;
+    if (fn && own / fn < 0.62) fn = 0;
+  }
+  const isFace = (x: number, y: number) => fn >= 8 && x >= 0 && y >= 0 && x < GRID && y < GRID && fill[y * GRID + x] === 1;
+  // glasses: rows across the face where a run of five or more cells is neither the hood nor the face
+  // (frames and lenses); a cap's peak: the hat's lowest rows reaching out past the hood below
   const rightOf = (y: number) => {
     for (let x = GRID - 1; x >= 0; x--) if (inHead(x, y)) return x;
     return -1;
@@ -563,27 +602,157 @@ function build(id: number, src: Cells, real: boolean): Look {
     for (let y = hatEnd + 1; y <= Math.min(neck, hatEnd + 3); y++) hoodRight = Math.min(hoodRight, rightOf(y) < 0 ? 99 : rightOf(y));
     for (let y = Math.max(top, hatEnd - 1); y <= hatEnd; y++) if (rightOf(y) > hoodRight + 1) visor = true;
   }
-  const headShape = (x: number, y: number) => inHead(x, y) && !(visor && y <= hatEnd && x > hoodRight + 0.5);
-  // the picture for the atlas: the outline's dark line taken off (a figure in 3D has its own edge),
-  // eyes that shine marked
+  // (the face's own colour from its chin: the rows over the neck, right of the middle)
+  const chinXs: number[] = [];
+  for (let y = neck - 3; y <= neck - 1; y++) for (let x = Math.floor(hcx); x <= hs.x1; x++) if (inHead(x, y) && !shellish(at(x, y))) chinXs.push(at(x, y));
+  const chin = chinXs.length >= 3 ? mode(chinXs, faceCol) : faceCol;
+  const band = (c0: number) => c0 >= 0 && c0 !== hoodCol && !near(c0, hoodCol) && c0 !== shell[top] && (chin < 0 || (c0 !== chin && !near(c0, chin)));
+  const bandRows: { y: number; x0: number; x1: number }[] = [];
+  for (let y = Math.max(top + 2, hatEnd + 1); y <= neck - 2; y++) {
+    let best = { x0: 0, x1: -1 };
+    for (let x = hs.x0; x <= hs.x1; x++) {
+      if (!inHead(x, y) || !band(at(x, y))) continue;
+      let e = x;
+      while (e + 1 <= hs.x1 && inHead(e + 1, y) && band(at(e + 1, y))) e++;
+      if (e - x > best.x1 - best.x0) best = { x0: x, x1: e };
+      x = e;
+    }
+    if (best.x1 - best.x0 + 1 >= 5) bandRows.push({ y, ...best });
+  }
+  let lenses: { y0: number; y1: number; x0: number; x1: number } | null = null;
+  let lensX0 = GRID,
+    lensX1 = -1;
+  if (bandRows.length && bandRows.length <= 4) {
+    // (one block of rows; frames with lenses in them: two colours at least, not a stripe)
+    const ys = bandRows.map((r) => r.y);
+    const L = { y0: ys[0], y1: ys[ys.length - 1], x0: Math.min(...bandRows.map((r) => r.x0)), x1: Math.max(...bandRows.map((r) => r.x1)) };
+    const inL: number[] = [];
+    for (let y = L.y0; y <= L.y1; y++) for (let x = L.x0; x <= L.x1; x++) if (at(x, y) >= 0) inL.push(at(x, y));
+    const frame = mode(inL, -1);
+    const lensN = inL.filter((k) => k !== frame && !near(k, frame)).length;
+    if (ys[ys.length - 1] - ys[0] === ys.length - 1 && lensN >= 2) {
+      lenses = L;
+      // (the lenses' own columns: the frame may run on to the back as a strap)
+      for (let y = L.y0; y <= L.y1; y++)
+        for (let x = L.x0; x <= L.x1; x++) {
+          const k = at(x, y);
+          if (k < 0 || k === frame || near(k, frame)) continue;
+          lensX0 = Math.min(lensX0, x);
+          lensX1 = Math.max(lensX1, x);
+        }
+    }
+  }
+  // the eyes: the few cells of the face (or the head, under the hat, in its front two thirds) unlike
+  // its common colours
+  const counts = new Map<number, number>();
+  for (let y = top; y <= neck; y++) for (let x = 0; x < GRID; x++) if (inHead(x, y)) counts.set(at(x, y), (counts.get(at(x, y)) ?? 0) + 1);
+  const common = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c0]) => c0);
+  const headW = hs.x1 - hs.x0 + 1;
+  const eyeSet = new Set<number>();
+  let ex = 0,
+    en = 0,
+    eMin = GRID,
+    eMax = -1;
+  for (let y = Math.max(top + 1, hatEnd + 1); y <= neck - 2; y++)
+    for (let x = Math.floor(hs.x0 + headW * 0.35); x <= hs.x1; x++) {
+      if (!inHead(x, y)) continue;
+      const c0 = at(x, y);
+      if (common.some((k) => k === c0 || near(k, c0)) || near(c0, shell[y])) continue;
+      eyeSet.add(y * GRID + x);
+      ex += x + 0.5;
+      en++;
+      eMin = Math.min(eMin, x);
+      eMax = Math.max(eMax, x);
+    }
+  // where it shines: its eyes and its lenses, if bright (a black eye in a pale face does not)
+  const shines = (c0: number) => {
+    const r = (c0 >> 16) & 255,
+      g = (c0 >> 8) & 255,
+      b = c0 & 255;
+    const mx = Math.max(r, g, b),
+      mn = Math.min(r, g, b);
+    const sat = mx ? (mx - mn) / mx : 0;
+    return (sat > 0.45 && mx > 120) || lum(c0) > 170;
+  };
+  const glow = new Uint8Array(GRID * GRID);
+  if (en >= 2 && en <= 24)
+    for (const i of eyeSet) {
+      const c0 = c[i];
+      // (brighter than the face round it)
+      if (shines(c0) && (faceCol < 0 || lum(c0) > lum(faceCol) + 25 || sat(c0) > sat(faceCol) + 0.3)) glow[i] = 1;
+    }
+  if (lenses)
+    for (let y = lenses.y0; y <= lenses.y1; y++)
+      for (let x = lenses.x0; x <= lenses.x1; x++) {
+        const c0 = at(x, y);
+        if (c0 >= 0 && shines(c0)) glow[y * GRID + x] = 1;
+      }
+  // the picture for the atlas: the figure (the trail gone), the outline's dark line taken off (a
+  // figure in 3D has its own edge); everything else as drawn — its prints, its patterns, its shading
   const art = new Int32Array(GRID * GRID).fill(-1);
   for (let y = 0; y < GRID; y++)
     for (let x = 0; x < GRID; x++) {
       const inside = y <= neck ? inHead(x, y) : inBody(x, y);
       if (inside) art[y * GRID + x] = at(x, y);
     }
+  // sparks of the speed trail that touch the figure (left on its hood's top, its shoulders): a cell
+  // on the figure's edge, of a colour the trail has, standing alone among its neighbours (at most one
+  // of its eight of that colour) takes its neighbours' colour — an outline's run of one colour stays
+  {
+    const trail: number[] = [];
+    for (let y = top0; y <= bottom; y++)
+      for (let x = 0; x < GRID; x++) {
+        const c0 = src[y * GRID + x];
+        if (c0 >= 0 && art[y * GRID + x] < 0 && !trail.some((t) => near(t, c0))) trail.push(c0);
+      }
+    const N8 = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ];
+    for (let pass = 0; pass < 2 && trail.length; pass++)
+      for (let y = 0; y < GRID; y++)
+        for (let x = 0; x < GRID; x++) {
+          const i = y * GRID + x,
+            c0 = art[i];
+          if (c0 < 0 || glow[i] || !trail.some((t) => near(t, c0))) continue;
+          let edge = false,
+            same = 0;
+          const votes = new Map<number, number>();
+          for (const [dx, dy] of N8) {
+            const nx = x + dx,
+              ny = y + dy;
+            const q = nx < 0 || ny < 0 || nx >= GRID || ny >= GRID ? -1 : art[ny * GRID + nx];
+            if (q < 0) {
+              if (dx === 0 || dy === 0) edge = true;
+              continue;
+            }
+            if (near(q, c0)) same++;
+            else votes.set(q, (votes.get(q) ?? 0) + 1);
+          }
+          if (!edge || same > 1 || !votes.size) continue;
+          let best = -1,
+            bn = 0;
+          for (const [q, n] of votes) if (n > bn) ((bn = n), (best = q));
+          if (bn >= 2) art[i] = best;
+        }
+  }
   for (let y = 0; y < GRID; y++)
     for (let x = 0; x < GRID; x++) {
       const i = y * GRID + x;
-      if (art[i] < 0) continue;
+      if (art[i] < 0 || glow[i]) continue;
       const edge = [
         [1, 0],
         [-1, 0],
         [0, 1],
         [0, -1],
-      ].some(([dx, dy]) => (art[(y + dy) * GRID + x + dx] ?? -1) < 0 || x + dx < 0 || x + dx >= GRID);
+      ].some(([dx, dy]) => x + dx < 0 || x + dx >= GRID || y + dy < 0 || y + dy >= GRID || art[(y + dy) * GRID + x + dx] < 0);
       if (!edge) continue;
-      // the neighbour toward the middle
       let best = -1;
       for (const [dx, dy] of [
         [1, 0],
@@ -599,95 +768,129 @@ function build(id: number, src: Cells, real: boolean): Look {
       }
       if (best >= 0 && lum(art[i]) < lum(best) * 0.55) art[i] = best;
     }
-  // the drawing's hood shading (its greys, its highlights, its outline) flattened to the hood's own
-  // colour: a 3D hood has its own light — only the face, the eyes, a mask stand out of it. The hood's
-  // palette is what its back half (the 3/4 view's far side) and its outline are drawn in.
-  {
-    const pal = new Map<number, number>();
-    const outside = (x: number, y: number) => x < 0 || y < 0 || x >= GRID || y >= GRID || !inHead(x, y);
-    for (let y = Math.max(top, hatEnd + 1); y <= neck; y++)
-      for (let x = 0; x < GRID; x++) {
-        if (!inHead(x, y)) continue;
-        let edge = false;
-        for (let dy = -2; dy <= 2 && !edge; dy++) for (let dx = -2; dx <= 2 && !edge; dx++) if (outside(x + dx, y + dy)) edge = true;
-        if (!edge) continue;
-        pal.set(at(x, y), (pal.get(at(x, y)) ?? 0) + 1);
-      }
-    const hoodish = [...pal.entries()].filter(([, n]) => n >= 2).map(([c0]) => c0);
-    // (a shade of the hood: its own colour lighter or darker — greys round a black hood, a highlight)
-    const sat = (c0: number) => {
-      const r = (c0 >> 16) & 255,
-        g = (c0 >> 8) & 255,
-        b = c0 & 255;
-      const mx = Math.max(r, g, b),
-        mn = Math.min(r, g, b);
-      return mx ? (mx - mn) / mx : 0;
-    };
-    const dist = (a: number, b: number) => Math.abs(((a >> 16) & 255) - ((b >> 16) & 255)) + Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)) + Math.abs((a & 255) - (b & 255));
-    const shadeOfHood = (c0: number) => dist(c0, hoodCol) < 110 || (sat(c0) < 0.2 && sat(hoodCol) < 0.2 && Math.abs(lum(c0) - lum(hoodCol)) < 95);
-    for (let y = Math.max(top, hatEnd + 1); y <= neck; y++)
-      for (let x = 0; x < GRID; x++) {
-        const i = y * GRID + x;
-        if (art[i] < 0 || !inHead(x, y)) continue;
-        // (never the eyes, nor a face plainly unlike its hood)
-        if (eyes && eyeSet.has(i)) continue;
-        if (isFace(x, y) && dist(art[i], hoodCol) > 140) continue;
-        if (hoodish.includes(art[i]) || shadeOfHood(art[i])) art[i] = hoodCol;
-      }
-  }
-  // where the picture shows on the hood: inside its opening (an oval, soft at its edge) and a hat's front
-  const sm = (a: number, b: number, x: number) => {
-    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-    return t * t * (3 - 2 * t);
-  };
-  const artMask = (mx: number, my: number) => {
-    const e = Math.hypot((mx - opening.x) / opening.rx, (my - opening.y) / opening.ry);
-    const inOpening = 1 - sm(0.86, 1.0, e);
-    const onHat = hatEnd >= top ? 1 - sm(hatEnd + 0.7, hatEnd + 1.2, my) : 0;
-    return Math.max(inOpening, onHat);
-  };
   const slot = takeSlot();
-  slotWrite(slot, artPixels(art, artMask));
-  if (import.meta.env?.DEV) debugArt.set(id, { src: new Int32Array(src), art, opening, hood: hoodCol, neck, top, hatEnd });
-  const hood = new THREE.Color().setHex(hoodCol, THREE.SRGBColorSpace);
-  const hat = hatEnd >= top ? new THREE.Color().setHex(shell[top], THREE.SRGBColorSpace) : null;
-  const headIn = {
+  // (the eyes and the lenses shine; the drawing's steps of shading on cloth blended soft — a shade
+  // next to a shade of itself — while what has contrast stays crisp: eyes, a mask, logos, checks,
+  // camo, a skeleton's ribs)
+  const softCell = new Float32Array(GRID * GRID);
+  const unlike = (a: number, b: number) => {
+    if (a < 0 || b < 0) return false;
+    if (Math.abs(lum(a) - lum(b)) > 55) return true;
+    const sa = sat(a),
+      sb = sat(b);
+    if (sa < 0.18 && sb < 0.18) return false;
+    return Math.abs(sa - sb) > 0.3 || hueDist(a, b) > 0.07;
+  };
+  for (let y = 0; y < GRID; y++)
+    for (let x = 0; x < GRID; x++) {
+      const i = y * GRID + x;
+      if (art[i] < 0 || glow[i] || (y <= neck && isFace(x, y) && fn < 60)) continue;
+      let ok = true;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ])
+        if (unlike(art[i], x + dx < 0 || x + dx >= GRID || y + dy < 0 || y + dy >= GRID ? -1 : art[(y + dy) * GRID + x + dx])) ok = false;
+      softCell[i] = ok ? 1 : 0;
+    }
+  slotWrite(
     slot,
-    shape: new Fine(headShape, 3),
-    opening,
+    artPixels(
+      art,
+      (mx, my) => glow[Math.min(GRID - 1, Math.floor(my)) * GRID + Math.min(GRID - 1, Math.floor(mx))],
+      (mx, my) => softCell[Math.min(GRID - 1, Math.floor(my)) * GRID + Math.min(GRID - 1, Math.floor(mx))],
+    ),
+  );
+  // the head's shape: its cells, a cap's peak and the glasses' ends that stick out cut off (they are
+  // parts of their own)
+  const lensRight = lenses ? Math.max(rightOf(lenses.y0 - 1), rightOf(lenses.y1 + 1)) : 99;
+  const headShape = (x: number, y: number) => inHead(x, y) && !(visor && y <= hatEnd && x > hoodRight + 0.5) && !(lenses && y >= lenses.y0 && y <= lenses.y1 && x > lensRight);
+  const shape = new Fine(headShape, 3);
+  // the front: the face's middle (or the glasses', the eyes'), as wide round the head as it is drawn
+  let fx0 = GRID,
+    fx1 = -1;
+  for (let y = top; y <= neck; y++)
+    for (let x = 0; x < GRID; x++)
+      if (isFace(x, y)) {
+        fx0 = Math.min(fx0, x);
+        fx1 = Math.max(fx1, x);
+      }
+  // (the head's own right edge at the face: not a cap's peak, not glasses sticking out)
+  const edges: number[] = [];
+  for (let y = Math.max(top + 1, hatEnd + 1); y <= neck - 1; y++) if (!lenses || y < lenses.y0 || y > lenses.y1) edges.push(rightOf(y) + 1);
+  const headRight = edges.length ? [...edges].sort((a, b) => a - b)[Math.floor(edges.length / 2)] : hs.x1 + 1;
+  const eyesOk = en >= 2 && en <= 24 && eMax - eMin + 1 <= headW * 0.75 && eMax - eMin >= 2;
+  // the front: between the eyes (or the lenses), else the face's middle
+  const c0 = lenses && lensX1 >= lensX0 ? (lensX0 + Math.min(lensX1 + 1, headRight)) / 2 : eyesOk ? (eMin + eMax + 1) / 2 : fn >= 8 ? (fx0 + fx1 + 1) / 2 : headRight - headW * 0.3;
+  // its right (the far side, foreshortened) out to the head's edge; its left as wide, or wider where
+  // the face is drawn wider (up to half as much again); a band of hood left behind it for the back
+  // (both eyes, both lenses inside it)
+  const feat = lenses && lensX1 >= lensX0 ? [lensX0, lensX1] : eyesOk ? [eMin, eMax] : [c0, c0];
+  const fr = Math.max(2, headRight - c0, feat[1] + 1.6 - c0);
+  let fl = Math.min(fr * 1.5, Math.max(fr, fn >= 8 ? c0 - fx0 : fr));
+  fl = Math.max(2, c0 - feat[0] + 0.8, Math.min(fl, c0 - hs.x0 - 3.2));
+  const front = { c: c0, fl, fr };
+  // the face's left edge on each row
+  const edge = new Float32Array(GRID).fill(c0 - fl);
+  for (let y = top; y <= neck; y++)
+    for (let x = 0; x < GRID; x++)
+      if (isFace(x, y)) {
+        edge[y] = Math.min(c0 - fl, x);
+        break;
+      }
+  const headR = ((hs.x1 - hs.x0 + 1) / 2) * SNARK_VOX * HEAD_K * 0.94;
+  const phi = Math.min(1.15, Math.max(0.55, (((fl + fr) / 2) * SNARK_VOX * HEAD_K) / headR));
+  if (import.meta.env?.DEV) debugArt.set(id, { src: new Int32Array(src), art, glow, face: Uint8Array.from({ length: GRID * GRID }, (_, i) => (isFace(i % GRID, (i / GRID) | 0) ? 1 : 0)), lenses, halo, yaw: phi, cx: front.c, neck, top, hatEnd, visor });
+  const v = SNARK_VOX;
+  const hv = v * HEAD_K;
+  const col = (k: number) => new THREE.Color().setHex(k, THREE.SRGBColorSpace);
+  // the peak's colour: the cells it is drawn in
+  let visorCol: THREE.Color | null = null;
+  if (visor) {
+    const xs: number[] = [];
+    for (let y = Math.max(top, hatEnd - 1); y <= hatEnd; y++) for (let x = hoodRight + 1; x < GRID; x++) if (inHead(x, y)) xs.push(at(x, y));
+    visorCol = col(mode(xs, shell[top]));
+  }
+  const headIn = {
+    art: { slot, c: front.c, fl: front.fl, fr: front.fr, xl: hs.x0 + 1.2, edge, phi, ay: neck + 1, vy: hv },
+    shape,
+    face: fn >= 8 ? new Fine(isFace, 4) : null,
+    faceWide: fn >= 8 ? new Fine(isFace, 9) : null,
     top,
     neck,
-    cx,
-    // (the head a little smaller than the picture's: still a big-headed zkSNARK, less of a bobblehead)
-    v: v * HEAD_K,
-    hood,
-    hat,
+    v: hv,
     hatEnd,
-    visor,
+    visor: visorCol,
+    knit: hatEnd >= top && !visor,
+    halo: halo ? { x: halo.x, y: halo.y, w: halo.w, col: col(halo.col) } : null,
+    lenses,
   };
   const { geo: head } = headGeo(headIn);
   const { geo: headFar } = lowDetail(() => headGeo(headIn));
-  // the torso: as wide as the picture's shoulders (a little narrower), down past them to a hoodie's hem
+  // the torso: as wide as the picture's shoulders (a little narrower), down past them to a hem
   const ext = 3;
+  const bw = bs.x1 - bs.x0 + 1;
   const halfW = (bw / 2) * v * BODY_SX;
   const H = (bottom + ext - neck) * v;
   const bodyIn = {
-    slot,
-    shape: new Fine((x: number, y: number) => inBody(x, y), 1),
-    neck,
-    bottom,
-    ext,
-    cx,
-    v,
-    sx: BODY_SX,
+    // (the chest under the face: the picture's body turned as its head is)
+    art: torsoWrap(slot, front.c, bs, neck, bottom, H / v),
     halfW,
     H,
-    cloth: new THREE.Color().setHex(cloth, THREE.SRGBColorSpace),
+    cloth: col(cloth),
   };
   const body = bodyGeo(bodyIn);
   const bodyFar = lowDetail(() => bodyGeo(bodyIn));
   let h = Math.imul(id ^ 0x5bd1e995, 0x27d4eb2d) >>> 0;
   const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0) / 4294967296);
+  // its limbs in its own colours: sleeves of its top, hands of its face (or gloves of its top, a
+  // face that is a mask or a void), trousers of its top darker, shoes of its hat, its eyes or its hood
+  const eyeCols = [...glow.keys()].filter((i) => glow[i]).map((i) => c[i]);
+  const accent = hatEnd >= top ? shell[top] : eyeCols.length ? mode(eyeCols, hoodCol) : -1;
+  const skinOk = fn >= 8 && faceCol >= 0 && lum(faceCol) > 70 && !shines(faceCol);
+  const shoes = accent >= 0 ? accent : shade(hoodCol, 0.75);
   return {
     id,
     real,
@@ -695,31 +898,49 @@ function build(id: number, src: Cells, real: boolean): Look {
     body,
     headFar,
     bodyFar,
-    headH: (neck - top + 1) * v * HEAD_K,
+    headH: (neck - top + 1) * hv,
     bodyH: H,
     halfW,
     cloth,
-    // (the street's look: trousers and sneakers of their own, by the number — denim, black, khaki,
-    // grey or the top's own colour darker; white, black or bright trainers on a light sole)
-    ...dress(rnd, cloth),
-    skin,
+    trousers: lum(cloth) < 45 ? 0x26262c : shade(cloth, 0.6),
+    shoes,
+    sole: lum(shoes) > 170 ? 0x34343a : 0xeeeeea,
+    skin: skinOk ? faceCol : shade(cloth, 0.85),
     bh: 0.96 + rnd() * 0.08,
     slot,
   };
 }
 
-function dress(rnd: () => number, cloth: number) {
-  const TROUSERS = [0x2e3a55, 0x3f5d8c, 0x1d1d23, 0x6c6356, 0x8b7b58, 0x4b505b, shade(cloth, 0.58)];
-  const SHOES: [number, number][] = [
-    [0xeeeeea, 0xb9b9b4],
-    [0x1c1c22, 0xe8e8e2],
-    [0xeeeeea, 0xd8d2c4],
-    [0x2a2a30, 0x2a2a30],
-    [0xeeeeea, 0x9a9a96],
-    [0x1c1c22, 0xe8e8e2],
-    [0xb83434, 0xf0f0ea],
-    [0x3a3a40, 0x9a9a96],
-  ];
-  const [shoes, sole] = SHOES[Math.floor(rnd() * SHOES.length)];
-  return { trousers: TROUSERS[Math.floor(rnd() * TROUSERS.length)], shoes, sole };
+/** The torso's wrap: its chest under the face, as far right as the picture's shoulders go, the back from its left. */
+function torsoWrap(slot: number, c: number, bs: { x0: number; x1: number }, neck: number, bottom: number, Hc: number) {
+  const cc = Math.min(bs.x1 - 1, Math.max(bs.x0 + 3, c));
+  const fr = Math.max(2.5, Math.min(bs.x1 + 1 - cc, (bs.x1 - bs.x0 + 1) * 0.4));
+  const fl = Math.max(2.5, Math.min(fr * 1.3, cc - bs.x0 - 3));
+  return { slot, c: cc, fl, fr, xl: bs.x0 + 1.2, phi: 1.05, ay: neck + 1 + Hc, vy: SNARK_VOX, last: bottom, first: neck + 1 };
 }
+
+/** How far apart two colours' hues are (0…0.5 of the wheel). */
+function hueDist(a: number, b: number) {
+  const d = Math.abs(hue(a) - hue(b));
+  return Math.min(d, 1 - d);
+}
+/** A colour's hue (0…1 round the wheel; 0 for a grey). */
+function hue(c0: number) {
+  const r = ((c0 >> 16) & 255) / 255,
+    g = ((c0 >> 8) & 255) / 255,
+    b = (c0 & 255) / 255;
+  const mx = Math.max(r, g, b),
+    mn = Math.min(r, g, b),
+    d = mx - mn;
+  if (d < 1e-6) return 0;
+  const h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return h / 6;
+}
+const sat = (c0: number) => {
+  const r = (c0 >> 16) & 255,
+    g = (c0 >> 8) & 255,
+    b = c0 & 255;
+  const mx = Math.max(r, g, b),
+    mn = Math.min(r, g, b);
+  return mx ? (mx - mn) / mx : 0;
+};

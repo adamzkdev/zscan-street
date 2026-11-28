@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { TrafficBlocker } from "../scene/goldengate";
 import { profile } from "../game/profile";
 import type { WalkControls } from "../interior/walk";
 import type { CityTraffic } from "../scene/citytraffic";
@@ -8,8 +9,10 @@ import { Snark } from "../scene/snark";
 import { CAR_VIEWS, GtaCamera } from "./camera";
 import { StreetSolid } from "./collide";
 import { KEYS } from "../scene/keys/plan";
+import { ISLES } from "../scene/isles/plan";
 import { F as WOODS } from "../scene/forest/land";
-import { DOOR_HALF, Doors, ropes, type DoorSpot } from "./doors";
+import { doorDepth, doorHalf, Doors, type DoorSpot, type DoorStyle } from "./doors";
+import { clearTrees } from "../scene/real/trees";
 import { FootPlayer } from "./foot";
 import { FrontEnd, type StartAt } from "./frontend";
 import { DEFAULTS, GtaHud, type MapData, type Settings } from "./hud";
@@ -36,6 +39,8 @@ import { SkyClock, WEATHER_NAME, weatherIcon } from "./skyclock";
 import type { Daylight } from "../scene/daylight";
 import { SwimFx } from "./swim";
 import { Beach } from "./beach";
+import { Sitters } from "./sitters";
+import type { IsleSeat } from "../scene/isles/types";
 import { DriveCar, SPECS, type CarBox, type VehicleKind } from "./vehicle";
 import { MOTO_SEAT } from "./models";
 import { Home } from "./home";
@@ -76,6 +81,10 @@ export interface GtaHost {
   dynamicHit(x: number, z: number): boolean;
   /** The walk-in places' doors, and going in. */
   doors(): DoorSpot[];
+  /** A place's facade as drawn, seen from (x, z) looking along −(fx, fz) (its own model; null: none there). */
+  placeFace?(key: string, x: number, z: number, fx: number, fz: number): { x: number; y: number; z: number } | null;
+  /** A place's footprint (its own model's box). */
+  placeBox?(key: string): { x0: number; x1: number; z0: number; z1: number } | null;
   enter(key: string): void;
   /** The city's buildings' fronts on the streets (the bigger city's included). */
   facades(): { type: string; face: string; x0: number; x1: number; z: number; out: THREE.Vector3; door?: { x: number; z: number } }[];
@@ -163,6 +172,10 @@ export interface GtaHost {
   carHold(p: THREE.Vector3, r: number): boolean;
   /** The Golden Gate's deck, Orchard Keys and its tunnel: outside what the street's own plan (its nav) knows. */
   beyond(x: number, z: number): boolean;
+  /** More walks for the passers-by (the islands' promenades and beaches): [ax, az, bx, bz]. */
+  walks?(): [number, number, number, number][];
+  /** The islands' people who stay put: their cafés' chairs, their stalls (src/gta/sitters.ts). */
+  seats?(): IsleSeat[];
   /** The sea you can wade and swim in there (Orchard Keys' beaches): its floor and its surface, or null. */
   sea?(x: number, z: number): { floor: number; surface: number } | null;
   /** The ear under the water (muffled) or not. */
@@ -174,6 +187,46 @@ const SETTINGS_KEY = "zstreet.gta.settings";
 const SCOOTER_SEAT = { x: -0.34, y: 0.72 };
 /** The game's day and night (s). */
 const ACTIVE_KEY = "zstreet.gta.alive";
+
+/**
+ * The places whose own door is the entrance (drawn with the building, a real door already: the
+ * statue's pedestal door, the tower's ticket booth, the Burj's glazed lobby under its porte-cochère):
+ * only the ring where E takes you in. Every other place gets an ordinary front door drawn on its facade.
+ */
+const OWN_DOOR = new Set(["statue", "eiffel", "arab"]);
+/**
+ * Each place's front door in its own manner (src/gta/doors.ts): an arched bronze pair in stone for the
+ * classical monuments, a revolving door for the towers, a glazed shopfront entrance for the shops and
+ * halls; a pair of glass doors for the rest.
+ */
+const DOOR_STYLE: Record<string, DoorStyle> = {
+  // (the opera house's foyer: its glass wall under the shells)
+  opera: "glass",
+  museum: "classic",
+  university: "classic",
+  cemetery: "classic",
+  colosseum: "classic",
+  bigben: "classic",
+  library: "classic",
+  reserve: "classic",
+  pyramid: "classic",
+  prison: "classic",
+  noir: "revolving",
+  zodl: "revolving",
+  zlab: "revolving",
+  vizor: "revolving",
+  zsalab: "revolving",
+  tower: "revolving",
+  "tower-halo": "revolving",
+  "tower-orchard": "revolving",
+  "tower-sapling": "revolving",
+  needle: "revolving",
+  hotel: "revolving",
+  mall: "shop",
+  gamehouse: "shop",
+  mempool: "shop",
+  factory: "shop",
+};
 
 /** Where a driver (and a passenger, one vehicle in three) sit in a vehicle of `kind` (its frame: +x ahead, +z its right), and how small they are drawn under its roof. */
 function seatsOf(kind: VehicleKind, obj: THREE.Object3D): { at: THREE.Vector3; scale: number }[] {
@@ -217,10 +270,12 @@ export class GtaMode {
   readonly missions: Missions;
   readonly sound: GtaSound;
   readonly radio: CarRadio;
-  /** Your home: furnishing it, its radio (homeedit.ts; the flat is interior/home). */
+  /** Your home: furnishing it, its radio (homeedit.ts; the villa's rooms are interior/home). */
   readonly homeEdit: HomeEdit;
   readonly swim: SwimFx;
   readonly beach: Beach;
+  /** The islands' cafés' customers and stallholders. */
+  private sitters: Sitters;
   readonly heat: Heat;
   readonly solid: StreetSolid;
   readonly doors: Doors;
@@ -255,6 +310,8 @@ export class GtaMode {
   private horn = false;
   private lastHitAt = 0;
   private wasIndoors = false;
+  /** The door you went in by (you come back out of it). */
+  private cameIn: DoorSpot | null = null;
   private heartbeat = 0;
   private reactT = 0;
   /** The game's own day: seconds into it (−1: set it again from the setting). */
@@ -380,6 +437,7 @@ export class GtaMode {
     this.peds = new Peds(host.scene);
     // Orchard Beach's own people, and the passers-by's walks along its sand
     this.beach = new Beach(host.scene);
+    this.sitters = new Sitters(() => host.seats?.() ?? []);
     this.peds.extra = Beach.walks();
     this.peds.events = {
       hitMe: (dmg, x, z) => this.hurtMe(dmg, x, z),
@@ -387,7 +445,9 @@ export class GtaMode {
     };
     // the figures' art atlas is written through the street's renderer
     snarkRenderer(host.renderer);
-    this.people = new People3D(host.scene, (x, z, r) => [...this.peds.near(x, z, r), ...this.beach.near(x, z, r), ...host.people3d(x, z, r), ...this.drivers(x, z)]);
+    this.people = new People3D(host.scene, (x, z, r) => [...this.peds.near(x, z, r), ...this.beach.near(x, z, r), ...this.sitters.near(x, z, r), ...host.people3d(x, z, r), ...this.drivers(x, z)]);
+    // (the zkSNARKs' eyes, lenses and halos glow at night)
+    this.people.night = () => host.night();
     this.breakables = new Breakables(this.debris);
     this.props = new StreetProps(host.scene, this.debris);
     host.interiorWalker.mover = () => this.active;
@@ -397,11 +457,17 @@ export class GtaMode {
       area: { x0: host.bounds.x0 - 4, x1: host.bounds.x1 + 4, z0: host.bounds.z0 - 4, z1: host.bounds.z1 + 4 },
       // (and Orchard Keys, across the bridge, in a picture of its own)
       // (across the strait: the woods' road down off the bridge, the tunnel, the town)
-      extra: [{ x0: KEYS.x0, x1: KEYS.x1, z0: Math.min(KEYS.z0, WOODS.z0), z1: KEYS.z1 }],
-      movers: () => [...host.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, this.front.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])],
+      // (and each island round the city, in a picture of its own made as you come near: src/scene/isles)
+      extra: [{ x0: KEYS.x0, x1: KEYS.x1, z0: Math.min(KEYS.z0, WOODS.z0), z1: KEYS.z1 }, ...ISLES.map((i) => ({ ...i.box, lazy: true }))],
+      movers: () => this.movers(),
       surface: (x, z) => this.roads.surface(x, z),
       road: (x, z) => this.roads.road(x, z),
     });
+    // an island's picture made (or let go): its doors and its pavements found again
+    this.solid.onMore = () => {
+      this.buildingSpots = null;
+      this.peds.relines();
+    };
     host.scene.add(this.player.group);
     this.player.group.visible = false;
     // the walker's own movement steps aside while the game moves it
@@ -532,16 +598,17 @@ export class GtaMode {
   }
 
   /**
-   * Into the game as zkSNARK #id: at home (src/gta/home.ts) by default — inside your penthouse, your
-   * car parked in front — else (`home: false`) on the street by your car, where the menu shot it.
+   * Into the game as zkSNARK #id: at home (src/gta/home.ts) by default — inside your villa on
+   * Orchard Keys, your car and your bike in its forecourt — else (`home: false`) on the street by
+   * your car, where the menu shot it.
    */
   play(id = FrontEnd.chosen(), at: StartAt | null = null, o: { home?: boolean } = {}) {
     const h = this.host;
     if (!h.walking()) h.setWalking(true);
     if (!h.walking()) return;
-    // you start at home (src/gta/home.ts): by its door, your car in front, then inside, by the lift
+    // you start at home (src/gta/home.ts): by its door, your car in the forecourt, then inside, in the hall
     const site = o.home === false ? null : Home.site;
-    const home = site ? homeStart(site, (x, z) => this.roads.road(x, z), (x, z) => this.roads.nearest(x, z)) : null;
+    const home = site ? homeStart(site) : null;
     if (home) at = home;
     if (at) h.walker.place(new THREE.Vector3(at.x, h.curb, at.z), at.heading, h.curb);
     this.active = true;
@@ -588,10 +655,7 @@ export class GtaMode {
     if (!this.solid.ready) {
       void this.solid.build().then(() => {
         if (!this.active) return;
-        this.placeSpots = this.host.doors().flatMap((d) => this.snapDoor(d) ?? []);
-        this.buildingSpots = null;
-        this.doors.set(this.placeSpots);
-        this.computeAccess();
+        void this.findPlaceDoors();
       });
       setTimeout(() => this.active && void this.solid.build(), 40_000);
     }
@@ -603,7 +667,7 @@ export class GtaMode {
       this.parked.push(car);
     }
     if (!this.parked.some((c) => c.kind === "gt")) this.spawnGt();
-    if (home) this.parkHome(home.car);
+    if (home) this.parkHome(home.car, site?.bike);
     this.scatterBikes();
     if (!GtaHud.coached()) this.hud.coach(0);
     else this.hud.toast(`zkSNARK #${id}`, "in ZStreet · the chain is live", "gold");
@@ -611,8 +675,8 @@ export class GtaMode {
     if (home) h.enter("home");
   }
 
-  /** Your GT (and a bike behind it) parked in front of your home, wherever they were. */
-  private parkHome(c: { x: number; z: number; yaw: number }) {
+  /** Your GT and your bike parked at home (the bike behind the car unless the house says where), wherever they were. */
+  private parkHome(c: { x: number; z: number; yaw: number }, at?: { x: number; z: number; yaw: number }) {
     const gt = this.parked.find((v) => v.kind === "gt" && v !== this.car);
     if (!gt) return;
     gt.place(c.x, c.z, c.yaw);
@@ -625,10 +689,16 @@ export class GtaMode {
       this.host.scene.add(bike.group);
       this.parked.push(bike);
     }
-    bike.place(c.x - fx * back, c.z - fz * back, c.yaw);
+    if (at) bike.place(at.x, at.z, at.yaw);
+    else bike.place(c.x - fx * back, c.z - fz * back, c.yaw);
+    // (standing on the ground they are parked on: a forecourt is the kerb's height, not the road's)
+    for (const v of [gt, bike]) {
+      const p = v.group.position;
+      p.y = this.host.carSurface(p.x, p.z) ?? this.roads.surface(p.x, p.z);
+    }
   }
 
-  /** Home: a waypoint to your building's door (the map's ⌂, the STORE's HOME tab). */
+  /** Home: a waypoint to your villa's door (the map's ⌂, the STORE's HOME tab). */
   goHome() {
     const s = Home.site;
     if (!s) return false;
@@ -985,7 +1055,12 @@ export class GtaMode {
     const h = this.host;
     const solid = this.solid;
     this.cam.follow(dt, pl.facing, pl.speed);
-    this.cam.foot(dt, pl.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z) && (solid.topAt(x, z) ?? 0) > 3.6 && !solid.thinAt(x, z)) || (!h.beyond(x, z) && h.nav.wall(x, z)) || this.crown(x, z) });
+    // (the camera's walls: the city's plan in the city; beyond it — Orchard Keys, your villa, the woods,
+    // the islands — anything in the solid shape standing over your waist that is not a lone post or trunk.
+    // Not "what reaches the slab's top": a wall taller than the slab shows there only by its sheared
+    // faces, a metre or two up, never at the top — the camera swung through every house out there, and
+    // out of your villa's door it stood inside the hall, the door's back filling the picture)
+    this.cam.foot(dt, pl.pos, { wall: (x, z) => (h.beyond(x, z) ? solid.ready && (solid.topAt(x, z) ?? -9) > this.player.pos.y + 0.85 && !solid.thinAt(x, z) : h.nav.wall(x, z)) || this.crown(x, z) });
   }
 
   /** Out of the car: on the driver's side if there is room, else the other. */
@@ -996,8 +1071,30 @@ export class GtaMode {
     const p = car.group.position;
     const rx = Math.sin(car.yaw),
       rz = Math.cos(car.yaw);
-    let spot = { x: p.x - rx * (car.spec.wid / 2 + 0.9), z: p.z - rz * (car.spec.wid / 2 + 0.9) };
-    if (this.host.footBlocked(spot.x, spot.z)) spot = { x: p.x + rx * (car.spec.wid / 2 + 0.9), z: p.z + rz * (car.spec.wid / 2 + 0.9) };
+    const fx = Math.cos(car.yaw),
+      fz = -Math.sin(car.yaw);
+    // the driver's side, else the other, else behind, else in front: the first spot a body stands on
+    // (the street's rule and the solid shape both: a planter, a wall, a pool's edge beside a parked car
+    // put you inside it)
+    const side = car.spec.wid / 2 + 0.9,
+      end = car.spec.len / 2 + 0.8;
+    const stands = (x: number, z: number) => {
+      if (this.host.footBlocked(x, z)) return false;
+      // (a deck, the rock, the woods: their own rules; off the solid shape's picture: the street's)
+      if (!this.solid.ready || this.host.footSpecial(x, z)) return true;
+      const t = this.solid.topAt(x, z);
+      if (t === undefined) return true;
+      // (nothing in the slab: water, a hole — unless the car stands over the slab, on a deck)
+      if (t !== t) return p.y > 2.2;
+      return Math.abs(t - p.y) < 0.75 && this.solid.foot(x, z, t).ok;
+    };
+    const spots = [
+      { x: p.x - rx * side, z: p.z - rz * side },
+      { x: p.x + rx * side, z: p.z + rz * side },
+      { x: p.x - fx * end, z: p.z - fz * end },
+      { x: p.x + fx * end, z: p.z + fz * end },
+    ];
+    const spot = spots.find((s) => stands(s.x, s.z)) ?? spots.find((s) => !this.host.footBlocked(s.x, s.z)) ?? spots[0];
     this.car = null;
     this.radio.car(false);
     if (car.spec.bike) this.dismount();
@@ -1106,6 +1203,7 @@ export class GtaMode {
   // ---- every frame ------------------------------------------------------------------------------------
 
   update(dt: number) {
+    this.frameNo++;
     if (this.front.open) {
       this.front.update(dt);
       // the street's people round the shot, in 3D
@@ -1131,9 +1229,58 @@ export class GtaMode {
       h.scene.add(this.player.group);
       this.debris.into(h.scene);
       const w = h.walker.camera.position;
-      this.player.place(w.x, h.walker.floor, w.z, h.walker.heading);
+      // out of the door you went in by: on its step, a pace out, your back to it (facing the street)
+      const d = this.cameIn ?? this.placeSpots.filter((p) => Math.hypot(p.x - w.x, p.z - w.z) < 30).sort((p, q) => Math.hypot(p.x - w.x, p.z - w.z) - Math.hypot(q.x - w.x, q.z - w.z))[0];
+      this.cameIn = null;
+      if (d && !d.bare) {
+        const out = Math.atan2(-d.fx, -d.fz);
+        // a pace out on the door's own floor (or the step there: a door up a flight of steps), beside
+        // whatever stands there (a fountain's basin, a post)
+        // (none: where the street put its walker out of the place, as before)
+        let x = w.x,
+          z = w.z,
+          y = h.walker.floor;
+        // (the street's walk rules read the walker's floor: it stands at the door's own — a door up on
+        // the rock, a podium — not where the street last had it)
+        const was = h.walker.floor;
+        // (only where the door stands on that raised floor itself: the rock's top, a deck)
+        const g17 = h.ground(d.x + d.fx * 1.7, d.z + d.fz * 1.7);
+        const special = h.footSpecial(d.x + d.fx * 1.7, d.z + d.fz * 1.7) && g17 !== null && Math.abs(g17 - d.y) < 0.3;
+        // (its floor is read-only from outside: the walk's own field)
+        const wk = h.walker as unknown as { floorY: number };
+        if (special) wk.floorY = d.y;
+        search: for (const k of [1.7, 2.2, 1.2, 2.8])
+          for (const a of [0, 0.8, -0.8, 1.6, -1.6]) {
+            const px = d.x + d.fx * k - d.fz * a,
+              pz = d.z + d.fz * k + d.fx * a;
+            // (the rock, the bridge, the woods: their own rules, their own floors)
+            if (h.footSpecial(px, pz)) {
+              if (h.footBlocked(px, pz)) continue;
+              ((x = px), (z = pz), (y = h.ground(px, pz) ?? d.y));
+              break search;
+            }
+            const t = this.solid.topAt(px, pz);
+            // (off the solid shape's picture: the street's own rule)
+            if (t === undefined || t !== t) {
+              if (h.footBlocked(px, pz)) continue;
+              ((x = px), (z = pz), (y = h.ground(px, pz) ?? d.y));
+              break search;
+            }
+            if (Math.abs(t - d.y) > 0.7 || !this.solid.foot(px, pz, t).ok) continue;
+            ((x = px), (z = pz), (y = t));
+            break search;
+          }
+        // (none found: the walker's floor as it was)
+        if (special) wk.floorY = x === w.x && z === w.z ? was : y;
+        this.player.place(x, y, z, out);
+        this.cam.behind(out);
+        // (the street put its walker out of the place's door on its own: this door wins)
+        this.placed = false;
+      } else {
+        this.player.place(w.x, h.walker.floor, w.z, h.walker.heading);
+        this.cam.behind(h.walker.heading);
+      }
       this.player.group.visible = true;
-      this.cam.behind(h.walker.heading);
       this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.55));
     }
     if (this.placed) {
@@ -1224,8 +1371,13 @@ export class GtaMode {
         this.player.place(t.x, this.solid.topAt(t.x, t.z) ?? 0.2, t.z, d.fz > 0 ? Math.PI : 0);
         this.cam.behind(this.player.facing, -0.15);
         this.cam.snap(this.player.pos.clone().setY(this.player.pos.y + 1.35));
-      } else if (d.key.startsWith("building:")) this.host.enterBuilding({ x: d.x, z: d.z, fx: d.fx, fz: d.fz, type: d.type ?? "office", name: d.label, seed: d.seed ?? 1 });
-      else this.host.enter(d.key);
+      } else if (d.key.startsWith("building:")) {
+        this.cameIn = d;
+        this.host.enterBuilding({ x: d.x, z: d.z, fx: d.fx, fz: d.fz, type: d.type ?? "office", name: d.label, seed: d.seed ?? 1 });
+      } else {
+        this.cameIn = d;
+        this.host.enter(d.key);
+      }
     }
     if (this.hud.coaching && i.hit("Enter")) this.hud.coach(-1);
   }
@@ -1322,13 +1474,14 @@ export class GtaMode {
           const w = Math.min(1, Math.max(0, (depth - 0.95) / 0.4));
           return sea.floor + (afloat - sea.floor) * w * w * (3 - 2 * w);
         }
+        // (a place's own floors first: a door up on them — the opera's at the top of its steps — is theirs)
+        const g = h.ground(x, z);
+        if (g !== null) return g;
         if (solid.ready && this.doorway(x, z)) {
           // the steps up to a door: climbed; anything higher walked past
           const t = solid.topAt(x, z) ?? pl.floor;
           return t === t && t < pl.floor + 1.05 ? Math.max(-0.05, t) : pl.floor;
         }
-        const g = h.ground(x, z);
-        if (g !== null) return g;
         if (!solid.ready) return h.curb;
         const f = solid.foot(x, z, Math.max(pl.floor, feet));
         return f.ok && Number.isFinite(f.floor) ? Math.max(-0.05, f.floor) : pl.floor;
@@ -1338,7 +1491,7 @@ export class GtaMode {
     if (follow && i.idleLook > 0.6) this.cam.follow(dt, pl.facing, pl.speed);
     // (the camera stops at what would hide you: a building, a tree's crown; not a lamp post, a sign,
     // a bus shelter's roof or a stall, which it passes, the way the games' cameras do)
-    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (solid.ready && solid.wall(x, z) && (solid.topAt(x, z) ?? 0) > 3.6 && !solid.thinAt(x, z)) || (!h.beyond(x, z) && h.nav.wall(x, z)) || this.crown(x, z) });
+    this.cam.foot(dt, this.player.pos, { wall: (x, z) => (h.beyond(x, z) ? solid.ready && (solid.topAt(x, z) ?? -9) > this.player.pos.y + 0.85 && !solid.thinAt(x, z) : h.nav.wall(x, z)) || this.crown(x, z) });
     pl.group.visible = this.cam.armLength > 0.8;
     // in the sea: rings, splashes, the view under the surface
     {
@@ -1384,8 +1537,15 @@ export class GtaMode {
   }
 
   /** The street's knock-about things and the pieces flying: placed once the solid shape is in, pushed by you. */
+  private isleT = 0;
   private streetThings(dt: number) {
     const h = this.host;
+    // the islands' solid shapes: made as you come near one (src/gta/collide.ts)
+    if ((this.isleT -= dt) <= 0 && this.solid.ready) {
+      this.isleT = 0.5;
+      const at = this.car ? this.car.group.position : this.player.pos;
+      this.solid.near(at.x, at.z);
+    }
     const world = {
       blocked: (x: number, z: number) => (this.solid.ready ? !this.solid.foot(x, z, this.roads.surface(x, z), 0.12).ok : h.nav.wall(x, z)),
       floor: (x: number, z: number) => {
@@ -1412,6 +1572,7 @@ export class GtaMode {
       const at = this.car ? this.car.group.position : this.player.pos;
       const fy = this.cam.yaw;
       this.beach.update(dt, at);
+      this.sitters.update(dt);
       this.peds.update(dt, { x: at.x, z: at.z, onFoot: !this.car, speed: this.car?.speed ?? this.player.speed, id: this.player.id, fx: -Math.sin(fy), fz: -Math.cos(fy), guard: !this.car && this.player.guard, down: this.wastedT >= 0 }, this.pedWorld(), { height: this.host.height(), at: this.host.lastBlockAt(), mempool: this.host.mempool() });
     }
     if (this.player.landed) this.punchLanded(null);
@@ -1548,15 +1709,27 @@ export class GtaMode {
     // (the game not started yet: its first build will see the town; started and still building: once it is done)
     if (!this.active && !this.solid.ready) return;
     if (!this.solid.ready) return void setTimeout(() => this.keysReady(), 1500);
+    // (the islands' own walks too: their promenades, their beaches)
+    this.peds.extra = [...Beach.walks(), ...(this.host.walks?.() ?? [])];
     void this.solid.buildMore().then(() => {
       this.buildingSpots = null;
       this.peds.relines();
     });
   }
 
-  trafficBlockers(): { x: number; z: number }[] {
+  /** (asked by the city's traffic, the bridge's and the islands' each frame: worked out once a frame) */
+  private blockersAt = -1;
+  private blockersWere: TrafficBlocker[] = [];
+  trafficBlockers(): TrafficBlocker[] {
     if (!this.active || this.wasIndoors) return [];
-    const out = [...this.peds.inRoad(this.pedWorld())];
+    if (this.blockersAt === this.frameNo) return this.blockersWere.slice();
+    this.blockersAt = this.frameNo;
+    this.blockersWere = this.workBlockers();
+    return this.blockersWere.slice();
+  }
+  private frameNo = 0;
+  private workBlockers(): TrafficBlocker[] {
+    const out: TrafficBlocker[] = [...this.peds.inRoad(this.pedWorld())];
     const pl = this.player.pos;
     // you in the road (the city's, the bridge's deck, Orchard Keys' streets): the traffic stops for you
     if (!this.car && (this.roads.road(pl.x, pl.z) || this.host.beyond(pl.x, pl.z))) out.push({ x: pl.x, z: pl.z });
@@ -1575,10 +1748,10 @@ export class GtaMode {
         if (Math.abs(along) < sp.len / 2 + 0.5 && across < sp.wid / 2 + 1.6) out.push({ x: w.x + fx * (sp.len / 2 + 1.2), z: w.z + fz * (sp.len / 2 + 1.2) });
       }
     }
-    // a wreck in the road: the traffic stops behind it (it drove through them) until it is towed
+    // a wreck in the road: the traffic stops behind it (it drove through them) and goes round its body, until it is towed
     for (const c of this.wrecks.keys()) {
       const p = c.group.position;
-      if (c !== this.car && this.roads.road(p.x, p.z)) out.push({ x: p.x, z: p.z });
+      if (c !== this.car && this.roads.road(p.x, p.z)) out.push({ x: p.x, z: p.z, yaw: c.yaw, hl: c.spec.len / 2, hw: c.spec.wid / 2, wait: c.speed > 0.8 });
     }
     return out;
   }
@@ -2070,12 +2243,28 @@ export class GtaMode {
     const s = this.solid;
     const out: DoorSpot[] = [];
     const walk = (x: number, z: number) => {
+      // (a place's own floors first: the rock's paths, its yard and its pier, up over the water — the
+      // street's rule there compares with the walker's floor: that floor, as if standing on it)
+      const gg = this.host.ground(x, z);
+      if (gg !== null) {
+        // (its floor is read-only from outside: the walk's own field, set and put back)
+        const wk = this.host.walker as unknown as { floorY: number };
+        const was = wk.floorY;
+        wk.floorY = gg;
+        const ok = !this.host.footBlocked(x, z);
+        wk.floorY = was;
+        return ok;
+      }
       const t = s.topAt(x, z);
       return t !== undefined && t === t && t > -0.3 && t < 2 && s.foot(x, z, Math.max(0.2, t)).ok;
     };
+    const floor = (x: number, z: number) => this.host.ground(x, z) ?? s.topAt(x, z) ?? 0.2;
     for (const d of this.placeSpots) {
       if (d.key !== "statue" && d.key !== "prison") continue;
-      // the landing on the island: the nearest spot a body can stand, round the door
+      // the landing on the island: the nearest spot a body can stand, round the door — unless that is
+      // its own doorstep (a door inland, up a path: the rock's cell house), then its shore facing the
+      // city (north): the end of its pier, or the northmost ground with the water just past it, within
+      // 18 m either side of the door's line
       let land: { x: number; z: number } | null = null;
       for (let r = 1.5; r < 12 && !land; r += 0.5)
         for (let a = 0; a < Math.PI * 2 && !land; a += Math.PI / 12) {
@@ -2083,6 +2272,22 @@ export class GtaMode {
             z = d.z + Math.sin(a) * r;
           if (walk(x, z)) land = { x, z };
         }
+      const step = land && Math.hypot(land.x - d.x, land.z - d.z) < 6 && ((land.x - d.x) * d.fx + (land.z - d.z) * d.fz) / Math.hypot(land.x - d.x, land.z - d.z) > 0.3;
+      if (step) {
+        let shore: { x: number; z: number } | null = null;
+        for (let ox = -18; ox <= 18; ox += 1.5)
+          for (let z = d.z; z > d.z - 70; z -= 0.5) {
+            const x = d.x + ox;
+            const t = s.topAt(x, z);
+            if (t === undefined) break;
+            if (t !== t || t < -0.35) {
+              // (water: the ground just behind is a landing if it is the northmost yet)
+              if (walk(x, z + 1.2) && Math.hypot(x - d.x, z + 1.2 - d.z) > 4 && (!shore || z + 1.2 < shore.z)) shore = { x, z: z + 1.2 };
+              break;
+            }
+          }
+        if (shore) land = shore;
+      }
       if (!land) continue;
       // the quay across the water, north of it (toward the city)
       let quay: { x: number; z: number } | null = null;
@@ -2098,8 +2303,8 @@ export class GtaMode {
       }
       if (!quay) continue;
       const name = d.label;
-      out.push({ key: `ferry:${d.key}:go`, x: quay.x, z: quay.z, fx: 0, fz: -1, y: s.topAt(quay.x, quay.z) ?? 0.2, label: `Ferry · ${name}`, bare: true, to: land } as DoorSpot & { to: { x: number; z: number } });
-      out.push({ key: `ferry:${d.key}:back`, x: land.x, z: land.z, fx: 0, fz: 1, y: s.topAt(land.x, land.z) ?? 0.2, label: "Ferry · back to the city", bare: true, to: quay } as DoorSpot & { to: { x: number; z: number } });
+      out.push({ key: `ferry:${d.key}:go`, x: quay.x, z: quay.z, fx: 0, fz: -1, y: floor(quay.x, quay.z), label: `Ferry · ${name}`, bare: true, to: land } as DoorSpot & { to: { x: number; z: number } });
+      out.push({ key: `ferry:${d.key}:back`, x: land.x, z: land.z, fx: 0, fz: 1, y: floor(land.x, land.z), label: "Ferry · back to the city", bare: true, to: quay } as DoorSpot & { to: { x: number; z: number } });
     }
     return out;
   }
@@ -2142,10 +2347,7 @@ export class GtaMode {
       if (dx * dx + dz * dz > 16) continue;
       const along = dx * d.fx + dz * d.fz,
         across = Math.abs(-dx * d.fz + dz * d.fx);
-      if (along < 0.34 && along > -2.5 && across < DOOR_HALF + (d.wall === false ? 0.35 : 0.1)) return true;
-      // a grand entrance's brass posts and velvet ropes: you walk up the carpet, not through them
-      const r = ropes(d);
-      if (r && along > r.from - 0.2 && along < r.to + 0.2 && Math.abs(across - r.half) < 0.3) return true;
+      if (along < doorDepth(d) && along > -2.5 && across < doorHalf(d) + (d.wall === false ? 0.35 : 0.1)) return true;
     }
     return false;
   }
@@ -2215,13 +2417,17 @@ export class GtaMode {
         for (let d = 2; d < (own ? 28 : 14) && !road; d += 1) road = this.roads.road(dx + fx * d, dz + fz * d);
         if (!road) return;
         if (this.placeSpots.some((p) => Math.hypot(p.x - dx, p.z - dz) < 8)) return;
+        // (its ground not in the solid shape yet: an island's picture is made as you come near, its doors then)
+        const ground = s.topAt(dx + fx, dz + fz);
+        if (ground === undefined || ground !== ground) return;
         if (out.some((p) => Math.hypot(p.x - dx, p.z - dz) < 6)) return;
         const seed = (Math.abs(Math.round(dx * 13 + dz * 7)) % 997) + i;
         const kind = f.type === "cafe" || f.type === "bar" ? f.type : kindOf(f.type, seed);
         const names = NAMES[kind];
-        out.push({ key: `building:${i}`, x: dx, z: dz, fx, fz, y: s.topAt(dx + fx, dz + fz) ?? 0.2, label: (f as { name?: string }).name ?? names[seed % names.length], type: f.type, seed, wall: true, kind });
+        out.push({ key: `building:${i}`, x: dx, z: dz, fx, fz, y: ground, label: (f as { name?: string }).name ?? names[seed % names.length], type: f.type, seed, wall: true, kind });
       });
       this.buildingSpots = out;
+      this.clearDoorways(out);
     }
     const near = this.buildingSpots
       .map((b) => ({ b, d: Math.hypot(b.x - x, b.z - z) }))
@@ -2234,21 +2440,297 @@ export class GtaMode {
   }
 
 
+  /** The places' front doors found (on their facades, src/gta snapDoor) and their ways in laid: tests wait for it. */
+  doorsReady = false;
+  private doorsRun = 0;
   /**
-   * A door against its building: from the place's door point, back to the first wall the street's
-   * solid shape has (a facade a few metres behind a forecourt), or out of one it stands in.
+   * The places' front doors found again, a few each frame (each place's own model is looked over for
+   * its facade), then drawn and their ways in from the street laid.
+   */
+  private async findPlaceDoors() {
+    const run = ++this.doorsRun;
+    this.doorsReady = false;
+    const out: DoorSpot[] = [];
+    let t = performance.now();
+    for (const d of this.host.doors()) {
+      if (performance.now() - t > 10) {
+        await new Promise((r) => requestAnimationFrame(r));
+        if (run !== this.doorsRun || !this.active) return;
+        t = performance.now();
+      }
+      const sp = this.snapDoor(d);
+      if (sp) out.push(sp);
+    }
+    this.placeSpots = out;
+    this.buildingSpots = null;
+    this.doors.set(this.placeSpots);
+    this.clearDoorways(out.filter((d) => !d.bare));
+    this.computeAccess();
+    this.doorsReady = true;
+  }
+  /**
+   * No tree in front of a door: those standing in its way in and in the view of it (6 m out, a crown's
+   * width across) are taken out, and the solid shape is made again without their trunks.
+   */
+  private clearDoorways(list: DoorSpot[]) {
+    const n = clearTrees(list.map((d) => ({ x: d.x, z: d.z, fx: d.fx, fz: d.fz, len: 6.5, half: 2.4 }))) + this.clearFurniture(list);
+    if (n && this.solid.ready) setTimeout(() => this.active && void this.solid.build(), 500);
+  }
+  /** The street furniture standing on a door's step or just before it (a vending machine, a bin, a post) taken away. */
+  private clearFurniture(list: DoorSpot[]) {
+    let n = 0;
+    const m = new THREE.Matrix4(),
+      p = new THREE.Vector3(),
+      zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.host.scene.traverse((o) => {
+      const im = o as THREE.InstancedMesh;
+      if (!im.isInstancedMesh || !o.name.startsWith("real:props:")) return;
+      let hit = false;
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        if (m.elements[0] === 0 && m.elements[10] === 0) continue;
+        p.setFromMatrixPosition(m);
+        for (const d of list) {
+          const dx = p.x - d.x,
+            dz = p.z - d.z;
+          if (dx * dx + dz * dz > 25) continue;
+          const along = dx * d.fx + dz * d.fz,
+            across = Math.abs(-dx * d.fz + dz * d.fx);
+          if (along > 0.1 && along < 3.5 && across < doorHalf(d) + 0.4) {
+            im.setMatrixAt(i, zero);
+            hit = true;
+            n++;
+            break;
+          }
+        }
+      }
+      if (hit) im.instanceMatrix.needsUpdate = true;
+    });
+    return n;
+  }
+
+  /** What moves (left out of the street's solid shape and of a door's view). */
+  private movers(): THREE.Object3D[] {
+    const h = this.host;
+    return [...h.movers(), this.player.group, this.doors.group, this.missions.group, this.net.group, this.people.group, this.props.group, this.debris.mesh, this.peds.group, this.front.group, ...this.parked.map((c) => c.group), ...this.heat.chasers.map((c) => c.car.group), ...(this.car ? [this.car.group] : [])];
+  }
+  /** The still things drawn round a spot (meshes, their world spheres), for a door's view; made once a second at most. */
+  private stills: { at: number; list: { o: THREE.Mesh; c: THREE.Vector3; r: number; lo: number; hi: number }[] } | null = null;
+  private stillMeshes() {
+    const now = performance.now();
+    if (this.stills && now - this.stills.at < 1000) return this.stills.list;
+    const skip = new Set(this.movers());
+    const list: { o: THREE.Mesh; c: THREE.Vector3; r: number; lo: number; hi: number }[] = [];
+    const box = new THREE.Box3();
+    const walk = (o: THREE.Object3D) => {
+      if (!o.visible || skip.has(o)) return;
+      const m = o as THREE.Mesh;
+      // (a city batch whose vertices went to the GPU only — scene/city dropOnUpload — has nothing a ray
+      // can hit, and its bounds read from the emptied array came out NaN)
+      if (m.isMesh && !(o as THREE.Sprite).isSprite && m.geometry.attributes.position?.array.length) {
+        const mat = m.material as THREE.Material | THREE.Material[];
+        const see = Array.isArray(mat) ? mat.some((x) => !(x.transparent && x.opacity < 0.5)) : !(mat.transparent && mat.opacity < 0.5);
+        if (see) {
+          // (its world box: an instanced set's covers its instances)
+          const im = m as THREE.InstancedMesh;
+          if (im.isInstancedMesh) {
+            if (!im.boundingBox) im.computeBoundingBox();
+            box.copy(im.boundingBox!).applyMatrix4(m.matrixWorld);
+          } else {
+            if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+            box.copy(m.geometry.boundingBox!).applyMatrix4(m.matrixWorld);
+          }
+          // (a box with no number in it — bounds taken before its vertices were there — is left out)
+          if (!box.isEmpty() && Number.isFinite(box.min.y + box.max.y + box.min.x + box.max.x)) {
+            const sph = box.getBoundingSphere(new THREE.Sphere());
+            list.push({ o: m, c: sph.center, r: sph.radius, lo: box.min.y, hi: box.max.y });
+          }
+        }
+      }
+      for (const c of o.children) walk(c);
+    };
+    this.host.scene.updateMatrixWorld();
+    walk(this.host.scene);
+    this.stills = { at: now, list };
+    return list;
+  }
+  /** Nothing drawn between an eye 6 m out in front of a door and the door (a post, a tree, a sign, a fountain): rays at a walker's eye and at the camera's. */
+  private doorSeen(o: { x: number; z: number; y: number; fx: number; fz: number }, lenient = false) {
+    const list = this.stillMeshes();
+    const ray = new THREE.Raycaster();
+    const from = new THREE.Vector3(),
+      to = new THREE.Vector3(),
+      dir = new THREE.Vector3(),
+      q = new THREE.Vector3();
+    const rx = -o.fz,
+      rz = o.fx;
+    // rays across its width (left, middle, right) at its middle, its lower half and its head, to just in
+    // front of its leaves: seen = its whole middle, its lower half (no low sign or planter across it, a
+    // post may hide a third) and its head likewise or over a step's nosing
+    const hit = (ye: number, yd: number, a: number) => {
+      from.set(o.x + o.fx * 6 + rx * a * 0.5, o.y + ye, o.z + o.fz * 6 + rz * a * 0.5);
+      to.set(o.x + o.fx * 0.12 + rx * a, o.y + yd, o.z + o.fz * 0.12 + rz * a);
+      const len = dir.subVectors(to, from).length();
+      dir.normalize();
+      const cand: THREE.Object3D[] = [];
+      for (const sm of list) {
+        // (the ground, the roads, a kerb: under the ray)
+        if (sm.hi < o.y + Math.min(ye, yd) - 0.05 || sm.lo > o.y + Math.max(ye, yd)) continue;
+        const t = Math.max(0, Math.min(len, q.subVectors(sm.c, from).dot(dir)));
+        if (q.copy(from).addScaledVector(dir, t).distanceToSquared(sm.c) > sm.r * sm.r) continue;
+        cand.push(sm.o);
+      }
+      ray.set(from, dir);
+      ray.far = len - 0.05;
+      return ray.intersectObjects(cand, false).length > 0;
+    };
+    const across = [-0.8, 0, 0.8];
+    // (a ring at a place's own entrance — a booth, a gateway — is seen past a post at its side)
+    if (across.filter((a) => hit(1.6, 1.2, a)).length > (lenient ? 1 : 0)) return false;
+    if (across.filter((a) => hit(1.1, 0.6, a)).length > 1) return false;
+    return across.filter((a) => hit(2.2, 2.1, a)).length < 2 || across.filter((a) => hit(1.1, 0.6, a)).length === 0;
+  }
+
+  /**
+   * A place's front door, an ordinary one on its facade (src/gta/doors.ts draws it): on the facade as
+   * drawn (the host's ray on the place's own model, across its forecourt and up its steps), else the
+   * first real wall the solid shape has behind the door point (wide: not a post or a trunk). On the
+   * side that faces a street or a plaza — the model's front first, another side of it if the front
+   * looks over water or nowhere — and slid along that facade to where nothing tall (a post, a trunk,
+   * a fountain) stands between it and the pavement. A place with a door of its own keeps it (only
+   * the ring where E takes you in); no wall found, no door drawn.
    */
   private snapDoor(d: DoorSpot): DoorSpot | null {
-    // (the MEMPOOL HQ and the GAME HOUSE have grand entrances of their own; your home, its tower's own front door)
-    if (d.key === "mempool" || d.key === "gamehouse" || d.key === "home") return { ...d, bare: true };
+    // (your home: its own front door, drawn with the house)
+    if (d.key === "home") return { ...d, bare: true };
     const s = this.solid;
     if (!s.ready) return d;
-    const wall = (k: number) => {
-      const t = s.topAt(d.x - d.fx * k, d.z - d.fz * k);
-      return t !== undefined && t === t && t > d.y + 2;
+    const own = OWN_DOOR.has(d.key);
+    const style: DoorStyle = DOOR_STYLE[d.key] ?? "glass";
+    const top = (x: number, z: number) => {
+      const t = s.topAt(x, z);
+      return t === undefined || t !== t ? null : t;
     };
-    // (how much clear pavement lies in front of it: a grand entrance's carpet and ropes fit in that)
-    const room = (o: DoorSpot): DoorSpot => {
+    // a wall over a floor: what reaches the slab's top (2.4 m) from there
+    const tall = (x: number, z: number, floor: number) => {
+      const t = top(x, z);
+      return t !== null && t > Math.min(floor + 2, 2.25);
+    };
+    // the solid shape's way: from (x, z) in along −f over the forecourt (steps climbed, planters and
+    // benches crossed) to the first wall across a door's width, or out of a wall it stands in
+    const walk = (x: number, z: number, fx: number, fz: number, y: number): DoorSpot | null => {
+      const rx = -fz,
+        rz = fx;
+      const at = (k: number) => ({ x: x - fx * k, z: z - fz * k });
+      const facade = (px: number, pz: number, floor: number) => {
+        for (const side of [-1, 0, 1]) {
+          let w = false;
+          for (let k = 0; k < 0.8 && !w; k += 0.2) w = tall(px + rx * side - fx * k, pz + rz * side - fz * k, floor);
+          if (!w) return false;
+        }
+        return true;
+      };
+      if (tall(x, z, y)) {
+        for (let k = -0.1; k > -4; k -= 0.1) {
+          const p = at(k);
+          if (!tall(p.x, p.z, y)) {
+            const q = at(k - 0.05);
+            return { ...d, ...q, fx, fz, y: top(q.x, q.z) ?? y, wall: true };
+          }
+        }
+        return null;
+      }
+      let floor = y;
+      for (let k = 0.1; k < 26; k += 0.1) {
+        const p = at(k);
+        const t = top(p.x, p.z);
+        if (t === null || t < -0.35) break;
+        if (facade(p.x, p.z, floor)) return { ...d, ...at(k - 0.06), fx, fz, y: floor, wall: true };
+        // a step up or down: climbed; anything higher (a planter, a bench) is crossed, the floor kept
+        if (Math.abs(t - floor) <= 0.62) floor = t;
+        // (a street crossed: no building of its own this side)
+        if (k > 4 && this.roads.road(p.x, p.z)) break;
+      }
+      return null;
+    };
+    // the door on the facade seen from the street point (x, z) looking along −f
+    const onWall = (x: number, z: number, fx: number, fz: number): DoorSpot | null => {
+      const f = this.host.placeFace?.(d.key, x, z, fx, fz);
+      if (f) {
+        const px = f.x + fx * 0.06,
+          pz = f.z + fz * 0.06;
+        // its floor: what you stand on right in front of it, as the solid shape has it — near the floor the
+        // host came in on, or the top step of a flight of steps down to it (a step at a time); not the
+        // top of something standing there (a jamb, a lamp's frame)
+        const floor = () => {
+          const t0 = top(px + fx * 0.4, pz + fz * 0.4);
+          if (t0 === null || t0 < -0.3 || t0 > 2.3) return f.y;
+          if (Math.abs(t0 - f.y) < 0.7) return t0;
+          let prev = t0;
+          for (let k = 0.8; k < 14; k += 0.4) {
+            const t = top(px + fx * k, pz + fz * k);
+            if (t === null || Math.abs(t - prev) > 0.62) return f.y;
+            if (Math.abs(t - f.y) < 0.4) return t0;
+            prev = t;
+          }
+          return f.y;
+        };
+        return { ...d, x: px, z: pz, fx, fz, y: floor(), wall: true };
+      }
+      return walk(x - fx * 3, z - fz * 3, fx, fz, d.y);
+    };
+    // what it looks out on: water close in front (no), a street straight out within 30 m, or open
+    // ground a plaza's size (a park, a square)
+    const looks = (o: DoorSpot) => {
+      let open = 0;
+      for (let k = 0.5; k <= 30; k += 0.5) {
+        const x = o.x + o.fx * k,
+          z = o.z + o.fz * k;
+        // (a street with a pavement before it: best near; the carriageway at its very step: poor)
+        if (this.roads.road(x, z)) return k < 1.6 ? 0.7 : 1 + 1 / k;
+        const t = top(x, z);
+        const wet = t === null || t < -0.35 || !!this.host.sea?.(x, z);
+        if (wet) return k < 10 ? 0 : open >= 15 ? 0.5 : 0;
+        if (Math.abs(t - o.y) < 0.65 && open === k - 0.5) open = k;
+      }
+      return open >= 15 ? 0.5 : 0;
+    };
+    // nothing standing between it and the pavement in front, the door's width and 6 m out (a post,
+    // a trunk, a bush, a fountain, a sign on legs): the solid shape, then what is drawn
+    const clear = (o: DoorSpot) => {
+      const rx = -o.fz,
+        rz = o.fx;
+      for (let k = 0.9; k < 6; k += 0.25)
+        for (let a = -0.9; a <= 0.91; a += 0.15) {
+          const t = top(o.x + o.fx * k + rx * a, o.z + o.fz * k + rz * a);
+          if (t !== null && t > o.y + 0.95) return false;
+        }
+      return this.doorSeen(o, own);
+    };
+    // (a place's own entrance — a booth, a lobby — taken as its ring only: the ring out in front of
+    // whatever it stands in or behind, on the first ground clear for a metre (the solid shape, then
+    // what is drawn: a booth's counter), not inside it)
+    const outFront = (o: DoorSpot): DoorSpot => {
+      const rx = -o.fz,
+        rz = o.fx;
+      const clearAt = (k: number) => {
+        for (let u = 0; u <= 0.8; u += 0.2)
+          for (const a of [-0.6, 0, 0.6]) {
+            const t = top(o.x + o.fx * (k + u) + rx * a, o.z + o.fz * (k + u) + rz * a);
+            if (t !== null && t > o.y + 0.6) return false;
+          }
+        return true;
+      };
+      for (let k = 0; k < 4.5; k += 0.1)
+        if (clearAt(k)) {
+          const p = { ...o, x: o.x + o.fx * (k + 0.15), z: o.z + o.fz * (k + 0.15) };
+          if (this.doorSeen(p, false) || k > 4) return k > 0 ? p : o;
+        }
+      return o;
+    };
+    // (how much clear pavement lies in front of it; drawn only on a wall that was found)
+    const room = (o0: DoorSpot): DoorSpot => {
+      const o = own ? outFront(o0) : o0;
       let k = 0.3;
       for (; k < 6; k += 0.2) {
         const x = o.x + o.fx * k,
@@ -2256,14 +2738,88 @@ export class GtaMode {
         const t = s.topAt(x, z);
         if (this.roads.road(x, z) || t === undefined || t !== t || t > o.y + 0.6 || t < o.y - 0.6) break;
       }
-      return { ...o, room: k };
+      return { ...o, room: k, drawn: !own && o.wall === true, style };
     };
-    if (wall(0)) {
-      for (let k = -0.1; k > -3; k -= 0.1) if (!wall(k)) return room({ ...d, x: d.x - d.fx * (k - 0.05), z: d.z - d.fz * (k - 0.05), wall: true });
+    // (the opera house's door up its Monumental Steps, in its foyer's glass on the podium: where the host
+    // put it — the street's solid shape sees only the podium from above)
+    if (d.key === "opera" && d.y > 2) return room({ ...d, wall: true });
+    // the sides to try: the model's front from its door point, then its other faces from their middles
+    const sides: { x: number; z: number; fx: number; fz: number }[] = [{ x: d.x + d.fx * 3, z: d.z + d.fz * 3, fx: d.fx, fz: d.fz }];
+    const box = this.host.placeBox?.(d.key);
+    if (box) {
+      const cx = (box.x0 + box.x1) / 2,
+        cz = (box.z0 + box.z1) / 2;
+      for (const [fx, fz] of [
+        [-d.fx, -d.fz],
+        [-d.fz, d.fx],
+        [d.fz, -d.fx],
+      ]) {
+        const ex = fx > 0.5 ? box.x1 : fx < -0.5 ? box.x0 : cx,
+          ez = fz > 0.5 ? box.z1 : fz < -0.5 ? box.z0 : cz;
+        sides.push({ x: ex + fx * 3, z: ez + fz * 3, fx, fz });
+      }
+    }
+    // along a facade to where the way in front is clear (the same facade: within a metre of it)
+    const slide = (b: DoorSpot): DoorSpot | null => {
+      if (clear(b)) return b;
+      const rx = -b.fz,
+        rz = b.fx;
+      // (from just in front of its facade: the forecourt is the same)
+      const sx = b.x + b.fx * 1.2,
+        sz = b.z + b.fz * 1.2;
+      for (const off of [1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6]) {
+        const o = onWall(sx + rx * off, sz + rz * off, b.fx, b.fz);
+        if (o && Math.abs((o.x - b.x) * b.fx + (o.z - b.z) * b.fz) <= 1 && Math.abs(o.y - b.y) <= 0.4 && clear(o)) return o;
+      }
+      return null;
+    };
+    // the side: the model's own front whenever it looks on a street or a plaza (its main facade);
+    // else the side that looks out best; then slid along it to where the way in front is clear
+    let best: DoorSpot | null = null,
+      front: DoorSpot | null = null,
+      score = 0.4;
+    for (const [i, sd] of sides.entries()) {
+      const o = onWall(sd.x, sd.z, sd.fx, sd.fz);
+      if (!o) continue;
+      const v = looks(o);
+      if (i === 0) front = o;
+      if (i === 0 && v >= 0.5) {
+        best = o;
+        break;
+      }
+      if (v > score) ((best = o), (score = v));
+    }
+    // (no side on a street or a square: an island's place, its front on its quay — the front as it is)
+    best ??= front;
+    if (!best) {
+      // no wall: the ring only, where the place said — beside whatever stands right there (a trunk, a post)
+      const rx = -d.fz,
+        rz = d.fx;
+      const level = (x: number, z: number) => {
+        for (let a = -0.8; a <= 0.81; a += 0.2)
+          for (let b = -0.8; b <= 0.81; b += 0.2) {
+            if (a * a + b * b > 0.65) continue;
+            const t = top(x + a, z + b);
+            if (t === null || Math.abs(t - d.y) > 0.3) return false;
+          }
+        return true;
+      };
+      // (the first spot along the front where its ring lies level and nothing stands between it and the
+      // pavement; else the first level one)
+      let flat: DoorSpot | null = null;
+      for (const off of [0, 0.8, -0.8, 1.6, -1.6, 2.4, -2.4, 3.2, -3.2]) {
+        const x = d.x + rx * off,
+          z = d.z + rz * off;
+        if (!level(x + d.fx * 1.2, z + d.fz * 1.2)) continue;
+        const o = { ...d, x, z, wall: false };
+        if (this.doorSeen(o, true)) return room(o);
+        flat ??= o;
+      }
+      if (flat) return room(flat);
       return room({ ...d, wall: false });
     }
-    for (let k = 0.1; k < 7; k += 0.1) if (wall(k)) return room({ ...d, x: d.x - d.fx * (k - 0.06), z: d.z - d.fz * (k - 0.06), wall: true });
-    return room({ ...d, wall: false });
+    best = slide(best) ?? best;
+    return room(best);
   }
 
   /** Inside one of the parked cars' boxes (you walk round them). */
@@ -2494,11 +3050,26 @@ export class GtaMode {
   private *boxes(self: DriveCar): Generator<CarBox> {
     for (const m of this.host.traffic.movers) {
       const p = m.group.position;
-      const along = m.line.axis === "x";
       const half = m.len / 2;
       const yaw = m.group.rotation.y;
       const hw = m.kind === "moto" ? 0.42 : 0.95;
-      yield { x: p.x, z: p.z, hx: along ? half : hw, hz: along ? hw : half, ref: { t: "mover", m }, vx: Math.cos(yaw) * m.v, vz: -Math.sin(yaw) * m.v, mass: SPECS[m.kind as VehicleKind]?.mass ?? 1.35 };
+      // (turned as it is: along its street, or part way round a corner, or pulling out round you —
+      // turned off the axes, three boxes along its length: one square box round it all stands well
+      // out of its sides)
+      const c = Math.cos(yaw),
+        s = Math.sin(yaw);
+      const cs = Math.abs(c),
+        sn = Math.abs(s);
+      const ref = { t: "mover", m },
+        vx = c * m.v,
+        vz = -s * m.v,
+        mass = SPECS[m.kind as VehicleKind]?.mass ?? 1.35;
+      const n = Math.min(cs, sn) > 0.06 ? 3 : 1,
+        seg = half / n;
+      for (let k = 0; k < n; k++) {
+        const o = (k - (n - 1) / 2) * 2 * seg;
+        yield { x: p.x + c * o, z: p.z - s * o, hx: cs * seg + sn * hw, hz: sn * seg + cs * hw, ref, vx, vz, mass };
+      }
     }
     yield* this.host.vehicles();
     // the other players' cars

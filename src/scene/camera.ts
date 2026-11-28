@@ -4,6 +4,7 @@ import { busLocal, type BlockBus } from "./bus";
 import { BUS } from "./voxel/vehicles";
 import { CITY, DISTRICTS, type Interior } from "./city";
 import { KEYS } from "./keys/plan";
+import { crossingAt, isleAt } from "./isles/plan";
 import type { Snark } from "./snark";
 
 export type Mode = "live" | "overview" | "free" | "district" | "follow" | "inspect";
@@ -320,8 +321,10 @@ export class CameraRig {
     const t = this.controls.target;
     // (and Orchard Keys, across the Golden Gate)
     const keys = t.x > KEYS.x0 - 20;
-    const cx = THREE.MathUtils.clamp(t.x, CITY.minX - 10, Math.max(CITY.maxX, KEYS.x1) + 10),
-      cz = THREE.MathUtils.clamp(t.z, CITY.minZ + 4, keys ? KEYS.z1 - 20 : CITY.maxZ - 2);
+    // (and the islands round the city, over their crossings: src/scene/isles)
+    const isle = !!isleAt(t.x, t.z) || !!crossingAt(t.x, t.z);
+    const cx = isle ? t.x : THREE.MathUtils.clamp(t.x, CITY.minX - 10, Math.max(CITY.maxX, KEYS.x1) + 10),
+      cz = isle ? t.z : THREE.MathUtils.clamp(t.z, CITY.minZ + 4, keys ? KEYS.z1 - 20 : CITY.maxZ - 2);
     if (cx !== t.x || cz !== t.z) {
       const d = new THREE.Vector3(cx - t.x, 0, cz - t.z);
       t.add(d);

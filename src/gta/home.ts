@@ -1,16 +1,18 @@
 import "./home.css";
 import { Economy, type StoreTab, type StoreTabContext } from "./economy";
+import { VILLA } from "../scene/keys/plan";
 
 /**
- * Your home (src/gta): a penthouse on Park Row, over Central Park — where PLAY starts you,
- * and the flat you furnish. This module is light (the store mounts it at boot): the catalog of
- * furniture (prices in ⓩ, owned through economy.ts under "home"), where each piece stands (kept in
- * this browser), the STORE › HOME tab, and the hooks the flat's interior (src/interior/home) and the
- * furnishing mode (src/gta/homeedit.ts) talk through.
+ * Your home (src/gta): a villa of your own, Vice City style — Shielded Point, a waterfront estate on
+ * Orchard Keys' north point across the Golden Gate (its outside: scene/keys/villa.ts), where PLAY
+ * starts you and the house you furnish. This module is light (the store mounts it at boot): the
+ * catalog of furniture (prices in ⓩ, owned through economy.ts under "home"), where each piece stands
+ * (kept in this browser), the STORE › HOME tab, and the hooks the villa's interior (src/interior/home)
+ * and the furnishing mode (src/gta/homeedit.ts) talk through.
  *
  *   Home.catalog()                 every piece for sale
  *   Home.owned() / Home.owns(id)   what you have (Economy.owned("home"))
- *   Home.placed()                  where the placed ones stand (local metres in the flat)
+ *   Home.placed()                  where the placed ones stand (local metres in the villa)
  *   Home.place(id, x, z, rot)      put a piece there (moves it if placed already)
  *   Home.store(id)                 back into storage
  *   Home.onChange(fn)              any change of the layout or of what you own
@@ -94,79 +96,84 @@ export const ROOMS: [HomeRoom | "all", string][] = [
 
 export interface Placed {
   id: string;
-  /** In the flat's own metres: x across, z from the front door (negative inward). */
+  /** In the villa's own metres: x across (east +), z from the front door (negative inward, toward the sea). */
   x: number;
   z: number;
   rot: number;
 }
 
-/** The flat comes furnished: these are yours and in place on the first visit. */
+/**
+ * The villa comes furnished, a mansion's way: these are yours and in place on the first visit.
+ * The great room's lounge faces the sea (the long sofa, its two armchairs either side of the low
+ * marble table on the gold-edged rug, a lamp at each end); by the bedroom wing's wall the TV, its
+ * sofa and the terracotta rug; the bookshelf, an olive tree and a cactus by the door; the dining
+ * table for six by the kitchen's glass; the king bed against the bedroom's wall, its foot to the sea,
+ * its nightstand and the wardrobe; zkSNARK #1 and #9593 framed on the walls; plants at the glass.
+ * What you buy in the store joins them (B at home to place it).
+ */
 const STARTER: Placed[] = [
-  { id: "sofa-charcoal", x: -0.8, z: -10, rot: Math.PI / 2 },
-  { id: "coffee-table", x: 0.85, z: -10, rot: Math.PI / 2 },
-  { id: "rug-gold", x: 0.75, z: -10, rot: Math.PI / 2 },
-  { id: "tv-wall", x: 2.66, z: -10, rot: -Math.PI / 2 },
-  { id: "floor-lamp", x: -1.4, z: -12.2, rot: 0 },
-  { id: "dining-6", x: -5.6, z: -10.4, rot: 0 },
-  { id: "bed-double", x: 4.25, z: -10, rot: Math.PI / 2 },
-  { id: "nightstand", x: 3.45, z: -8.6, rot: Math.PI / 2 },
-  { id: "monstera", x: -1.6, z: -13.3, rot: 0 },
-  { id: "ficus", x: 2.5, z: -6.6, rot: 0 },
-  { id: "print-1", x: -3.2, z: -0.1, rot: Math.PI },
+  { id: "sofa-charcoal", x: -1.0, z: -4.5, rot: Math.PI },
+  { id: "coffee-table", x: -1.0, z: -6.1, rot: 0 },
+  { id: "rug-gold", x: -1.0, z: -6.0, rot: 0 },
+  { id: "armchair-grey", x: -3.7, z: -6.0, rot: Math.PI / 2 },
+  { id: "velvet-chair", x: 1.5, z: -6.2, rot: -Math.PI / 2 },
+  { id: "floor-lamp", x: -3.6, z: -4.4, rot: 0 },
+  { id: "side-lamp", x: 0.85, z: -4.45, rot: 0 },
+  { id: "tv-wall", x: 6.66, z: -6.0, rot: -Math.PI / 2 },
+  { id: "sofa-sand", x: 4.4, z: -6.0, rot: Math.PI / 2 },
+  { id: "rug-terracotta", x: 5.3, z: -6.0, rot: Math.PI / 2 },
+  { id: "bookshelf", x: -5.85, z: -0.31, rot: Math.PI },
+  { id: "indoor-tree", x: -5.6, z: -1.6, rot: 0 },
+  { id: "cactus", x: 5.9, z: -1.0, rot: 0 },
+  { id: "dining-6", x: -10.6, z: -7.4, rot: 0 },
+  { id: "bed-king", x: 12.6, z: -5.45, rot: Math.PI },
+  { id: "nightstand", x: 11.15, z: -4.6, rot: Math.PI },
+  { id: "wardrobe", x: 7.4, z: -7.6, rot: Math.PI / 2 },
+  { id: "monstera", x: -6.4, z: -9.7, rot: 0 },
+  { id: "ficus", x: 6.4, z: -9.7, rot: 0 },
+  { id: "print-1", x: 5.8, z: -0.1, rot: Math.PI },
+  { id: "print-9593", x: 15.6, z: -4.3, rot: Math.PI },
 ];
 
-/** Where your home is: its building's door on the street, the way out of it, how tall it is. */
+/** Where your home is: its front door on the plot, the way out of it, where your car waits, the rooms' view. */
 export interface HomeSite {
   door: { x: number; z: number };
   out: { x: number; z: number };
-  height: number;
+  /** Your ZK-GT and your bike, parked (world metres; yaw as a car's: 0 points it along +x). */
+  car: { x: number; z: number; yaw: number };
+  bike?: { x: number; z: number; yaw: number };
   /**
-   * The flat's glass and the city it looks at: `yaw` turns the panorama (the flat's back, local −z,
-   * looks that way), `side` and `back` place its camera from the door (world metres, as cityView takes them).
+   * The rooms' glass and what it looks at (ctx.cityView, from the door): the eye `up` over the door's
+   * kerb, `back` metres in from the door and `side` across (world), the panorama turned by `yaw` (the
+   * rooms' back, local −z, looks that way).
    */
-  view: { yaw: number; side: number; back: number };
+  view: { up: number; back: number; side: number; yaw: number };
+  name: string;
 }
 
-type FacadeLike = { type: string; height?: number; door?: { x: number; z: number }; out?: { x: number; z: number } };
-type Box = { x0: number; x1: number; z0: number; z1: number };
+/** Your villa, from the plan (scene/keys/plan.ts VILLA): its door faces the street (+z), its glass the sea. */
+export function villaSite(): HomeSite {
+  const V = VILLA;
+  return {
+    door: { ...V.door },
+    out: { x: 0, z: 1 },
+    car: { ...V.car },
+    bike: { ...V.bike },
+    // from the great room, by its glass on the strait: the Golden Gate, the city across the water
+    view: { up: V.floor - 0.2 + 1.65, back: V.door.z - V.house.z0 - 1.2, side: 0, yaw: 0 },
+    name: V.name,
+  };
+}
 
 /**
- * Your building, chosen from the city's facades (main.ts, at boot): the tallest apartment tower
- * facing Central Park (Central Park South: its front and the flat's glass over the park, the heart's
- * towers beyond); else one on the heart's north row (its glass at the back); else the apartment door
- * nearest the heart.
+ * The layout is kept per house: v1 was the penthouse on Park Row (its own metres), v2 is the villa.
+ * Moving in: what you owned stays yours — the starter set goes where the villa has room for it,
+ * everything else waits in storage (B at home to place it).
  */
-export function pickSite(facades: FacadeLike[], park?: Box): HomeSite | null {
-  const apt = facades.filter((f) => f.type === "apartment" && f.door && f.out);
-  type F = (typeof apt)[number];
-  const pick = (l: F[], score: (f: F) => number) => l.reduce<F | null>((b, f) => (!b || score(f) > score(b) ? f : b), null);
-  const dist = (f: F) => Math.hypot(f.door!.x, f.door!.z);
-  const onPark = park ? apt.filter((f) => {
-    const px = f.door!.x + f.out!.x * 20,
-      pz = f.door!.z + f.out!.z * 20;
-    return px > park.x0 && px < park.x1 && pz > park.z0 && pz < park.z1;
-  }) : [];
-  const site = (f: F, front: boolean): HomeSite => {
-    const o = f.out!;
-    return {
-      door: { ...f.door! },
-      out: { x: o.x, z: o.z },
-      height: f.height ?? 30,
-      // over the park: the glass looks out of its front, the view taken just in front of it; else
-      // out of its back, from the middle of the building
-      view: front ? { yaw: Math.atan2(-o.x, -o.z), side: o.x * 3, back: -o.z * 3 } : { yaw: Math.atan2(o.x, o.z), side: -o.x * 6, back: o.z * 6 },
-    };
-  };
-  const p = pick(onPark, (f) => (f.height ?? 0) - dist(f) * 0.02);
-  if (p) return site(p, true);
-  const row = apt.filter((f) => f.out!.z > 0.5 && Math.abs(f.door!.x) < 46 && f.door!.z < -8 && f.door!.z > -40);
-  const f = pick(row, (f) => (f.height ?? 0) - Math.abs(f.door!.x) * 0.05) ?? pick(apt, (f) => -dist(f));
-  return f ? site(f, false) : null;
-}
-
-const KEY = "zstreet.home.v1";
+const KEY = "zstreet.home.v2";
+const OLD_KEY = "zstreet.home.v1";
 interface Saved {
-  v: 1;
+  v: 2;
   placed: Placed[];
   /** The starter set has been given (once). */
   given: boolean;
@@ -175,9 +182,18 @@ interface Saved {
 function load(): Saved {
   try {
     const o = JSON.parse(localStorage.getItem(KEY) ?? "null") as Saved | null;
-    if (o && o.v === 1 && Array.isArray(o.placed)) return o;
+    if (o && o.v === 2 && Array.isArray(o.placed)) return o;
+    // moving in from the penthouse: its layout's metres mean nothing here
+    const old = JSON.parse(localStorage.getItem(OLD_KEY) ?? "null") as { given?: boolean } | null;
+    if (old) {
+      // (the villa's furnished set given — the pieces already owned stay owned — and placed)
+      const moved: Saved = { v: 2, placed: [], given: false };
+      localStorage.setItem(KEY, JSON.stringify(moved));
+      localStorage.removeItem(OLD_KEY);
+      return moved;
+    }
   } catch {}
-  return { v: 1, placed: [], given: false };
+  return { v: 2, placed: [], given: false };
 }
 let saved = load();
 function save() {
@@ -190,16 +206,16 @@ const listeners = new Set<() => void>();
 const changed = () => {
   for (const f of listeners) f();
 };
-// (a purchase in the store: the flat's storage and the tab know at once)
+// (a purchase in the store: the villa's storage and the tab know at once)
 Economy.onChange((e) => {
   if (e.cat === "home") changed();
 });
 
-/** The flat's interior, while it is built: where a piece may stand, and the ghost while you furnish. */
+/** The villa's interior, while it is built: where a piece may stand, and the ghost while you furnish. */
 export interface HomeRoomHooks {
-  /** The flat's scene (you are home when the place you are in shows it). */
+  /** The villa's scene (you are home when the place you are in shows it). */
   scene: object;
-  /** Can `id` stand at (x, z) turned `rot` (not in a wall, not on another piece, inside the flat)? */
+  /** Can `id` stand at (x, z) turned `rot` (not in a wall, not on another piece, inside the house)? */
   canPlace(id: string, x: number, z: number, rot: number): boolean;
   /** A wall piece near (x, z): the point on the nearest wall and the way it faces, or null. */
   snapWall(x: number, z: number): { x: number; z: number; rot: number } | null;
@@ -215,7 +231,7 @@ let room: HomeRoomHooks | null = null;
 let site: HomeSite | null = null;
 
 export const Home = {
-  /** Your building (main.ts sets it at boot), null until then. */
+  /** Your villa (main.ts sets it at boot), null until then. */
   get site() {
     return site;
   },
@@ -228,11 +244,11 @@ export const Home = {
   piece(id: string) {
     return HOME_CATALOG.find((x) => x.id === id) ?? null;
   },
-  /** The starter set yours (owned and placed) the first time: called by the flat and the store. */
+  /** The starter set yours (owned and placed) the first time: called by the villa and the store. */
   ensure() {
     if (saved.given) return;
     saved.given = true;
-    for (const s of STARTER) Economy.grant("home", s.id, "your flat");
+    for (const s of STARTER) Economy.grant("home", s.id, "your villa");
     saved.placed = STARTER.map((s) => ({ ...s }));
     save();
   },
@@ -249,7 +265,7 @@ export const Home = {
   isPlaced(id: string) {
     return saved.placed.some((q) => q.id === id);
   },
-  /** Owned and not placed: in the flat's storage. */
+  /** Owned and not placed: in the villa's storage. */
   stored(): string[] {
     return this.owned().filter((id) => !this.isPlaced(id));
   },
@@ -275,7 +291,7 @@ export const Home = {
     listeners.add(f);
     return () => listeners.delete(f);
   },
-  /** The flat registers itself while it is built (and null when it goes). */
+  /** The villa registers itself while it is built (and null when it goes). */
   setRoom(r: HomeRoomHooks | null) {
     room = r;
   },
@@ -284,7 +300,7 @@ export const Home = {
   },
   /** For tests: forget the layout (the starter set is given again). */
   reset() {
-    saved = { v: 1, placed: [], given: false };
+    saved = { v: 2, placed: [], given: false };
     save();
     changed();
   },
@@ -334,7 +350,7 @@ export const storeTab: StoreTab = {
           .map((x, i) => {
             const o = Home.owns(x.id),
               pl = Home.isPlaced(x.id);
-            const tag = pl ? `<em class="gf-tag gold">In your flat</em>` : o ? `<em class="gf-tag">In storage</em>` : `<em class="gf-price">ⓩ ${x.price.toLocaleString("en-US")}</em>`;
+            const tag = pl ? `<em class="gf-tag gold">In your villa</em>` : o ? `<em class="gf-tag">In storage</em>` : `<em class="gf-price">ⓩ ${x.price.toLocaleString("en-US")}</em>`;
             return `<button type="button" role="option" class="gf-tile hm-tile ${i === at ? "on" : ""}" data-i="${i}" aria-selected="${i === at}"><span class="hm-sw" style="--sw:${x.swatch}">${icon(x.icon, "#f3efe6")}</span><b>${esc(x.name)}</b>${tag}</button>`;
           })
           .join("")}</div>
@@ -344,7 +360,7 @@ export const storeTab: StoreTab = {
               <span class="hm-bal"><b>${bal.toLocaleString("en-US")}</b><small>Your ⓩ</small></span>
               ${
                 owned
-                  ? `<button class="gf-btn gold" type="button" disabled>${placed ? "In your flat" : "Owned"}</button>`
+                  ? `<button class="gf-btn gold" type="button" disabled>${placed ? "In your villa" : "Owned"}</button>`
                   : short > 0
                     ? `<button class="gf-btn gold" type="button" disabled>ⓩ ${short.toLocaleString("en-US")} short</button>`
                     : `<button class="gf-btn gold" data-buy type="button">Buy <small>ⓩ ${it.price.toLocaleString("en-US")}</small></button>`
@@ -373,7 +389,7 @@ export const storeTab: StoreTab = {
     const buy = () => {
       const it = list()[at];
       if (!it || Home.owns(it.id)) return;
-      if (ctx.economy.buy({ cat: "home", id: it.id, name: it.name, price: it.price })) ctx.say(`${it.name}: yours. It waits in your flat's storage — at home, press B to place it.`);
+      if (ctx.economy.buy({ cat: "home", id: it.id, name: it.name, price: it.price })) ctx.say(`${it.name}: yours. It waits in your villa's storage — at home, press B to place it.`);
       else ctx.say(`Not enough ⓩ for ${it.name}. Earn ⓩ in the missions, or get them at Get ⓩ.`);
       render();
     };

@@ -1,15 +1,16 @@
-// node shots/_bootcheck.mjs [url]: does the page open? console errors and the boot/halt screen state after N s (phone emulation unless DESKTOP=1)
+// node shots/_bootcheck.mjs: the game's start, step by step (street up, solid shape, doors), and any page error on the way
 import puppeteer from "puppeteer-core";
-const url = process.argv[2] ?? "http://localhost:3008/?debug";
-const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 900000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"] });
+const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 900000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 960, height: 540 } });
 const p = await b.newPage();
-if (!process.env.DESKTOP) await p.emulate({ viewport: { width: 844, height: 390, deviceScaleFactor: 3, isMobile: true, hasTouch: true, isLandscape: true }, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" });
-p.on("console", (m) => console.log("[console]", m.type(), m.text().slice(0, 200)));
-p.on("pageerror", (e) => console.log("[pageerror]", e.message));
-await p.goto(url);
-for (let i = 0; i < Number(process.env.SECS ?? 40) / 5; i++) {
-  await new Promise((r) => setTimeout(r, 5000));
-  console.log(await p.evaluate(() => JSON.stringify({ up: !!window.__streetUp, street: !!window.street, boot: document.querySelector("#boot p")?.textContent ?? null, bar: document.querySelector("#boot i")?.style.width, halt: document.querySelector("#halt")?.innerText.replace(/\s+/g, " ") ?? null })));
+await p.evaluateOnNewDocument(() => { const W = window.WebSocket; const F = function (u, pr) { if (pr === "vite-hmr" || String(u).includes("token=")) return { addEventListener() {}, removeEventListener() {}, send() {}, close() {}, readyState: 0 }; return pr === undefined ? new W(u) : new W(u, pr); }; F.prototype = W.prototype; Object.assign(F, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 }); window.WebSocket = F; });
+p.on("pageerror", (e) => console.log("pageerror", e.message, (e.stack ?? "").split("\n").slice(1, 4).join(" | ")));
+p.on("console", (m) => { if (m.type() === "error") console.log("console.error", m.text().slice(0, 300)); });
+await p.goto("http://localhost:3061/?debug&gta=1192&theme=day&solo");
+const t0 = Date.now();
+for (let i = 0; i < 24; i++) {
+  await new Promise((r) => setTimeout(r, 10000));
+  const s = await p.evaluate(() => ({ up: !!window.__streetUp, solid: !!window.street?.gta?.solid?.ready, doors: !!window.street?.gta?.doorsReady, isles: window.street?.isles?.live?.map((L) => !!L.content).join(",") })).catch((e) => ({ err: e.message }));
+  console.log(((Date.now() - t0) / 1000).toFixed(0) + "s", JSON.stringify(s));
+  if (s.doors) break;
 }
-if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT });
 await b.close();

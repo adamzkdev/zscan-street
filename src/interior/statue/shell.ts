@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { meshModel, MATERIALS } from "../../scene/voxel/mesher";
-import { C, hash, VoxelModel } from "../../scene/voxel/model";
+import { C, hash, palette, VoxelModel } from "../../scene/voxel/model";
+import { smoothPart } from "../../scene/voxel/smooth";
 import { statue } from "../../scene/voxel/landmarks/statue";
 import type { Kind } from "../../scene/voxel/model";
 import type { Rect } from "../types";
@@ -216,9 +217,48 @@ export function buildShell(): Shell {
         if (r > 9.6 && r < 12) m.set(x, y, z, 0);
       }
 
-  // ---- mesh it ---------------------------------------------------------------------------------
+  // ---- mesh it: the figure smooth, the rest as built ----------------------------------------------
+  // (the copper skin, the robe's folds, the arms, the head: one surface over its cells — surface nets,
+  // relaxed — not a stair of copper blocks; the pedestal, the balcony's granite and rails, and the lit
+  // glass of the crown and the torch stay as they are built)
   const object = new THREE.Group();
-  const geos = meshModel(m);
+  const kinds = palette.entries.map((e) => e.kind);
+  const fig = new VoxelModel(m.w, m.h, m.d),
+    flame = new VoxelModel(m.w, m.h, m.d),
+    rest = new VoxelModel(m.w, m.h, m.d);
+  {
+    const d = m.data,
+      WD = m.w * m.d;
+    for (let i = 0; i < d.length; i++) {
+      const c = d[i];
+      if (!c) continue;
+      const y = Math.floor(i / WD),
+        z = Math.floor(i / m.w) % m.d,
+        x = i % m.w;
+      const edge = Math.max(Math.abs(x + 0.5 - CX), Math.abs(z + 0.5 - CZ));
+      // (not the torch's cup and the gallery round it: built as it is, its floor flat under your feet)
+      const cup = y > CUP - 6 && Math.hypot(x + 0.5 - TX, z + 0.5 - TZ) < 14;
+      const inFig = kinds[c] === "solid" && y >= Y0 && (y > Y0 + 5 || edge < 25.5) && !cup;
+      // (the torch's flame: its own smooth glow)
+      const inFlame = kinds[c] === "emit" && y > CUP + 8;
+      (inFig ? fig : inFlame ? flame : rest).data[i] = c;
+    }
+  }
+  // (relaxed longer than a canopy: a thin skin's stair of cells would stay as dimples)
+  const smooth = smoothPart(fig, () => true, 5);
+  if (smooth) {
+    const skin = new THREE.Mesh(smooth, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.3 }));
+    skin.name = "statue:skin";
+    skin.receiveShadow = skin.castShadow = false;
+    object.add(skin);
+  } else for (let i = 0; i < fig.data.length; i++) if (fig.data[i]) rest.data[i] = fig.data[i];
+  const glow = smoothPart(flame, () => true, 4);
+  if (glow) {
+    const f = new THREE.Mesh(glow, new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: true }));
+    f.name = "statue:flame";
+    object.add(f);
+  } else for (let i = 0; i < flame.data.length; i++) if (flame.data[i]) rest.data[i] = flame.data[i];
+  const geos = meshModel(rest);
   for (const [kd, geo] of Object.entries(geos) as [Kind, THREE.BufferGeometry][]) {
     // (the lit cells through the tone mapping: right up against the crown's windows and the torch's
     // glass, untone-mapped they blew the whole picture out to white)

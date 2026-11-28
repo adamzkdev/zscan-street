@@ -4,20 +4,22 @@ const [URL = "http://localhost:3061/?debug&gta=1192&theme=day&solo"] = process.a
 const b = await puppeteer.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", headless: "new", protocolTimeout: 600000, args: ["--use-angle=metal", "--ignore-gpu-blocklist"], defaultViewport: { width: 800, height: 600 } });
 const p = await b.newPage();
 await p.goto(URL);
-await p.waitForFunction(() => window.__streetUp && window.street?.gta?.solid?.ready, { timeout: 240000, polling: 300 });
+await p.waitForFunction(() => window.__streetUp && window.street?.gta?.solid?.ready && window.street.gta.doorsReady, { timeout: 600000, polling: 300 });
 await new Promise((r) => setTimeout(r, 2500));
 const res = await p.evaluate(() => {
   const g = street.gta, h = g.host, s = g.solid;
   // the game's own rule on foot, standing at floor height f
   const free = (x, z, f) => {
     if (g.doorway(x, z)) { const t = s.topAt(x, z); return t === t && t > -0.35; }
-    if (h.footSpecial(x, z)) return !h.footBlocked(x, z);
+    // (the street's own rule there compares with the walker's floor: the floor the fill stands on)
+    if (h.footSpecial(x, z)) { const was = h.walker.floorY; h.walker.floorY = f; const ok = !h.footBlocked(x, z); h.walker.floorY = was; return ok; }
     return s.foot(x, z, f).ok && !h.footSmall(x, z);
   };
+  // (as the game: a place's own floors first — the opera's steps up to its door — then a doorway's steps)
   const floorAt = (x, z, f) => {
-    if (g.doorway(x, z)) { const t = s.topAt(x, z); return t < f + 1.05 ? Math.max(-0.05, t) : f; }
     const gg = h.ground(x, z);
     if (gg !== null) return gg;
+    if (g.doorway(x, z)) { const t = s.topAt(x, z); return t < f + 1.05 ? Math.max(-0.05, t) : f; }
     const r = s.foot(x, z, f);
     return r.ok ? Math.max(-0.05, r.floor) : f;
   };
